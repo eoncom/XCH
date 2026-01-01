@@ -1,0 +1,410 @@
+import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
+import { NetBoxProviderService } from './providers/netbox.provider';
+import { UptimeKumaProviderService } from './providers/uptime-kuma.provider';
+import { SyncNetBoxSitesDto, SyncNetBoxDevicesDto, MapAssetToNetBoxDto } from './dto/sync-netbox.dto';
+
+@Injectable()
+export class IntegrationsService {
+  private readonly logger = new Logger(IntegrationsService.name);
+
+  constructor(
+    private prisma: PrismaClient,
+    private netboxProvider: NetBoxProviderService,
+    private uptimeKumaProvider: UptimeKumaProviderService,
+  ) {}
+
+  /**
+   * Test all integrations connections
+   */
+  async testAllConnections() {
+    const results = await Promise.allSettled([
+      this.netboxProvider.testConnection(),
+      this.uptimeKumaProvider.testConnection(),
+    ]);
+
+    return {
+      netbox: results[0].status === 'fulfilled' ? results[0].value : { success: false, message: 'Test failed' },
+      uptimeKuma: results[1].status === 'fulfilled' ? results[1].value : { success: false, message: 'Test failed' },
+    };
+  }
+
+  /**
+   * Test specific provider connection
+   */
+  async testConnection(provider: 'netbox' | 'uptime_kuma') {
+    if (provider === 'netbox') {
+      return await this.netboxProvider.testConnection();
+    } else if (provider === 'uptime_kuma') {
+      return await this.uptimeKumaProvider.testConnection();
+    } else {
+      throw new BadRequestException('Invalid provider');
+    }
+  }
+
+  /**
+   * Get integration status
+   */
+  async getStatus() {
+    return {
+      netbox: {
+        name: this.netboxProvider.getName(),
+        status: this.netboxProvider.getStatus(),
+      },
+      uptimeKuma: {
+        name: this.uptimeKumaProvider.getName(),
+        status: this.uptimeKumaProvider.getStatus(),
+      },
+    };
+  }
+
+  // ==================== NETBOX SYNC ====================
+
+  /**
+   * Sync sites from NetBox to XCH
+   */
+  async syncNetBoxSites(tenantId: string, syncDto: SyncNetBoxSitesDto) {
+    const netboxSites = await this.netboxProvider.fetchSites();
+    const results = {
+      fetched: netboxSites.length,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    for (const netboxSite of netboxSites) {
+      try {
+        const mappedData = await this.netboxProvider.mapSiteToXCH(netboxSite);
+
+        // Check if site already exists (by externalId)
+        const existingSite = await this.prisma.site.findFirst({
+          where: {
+            tenantId,
+            externalRefs: {
+              some: {
+                externalId: mappedData.externalId,
+                externalSystem: 'netbox',
+              },
+            },
+          },
+        });
+
+        if (existingSite) {
+          if (syncDto.updateExisting) {
+            // Update site metadata
+            await this.prisma.site.update({
+              where: { id: existingSite.id },
+              data: {
+                name: mappedData.name,
+                status: mappedData.status,
+                address: mappedData.address,
+                metadata: mappedData.metadata,
+              },
+            });
+            results.updated++;
+          } else {
+            results.skipped++;
+          }
+        } else if (syncDto.autoCreate) {
+          // Create new site
+          const { externalId, externalSystem, metadata, ...siteData } = mappedData;
+
+          const newSite = await this.prisma.site.create({
+            data: {
+              ...siteData,
+              tenantId,
+              healthStatus: 'UNKNOWN',
+            },
+          });
+
+          // Create external reference
+          await this.prisma.externalRef.create({
+            data: {
+              entityType: 'SITE',
+              entityId: newSite.id,
+              externalSystem: 'netbox',
+              externalId: externalId,
+              metadata,
+              tenantId,
+            },
+          });
+
+          results.created++;
+        } else {
+          results.skipped++;
+        }
+      } catch (error) {
+        this.logger.error(`Failed to sync NetBox site ${netboxSite.name}`, error.message);
+        results.errors.push(`${netboxSite.name}: ${error.message}`);
+      }
+    }
+
+    this.logger.log(`NetBox sites sync completed: ${JSON.stringify(results)}`);
+    return results;
+  }
+
+  /**
+   * Sync devices from NetBox for a specific site
+   */
+  async syncNetBoxDevices(tenantId: string, syncDto: SyncNetBoxDevicesDto) {
+    // Verify XCH site exists
+    const site = await this.prisma.site.findFirst({
+      where: { id: syncDto.siteId, tenantId },
+      include: {
+        externalRefs: {
+          where: { externalSystem: 'netbox' },
+        },
+      },
+    });
+
+    if (!site) {
+      throw new NotFoundException('Site not found');
+    }
+
+    // Get NetBox site ID from external refs or use provided
+    const netboxSiteId =
+      syncDto.netboxSiteId || site.externalRefs[0]?.externalId;
+
+    if (!netboxSiteId) {
+      throw new BadRequestException(
+        'No NetBox site mapping found. Please provide netboxSiteId or map the site first.',
+      );
+    }
+
+    const netboxDevices = await this.netboxProvider.fetchDevicesForSite(
+      parseInt(netboxSiteId),
+    );
+
+    const results = {
+      fetched: netboxDevices.length,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    for (const netboxDevice of netboxDevices) {
+      try {
+        const mappedData = await this.netboxProvider.mapDeviceToXCH(netboxDevice);
+
+        // Check if asset already exists (by externalId)
+        const existingAsset = await this.prisma.asset.findFirst({
+          where: {
+            tenantId,
+            externalRefs: {
+              some: {
+                externalId: mappedData.externalId,
+                externalSystem: 'netbox',
+              },
+            },
+          },
+        });
+
+        if (existingAsset) {
+          results.skipped++;
+        } else if (syncDto.autoCreate) {
+          // Create new asset
+          const { externalId, externalSystem, metadata, ...assetData } = mappedData;
+
+          const newAsset = await this.prisma.asset.create({
+            data: {
+              ...assetData,
+              tenantId,
+              siteId: syncDto.siteId,
+            },
+          });
+
+          // Create external reference
+          await this.prisma.externalRef.create({
+            data: {
+              entityType: 'ASSET',
+              entityId: newAsset.id,
+              externalSystem: 'netbox',
+              externalId: externalId,
+              metadata,
+              tenantId,
+            },
+          });
+
+          results.created++;
+        } else {
+          results.skipped++;
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to sync NetBox device ${netboxDevice.name}`,
+          error.message,
+        );
+        results.errors.push(`${netboxDevice.name}: ${error.message}`);
+      }
+    }
+
+    this.logger.log(`NetBox devices sync completed: ${JSON.stringify(results)}`);
+    return results;
+  }
+
+  /**
+   * Manually map XCH asset to NetBox device (by serial number or manual ID)
+   */
+  async mapAssetToNetBox(tenantId: string, mapDto: MapAssetToNetBoxDto) {
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: mapDto.assetId, tenantId },
+    });
+
+    if (!asset) {
+      throw new NotFoundException('Asset not found');
+    }
+
+    let netboxDevice;
+
+    if (mapDto.netboxDeviceId) {
+      // Manual mapping by ID (fetch device to validate)
+      const devices = await this.netboxProvider.fetchDevicesForSite(0); // Fetch all
+      netboxDevice = devices.find((d) => d.id.toString() === mapDto.netboxDeviceId);
+    } else if (asset.serialNumber) {
+      // Auto-mapping by serial number
+      netboxDevice = await this.netboxProvider.searchDeviceBySerial(asset.serialNumber);
+    } else {
+      throw new BadRequestException(
+        'Asset has no serial number and no netboxDeviceId provided',
+      );
+    }
+
+    if (!netboxDevice) {
+      throw new NotFoundException('NetBox device not found');
+    }
+
+    // Create or update external reference
+    const existingRef = await this.prisma.externalRef.findFirst({
+      where: {
+        entityType: 'ASSET',
+        entityId: asset.id,
+        externalSystem: 'netbox',
+        tenantId,
+      },
+    });
+
+    if (existingRef) {
+      await this.prisma.externalRef.update({
+        where: { id: existingRef.id },
+        data: {
+          externalId: netboxDevice.id.toString(),
+          metadata: {
+            netbox_url: netboxDevice.url,
+            device_role: netboxDevice.device_role?.name,
+            platform: netboxDevice.platform?.name,
+          },
+        },
+      });
+    } else {
+      await this.prisma.externalRef.create({
+        data: {
+          entityType: 'ASSET',
+          entityId: asset.id,
+          externalSystem: 'netbox',
+          externalId: netboxDevice.id.toString(),
+          metadata: {
+            netbox_url: netboxDevice.url,
+            device_role: netboxDevice.device_role?.name,
+            platform: netboxDevice.platform?.name,
+          },
+          tenantId,
+        },
+      });
+    }
+
+    this.logger.log(`Asset ${asset.id} mapped to NetBox device ${netboxDevice.id}`);
+    return {
+      message: 'Asset mapped successfully',
+      netboxDevice: {
+        id: netboxDevice.id,
+        name: netboxDevice.name,
+        url: netboxDevice.url,
+      },
+    };
+  }
+
+  // ==================== UPTIME KUMA MONITORING ====================
+
+  /**
+   * Update site health status from Uptime Kuma monitor
+   */
+  async updateSiteHealthFromMonitor(siteId: string, tenantId: string, monitorIdentifier: string) {
+    const site = await this.prisma.site.findFirst({
+      where: { id: siteId, tenantId },
+    });
+
+    if (!site) {
+      throw new NotFoundException('Site not found');
+    }
+
+    const monitorStatus = await this.uptimeKumaProvider.getMonitorStatus(monitorIdentifier);
+
+    if (!monitorStatus) {
+      throw new NotFoundException(`Monitor ${monitorIdentifier} not found in Uptime Kuma`);
+    }
+
+    const healthStatus = this.uptimeKumaProvider.mapToHealthStatus(monitorStatus.status);
+
+    await this.prisma.site.update({
+      where: { id: siteId },
+      data: {
+        healthStatus,
+        metadata: {
+          ...site.metadata,
+          monitoring: {
+            source: 'uptime_kuma',
+            monitor: monitorIdentifier,
+            lastCheck: monitorStatus.lastCheck,
+            uptime: monitorStatus.uptime,
+          },
+        },
+      },
+    });
+
+    this.logger.log(`Site ${siteId} health updated to ${healthStatus} from Uptime Kuma`);
+    return {
+      siteId,
+      healthStatus,
+      monitor: monitorStatus,
+    };
+  }
+
+  /**
+   * Sync all sites health from Uptime Kuma
+   * Assumes sites have metadata.monitoring.monitor identifier
+   */
+  async syncAllSitesHealth(tenantId: string) {
+    const sites = await this.prisma.site.findMany({
+      where: { tenantId },
+    });
+
+    const results = {
+      total: sites.length,
+      updated: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    for (const site of sites) {
+      try {
+        const monitorIdentifier = site.metadata?.['monitoring']?.['monitor'];
+
+        if (!monitorIdentifier) {
+          results.skipped++;
+          continue;
+        }
+
+        await this.updateSiteHealthFromMonitor(site.id, tenantId, monitorIdentifier);
+        results.updated++;
+      } catch (error) {
+        this.logger.error(`Failed to update health for site ${site.id}`, error.message);
+        results.errors.push(`${site.name}: ${error.message}`);
+      }
+    }
+
+    this.logger.log(`Sites health sync completed: ${JSON.stringify(results)}`);
+    return results;
+  }
+}

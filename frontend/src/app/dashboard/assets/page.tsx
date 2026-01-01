@@ -1,0 +1,209 @@
+'use client';
+
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { assetsApi } from '@/lib/api/assets';
+import { Plus, Search, QrCode, Package } from 'lucide-react';
+import Link from 'next/link';
+import type { Asset, AssetType, AssetStatus } from '@/types';
+
+const assetTypeLabels: Record<AssetType, string> = {
+  PRINTER: 'Imprimante',
+  IPAD: 'iPad',
+  TABLET: 'Tablette',
+  SWITCH: 'Switch',
+  FIREWALL: 'Firewall',
+  ROUTER: 'Routeur',
+  WIFI_AP: 'Point d\'accès WiFi',
+  TEAMS_ROOM: 'Teams Room',
+  SERVER: 'Serveur',
+  CABLE: 'Câble',
+  OTHER: 'Autre',
+};
+
+const assetStatusColors = {
+  IN_STOCK: 'secondary',
+  ACTIVE: 'success',
+  INACTIVE: 'secondary',
+  MAINTENANCE: 'warning',
+  RETIRED: 'error',
+} as const;
+
+const assetStatusLabels: Record<AssetStatus, string> = {
+  IN_STOCK: 'En stock',
+  ACTIVE: 'Actif',
+  INACTIVE: 'Inactif',
+  MAINTENANCE: 'Maintenance',
+  RETIRED: 'Retiré',
+};
+
+export default function AssetsPage() {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [typeFilter, setTypeFilter] = useState<string>('');
+  const router = useRouter();
+
+  const { data: assets, isLoading } = useQuery<Asset[]>({
+    queryKey: ['assets', { status: statusFilter, type: typeFilter, search }],
+    queryFn: () =>
+      assetsApi.getAll({
+        status: statusFilter || undefined,
+        type: typeFilter || undefined,
+        search: search || undefined,
+      }),
+  });
+
+  const filteredAssets = assets?.filter((asset) => {
+    const searchLower = search.toLowerCase();
+    return (
+      asset.model?.toLowerCase().includes(searchLower) ||
+      asset.brand?.toLowerCase().includes(searchLower) ||
+      asset.serialNumber?.toLowerCase().includes(searchLower) ||
+      assetTypeLabels[asset.type].toLowerCase().includes(searchLower)
+    );
+  });
+
+  if (isLoading) {
+    return <div className="text-center">Chargement des équipements...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Équipements</h1>
+          <p className="text-muted-foreground">
+            Gérez votre inventaire d'équipements
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/assets/scanner">
+              <QrCode className="mr-2 h-4 w-4" />
+              Scanner QR
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/dashboard/assets/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Nouvel équipement
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Tous les types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">Tous les types</SelectItem>
+            {Object.entries(assetTypeLabels).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Tous les statuts" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">Tous les statuts</SelectItem>
+            {Object.entries(assetStatusLabels).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Assets Grid */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {filteredAssets?.map((asset) => (
+          <Card
+            key={asset.id}
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+          >
+            <Link href={`/dashboard/assets/${asset.id}`}>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <CardTitle className="text-lg">
+                        {asset.brand} {asset.model}
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        {assetTypeLabels[asset.type]}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant={assetStatusColors[asset.status]}>
+                    {assetStatusLabels[asset.status]}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 text-sm">
+                  {asset.serialNumber && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">S/N:</span>
+                      <span className="font-mono">{asset.serialNumber}</span>
+                    </div>
+                  )}
+                  {asset.site && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Site:</span>
+                      <span>{asset.site.name}</span>
+                    </div>
+                  )}
+                  {asset.qrCodeUrl && (
+                    <div className="flex items-center text-muted-foreground">
+                      <QrCode className="mr-2 h-4 w-4" />
+                      QR Code généré
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Link>
+          </Card>
+        ))}
+      </div>
+
+      {filteredAssets?.length === 0 && (
+        <div className="text-center py-12">
+          <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <p className="text-muted-foreground">Aucun équipement trouvé</p>
+        </div>
+      )}
+    </div>
+  );
+}

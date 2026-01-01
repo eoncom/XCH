@@ -1,0 +1,137 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with PostGIS
+  postgres:
+    image: postgis/postgis:15-3.4-alpine
+    container_name: xch-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-xch_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xch_password}
+      POSTGRES_DB: ${POSTGRES_DB:-xch_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xch_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - xch-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: xch-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - xch-network
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    container_name: xch-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - xch-network
+
+  # MinIO Client (mc) - Create buckets on startup
+  minio-init:
+    image: minio/mc:latest
+    container_name: xch-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set xch http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin};
+      mc mb xch/xch-storage --ignore-existing;
+      mc mb xch/plans --ignore-existing;
+      mc mb xch/photos --ignore-existing;
+      mc mb xch/exports --ignore-existing;
+      mc mb xch/qrcodes --ignore-existing;
+      mc anonymous set download xch/xch-storage;
+      exit 0;
+      "
+    networks:
+      - xch-network
+
+  # Backend (NestJS) - Will be added later
+  # backend:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   container_name: xch-backend
+  #   environment:
+  #     NODE_ENV: development
+  #     DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: 6379
+  #   ports:
+  #     - "3001:3001"
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #     - minio
+  #   volumes:
+  #     - ./backend:/app
+  #     - /app/node_modules
+  #   networks:
+  #     - xch-network
+
+  # Frontend (Next.js) - Will be added later
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: xch-frontend
+  #   environment:
+  #     NODE_ENV: development
+  #     NEXT_PUBLIC_API_URL: http://localhost:3001
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - backend
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #     - /app/.next
+  #   networks:
+  #     - xch-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  xch-network:
+    driver: bridge

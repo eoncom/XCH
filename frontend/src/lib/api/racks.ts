@@ -1,0 +1,36 @@
+import { apiClient } from '../api-client';
+import type { Rack } from '@/types';
+
+export const racksApi = {
+  getAll: (siteId?: string) => {
+    const query = siteId ? `?siteId=${siteId}` : '';
+    return apiClient.get<Rack[]>(`/racks${query}`);
+  },
+
+  getById: (id: string) => apiClient.get<Rack>(`/racks/${id}`),
+
+  create: (data: {
+    siteId: string;
+    name: string;
+    heightU: number;
+    status: string;
+    location?: string;
+  }) => apiClient.post<Rack>('/racks', data),
+
+  update: (id: string, data: Partial<Rack>) =>
+    apiClient.patch<Rack>(`/racks/${id}`, data),
+
+  delete: (id: string) => apiClient.delete(`/racks/${id}`),
+
+  mountEquipment: (
+    rackId: string,
+    data: {
+      assetId: string;
+      positionU: number;
+      heightU: number;
+    }
+  ) => apiClient.post(`/racks/${rackId}/mount`, data),
+
+  unmountEquipment: (rackId: string, assetId: string) =>
+    apiClient.delete(`/racks/${rackId}/unmount/${assetId}`),
+};

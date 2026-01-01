@@ -1,0 +1,69 @@
+# Auto detect text files and normalize line endings to LF
+* text=auto
+
+# Explicitly set LF for all source code files
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+
+# Configuration and data files
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.xml text eol=lf
+*.sql text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+
+# Styles
+*.css text eol=lf
+*.scss text eol=lf
+*.sass text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+
+# Docker
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+docker-compose.yaml text eol=lf
+.dockerignore text eol=lf
+
+# Git
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# Environment
+.env text eol=lf
+.env.example text eol=lf
+.env.local text eol=lf
+
+# HTML/SVG
+*.html text eol=lf
+*.svg text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mov binary
+*.mp4 binary
+*.mp3 binary
+*.gz binary
+*.zip binary
+*.7z binary
+*.ttf binary
+*.otf binary
+*.db binary
+*.sqlite binary
+*.woff binary
+*.woff2 binary

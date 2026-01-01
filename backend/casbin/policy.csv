@@ -1,0 +1,67 @@
+# ADMIN - Full access
+p, ADMIN, sites, create, *
+p, ADMIN, sites, read, *
+p, ADMIN, sites, update, *
+p, ADMIN, sites, delete, *
+p, ADMIN, assets, create, *
+p, ADMIN, assets, read, *
+p, ADMIN, assets, update, *
+p, ADMIN, assets, delete, *
+p, ADMIN, racks, create, *
+p, ADMIN, racks, read, *
+p, ADMIN, racks, update, *
+p, ADMIN, racks, delete, *
+p, ADMIN, tasks, create, *
+p, ADMIN, tasks, read, *
+p, ADMIN, tasks, update, *
+p, ADMIN, tasks, delete, *
+p, ADMIN, floor-plans, create, *
+p, ADMIN, floor-plans, read, *
+p, ADMIN, floor-plans, update, *
+p, ADMIN, floor-plans, delete, *
+p, ADMIN, integrations, read, *
+p, ADMIN, integrations, create, *
+p, ADMIN, integrations, update, *
+p, ADMIN, users, create, *
+p, ADMIN, users, read, *
+p, ADMIN, users, update, *
+p, ADMIN, users, delete, *
+p, ADMIN, tenants, read, *
+p, ADMIN, tenants, update, *
+
+# MANAGER
+p, MANAGER, sites, read, *
+p, MANAGER, assets, read, *
+p, MANAGER, racks, read, *
+p, MANAGER, tasks, create, *
+p, MANAGER, tasks, read, *
+p, MANAGER, tasks, update, *
+p, MANAGER, floor-plans, read, *
+p, MANAGER, floor-plans, update, *
+p, MANAGER, integrations, read, *
+p, MANAGER, users, read, *
+
+# TECHNICIEN
+p, TECHNICIEN, sites, create, *
+p, TECHNICIEN, sites, read, *
+p, TECHNICIEN, sites, update, *
+p, TECHNICIEN, assets, create, *
+p, TECHNICIEN, assets, read, *
+p, TECHNICIEN, assets, update, *
+p, TECHNICIEN, assets, delete, *
+p, TECHNICIEN, racks, create, *
+p, TECHNICIEN, racks, read, *
+p, TECHNICIEN, racks, update, *
+p, TECHNICIEN, tasks, create, *
+p, TECHNICIEN, tasks, read, *
+p, TECHNICIEN, tasks, update, *
+p, TECHNICIEN, floor-plans, read, *
+p, TECHNICIEN, floor-plans, create, *
+p, TECHNICIEN, floor-plans, update, *
+
+# VIEWER
+p, VIEWER, sites, read, *
+p, VIEWER, assets, read, *
+p, VIEWER, racks, read, *
+p, VIEWER, tasks, read, *
+p, VIEWER, floor-plans, read, *

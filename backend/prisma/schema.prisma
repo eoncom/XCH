@@ -1,0 +1,607 @@
+// XCH - Prisma Schema
+// PostgreSQL 15+ with PostGIS extension
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis(version: "3.4")]
+}
+
+// ============================================================================
+// TENANT & AUTH
+// ============================================================================
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
+
+model Tenant {
+  id       String       @id @default(cuid())
+  name     String
+  subdomain String      @unique
+  status   TenantStatus @default(ACTIVE)
+
+  // Branding
+  logoUrl      String?
+  primaryColor String? @default("#0070f3")
+
+  // Configuration (JSON)
+  config Json? @db.JsonB
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users         User[]
+  authProviders AuthProvider[]
+  sites         Site[]
+  assets        Asset[]
+  racks         Rack[]
+  tasks         Task[]
+  providers     Provider[]
+  auditLogs     AuditLog[]
+
+  @@index([status])
+  @@map("tenants")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  TECHNICIEN
+  VIEWER
+}
+
+model User {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Identity
+  email        String
+  passwordHash String? // NULL if external auth only
+
+  // Profile
+  name      String
+  phone     String?
+  avatarUrl String?
+
+  // Permissions
+  role   UserRole @default(VIEWER)
+  active Boolean  @default(true)
+
+  // External auth
+  externalId   String? // OIDC 'sub' or SAML nameID
+  authProvider String  @default("local") // local, oidc, saml
+
+  // Metadata
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  assignedTasks Task[]     @relation("AssignedTo")
+  createdTasks  Task[]     @relation("CreatedBy")
+  auditLogs     AuditLog[]
+  photos        Photo[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([tenantId, externalId])
+  @@index([tenantId, role])
+  @@map("users")
+}
+
+enum AuthProviderType {
+  OIDC
+  SAML
+}
+
+model AuthProvider {
+  id       String           @id @default(cuid())
+  tenantId String
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type     AuthProviderType
+  name     String
+  enabled  Boolean          @default(false)
+
+  // OIDC config
+  issuer       String?
+  clientId     String?
+  clientSecret String? // Encrypted at-rest
+  scopes       String[] @default(["openid", "profile", "email"])
+
+  // SAML config (future)
+  samlConfig Json? @db.JsonB
+
+  // Attribute mapping
+  attributeMap Json? @db.JsonB
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, type, name])
+  @@index([tenantId, enabled])
+  @@map("auth_providers")
+}
+
+// ============================================================================
+// SITES (CHANTIERS)
+// ============================================================================
+
+enum SiteStatus {
+  PREPARATION
+  ACTIVE
+  CLOSED
+}
+
+enum HealthStatus {
+  OK
+  WARNING
+  CRITICAL
+  UNKNOWN
+}
+
+model Site {
+  id       String     @id @default(cuid())
+  tenantId String
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code     String
+  name     String
+  status   SiteStatus @default(ACTIVE)
+
+  // Location
+  address    String
+  city       String
+  postalCode String?
+  country    String  @default("France")
+
+  // PostGIS geometry - POINT(longitude, latitude)
+  coordinates Unsupported("geometry(Point,4326)")?
+
+  // Contacts (JSON array)
+  contacts Json? @db.JsonB // [{name, phone, email, role, isPrimary}]
+
+  // Access notes (JSON)
+  accessNotes Json? @db.JsonB // {schedules, badges, procedures, safety}
+
+  // Connectivity (JSON)
+  connectivity Json? @db.JsonB // {primary: {type, provider, ref}, backup, cutProcedure}
+
+  // Health
+  healthStatus    HealthStatus @default(UNKNOWN)
+  lastHealthCheck DateTime?
+
+  // Metadata
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  assets       Asset[]
+  racks        Rack[]
+  floorPlans   FloorPlan[]
+  tasks        Task[]
+  externalRefs ExternalRef[]
+  photos       Photo[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, healthStatus])
+  @@map("sites")
+}
+
+// ============================================================================
+// ASSETS (ÉQUIPEMENTS)
+// ============================================================================
+
+enum AssetType {
+  PRINTER
+  IPAD
+  TABLET
+  SWITCH
+  FIREWALL
+  ACCESS_POINT
+  TEAMS_ROOM
+  WEBCAM
+  DISPLAY
+  CAMERA
+  SERVER
+  PATCH_PANEL
+  PDU
+  OTHER
+}
+
+enum AssetStatus {
+  IN_SERVICE
+  OUT_OF_SERVICE
+  IN_TRANSIT
+  STOCK
+  RETIRED
+}
+
+model Asset {
+  id       String     @id @default(cuid())
+  tenantId String
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  siteId   String
+  site     Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  type     AssetType
+  model    String?
+  manufacturer String?
+  serialNumber String?
+  inventoryTag String?
+  status       AssetStatus @default(IN_SERVICE)
+
+  // Location
+  locationText String?
+
+  // Network info (JSON)
+  networkInfo Json? @db.JsonB // {ip, mac, hostname, vlan, port}
+
+  // Rack mounting (optional)
+  rackId        String?
+  rack          Rack?   @relation(fields: [rackId], references: [id], onDelete: SetNull)
+  rackPositionU Int? // Starting U position
+  rackHeightU   Int? // Height in U
+
+  // Metadata
+  purchaseDate     DateTime?
+  warrantyEnd      DateTime?
+  weight           Float? // kg
+  powerConsumption Float? // Watts
+  notes            String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  pins         Pin[]
+  tasks        Task[]
+  externalRefs ExternalRef[]
+  photos       Photo[]
+
+  @@unique([tenantId, serialNumber])
+  @@index([tenantId])
+  @@index([tenantId, siteId])
+  @@index([tenantId, type])
+  @@index([tenantId, status])
+  @@index([rackId])
+  @@map("assets")
+}
+
+// ============================================================================
+// RACKS (BAIES)
+// ============================================================================
+
+enum RackType {
+  WALL_MOUNTED
+  FLOOR_STANDING
+  ENCLOSED_CABINET
+}
+
+enum RackStatus {
+  IN_SERVICE
+  OUT_OF_SERVICE
+  PREPARATION
+}
+
+model Rack {
+  id       String     @id @default(cuid())
+  tenantId String
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  siteId   String
+  site     Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name     String
+  serialNumber String?
+  model        String?
+  manufacturer String?
+  heightU      Int // 4, 6, 12, 18, 24, 42
+  rackType     RackType   @default(FLOOR_STANDING)
+  status       RackStatus @default(IN_SERVICE)
+  location     String?
+
+  // Specs (JSON)
+  specs Json? @db.JsonB // {dimensions, depth, maxLoad, cooling, security, power}
+
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  assets Asset[]
+  pins   Pin[]
+
+  @@unique([tenantId, siteId, name])
+  @@index([tenantId])
+  @@index([tenantId, siteId])
+  @@map("racks")
+}
+
+// ============================================================================
+// FLOOR PLANS & PINS
+// ============================================================================
+
+model FloorPlan {
+  id      String @id @default(cuid())
+  siteId  String
+  site    Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  title   String
+  version Int    @default(1)
+
+  // File
+  fileUrl  String
+  fileSize Int?
+  mimeType String?
+
+  // Metadata
+  notes      String?  @db.Text
+  uploadedBy String
+  uploadedAt DateTime @default(now())
+
+  // Relations
+  pins Pin[]
+
+  @@index([siteId])
+  @@index([siteId, version])
+  @@map("floor_plans")
+}
+
+enum PinType {
+  SWITCH
+  FIREWALL
+  ACCESS_POINT
+  PRINTER
+  RACK
+  CAMERA
+  PATCH_PANEL
+  OTHER
+}
+
+model Pin {
+  id          String    @id @default(cuid())
+  floorPlanId String
+  floorPlan   FloorPlan @relation(fields: [floorPlanId], references: [id], onDelete: Cascade)
+
+  // Normalized coordinates (0.0 to 1.0)
+  x Float
+  y Float
+
+  // Type & association
+  pinType PinType
+  assetId String?
+  asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  rackId  String?
+  rack    Rack?   @relation(fields: [rackId], references: [id], onDelete: Cascade)
+
+  label String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([floorPlanId])
+  @@index([assetId])
+  @@index([rackId])
+  @@map("pins")
+}
+
+// ============================================================================
+// TASKS
+// ============================================================================
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  tenantId    String
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  siteId      String
+  site        Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  assetId     String?
+  asset       Asset?       @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  title       String
+  description String?      @db.Text
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+
+  // Assignment
+  assignedTo   String?
+  assignedUser User?   @relation("AssignedTo", fields: [assignedTo], references: [id], onDelete: SetNull)
+  createdBy    String
+  creator      User    @relation("CreatedBy", fields: [createdBy], references: [id])
+
+  // Scheduling
+  dueDate DateTime?
+
+  // Checklist (JSON array)
+  checklist Json? @db.JsonB // [{id, text, checked, order}]
+
+  // TicketLink
+  ticketRef    String?
+  ticketUrl    String?
+  ticketStatus String?
+
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  photos Photo[]
+
+  @@index([tenantId])
+  @@index([tenantId, siteId])
+  @@index([tenantId, status])
+  @@index([tenantId, assignedTo])
+  @@index([tenantId, dueDate])
+  @@map("tasks")
+}
+
+// ============================================================================
+// PROVIDERS (PRESTATAIRES)
+// ============================================================================
+
+enum ProviderType {
+  CABLING
+  OPERATOR
+  INTEGRATOR
+  MAINTENANCE
+  OTHER
+}
+
+model Provider {
+  id       String       @id @default(cuid())
+  tenantId String
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name     String
+  type     ProviderType
+
+  // Contacts (JSON)
+  contacts Json? @db.JsonB // [{name, phone, email, role}]
+
+  // Availability (JSON)
+  availability Json? @db.JsonB // {schedules, sla, interventionDelay}
+
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, type])
+  @@map("providers")
+}
+
+// ============================================================================
+// PHOTOS & ATTACHMENTS
+// ============================================================================
+
+enum EntityType {
+  SITE
+  ASSET
+  TASK
+  RACK
+}
+
+model Photo {
+  id         String     @id @default(cuid())
+  entityType EntityType
+  entityId   String
+
+  // Polymorphic relations
+  site  Site?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  asset Asset? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  task  Task?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  // File
+  fileUrl  String
+  fileName String
+  fileSize Int?
+  mimeType String
+
+  // Metadata
+  caption    String?
+  uploadedBy String
+  uploader   User    @relation(fields: [uploadedBy], references: [id])
+  uploadedAt DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([uploadedAt])
+  @@map("photos")
+}
+
+// ============================================================================
+// EXTERNAL REFS (INTEGRATIONS)
+// ============================================================================
+
+model ExternalRef {
+  id         String     @id @default(cuid())
+  entityType EntityType
+  entityId   String
+
+  // Polymorphic relations
+  site  Site?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  asset Asset? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  // Provider
+  provider    String // netbox, uptime_kuma, fortimanager
+  externalId  String
+  externalUrl String?
+
+  // Metadata (JSON)
+  metadata Json?     @db.JsonB
+  lastSync DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([entityType, entityId, provider])
+  @@index([entityType, entityId])
+  @@index([provider])
+  @@map("external_refs")
+}
+
+// ============================================================================
+// AUDIT LOGS
+// ============================================================================
+
+model AuditLog {
+  id         String  @id @default(cuid())
+  tenantId   String
+  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String // CREATE, UPDATE, DELETE
+  entityType String
+  entityId   String?
+
+  // Changes (JSON)
+  changes Json? @db.JsonB // {before: {...}, after: {...}}
+
+  // Context
+  ipAddress String?
+  userAgent String?
+
+  timestamp DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, timestamp])
+  @@index([tenantId, userId])
+  @@index([tenantId, entityType, entityId])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// CASBIN (RBAC/ABAC)
+// ============================================================================
+
+model CasbinRule {
+  id    Int     @id @default(autoincrement())
+  ptype String // 'p' or 'g'
+  v0    String?
+  v1    String?
+  v2    String?
+  v3    String?
+  v4    String?
+  v5    String?
+
+  @@index([ptype, v0, v1, v2, v3])
+  @@map("casbin_rule")
+}
