@@ -1,10 +1,11 @@
 # XCH - Gestion IT pour Chantiers Temporaires
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![NestJS](https://img.shields.io/badge/NestJS-10-red)](https://nestjs.com/)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue)](https://www.postgresql.org/)
+[![MVP](https://img.shields.io/badge/MVP-100%25-brightgreen)](LIVRAISON_MVP_100.md)
 
 > Application web full-stack de gestion IT pour chantiers temporaires - Instance mono-délégation
 
@@ -96,10 +97,11 @@ XCH centralise le contexte et référence les outils spécialisés (NetBox, moni
 - **Passport.js** (auth local + OIDC)
 
 ### Frontend
-- **Next.js 14** (React + TypeScript)
-- **shadcn/ui** + **Tailwind CSS**
+- **Next.js 15** (React 19 + TypeScript 5.7)
+- **shadcn/ui** + **Tailwind CSS 3.4**
+- **Zustand** (state management) + **TanStack Query** (data fetching)
 - **Leaflet** (cartes interactives)
-- **Konva.js** (plans interactifs)
+- **Konva.js** (plans interactifs + visualisation baies)
 - **React Hook Form** + **Zod** (validation)
 
 ### Infrastructure
@@ -114,65 +116,132 @@ XCH centralise le contexte et référence les outils spécialisés (NetBox, moni
 
 ## 📦 Installation
 
-### Prérequis
+### Guides d'installation complets
 
-- Docker 24+
-- Docker Compose 2.20+
-- 4 CPU, 8 GB RAM minimum
-- 100 GB stockage
+- **🔧 [INSTALL_DEV.md](INSTALL_DEV.md)** - Installation complète environnement développement (Windows/WSL2)
+  - Prérequis (Node.js, Docker, PostgreSQL, Redis)
+  - Backend NestJS + Frontend Next.js 15
+  - Configuration VS Code avec debugging
+  - Troubleshooting développement (10+ scénarios)
+
+- **🚀 [INSTALL_PROD.md](INSTALL_PROD.md)** - Déploiement production Linux (Ubuntu/Debian)
+  - Sécurisation serveur (UFW, Fail2ban, SSH)
+  - Docker avec isolation complète
+  - Nginx reverse proxy + SSL/TLS (Let's Encrypt)
+  - Backups automatisés PostgreSQL
+  - Monitoring et health checks
+  - Troubleshooting production (15+ scénarios)
+
+- **🐳 [DOCKER_PORTS.md](DOCKER_PORTS.md)** - Gestion ports Docker et isolation
+  - Architecture réseau Docker `xch-network`
+  - Détection et résolution conflits de ports
+  - Configuration multi-instances (dev, staging, prod)
+  - Scripts de vérification automatique
+  - Sécurité réseau (firewall, exposition minimale)
 
 ### Installation rapide (Développement)
 
 ```bash
-# Cloner le repo
+# 1. Cloner le repository
 git clone https://github.com/your-org/xch.git
 cd xch
 
-# Copier configuration environnement
-cp .env.example .env
-
-# Éditer .env (DB passwords, JWT secret, etc.)
-nano .env
-
-# Démarrer tous les services
+# 2. Backend : Démarrer infrastructure Docker
+cd backend
 docker-compose up -d
 
-# Attendre initialisation DB + migrations
-docker-compose logs -f app
+# 3. Backend : Installer dépendances
+npm install
 
-# Accès application
-# https://localhost
+# 4. Backend : Migrations Prisma + seed
+npx prisma migrate dev
+npx prisma db seed
+
+# 5. Frontend : Installer dépendances
+cd ../frontend
+npm install
+
+# 6. Frontend : Générer icônes PWA
+npm run generate-icons
+
+# 7. Démarrer les serveurs de développement
+# Terminal 1 (backend)
+cd backend && npm run start:dev
+
+# Terminal 2 (frontend)
+cd frontend && npm run dev
 ```
+
+**Accès application** :
+- Frontend : http://localhost:3001
+- Backend API : http://localhost:3000
+- API Docs (Swagger) : http://localhost:3000/api
 
 **Compte admin par défaut** :
 - Email : `admin@xch.local`
-- Password : `admin` (à changer immédiatement)
+- Password : `admin123` (⚠️ À changer immédiatement)
+
+### Prérequis
+
+#### Développement
+- **Node.js** 18+ (LTS recommandé)
+- **Docker** 24+ avec Docker Compose
+- **PostgreSQL** 15 (via Docker recommandé)
+- **Redis** 7 (via Docker recommandé)
+- **MinIO** (via Docker)
+- **RAM** : 8 GB minimum
+- **Stockage** : 20 GB
+
+#### Production
+- **Serveur Linux** (Ubuntu 22.04+ ou Debian 12+)
+- **Docker** 24+ avec Docker Compose
+- **RAM** : 8 GB minimum (16 GB recommandé)
+- **Stockage** : 100 GB minimum (SSD recommandé)
+- **Ports** : 80 (HTTP), 443 (HTTPS), 22 (SSH)
 
 ### Installation production
 
-Voir documentation complète : [INSTALLATION.md](INSTALLATION.md)
+Voir guide complet : **[INSTALL_PROD.md](INSTALL_PROD.md)**
 
 ---
 
 ## 📖 Documentation
 
+**📚 [DOCS_INDEX.md](DOCS_INDEX.md)** - Index complet de toute la documentation (27 fichiers)
+
+### Installation & Déploiement
+- **[INSTALL_DEV.md](INSTALL_DEV.md)** - Installation développement Windows/WSL2 (6 600+ lignes)
+- **[INSTALL_PROD.md](INSTALL_PROD.md)** - Déploiement production Linux (11 000+ lignes)
+- **[DOCKER_PORTS.md](DOCKER_PORTS.md)** - Gestion ports Docker et isolation réseau (2 800+ lignes)
+
 ### Architecture & Décisions
-- [Stack Technique](docs/architecture/tech-stack.md)
-- [Schéma Base de Données](docs/architecture/database-schema.md)
-- [ADR-001 : Stack TypeScript](docs/decisions/adr-001-stack-typescript.md)
-- [ADR-002 : Multi-tenant RLS](docs/decisions/adr-002-multi-tenant-rls.md)
-- [ADR-003 : Auth OIDC Hybride](docs/decisions/adr-003-auth-oidc-hybrid.md)
-- [ADR-004 : RBAC Casbin](docs/decisions/adr-004-rbac-casbin.md)
-- [ADR-005 : CI/CD GitLab](docs/decisions/adr-005-cicd-gitlab.md)
+- **[docs/architecture/tech-stack.md](docs/architecture/tech-stack.md)** - Stack technique complète avec justifications
+- **[docs/architecture/database-schema.md](docs/architecture/database-schema.md)** - Schéma PostgreSQL (18 tables + ERD)
+- **[docs/decisions/adr-001-stack-typescript.md](docs/decisions/adr-001-stack-typescript.md)** - Choix TypeScript full-stack
+- **[docs/decisions/adr-002-multi-tenant-rls.md](docs/decisions/adr-002-multi-tenant-rls.md)** - Multi-tenant PostgreSQL RLS
+- **[docs/decisions/adr-003-auth-oidc-hybrid.md](docs/decisions/adr-003-auth-oidc-hybrid.md)** - Auth hybride (JWT + SSO)
+- **[docs/decisions/adr-004-rbac-casbin.md](docs/decisions/adr-004-rbac-casbin.md)** - RBAC avec Casbin (4 rôles)
+- **[docs/decisions/adr-005-cicd-gitlab.md](docs/decisions/adr-005-cicd-gitlab.md)** - Pipeline CI/CD GitLab
 
 ### Développement
-- [Roadmap Développement](docs/roadmap.md)
-- [Cahier des Charges](docs/cahier-des-charges.md)
-- [Contributing Guide](CONTRIBUTING.md)
+- **[DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md)** - Guide développement quotidien
+- **[docs/roadmap.md](docs/roadmap.md)** - Roadmap et état d'avancement
+- **[docs/cahier-des-charges.md](docs/cahier-des-charges.md)** - Spécifications fonctionnelles complètes
+- **[CLAUDE.md](CLAUDE.md)** - Instructions pour agents Claude Code
+
+### Frontend
+- **[frontend/README.md](frontend/README.md)** - Documentation Next.js 15 spécifique
+- **[frontend/public/ICONS_README.md](frontend/public/ICONS_README.md)** - Génération icônes PWA
+
+### Livrables & Checkpoints
+- **[LIVRAISON_MVP_100.md](LIVRAISON_MVP_100.md)** - Document de livraison MVP 100% complet ✅
+- **[MVP_COMPLET.md](MVP_COMPLET.md)** - Récapitulatif technique MVP
+- **[CHECKPOINT_BACKEND_FINAL.md](CHECKPOINT_BACKEND_FINAL.md)** - Validation backend (10 modules)
+- **[CHECKPOINT_FRONTEND_FINAL.md](CHECKPOINT_FRONTEND_FINAL.md)** - Validation frontend (7 modules)
 
 ### Utilisation
-- [Guide Utilisateur](docs/USER_GUIDE.md)
-- [Guide Administrateur](docs/ADMIN_GUIDE.md)
+- **Guide Utilisateur** - À venir (MVP livré)
+- **Guide Administrateur** - À venir (MVP livré)
 
 ---
 
@@ -240,27 +309,61 @@ npm run test:e2e
 
 ## 🚢 Déploiement
 
-### On-premise
+### Production complète
+
+Voir le guide complet : **[INSTALL_PROD.md](INSTALL_PROD.md)** (11 000+ lignes)
+
+**Inclut :**
+- ✅ Sécurisation serveur Linux (UFW firewall, Fail2ban, SSH)
+- ✅ Installation Docker avec isolation réseau `xch-network`
+- ✅ Configuration production (secrets sécurisés, ports personnalisés)
+- ✅ Nginx reverse proxy avec SSL/TLS (Let's Encrypt)
+- ✅ Backups automatisés PostgreSQL (cron, rétention 7 jours)
+- ✅ Monitoring et health checks
+- ✅ Procédures de mise à jour et rollback
+- ✅ Troubleshooting production (15+ scénarios)
+
+### Déploiement rapide (Production)
 
 ```bash
-# Build images
-docker-compose -f docker-compose.prod.yml build
+# 1. Préparer le serveur (Ubuntu 22.04+)
+sudo apt update && sudo apt upgrade -y
 
-# Démarrer services
-docker-compose -f docker-compose.prod.yml up -d
+# 2. Installer Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
 
-# Migrations DB
-docker-compose exec app npx prisma migrate deploy
+# 3. Cloner le projet
+git clone https://github.com/your-org/xch.git
+cd xch/backend
 
-# Vérifier santé
-docker-compose ps
+# 4. Configurer .env.production (secrets, ports)
+cp .env.example .env.production
+nano .env.production
+# Générer secrets : openssl rand -base64 32
+
+# 5. Démarrer Docker Compose
+docker-compose --env-file .env.production up -d
+
+# 6. Vérifier les conteneurs
+docker ps
+
+# 7. Migrations Prisma
+docker-compose exec backend npx prisma migrate deploy
+
+# 8. Configurer Nginx + SSL (voir INSTALL_PROD.md)
 ```
 
-### Cloud (AWS, Azure, GCP)
+### Multi-instances (dev, staging, prod)
 
-Architecture Docker portable on-premise ↔ cloud.
+Voir guide complet : **[DOCKER_PORTS.md](DOCKER_PORTS.md)** section "Isolation multi-instances"
 
-Voir : [INSTALLATION.md](INSTALLATION.md) section Cloud
+**Permet :**
+- Plusieurs environnements XCH sur un seul serveur
+- Ports personnalisés par instance (5432→5433→5434, etc.)
+- Isolation réseau Docker complète
+- Gestion via scripts automatisés
 
 ---
 
@@ -300,9 +403,47 @@ Contributions bienvenues ! Voir [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 📝 Changelog
 
-Voir [CHANGELOG.md](CHANGELOG.md) pour historique versions.
+### Version 1.0.0-MVP (2026-01-01) ✅ **PRODUCTION-READY**
 
-**Version actuelle** : 1.0.0-alpha (MVP en développement)
+**🎉 MVP 100% Complet - Livraison finale**
+
+#### Backend (NestJS 10)
+- ✅ 10 modules terminés (Auth, Users, Tenants, Sites, Assets, Racks, Tasks, FloorPlans, Integrations, Audit)
+- ✅ 100+ endpoints REST documentés (Swagger)
+- ✅ Authentification JWT + SSO OIDC (Microsoft Entra ID, Keycloak)
+- ✅ RBAC Casbin avec 4 rôles (Admin, Manager, Technicien, Viewer)
+- ✅ Multi-tenant PostgreSQL Row-Level Security (RLS)
+- ✅ Intégrations NetBox + Uptime Kuma (READ-ONLY)
+- ✅ Audit trail complet (actions tracées)
+
+#### Frontend (Next.js 15)
+- ✅ 7 modules terminés (Dashboard, Sites, Assets, Tasks, Racks, FloorPlans, Settings)
+- ✅ 17 pages fonctionnelles
+- ✅ Carte interactive Leaflet (clustering, filtres)
+- ✅ QR codes génération + scanner caméra (@zxing/browser)
+- ✅ Kanban drag & drop (Tasks avec checklist)
+- ✅ Visualisation 2D baies Konva.js (mount/unmount équipements)
+- ✅ Upload floor plans + pins éditables
+- ✅ PWA manifest + icons (192x192, 512x512)
+- ✅ Toast notifications (react-hot-toast)
+- ✅ Error boundaries React
+
+#### Infrastructure
+- ✅ Docker Compose (PostgreSQL 15 + PostGIS, Redis 7, MinIO)
+- ✅ Réseau Docker isolé `xch-network`
+- ✅ Ports personnalisables via variables d'environnement
+- ✅ Prisma migrations + seed data
+
+#### Documentation
+- ✅ INSTALL_DEV.md (6 600+ lignes) - Installation développement Windows/WSL2
+- ✅ INSTALL_PROD.md (11 000+ lignes) - Déploiement production Linux
+- ✅ DOCKER_PORTS.md (2 800+ lignes) - Gestion ports et isolation
+- ✅ DOCS_INDEX.md - Index complet 27 fichiers documentation
+- ✅ 5 ADR (Architecture Decision Records)
+- ✅ Troubleshooting développement (10+ scénarios)
+- ✅ Troubleshooting production (15+ scénarios)
+
+**📦 Détails complets :** [LIVRAISON_MVP_100.md](LIVRAISON_MVP_100.md)
 
 ---
 
