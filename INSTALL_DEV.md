@@ -725,6 +725,1419 @@ git pull origin main
 
 ---
 
+## 🖥️ 9. Test sur Serveur Linux de Développement
+
+### 9.1 Vue d'ensemble
+
+**Workflow de développement hybride :**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    WORKFLOW DÉVELOPPEMENT                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. DEV LOCAL (PC Windows/WSL2)                                │
+│     ├─ Développement rapide                                    │
+│     ├─ Hot-reload backend/frontend                             │
+│     ├─ Tests unitaires                                         │
+│     └─ Commit + Push GitHub                                    │
+│                                                                 │
+│  2. TEST SERVEUR LINUX (Docker isolé)                          │
+│     ├─ git pull sur serveur                                    │
+│     ├─ Build containers Docker                                 │
+│     ├─ Tests intégration                                       │
+│     ├─ Tests performance                                       │
+│     └─ Validation pré-production                               │
+│                                                                 │
+│  3. PRODUCTION                                                  │
+│     └─ Déploiement final (voir INSTALL_PROD.md)               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Avantages de tester sur serveur avant production :**
+
+✅ **Environnement réaliste**
+- Même OS que production (Ubuntu/Debian)
+- Containers Docker isolés
+- Réseau similaire à production
+
+✅ **Détection précoce des problèmes**
+- Conflits de ports avec services existants
+- Problèmes de ressources (RAM, CPU, disque)
+- Issues réseau Docker
+
+✅ **Validation multi-environnements**
+- Comportement différent Windows vs Linux
+- Permissions fichiers Unix
+- Compatibilité architectures
+
+✅ **Tests d'intégration**
+- Interactions avec autres services (Nginx Proxy Manager, Home Assistant)
+- Performance réelle serveur
+- Charge réseau
+
+---
+
+### 9.2 Prérequis Serveur
+
+#### Serveur Linux (Ubuntu 22.04+ / Debian 12+)
+
+**Déjà installés (votre setup) :**
+- ✅ Docker 24+
+- ✅ Portainer (gestion containers)
+- ✅ Nginx Proxy Manager (domaines/SSL)
+- ✅ Home Assistant + autres containers
+
+**À vérifier :**
+
+```bash
+# Connexion SSH
+ssh user@IP_SERVEUR
+
+# Vérifier versions Docker
+docker --version
+docker-compose --version
+
+# Vérifier Git
+git --version
+
+# Si Git manquant
+sudo apt update
+sudo apt install -y git
+
+# Vérifier espace disque disponible (min 20 GB)
+df -h
+
+# Vérifier RAM disponible (min 4 GB libre)
+free -h
+```
+
+#### Ports potentiellement occupés
+
+**Lister tous les ports actifs :**
+
+```bash
+# Méthode 1 : netstat (tous les ports TCP/UDP en écoute)
+sudo netstat -tulpn | grep LISTEN
+
+# Méthode 2 : ss (plus rapide)
+sudo ss -tulnp | grep LISTEN
+
+# Méthode 3 : Ports Docker mappés
+docker ps --format "table {{.Names}}\t{{.Ports}}"
+
+# Méthode 4 : Ports système classiques
+sudo lsof -i :5432 # PostgreSQL
+sudo lsof -i :6379 # Redis
+sudo lsof -i :9000 # MinIO / Portainer
+sudo lsof -i :3000 # Backend
+sudo lsof -i :3001 # Frontend
+sudo lsof -i :80   # HTTP
+sudo lsof -i :443  # HTTPS
+```
+
+**Exemple de sortie (votre serveur) :**
+
+```
+# Ports probablement occupés :
+:80    → Nginx Proxy Manager
+:443   → Nginx Proxy Manager
+:5432  → PostgreSQL (autre projet ?)
+:6379  → Redis (autre projet ?)
+:8123  → Home Assistant
+:9000  → Portainer
+:9443  → Portainer SSL
+```
+
+**Solution :** Utiliser des ports personnalisés pour XCH (section 9.4).
+
+---
+
+### 9.3 Déploiement Test sur Serveur
+
+#### Étape 1 : Connexion SSH et préparation
+
+```bash
+# Connexion SSH au serveur
+ssh votre-user@IP_SERVEUR
+
+# Créer dossier pour projets (si inexistant)
+sudo mkdir -p /opt/xch-dev
+sudo chown $USER:$USER /opt/xch-dev
+cd /opt/xch-dev
+
+# Ou utiliser home directory
+mkdir -p ~/projects/xch-dev
+cd ~/projects/xch-dev
+```
+
+#### Étape 2 : Cloner le repository
+
+```bash
+# Cloner depuis GitHub (remplacer USERNAME par votre compte)
+git clone https://github.com/USERNAME/xch.git
+cd xch
+
+# Vérifier la branche
+git branch -a
+git checkout main  # ou develop
+
+# Voir les fichiers
+ls -la
+```
+
+#### Étape 3 : Détecter les conflits de ports
+
+**Script automatique de détection :**
+
+Créer `scripts/check-server-ports.sh` :
+
+```bash
+#!/bin/bash
+
+echo "======================================"
+echo "  XCH - Détection Ports Serveur"
+echo "======================================"
+echo ""
+
+# Ports requis par XCH (défaut)
+declare -A XCH_PORTS=(
+    [5432]="PostgreSQL"
+    [6379]="Redis"
+    [9000]="MinIO API"
+    [9001]="MinIO Console"
+    [3000]="Backend NestJS"
+    [3001]="Frontend Next.js"
+)
+
+# Ports suggérés si conflits
+declare -A ALT_PORTS=(
+    [5432]=5433
+    [6379]=6380
+    [9000]=9002
+    [9001]=9003
+    [3000]=3100
+    [3001]=3101
+)
+
+CONFLICTS=0
+ENV_FILE=".env.server-dev"
+
+echo "Vérification des ports..."
+echo ""
+
+for port in "${!XCH_PORTS[@]}"; do
+    service="${XCH_PORTS[$port]}"
+
+    # Vérifier si port est utilisé
+    if sudo ss -tuln | grep -qw ":$port "; then
+        echo "❌ Port $port ($service) : OCCUPÉ"
+
+        # Identifier le processus
+        process=$(sudo lsof -i :$port 2>/dev/null | tail -n +2 | awk '{print $1 " (PID: " $2 ")"}' | head -1)
+        if [ -n "$process" ]; then
+            echo "   → $process"
+        fi
+
+        alt_port=${ALT_PORTS[$port]}
+        echo "   ✅ Port alternatif recommandé : $alt_port"
+
+        ((CONFLICTS++))
+    else
+        echo "✅ Port $port ($service) : LIBRE"
+    fi
+done
+
+echo ""
+echo "======================================"
+
+if [ $CONFLICTS -eq 0 ]; then
+    echo "✅ Aucun conflit détecté"
+    echo ""
+    echo "Vous pouvez utiliser les ports par défaut."
+    echo "Copiez .env.example vers .env"
+else
+    echo "⚠️  $CONFLICTS conflit(s) détecté(s)"
+    echo ""
+    echo "Générer fichier $ENV_FILE avec ports personnalisés ?"
+    read -p "Générer $ENV_FILE ? (y/N) " -n 1 -r
+    echo
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        # Générer .env avec ports alternatifs
+        cat > $ENV_FILE <<EOF
+# ================================
+# XCH - Configuration Serveur Dev
+# Généré le $(date +"%Y-%m-%d %H:%M:%S")
+# ================================
+
+# Environnement
+NODE_ENV=development
+
+# Ports personnalisés (conflits détectés)
+POSTGRES_PORT=${ALT_PORTS[5432]}
+REDIS_PORT=${ALT_PORTS[6379]}
+MINIO_PORT=${ALT_PORTS[9000]}
+MINIO_CONSOLE_PORT=${ALT_PORTS[9001]}
+APP_PORT=${ALT_PORTS[3000]}
+# FRONTEND_PORT=${ALT_PORTS[3001]}  # Modifier dans frontend/package.json
+
+# ================================
+# Configuration PostgreSQL
+# ================================
+
+DATABASE_URL="postgresql://xch_user:xch_dev_password@localhost:${ALT_PORTS[5432]}/xch_dev?schema=public"
+POSTGRES_USER=xch_user
+POSTGRES_PASSWORD=xch_dev_password
+POSTGRES_DB=xch_dev
+
+# ================================
+# Configuration Redis
+# ================================
+
+REDIS_HOST=localhost
+REDIS_PORT=${ALT_PORTS[6379]}
+REDIS_PASSWORD=redis_dev_password
+
+# ================================
+# Configuration MinIO
+# ================================
+
+MINIO_ENDPOINT=localhost
+MINIO_PORT=${ALT_PORTS[9000]}
+MINIO_USE_SSL=false
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin123
+MINIO_BUCKET_NAME=xch-uploads
+
+# ================================
+# Configuration Application
+# ================================
+
+JWT_SECRET=dev_jwt_secret_change_for_server_test
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_SECRET=dev_refresh_secret_change_for_server_test
+JWT_REFRESH_EXPIRES_IN=7d
+
+# URL Frontend (pour CORS)
+FRONTEND_URL=http://localhost:${ALT_PORTS[3001]}
+CORS_ORIGIN=http://localhost:${ALT_PORTS[3001]}
+
+# ================================
+# Configuration OIDC (optionnel)
+# ================================
+
+OIDC_ENABLED=false
+# OIDC_ISSUER=
+# OIDC_CLIENT_ID=
+# OIDC_CLIENT_SECRET=
+
+# ================================
+# Intégrations (optionnel)
+# ================================
+
+NETBOX_ENABLED=false
+# NETBOX_URL=
+# NETBOX_TOKEN=
+
+UPTIME_KUMA_ENABLED=false
+# UPTIME_KUMA_URL=
+EOF
+
+        echo ""
+        echo "✅ Fichier $ENV_FILE créé avec ports personnalisés"
+        echo ""
+        echo "Prochaines étapes :"
+        echo "1. Copier vers .env : cp $ENV_FILE .env"
+        echo "2. Modifier backend/docker-compose.yml (voir section 9.4)"
+        echo "3. Modifier frontend/package.json (port 3101)"
+    fi
+fi
+
+echo ""
+echo "======================================"
+```
+
+**Exécuter le script :**
+
+```bash
+# Rendre exécutable
+chmod +x scripts/check-server-ports.sh
+
+# Lancer la vérification
+./scripts/check-server-ports.sh
+```
+
+**Sortie exemple (avec conflits) :**
+
+```
+======================================
+  XCH - Détection Ports Serveur
+======================================
+
+Vérification des ports...
+
+❌ Port 5432 (PostgreSQL) : OCCUPÉ
+   → postgres (PID: 1234)
+   ✅ Port alternatif recommandé : 5433
+❌ Port 6379 (Redis) : OCCUPÉ
+   → redis-server (PID: 5678)
+   ✅ Port alternatif recommandé : 6380
+❌ Port 9000 (MinIO API) : OCCUPÉ
+   → portainer (PID: 9012)
+   ✅ Port alternatif recommandé : 9002
+✅ Port 9001 (MinIO Console) : LIBRE
+✅ Port 3000 (Backend NestJS) : LIBRE
+✅ Port 3001 (Frontend Next.js) : LIBRE
+
+======================================
+⚠️  3 conflit(s) détecté(s)
+
+Générer fichier .env.server-dev avec ports personnalisés ?
+Générer .env.server-dev ? (y/N) y
+
+✅ Fichier .env.server-dev créé avec ports personnalisés
+
+Prochaines étapes :
+1. Copier vers .env : cp .env.server-dev .env
+2. Modifier backend/docker-compose.yml (voir section 9.4)
+3. Modifier frontend/package.json (port 3101)
+
+======================================
+```
+
+#### Étape 4 : Configurer docker-compose.yml pour ports personnalisables
+
+**Modifier `backend/docker-compose.yml` :**
+
+```bash
+cd backend
+nano docker-compose.yml
+```
+
+**Remplacer les ports fixes par variables :**
+
+```yaml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:15-3.4
+    container_name: xch-dev-postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"  # ✅ Variable
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-xch_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xch_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-xch_dev}
+    volumes:
+      - xch-dev-postgres-data:/var/lib/postgresql/data
+    networks:
+      - xch-dev-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: xch-dev-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"  # ✅ Variable
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    volumes:
+      - xch-dev-redis-data:/data
+    networks:
+      - xch-dev-network
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: xch-dev-minio
+    ports:
+      - "${MINIO_PORT:-9000}:9000"              # ✅ Variable API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"      # ✅ Variable Console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    command: server /data --console-address ":9001"
+    volumes:
+      - xch-dev-minio-data:/data
+    networks:
+      - xch-dev-network
+    restart: unless-stopped
+
+networks:
+  xch-dev-network:
+    name: xch-dev-network
+    driver: bridge
+
+volumes:
+  xch-dev-postgres-data:
+    name: xch-dev-postgres-data
+  xch-dev-redis-data:
+    name: xch-dev-redis-data
+  xch-dev-minio-data:
+    name: xch-dev-minio-data
+```
+
+**Sauvegarder :** `Ctrl+O`, `Enter`, `Ctrl+X`
+
+#### Étape 5 : Copier la configuration
+
+```bash
+# Copier .env généré vers backend/
+cp .env.server-dev backend/.env
+
+# Vérifier le contenu
+cat backend/.env
+```
+
+#### Étape 6 : Modifier le port frontend (si conflit)
+
+Si le port 3001 est occupé, modifier `frontend/package.json` :
+
+```bash
+cd ../frontend
+nano package.json
+```
+
+**Remplacer :**
+
+```json
+{
+  "scripts": {
+    "dev": "next dev -p 3101",     // ✅ Port personnalisé
+    "start": "next start -p 3101"  // ✅ Port personnalisé
+  }
+}
+```
+
+**Sauvegarder :** `Ctrl+O`, `Enter`, `Ctrl+X`
+
+#### Étape 7 : Démarrer les services Docker
+
+```bash
+# Retourner au dossier backend
+cd ../backend
+
+# Démarrer l'infrastructure Docker
+docker-compose up -d
+
+# Vérifier les conteneurs
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+```
+
+**Sortie attendue :**
+
+```
+NAMES                STATUS              PORTS
+xch-dev-postgres     Up 10 seconds       0.0.0.0:5433->5432/tcp
+xch-dev-redis        Up 10 seconds       0.0.0.0:6380->6379/tcp
+xch-dev-minio        Up 10 seconds       0.0.0.0:9002->9000/tcp, 0.0.0.0:9003->9001/tcp
+```
+
+**Vérifier les logs :**
+
+```bash
+# Logs de tous les services
+docker-compose logs -f
+
+# Logs PostgreSQL uniquement
+docker-compose logs -f postgres
+
+# Vérifier que PostgreSQL est prêt
+docker-compose logs postgres | grep "ready to accept connections"
+# Sortie : database system is ready to accept connections
+```
+
+#### Étape 8 : Installer dépendances backend
+
+```bash
+# Toujours dans backend/
+npm install
+
+# Vérifier installation
+ls node_modules | wc -l  # Doit afficher ~300-400 packages
+```
+
+#### Étape 9 : Migrations Prisma
+
+```bash
+# Générer le client Prisma
+npx prisma generate
+
+# Appliquer les migrations
+npx prisma migrate dev --name init
+
+# Seed la base de données
+npx prisma db seed
+```
+
+**Vérifier la base de données :**
+
+```bash
+# Se connecter à PostgreSQL
+docker-compose exec postgres psql -U xch_user -d xch_dev
+
+# Dans psql :
+\dt              # Lister les tables
+SELECT * FROM "User";  # Voir les utilisateurs seed
+\q               # Quitter
+```
+
+#### Étape 10 : Démarrer le backend
+
+```bash
+# Mode développement
+npm run start:dev
+
+# Laisser tourner dans le terminal, ou utiliser PM2 (optionnel)
+```
+
+**Vérifier que le backend fonctionne :**
+
+```bash
+# Dans un autre terminal SSH
+curl http://localhost:3100/health  # Si APP_PORT=3100
+# Sortie : {"status":"ok","timestamp":"..."}
+```
+
+#### Étape 11 : Installer et démarrer le frontend
+
+```bash
+# Nouveau terminal SSH (ou session tmux)
+cd /opt/xch-dev/xch/frontend  # ou ~/projects/xch-dev/xch/frontend
+
+# Installer dépendances
+npm install
+
+# Générer les icônes PWA
+npm run generate-icons
+
+# Démarrer le frontend
+npm run dev
+```
+
+**Vérifier que le frontend fonctionne :**
+
+```bash
+# Dans un autre terminal
+curl http://localhost:3101  # Si port personnalisé 3101
+# Sortie : HTML de l'application Next.js
+```
+
+#### Étape 12 : Accéder depuis votre PC Windows
+
+**Ouvrir dans le navigateur :**
+
+```
+http://IP_SERVEUR:3101
+```
+
+**Exemple :**
+```
+http://192.168.1.100:3101
+```
+
+**Compte admin par défaut :**
+- Email : `admin@xch.local`
+- Password : `admin123`
+
+---
+
+### 9.4 Intégration Nginx Proxy Manager (Optionnel)
+
+**Avantage :** Accéder à l'application via un nom de domaine au lieu de `IP:PORT`.
+
+#### Étape 1 : Connecter XCH au réseau Nginx Proxy Manager
+
+**Vérifier le réseau NPM :**
+
+```bash
+# Lister les réseaux Docker
+docker network ls
+
+# Inspecter le réseau NPM (nom peut varier)
+docker network inspect npm_default
+# ou
+docker network inspect nginxproxymanager_default
+```
+
+**Modifier `backend/docker-compose.yml` :**
+
+```yaml
+services:
+  # ... services existants ...
+
+networks:
+  xch-dev-network:
+    name: xch-dev-network
+    driver: bridge
+
+  # ✅ Ajouter le réseau NPM (externe)
+  nginxproxymanager_default:
+    external: true
+```
+
+**Connecter le frontend au réseau NPM :**
+
+⚠️ **Problème :** Le frontend tourne via `npm run dev` (pas dans Docker).
+
+**Solution 1 : Proxy vers localhost**
+
+Dans Nginx Proxy Manager, créer un proxy vers `localhost:3101` (le port du frontend sur le serveur).
+
+**Solution 2 : Dockeriser le frontend (recommandé pour serveur test)**
+
+Créer `frontend/Dockerfile.dev` :
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copier package.json
+COPY package*.json ./
+
+# Installer dépendances
+RUN npm install
+
+# Copier le code source
+COPY . .
+
+# Générer icônes PWA
+RUN npm run generate-icons
+
+# Exposer le port
+EXPOSE 3001
+
+# Démarrer en mode développement
+CMD ["npm", "run", "dev"]
+```
+
+**Ajouter le service frontend dans `backend/docker-compose.yml` :**
+
+```yaml
+services:
+  # ... postgres, redis, minio ...
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.dev
+    container_name: xch-dev-frontend
+    ports:
+      - "3101:3001"  # Port externe : port interne
+    environment:
+      - NEXT_PUBLIC_API_URL=http://xch-dev-backend:3000
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - xch-dev-network
+      - nginxproxymanager_default  # ✅ Connecté au réseau NPM
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.dev
+    container_name: xch-dev-backend
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=${DATABASE_URL}
+    volumes:
+      - ../backend:/app
+      - /app/node_modules
+    networks:
+      - xch-dev-network
+      - nginxproxymanager_default  # ✅ Connecté au réseau NPM
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    restart: unless-stopped
+
+networks:
+  xch-dev-network:
+    name: xch-dev-network
+    driver: bridge
+
+  nginxproxymanager_default:
+    external: true
+```
+
+**Créer `backend/Dockerfile.dev` :**
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copier package.json
+COPY package*.json ./
+
+# Installer dépendances
+RUN npm install
+
+# Copier le code source
+COPY . .
+
+# Générer Prisma Client
+RUN npx prisma generate
+
+# Exposer le port
+EXPOSE 3000
+
+# Démarrer en mode développement
+CMD ["npm", "run", "start:dev"]
+```
+
+**Redémarrer avec Docker Compose :**
+
+```bash
+cd backend
+docker-compose down
+docker-compose up -d --build
+```
+
+**Vérifier les conteneurs :**
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Ports}}"
+```
+
+**Sortie attendue :**
+
+```
+NAMES                PORTS
+xch-dev-frontend     0.0.0.0:3101->3001/tcp
+xch-dev-backend      0.0.0.0:3100->3000/tcp
+xch-dev-postgres     0.0.0.0:5433->5432/tcp
+xch-dev-redis        0.0.0.0:6380->6379/tcp
+xch-dev-minio        0.0.0.0:9002->9000/tcp, 0.0.0.0:9003->9001/tcp
+```
+
+#### Étape 2 : Configurer Proxy Host dans NPM
+
+**Accéder à Nginx Proxy Manager :**
+
+```
+http://IP_SERVEUR:81
+```
+
+**Créer un Proxy Host :**
+
+1. **Proxy Hosts** → **Add Proxy Host**
+
+2. **Details :**
+   - **Domain Names :** `xch-dev.local` (ou `xch-dev.votre-domaine.com`)
+   - **Scheme :** `http`
+   - **Forward Hostname / IP :** `xch-dev-frontend` (nom du conteneur)
+   - **Forward Port :** `3001` (port interne du conteneur)
+   - **Cache Assets :** ✅ Activé
+   - **Block Common Exploits :** ✅ Activé
+   - **Websockets Support :** ✅ Activé (pour hot-reload)
+
+3. **SSL :**
+   - Si domaine public : **Request a new SSL Certificate** (Let's Encrypt)
+   - Si domaine local : **Use a Custom SSL Certificate** ou laisser HTTP
+
+4. **Advanced (optionnel) :**
+
+```nginx
+# Proxy vers backend API
+location /api {
+    proxy_pass http://xch-dev-backend:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+5. **Save**
+
+#### Étape 3 : Configuration DNS locale (PC Windows)
+
+**Éditer le fichier hosts Windows :**
+
+```powershell
+# Ouvrir PowerShell en Administrateur
+notepad C:\Windows\System32\drivers\etc\hosts
+```
+
+**Ajouter :**
+
+```
+192.168.1.100   xch-dev.local
+```
+
+**Sauvegarder et fermer.**
+
+#### Étape 4 : Accéder via le domaine
+
+**Ouvrir dans le navigateur (PC Windows) :**
+
+```
+http://xch-dev.local
+```
+
+**Ou avec SSL (si configuré) :**
+
+```
+https://xch-dev.local
+```
+
+---
+
+### 9.5 Workflow Dev → Serveur
+
+**Workflow complet pour développer en local et tester sur serveur :**
+
+#### 1. Développement local (PC Windows/WSL2)
+
+```bash
+# WSL2 Terminal
+
+# Créer une branche feature
+git checkout -b feature/nouvelle-fonctionnalite
+
+# Développer (hot-reload actif)
+# - Modifier le code backend/frontend
+# - Tester localement : http://localhost:3001
+
+# Commit
+git add .
+git commit -m "feat: ajout nouvelle fonctionnalité"
+
+# Push vers GitHub
+git push origin feature/nouvelle-fonctionnalite
+```
+
+#### 2. Test sur serveur Linux
+
+```bash
+# SSH vers serveur
+ssh user@IP_SERVEUR
+
+# Aller dans le dossier XCH
+cd /opt/xch-dev/xch  # ou ~/projects/xch-dev/xch
+
+# Récupérer les dernières modifications
+git fetch origin
+git checkout feature/nouvelle-fonctionnalite
+git pull origin feature/nouvelle-fonctionnalite
+
+# Rebuild les containers (si modifications Dockerfile/dépendances)
+cd backend
+docker-compose up -d --build
+
+# Si modifications backend seulement (sans rebuild)
+docker-compose restart backend
+
+# Si modifications Prisma schema
+docker-compose exec backend npx prisma migrate dev
+docker-compose exec backend npx prisma generate
+docker-compose restart backend
+
+# Si modifications frontend seulement
+docker-compose restart frontend
+
+# Vérifier les logs
+docker-compose logs -f backend
+docker-compose logs -f frontend
+```
+
+#### 3. Tester depuis PC Windows
+
+```
+http://IP_SERVEUR:3101
+# ou
+http://xch-dev.local
+```
+
+#### 4. Valider et merger
+
+```bash
+# Si tests OK sur serveur, merger dans main
+git checkout main
+git merge feature/nouvelle-fonctionnalite
+git push origin main
+
+# Sur serveur, passer sur main
+ssh user@IP_SERVEUR
+cd /opt/xch-dev/xch
+git checkout main
+git pull origin main
+cd backend
+docker-compose up -d --build
+```
+
+#### Script d'automatisation (optionnel)
+
+Créer `scripts/deploy-server-dev.sh` :
+
+```bash
+#!/bin/bash
+
+# ============================================
+# Script de déploiement serveur dev
+# ============================================
+
+set -e
+
+SERVER_USER="votre-user"
+SERVER_IP="192.168.1.100"
+PROJECT_PATH="/opt/xch-dev/xch"
+
+echo "======================================"
+echo "  Déploiement XCH Serveur Dev"
+echo "======================================"
+echo ""
+
+# Vérifier que les modifications locales sont commitées
+if [[ -n $(git status -s) ]]; then
+    echo "❌ Modifications locales non commitées détectées"
+    echo ""
+    git status -s
+    echo ""
+    echo "Commitez vos modifications avant de déployer."
+    exit 1
+fi
+
+# Récupérer la branche actuelle
+BRANCH=$(git branch --show-current)
+echo "📦 Branche actuelle : $BRANCH"
+echo ""
+
+# Pusher vers GitHub
+echo "⬆️  Push vers GitHub..."
+git push origin $BRANCH
+echo ""
+
+# Se connecter au serveur et déployer
+echo "🚀 Déploiement sur serveur $SERVER_IP..."
+echo ""
+
+ssh $SERVER_USER@$SERVER_IP << EOF
+    set -e
+
+    echo "📂 Navigation vers projet..."
+    cd $PROJECT_PATH
+
+    echo "⬇️  Pull dernières modifications..."
+    git fetch origin
+    git checkout $BRANCH
+    git pull origin $BRANCH
+
+    echo "🔨 Rebuild containers..."
+    cd backend
+    docker-compose up -d --build
+
+    echo "⏳ Attente démarrage (10s)..."
+    sleep 10
+
+    echo "✅ Vérification statut containers..."
+    docker-compose ps
+
+    echo ""
+    echo "======================================"
+    echo "  ✅ Déploiement terminé !"
+    echo "======================================"
+    echo ""
+    echo "Accès application :"
+    echo "  http://$SERVER_IP:3101"
+    echo "  http://xch-dev.local (si DNS configuré)"
+    echo ""
+EOF
+
+echo ""
+echo "🎉 Déploiement réussi !"
+```
+
+**Utilisation :**
+
+```bash
+# Rendre exécutable (local WSL2)
+chmod +x scripts/deploy-server-dev.sh
+
+# Lancer le déploiement
+./scripts/deploy-server-dev.sh
+```
+
+---
+
+### 9.6 Troubleshooting Serveur
+
+#### Problème 1 : Conflits de ports persistants
+
+**Erreur :**
+
+```
+Error starting userland proxy: listen tcp4 0.0.0.0:5432: bind: address already in use
+```
+
+**Solution 1 : Identifier et arrêter le service**
+
+```bash
+# Identifier le processus
+sudo lsof -i :5432
+
+# Exemple de sortie :
+# COMMAND   PID      USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+# postgres  1234  postgres    5u  IPv4  98765      0t0  TCP *:5432 (LISTEN)
+
+# Arrêter PostgreSQL système
+sudo systemctl stop postgresql
+sudo systemctl disable postgresql
+
+# Redémarrer XCH Docker
+cd /opt/xch-dev/xch/backend
+docker-compose up -d
+```
+
+**Solution 2 : Utiliser les ports personnalisés**
+
+```bash
+# Relancer le script de détection
+./scripts/check-server-ports.sh
+
+# Générer .env avec ports alternatifs (y)
+# Copier vers backend
+cp .env.server-dev backend/.env
+
+# Vérifier docker-compose.yml utilise ${POSTGRES_PORT:-5432}
+cat backend/docker-compose.yml | grep POSTGRES_PORT
+
+# Relancer Docker
+cd backend
+docker-compose down
+docker-compose up -d
+```
+
+#### Problème 2 : Backend ne se connecte pas à PostgreSQL
+
+**Erreur dans logs :**
+
+```
+docker-compose logs backend
+# Error: connect ECONNREFUSED 127.0.0.1:5432
+```
+
+**Cause :** DATABASE_URL utilise `localhost` au lieu du nom du conteneur.
+
+**Solution :**
+
+```bash
+# Éditer backend/.env
+nano backend/.env
+```
+
+**Corriger DATABASE_URL :**
+
+```env
+# ❌ Incorrect (si backend dans Docker)
+DATABASE_URL="postgresql://xch_user:password@localhost:5432/xch_dev"
+
+# ✅ Correct (utiliser nom du conteneur)
+DATABASE_URL="postgresql://xch_user:password@xch-dev-postgres:5432/xch_dev"
+```
+
+**Redémarrer le backend :**
+
+```bash
+docker-compose restart backend
+docker-compose logs -f backend
+```
+
+#### Problème 3 : Conflit réseau Docker
+
+**Erreur :**
+
+```
+Error response from daemon: network xch-dev-network has active endpoints
+```
+
+**Solution :**
+
+```bash
+# Lister les conteneurs connectés au réseau
+docker network inspect xch-dev-network
+
+# Arrêter tous les conteneurs XCH
+cd backend
+docker-compose down
+
+# Supprimer le réseau manuellement (si nécessaire)
+docker network rm xch-dev-network
+
+# Recréer
+docker-compose up -d
+```
+
+#### Problème 4 : Containers ne démarrent pas (ressources)
+
+**Symptômes :**
+
+```bash
+docker-compose ps
+# État : Restarting ou Exited
+```
+
+**Vérifier les ressources :**
+
+```bash
+# RAM disponible
+free -h
+# Si < 2 GB libre → Problème mémoire
+
+# CPU
+top
+# Vérifier charge (load average)
+
+# Disque
+df -h
+# Si > 90% utilisé → Problème espace
+
+# Logs Docker
+docker-compose logs postgres
+# Rechercher "out of memory" ou "no space left"
+```
+
+**Solutions :**
+
+**Libérer de la mémoire :**
+
+```bash
+# Arrêter containers non essentiels
+docker stop $(docker ps -q)  # Arrête TOUS les containers (⚠️ ATTENTION)
+
+# Ou arrêter sélectivement
+docker stop home-assistant portainer  # Exemples
+
+# Nettoyer Docker
+docker system prune -a --volumes  # ⚠️ Supprime tout ce qui n'est pas utilisé
+```
+
+**Libérer de l'espace disque :**
+
+```bash
+# Supprimer images Docker inutilisées
+docker image prune -a
+
+# Supprimer volumes Docker orphelins
+docker volume prune
+
+# Nettoyer logs système
+sudo journalctl --vacuum-time=3d
+```
+
+#### Problème 5 : Frontend ne charge pas (CORS)
+
+**Erreur dans navigateur (F12 Console) :**
+
+```
+Access to fetch at 'http://IP_SERVEUR:3100/api/...' from origin 'http://IP_SERVEUR:3101' has been blocked by CORS policy
+```
+
+**Solution :**
+
+```bash
+# Éditer backend/.env
+nano backend/.env
+```
+
+**Ajouter l'IP du serveur dans CORS_ORIGIN :**
+
+```env
+# Autoriser frontend depuis IP serveur
+CORS_ORIGIN=http://192.168.1.100:3101,http://localhost:3101,http://xch-dev.local
+
+# Ou autoriser tout (développement seulement !)
+CORS_ORIGIN=*
+```
+
+**Redémarrer le backend :**
+
+```bash
+docker-compose restart backend
+```
+
+#### Problème 6 : Hot-reload ne fonctionne pas
+
+**Cause :** Volumes Docker mal configurés.
+
+**Solution :**
+
+Vérifier `docker-compose.yml` :
+
+```yaml
+services:
+  backend:
+    volumes:
+      - ../backend:/app           # ✅ Source code
+      - /app/node_modules         # ✅ Exclure node_modules
+      - /app/dist                 # ✅ Exclure dist
+
+  frontend:
+    volumes:
+      - ../frontend:/app          # ✅ Source code
+      - /app/node_modules         # ✅ Exclure node_modules
+      - /app/.next                # ✅ Exclure .next
+```
+
+**Redémarrer :**
+
+```bash
+docker-compose down
+docker-compose up -d --build
+```
+
+#### Problème 7 : Nginx Proxy Manager ne route pas correctement
+
+**Symptôme :** `http://xch-dev.local` affiche erreur 502 Bad Gateway.
+
+**Vérification :**
+
+```bash
+# Vérifier que le frontend est UP
+docker ps | grep xch-dev-frontend
+# État doit être "Up"
+
+# Tester connexion directe
+curl http://xch-dev-frontend:3001
+# Doit retourner HTML
+
+# Vérifier les logs NPM
+docker logs nginx-proxy-manager  # Nom peut varier
+```
+
+**Solution :**
+
+1. **Vérifier réseau NPM :**
+
+```bash
+docker network inspect nginxproxymanager_default | grep xch-dev-frontend
+# Le conteneur doit apparaître dans "Containers"
+```
+
+2. **Reconnecter au réseau :**
+
+```bash
+docker network connect nginxproxymanager_default xch-dev-frontend
+```
+
+3. **Recréer Proxy Host dans NPM UI :**
+   - Forward Hostname : `xch-dev-frontend` (nom exact du conteneur)
+   - Forward Port : `3001` (port interne)
+   - Websockets : ✅ Activé
+
+---
+
+### 9.7 Nettoyage Serveur Test
+
+**Pour supprimer complètement XCH du serveur :**
+
+```bash
+# SSH vers serveur
+ssh user@IP_SERVEUR
+
+# Aller dans le dossier projet
+cd /opt/xch-dev/xch/backend  # ou ~/projects/xch-dev/xch/backend
+
+# Arrêter et supprimer tous les containers + volumes
+docker-compose down -v
+
+# Supprimer les images Docker XCH
+docker images | grep xch
+docker rmi xch-dev-backend xch-dev-frontend  # Si images custom
+
+# Supprimer le réseau
+docker network rm xch-dev-network
+
+# Déconnecter du réseau NPM (si connecté)
+docker network disconnect nginxproxymanager_default xch-dev-frontend 2>/dev/null || true
+docker network disconnect nginxproxymanager_default xch-dev-backend 2>/dev/null || true
+
+# Revenir au dossier parent
+cd ../..
+
+# Supprimer le dossier projet
+rm -rf xch
+
+# Vérifier que tout est supprimé
+docker ps -a | grep xch
+docker volume ls | grep xch
+docker network ls | grep xch
+docker images | grep xch
+
+# Doit retourner vide
+```
+
+**Nettoyage Docker global (optionnel) :**
+
+```bash
+# Nettoyer tous les containers arrêtés
+docker container prune
+
+# Nettoyer toutes les images inutilisées
+docker image prune -a
+
+# Nettoyer tous les volumes orphelins
+docker volume prune
+
+# Nettoyer tout (⚠️ ATTENTION : supprime TOUT ce qui n'est pas utilisé)
+docker system prune -a --volumes
+```
+
+**Restaurer les services système (si arrêtés) :**
+
+```bash
+# Si PostgreSQL système a été arrêté
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Si Redis système a été arrêté
+sudo systemctl start redis
+sudo systemctl enable redis
+```
+
+---
+
+## ✅ Récapitulatif Section 9
+
+**Vous savez maintenant :**
+
+✅ **Déployer XCH sur serveur Linux de dev** avec isolation complète
+✅ **Détecter et résoudre les conflits de ports** automatiquement
+✅ **Configurer docker-compose.yml** avec ports personnalisables
+✅ **Intégrer avec Nginx Proxy Manager** pour accès via domaine
+✅ **Workflow dev local → test serveur** avec script automatisé
+✅ **Troubleshooter les problèmes courants** (ports, réseau, ressources)
+✅ **Nettoyer proprement** le serveur après tests
+
+**Workflow complet :**
+
+```
+PC Windows (WSL2)               Serveur Linux Dev
+─────────────────               ─────────────────
+1. Développer localement    →   3. git pull
+2. Commit + Push GitHub     →   4. docker-compose up -d --build
+                                5. Tester via http://IP_SERVEUR:3101
+                                6. Valider avant production
+```
+
+**Prochaine étape :** Production (voir `INSTALL_PROD.md`)
+
+---
+
 ## 🎯 8. Prochaines Étapes
 
 Maintenant que l'installation est complète :
