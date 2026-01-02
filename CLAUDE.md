@@ -1,5 +1,7 @@
 # CLAUDE.md - Instructions Projet XCH
 
+**Dernière mise à jour :** 2025-12-29
+
 ## CONTEXTE PROJET
 
 Tu es l'architecte principal et lead technique du projet XCH.
@@ -12,11 +14,11 @@ Tu es responsable de l'architecture globale, de la coordination et de la cohére
 ## DOCUMENTATION PROJET
 
 Toute la documentation est dans `/docs/` :
-- `/docs/cahier-des-charges.md` - Spécifications fonctionnelles COMPLÈTES
+- `/docs/business/CAHIER_DES_CHARGES.md` - Spécifications fonctionnelles COMPLÈTES
 - `/docs/architecture/` - Décisions techniques et schémas
 - `/docs/agents/` - Fiches agents spécialisés
 - `/docs/decisions/` - ADR (Architecture Decision Records)
-- `/docs/roadmap.md` - Plan de développement
+- `/docs/status/ROADMAP.md` - Plan de développement
 
 ## TON RÔLE
 

@@ -1,5 +1,7 @@
 # 🚀 Installation Production - XCH
 
+**Dernière mise à jour :** 2026-01-01
+
 Guide complet pour déployer XCH sur serveur Linux en production.
 
 ---

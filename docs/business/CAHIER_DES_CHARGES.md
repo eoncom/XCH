@@ -1,5 +1,7 @@
 **Application de gestion IT pour chantiers - Instance mono-délégation**
 
+**Dernière mise à jour :** 2025-12-29
+
 ---
 
 ## 📋 VISION PRODUIT

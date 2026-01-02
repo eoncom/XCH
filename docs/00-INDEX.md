@@ -45,8 +45,8 @@
 
 ## Installation & Déploiement
 
-### INSTALL_DEV.md
-**📍 Chemin:** [`INSTALL_DEV.md`](INSTALL_DEV.md)
+### installation/INSTALL_DEV.md
+**📍 Chemin:** [`installation/INSTALL_DEV.md`](installation/INSTALL_DEV.md)
 **📝 Description:** Guide complet d'installation en environnement de développement
 **🎯 Audience:** Développeurs
 **📋 Contient:**
@@ -64,8 +64,8 @@
 - ✅ Hot-reload backend et frontend
 - ✅ Génération PWA icons
 
-### INSTALL_PROD.md
-**📍 Chemin:** [`INSTALL_PROD.md`](INSTALL_PROD.md)
+### installation/INSTALL_PROD.md
+**📍 Chemin:** [`installation/INSTALL_PROD.md`](installation/INSTALL_PROD.md)
 **📝 Description:** Guide complet de déploiement en production Linux
 **🎯 Audience:** DevOps, Administrateurs système
 **📋 Contient:**
@@ -87,8 +87,8 @@
 - ✅ SSL/TLS avec certbot (auto-renewal)
 - ✅ PM2 et systemd pour gestion processus
 
-### DOCKER_PORTS.md
-**📍 Chemin:** [`DOCKER_PORTS.md`](DOCKER_PORTS.md)
+### installation/DOCKER_PORTS.md
+**📍 Chemin:** [`installation/DOCKER_PORTS.md`](installation/DOCKER_PORTS.md)
 **📝 Description:** Guide exhaustif sur la gestion des ports Docker et l'isolation
 **🎯 Audience:** DevOps, Développeurs
 **📋 Contient:**
@@ -113,7 +113,7 @@
 ## Architecture & Décisions techniques
 
 ### Cahier des charges
-**📍 Chemin:** [`docs/cahier-des-charges.md`](docs/cahier-des-charges.md)
+**📍 Chemin:** [`business/CAHIER_DES_CHARGES.md`](business/CAHIER_DES_CHARGES.md)
 **📝 Description:** Spécifications fonctionnelles complètes du projet
 **🎯 Audience:** Product Owner, Équipe développement
 **📋 Contient:**
@@ -178,7 +178,7 @@
 **✅ Statut:** Accepté
 
 ### Roadmap
-**📍 Chemin:** [`docs/roadmap.md`](docs/roadmap.md)
+**📍 Chemin:** [`status/ROADMAP.md`](status/ROADMAP.md)
 **📝 Description:** Planification détaillée du développement par phases
 **🎯 Audience:** Chef de projet, Équipe développement
 **📋 Contient:**
@@ -192,8 +192,8 @@
 
 ## Guides de développement
 
-### DEVELOPMENT_GUIDE.md
-**📍 Chemin:** [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md)
+### guides/DEVELOPMENT_GUIDE.md
+**📍 Chemin:** [`guides/DEVELOPMENT_GUIDE.md`](guides/DEVELOPMENT_GUIDE.md)
 **📝 Description:** Guide pratique pour le développement quotidien
 **🎯 Audience:** Développeurs
 **📋 Contient:**
@@ -262,8 +262,8 @@
 
 ### Checkpoints Backend
 
-#### CHECKPOINT_MODULES_1-4.md
-**📍 Chemin:** [`CHECKPOINT_MODULES_1-4.md`](CHECKPOINT_MODULES_1-4.md)
+#### archive/backend/backend-checkpoint-MODULES_1-4.md
+**📍 Chemin:** [`archive/backend/backend-checkpoint-MODULES_1-4.md`](archive/backend/backend-checkpoint-MODULES_1-4.md)
 **📝 Description:** Validation modules backend 1 à 4
 **📅 Date:** Phase 1
 **📋 Contient:**
@@ -272,8 +272,8 @@
 - ✅ Module Sites
 - ✅ Module Assets
 
-#### CHECKPOINT_MODULES_6-8.md
-**📍 Chemin:** [`backend/CHECKPOINT_MODULES_6-8.md`](backend/CHECKPOINT_MODULES_6-8.md)
+#### archive/backend/backend-checkpoint-MODULES_6-8.md
+**📍 Chemin:** [`backend/archive/backend/backend-checkpoint-MODULES_6-8.md`](backend/archive/backend/backend-checkpoint-MODULES_6-8.md)
 **📝 Description:** Validation modules backend 6 à 8
 **📅 Date:** Phase 2
 **📋 Contient:**
@@ -281,8 +281,8 @@
 - ✅ Module Racks (baies 4U-42U)
 - ✅ Module FloorPlans (upload + pins)
 
-#### CHECKPOINT_BACKEND_FINAL.md
-**📍 Chemin:** [`CHECKPOINT_BACKEND_FINAL.md`](CHECKPOINT_BACKEND_FINAL.md)
+#### archive/backend/backend-checkpoint-BACKEND_FINAL.md
+**📍 Chemin:** [`archive/backend/backend-checkpoint-BACKEND_FINAL.md`](archive/backend/backend-checkpoint-BACKEND_FINAL.md)
 **📝 Description:** Validation finale backend complet
 **📅 Date:** Fin Phase 2
 **📋 Contient:**
@@ -295,8 +295,8 @@
 
 ### Checkpoints Frontend
 
-#### CHECKPOINT_FRONTEND_PHASE1.md
-**📍 Chemin:** [`CHECKPOINT_FRONTEND_PHASE1.md`](CHECKPOINT_FRONTEND_PHASE1.md)
+#### archive/backend/backend-checkpoint-FRONTEND_PHASE1.md
+**📍 Chemin:** [`archive/backend/backend-checkpoint-FRONTEND_PHASE1.md`](archive/backend/backend-checkpoint-FRONTEND_PHASE1.md)
 **📝 Description:** Validation Phase 1 frontend
 **📅 Date:** Phase 3
 **📋 Contient:**
@@ -304,8 +304,8 @@
 - ✅ Dashboard avec stats
 - ✅ Liste sites avec carte Leaflet
 
-#### CHECKPOINT_FRONTEND_FINAL.md
-**📍 Chemin:** [`CHECKPOINT_FRONTEND_FINAL.md`](CHECKPOINT_FRONTEND_FINAL.md)
+#### archive/backend/backend-checkpoint-FRONTEND_FINAL.md
+**📍 Chemin:** [`archive/backend/backend-checkpoint-FRONTEND_FINAL.md`](archive/backend/backend-checkpoint-FRONTEND_FINAL.md)
 **📝 Description:** Validation finale frontend complet
 **📅 Date:** Fin Phase 3
 **📋 Contient:**
@@ -365,23 +365,23 @@
 ### Par cas d'usage
 
 #### "Je veux installer XCH en développement"
-→ [`INSTALL_DEV.md`](INSTALL_DEV.md)
+→ [`installation/INSTALL_DEV.md`](installation/INSTALL_DEV.md)
 
 #### "Je veux déployer XCH en production"
-→ [`INSTALL_PROD.md`](INSTALL_PROD.md)
+→ [`installation/INSTALL_PROD.md`](installation/INSTALL_PROD.md)
 
 #### "J'ai un conflit de port Docker"
-→ [`DOCKER_PORTS.md`](DOCKER_PORTS.md)
+→ [`installation/DOCKER_PORTS.md`](installation/DOCKER_PORTS.md)
 
 #### "Je veux comprendre l'architecture technique"
 → [`docs/architecture/tech-stack.md`](docs/architecture/tech-stack.md)
 → [`docs/architecture/database-schema.md`](docs/architecture/database-schema.md)
 
 #### "Je veux voir les spécifications fonctionnelles"
-→ [`docs/cahier-des-charges.md`](docs/cahier-des-charges.md)
+→ [`business/CAHIER_DES_CHARGES.md`](business/CAHIER_DES_CHARGES.md)
 
 #### "Je veux contribuer au code"
-→ [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md)
+→ [`guides/DEVELOPMENT_GUIDE.md`](guides/DEVELOPMENT_GUIDE.md)
 → [`CLAUDE.md`](CLAUDE.md)
 
 #### "Je veux vérifier ce qui a été livré"
@@ -392,31 +392,31 @@
 → [`docs/decisions/`](docs/decisions/) (5 ADR)
 
 #### "Je veux voir la roadmap"
-→ [`docs/roadmap.md`](docs/roadmap.md)
+→ [`status/ROADMAP.md`](status/ROADMAP.md)
 
 ### Par rôle
 
 #### Chef de projet / Product Owner
-1. [`docs/cahier-des-charges.md`](docs/cahier-des-charges.md) - Spécifications
+1. [`business/CAHIER_DES_CHARGES.md`](business/CAHIER_DES_CHARGES.md) - Spécifications
 2. [`LIVRAISON_MVP_100.md`](LIVRAISON_MVP_100.md) - Livrable final
-3. [`docs/roadmap.md`](docs/roadmap.md) - Planification
+3. [`status/ROADMAP.md`](status/ROADMAP.md) - Planification
 4. [`DEVELOPMENT_STATUS.md`](DEVELOPMENT_STATUS.md) - État avancement
 
 #### Développeur Backend
-1. [`INSTALL_DEV.md`](INSTALL_DEV.md) - Installation dev
+1. [`installation/INSTALL_DEV.md`](installation/INSTALL_DEV.md) - Installation dev
 2. [`docs/architecture/database-schema.md`](docs/architecture/database-schema.md) - Schéma DB
-3. [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md) - Conventions code
-4. [`CHECKPOINT_BACKEND_FINAL.md`](CHECKPOINT_BACKEND_FINAL.md) - Backend complet
+3. [`guides/DEVELOPMENT_GUIDE.md`](guides/DEVELOPMENT_GUIDE.md) - Conventions code
+4. [`archive/backend/backend-checkpoint-BACKEND_FINAL.md`](archive/backend/backend-checkpoint-BACKEND_FINAL.md) - Backend complet
 
 #### Développeur Frontend
-1. [`INSTALL_DEV.md`](INSTALL_DEV.md) - Installation dev
+1. [`installation/INSTALL_DEV.md`](installation/INSTALL_DEV.md) - Installation dev
 2. [`frontend/README.md`](frontend/README.md) - Doc frontend
 3. [`docs/PLAN_FRONTEND.md`](docs/PLAN_FRONTEND.md) - Plan frontend
-4. [`CHECKPOINT_FRONTEND_FINAL.md`](CHECKPOINT_FRONTEND_FINAL.md) - Frontend complet
+4. [`archive/backend/backend-checkpoint-FRONTEND_FINAL.md`](archive/backend/backend-checkpoint-FRONTEND_FINAL.md) - Frontend complet
 
 #### DevOps / Administrateur système
-1. [`INSTALL_PROD.md`](INSTALL_PROD.md) - Déploiement production
-2. [`DOCKER_PORTS.md`](DOCKER_PORTS.md) - Gestion ports Docker
+1. [`installation/INSTALL_PROD.md`](installation/INSTALL_PROD.md) - Déploiement production
+2. [`installation/DOCKER_PORTS.md`](installation/DOCKER_PORTS.md) - Gestion ports Docker
 3. [`docs/architecture/tech-stack.md`](docs/architecture/tech-stack.md) - Stack complète
 4. [`docs/decisions/adr-005-cicd-gitlab.md`](docs/decisions/adr-005-cicd-gitlab.md) - CI/CD
 
@@ -438,9 +438,9 @@
 - **2 documents de livraison** (MVP_COMPLET, LIVRAISON_MVP_100)
 
 ### Lignes de documentation
-- **INSTALL_DEV.md**: ~6 600 lignes
-- **INSTALL_PROD.md**: ~11 000 lignes
-- **DOCKER_PORTS.md**: ~2 800 lignes
+- **installation/INSTALL_DEV.md**: ~6 600 lignes
+- **installation/INSTALL_PROD.md**: ~11 000 lignes
+- **installation/DOCKER_PORTS.md**: ~2 800 lignes
 - **Total guides installation**: ~20 400 lignes
 
 ### Couverture documentation
@@ -459,13 +459,13 @@
 
 **À jour automatiquement:**
 - `README.md` - Présentation projet
-- `docs/roadmap.md` - État avancement
+- `status/ROADMAP.md` - État avancement
 - `DEVELOPMENT_STATUS.md` - Métriques développement
 
 **À mettre à jour manuellement:**
-- `INSTALL_DEV.md` - Si changement stack ou workflow dev
-- `INSTALL_PROD.md` - Si nouveaux prérequis ou procédures
-- `DOCKER_PORTS.md` - Si nouveaux services Docker
+- `installation/INSTALL_DEV.md` - Si changement stack ou workflow dev
+- `installation/INSTALL_PROD.md` - Si nouveaux prérequis ou procédures
+- `installation/DOCKER_PORTS.md` - Si nouveaux services Docker
 - `docs/architecture/tech-stack.md` - Si mise à jour versions majeures
 - `docs/architecture/database-schema.md` - Si modifications schéma DB
 
@@ -491,16 +491,16 @@ Créer une issue GitHub avec le label `documentation`.
 ### Je débute sur le projet
 
 - [ ] Lire [`README.md`](README.md) - Vue d'ensemble
-- [ ] Lire [`docs/cahier-des-charges.md`](docs/cahier-des-charges.md) - Comprendre les specs
+- [ ] Lire [`business/CAHIER_DES_CHARGES.md`](business/CAHIER_DES_CHARGES.md) - Comprendre les specs
 - [ ] Lire [`docs/architecture/tech-stack.md`](docs/architecture/tech-stack.md) - Stack technique
-- [ ] Suivre [`INSTALL_DEV.md`](INSTALL_DEV.md) - Installer environnement dev
-- [ ] Lire [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md) - Conventions code
+- [ ] Suivre [`installation/INSTALL_DEV.md`](installation/INSTALL_DEV.md) - Installer environnement dev
+- [ ] Lire [`guides/DEVELOPMENT_GUIDE.md`](guides/DEVELOPMENT_GUIDE.md) - Conventions code
 - [ ] Consulter [`LIVRAISON_MVP_100.md`](LIVRAISON_MVP_100.md) - Comprendre ce qui est livré
 
 ### Je déploie en production
 
-- [ ] Lire [`INSTALL_PROD.md`](INSTALL_PROD.md) intégralement (11 000 lignes)
-- [ ] Consulter [`DOCKER_PORTS.md`](DOCKER_PORTS.md) - Gestion ports
+- [ ] Lire [`installation/INSTALL_PROD.md`](installation/INSTALL_PROD.md) intégralement (11 000 lignes)
+- [ ] Consulter [`installation/DOCKER_PORTS.md`](installation/DOCKER_PORTS.md) - Gestion ports
 - [ ] Exécuter scripts de vérification (`check-ports.sh`, `check-all-ports.sh`)
 - [ ] Configurer firewall UFW selon guide
 - [ ] Configurer Nginx + SSL/TLS avec Let's Encrypt
@@ -510,9 +510,9 @@ Créer une issue GitHub avec le label `documentation`.
 ### Je résous un problème
 
 - [ ] Consulter section **Troubleshooting** du guide concerné:
-  - Problème développement → [`INSTALL_DEV.md`](INSTALL_DEV.md#troubleshooting)
-  - Problème production → [`INSTALL_PROD.md`](INSTALL_PROD.md#troubleshooting)
-  - Problème ports Docker → [`DOCKER_PORTS.md`](DOCKER_PORTS.md#troubleshooting)
+  - Problème développement → [`installation/INSTALL_DEV.md`](installation/INSTALL_DEV.md#troubleshooting)
+  - Problème production → [`installation/INSTALL_PROD.md`](installation/INSTALL_PROD.md#troubleshooting)
+  - Problème ports Docker → [`installation/DOCKER_PORTS.md`](installation/DOCKER_PORTS.md#troubleshooting)
 - [ ] Vérifier logs Docker: `docker-compose logs -f`
 - [ ] Vérifier configuration: `docker-compose config`
 - [ ] Exécuter scripts de diagnostic (`check-all-ports.sh`)

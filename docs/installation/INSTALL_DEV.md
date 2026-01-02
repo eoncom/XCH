@@ -1,5 +1,7 @@
 # 🛠️ Installation Développement - XCH
 
+**Dernière mise à jour :** 2026-01-01
+
 Guide complet pour installer et développer XCH sur Windows avec WSL2.
 
 ---

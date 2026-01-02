@@ -1,5 +1,7 @@
 # PWA Icons Generation
 
+**Dernière mise à jour :** 2026-01-01
+
 ## Current Status
 
 Un fichier SVG `icon.svg` est fourni comme source pour les icons PWA.

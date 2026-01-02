@@ -1,5 +1,7 @@
 # XCH - Gestion IT pour Chantiers Temporaires
 
+**Dernière mise à jour :** 2026-01-01
+
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![NestJS](https://img.shields.io/badge/NestJS-10-red)](https://nestjs.com/)
@@ -118,13 +120,13 @@ XCH centralise le contexte et référence les outils spécialisés (NetBox, moni
 
 ### Guides d'installation complets
 
-- **🔧 [INSTALL_DEV.md](INSTALL_DEV.md)** - Installation complète environnement développement (Windows/WSL2)
+- **🔧 [INSTALL_DEV.md](docs/installation/INSTALL_DEV.md)** - Installation complète environnement développement (Windows/WSL2)
   - Prérequis (Node.js, Docker, PostgreSQL, Redis)
   - Backend NestJS + Frontend Next.js 15
   - Configuration VS Code avec debugging
   - Troubleshooting développement (10+ scénarios)
 
-- **🚀 [INSTALL_PROD.md](INSTALL_PROD.md)** - Déploiement production Linux (Ubuntu/Debian)
+- **🚀 [INSTALL_PROD.md](docs/installation/INSTALL_PROD.md)** - Déploiement production Linux (Ubuntu/Debian)
   - Sécurisation serveur (UFW, Fail2ban, SSH)
   - Docker avec isolation complète
   - Nginx reverse proxy + SSL/TLS (Let's Encrypt)
@@ -132,7 +134,7 @@ XCH centralise le contexte et référence les outils spécialisés (NetBox, moni
   - Monitoring et health checks
   - Troubleshooting production (15+ scénarios)
 
-- **🐳 [DOCKER_PORTS.md](DOCKER_PORTS.md)** - Gestion ports Docker et isolation
+- **🐳 [DOCKER_PORTS.md](docs/installation/DOCKER_PORTS.md)** - Gestion ports Docker et isolation
   - Architecture réseau Docker `xch-network`
   - Détection et résolution conflits de ports
   - Configuration multi-instances (dev, staging, prod)
@@ -201,43 +203,42 @@ cd frontend && npm run dev
 
 ### Installation production
 
-Voir guide complet : **[INSTALL_PROD.md](INSTALL_PROD.md)**
+Voir guide complet : **[INSTALL_PROD.md](docs/installation/INSTALL_PROD.md)**
 
 ---
 
 ## 📖 Documentation
 
-**📚 [DOCS_INDEX.md](DOCS_INDEX.md)** - Index complet de toute la documentation (27 fichiers)
+**📚 [Index Documentation Complète](docs/00-INDEX.md)** - Index complet de toute la documentation (27 fichiers)
 
 ### Installation & Déploiement
-- **[INSTALL_DEV.md](INSTALL_DEV.md)** - Installation développement Windows/WSL2 (6 600+ lignes)
-- **[INSTALL_PROD.md](INSTALL_PROD.md)** - Déploiement production Linux (11 000+ lignes)
-- **[DOCKER_PORTS.md](DOCKER_PORTS.md)** - Gestion ports Docker et isolation réseau (2 800+ lignes)
+- **[INSTALL_DEV.md](docs/installation/INSTALL_DEV.md)** - Installation développement Windows/WSL2 (6 600+ lignes)
+- **[INSTALL_PROD.md](docs/installation/INSTALL_PROD.md)** - Déploiement production Linux (11 000+ lignes)
+- **[DOCKER_PORTS.md](docs/installation/DOCKER_PORTS.md)** - Gestion ports Docker et isolation réseau (2 800+ lignes)
 
 ### Architecture & Décisions
-- **[docs/architecture/tech-stack.md](docs/architecture/tech-stack.md)** - Stack technique complète avec justifications
-- **[docs/architecture/database-schema.md](docs/architecture/database-schema.md)** - Schéma PostgreSQL (18 tables + ERD)
-- **[docs/decisions/adr-001-stack-typescript.md](docs/decisions/adr-001-stack-typescript.md)** - Choix TypeScript full-stack
-- **[docs/decisions/adr-002-multi-tenant-rls.md](docs/decisions/adr-002-multi-tenant-rls.md)** - Multi-tenant PostgreSQL RLS
-- **[docs/decisions/adr-003-auth-oidc-hybrid.md](docs/decisions/adr-003-auth-oidc-hybrid.md)** - Auth hybride (JWT + SSO)
-- **[docs/decisions/adr-004-rbac-casbin.md](docs/decisions/adr-004-rbac-casbin.md)** - RBAC avec Casbin (4 rôles)
-- **[docs/decisions/adr-005-cicd-gitlab.md](docs/decisions/adr-005-cicd-gitlab.md)** - Pipeline CI/CD GitLab
+- **[tech-stack.md](docs/architecture/tech-stack.md)** - Stack technique complète avec justifications
+- **[database-schema.md](docs/architecture/database-schema.md)** - Schéma PostgreSQL (18 tables + ERD)
+- **[ADR-001](docs/decisions/adr-001-stack-typescript.md)** - Choix TypeScript full-stack
+- **[ADR-002](docs/decisions/adr-002-multi-tenant-rls.md)** - Multi-tenant PostgreSQL RLS
+- **[ADR-003](docs/decisions/adr-003-auth-oidc-hybrid.md)** - Auth hybride (JWT + SSO)
+- **[ADR-004](docs/decisions/adr-004-rbac-casbin.md)** - RBAC avec Casbin (4 rôles)
+- **[ADR-005](docs/decisions/adr-005-cicd-gitlab.md)** - Pipeline CI/CD GitLab
 
-### Développement
-- **[DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md)** - Guide développement quotidien
-- **[docs/roadmap.md](docs/roadmap.md)** - Roadmap et état d'avancement
-- **[docs/cahier-des-charges.md](docs/cahier-des-charges.md)** - Spécifications fonctionnelles complètes
+### Développement & Planning
+- **[DEVELOPMENT_GUIDE.md](docs/guides/DEVELOPMENT_GUIDE.md)** - Guide développement quotidien
+- **[PROJECT_STATUS.md](docs/status/PROJECT_STATUS.md)** - État du projet (source de vérité unique)
+- **[ROADMAP.md](docs/status/ROADMAP.md)** - Roadmap et planification
+- **[CAHIER_DES_CHARGES.md](docs/business/CAHIER_DES_CHARGES.md)** - Spécifications fonctionnelles complètes
 - **[CLAUDE.md](CLAUDE.md)** - Instructions pour agents Claude Code
 
 ### Frontend
 - **[frontend/README.md](frontend/README.md)** - Documentation Next.js 15 spécifique
 - **[frontend/public/ICONS_README.md](frontend/public/ICONS_README.md)** - Génération icônes PWA
 
-### Livrables & Checkpoints
+### Livrables
 - **[LIVRAISON_MVP_100.md](LIVRAISON_MVP_100.md)** - Document de livraison MVP 100% complet ✅
-- **[MVP_COMPLET.md](MVP_COMPLET.md)** - Récapitulatif technique MVP
-- **[CHECKPOINT_BACKEND_FINAL.md](CHECKPOINT_BACKEND_FINAL.md)** - Validation backend (10 modules)
-- **[CHECKPOINT_FRONTEND_FINAL.md](CHECKPOINT_FRONTEND_FINAL.md)** - Validation frontend (7 modules)
+- **[Checkpoints archivés](docs/archive/)** - Historique validations backend et frontend
 
 ### Utilisation
 - **Guide Utilisateur** - À venir (MVP livré)
@@ -311,7 +312,7 @@ npm run test:e2e
 
 ### Production complète
 
-Voir le guide complet : **[INSTALL_PROD.md](INSTALL_PROD.md)** (11 000+ lignes)
+Voir le guide complet : **[INSTALL_PROD.md](docs/installation/INSTALL_PROD.md)** (11 000+ lignes)
 
 **Inclut :**
 - ✅ Sécurisation serveur Linux (UFW firewall, Fail2ban, SSH)
