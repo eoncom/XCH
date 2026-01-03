@@ -4,7 +4,11 @@
       "Bash(npm init:*)",
       "Bash(chmod:*)",
       "Bash(ls:*)",
-      "Bash(bash scripts/check-docs.sh:*)"
+      "Bash(bash scripts/check-docs.sh:*)",
+      "Bash(ssh eon@192.168.0.1 \"cd /opt/xch && cat docker/postgres/init.sql | grep -n ''xch_''\")",
+      "Bash(ssh eon@192.168.0.13 \"cd /opt/xch && cat docker/postgres/init.sql | grep -n ''xch_''\")",
+      "Bash(ssh:*)",
+      "Bash(cat:*)"
     ]
   }
 }

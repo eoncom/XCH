@@ -108,6 +108,59 @@ Corriger `init.sql` : remplacer toutes occurrences `xch_db` → `xch_dev`
 
 ---
 
+### Session 4 : Fix PostgreSQL init.sql + déploiement serveur
+**Durée :** ~20min
+**Status :** ✅ Terminée
+
+**Actions :**
+- Connexion serveur Ubuntu (192.168.0.13)
+- Vérification problème : `docker/postgres/init.sql` lignes 18 et 21 référencent `xch_db`
+- Confirmation `.env` configure bien `xch_dev`
+- Correction : `sed -i 's/xch_db/xch_dev/g' docker/postgres/init.sql`
+- Redémarrage Docker Compose : `docker-compose down -v && docker-compose up -d`
+- Vérification logs PostgreSQL : aucune erreur
+
+**Problème résolu :**
+```sql
+# AVANT (lignes 18 et 21)
+GRANT ALL PRIVILEGES ON DATABASE xch_db TO xch_user;
+ALTER DATABASE xch_db SET search_path TO public, postgis;
+
+# APRÈS
+GRANT ALL PRIVILEGES ON DATABASE xch_dev TO xch_user;
+ALTER DATABASE xch_dev SET search_path TO public, postgis;
+```
+
+**Résultat :**
+- ✅ init.sql corrigé (xch_db → xch_dev)
+- ✅ PostgreSQL démarre sans erreur
+- ✅ Extensions PostGIS chargées dans xch_dev
+- ✅ Permissions appliquées correctement
+- ✅ Déploiement serveur débloqué
+
+**Fichiers modifiés :**
+- `/opt/xch-dev/XCH/docker/postgres/init.sql` (serveur distant)
+- `DEVELOPMENT_LOG.md` (ce fichier)
+- `TODO.md` (tâche URGENT retirée)
+
+**Logs validation :**
+```
+CREATE EXTENSION
+DO
+GRANT
+ALTER DATABASE
+PostgreSQL init process complete; ready for start up.
+database system is ready to accept connections
+```
+
+**Notes :**
+- Serveur : 192.168.0.13 (utilisateur eon)
+- Chemin projet : `/opt/xch-dev/XCH`
+- Docker nécessite sudo
+- Prochaine étape : Tests déploiement complet (backend + frontend)
+
+---
+
 ## 2026-01-01
 
 ### Session : Livraison finale MVP 100%
@@ -210,8 +263,8 @@ Corriger `init.sql` : remplacer toutes occurrences `xch_db` → `xch_dev`
 
 ## Statistiques globales
 
-**Sessions totales :** 8
-**Durée totale développement :** ~30h
+**Sessions totales :** 9
+**Durée totale développement :** ~30.5h
 **Commits Git :** 5+
 **Fichiers créés/modifiés :** ~300+
 **Lignes code :** ~14500+
@@ -223,7 +276,7 @@ Phase 1 (Archi)      : ✅ 100% (2025-12-29)
 Phase 2 (Backend)    : ✅ 100% (2025-12-31)
 Phase 3 (Frontend)   : ✅ 100% (2026-01-01)
 Phase 4 (Livraison)  : ✅ 100% (2026-01-01)
-Phase 5 (Deploy)     : ⏳  30% (en cours)
+Phase 5 (Deploy)     : ⏳  40% (fix init.sql débloqué)
 ```
 
 ---
@@ -232,11 +285,11 @@ Phase 5 (Deploy)     : ⏳  30% (en cours)
 
 ### Problèmes récurrents identifiés
 
-1. **Base de données PostgreSQL**
+1. **Base de données PostgreSQL** ✅ RÉSOLU (2026-01-03)
    - Erreur historique : `xch_db` vs `xch_dev`
-   - Fichier concerné : `backend/init.sql`
-   - Impact : Bloque déploiement production
-   - Correction nécessaire : Remplacer toutes occurrences
+   - Fichier concerné : `docker/postgres/init.sql`
+   - Impact : Bloquait déploiement production
+   - Correction effectuée : Toutes occurrences remplacées (lignes 18 et 21)
 
 2. **Ports Docker**
    - Conflits potentiels en production
@@ -268,19 +321,22 @@ Phase 5 (Deploy)     : ⏳  30% (en cours)
 
 ## Prochaines sessions prévues
 
-### Session à venir : Correction init.sql + test déploiement
+### Session à venir : Tests déploiement complet serveur
 
 **Objectif :**
-- Corriger `backend/init.sql` (xch_db → xch_dev)
-- Tester déploiement complet serveur Ubuntu
-- Valider configuration production
+- Lancer backend (NestJS) sur serveur Ubuntu
+- Lancer frontend (Next.js) sur serveur Ubuntu
+- Tester connectivité backend ↔ frontend
+- Valider fonctionnalités critiques (auth, QR codes, upload fichiers)
+- Vérifier performance production
 
 **Pré-requis :**
-- Accès serveur Ubuntu
-- Docker + Docker Compose installés
-- Variables environnement configurées
+- ✅ PostgreSQL opérationnel (init.sql corrigé)
+- ✅ Docker + Docker Compose installés
+- ✅ Variables environnement configurées
+- Ports ouverts : 3000 (backend), 3001 (frontend), 5432 (postgres)
 
-**Durée estimée :** 1-2h
+**Durée estimée :** 2-3h
 
 ---
 
