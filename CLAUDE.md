@@ -1,6 +1,6 @@
 # CLAUDE.md - Instructions Projet XCH
 
-**Dernière mise à jour :** 2025-12-29
+**Dernière mise à jour :** 2026-01-03
 
 ## CONTEXTE PROJET
 
@@ -247,49 +247,192 @@ N'implémente PAS (sauf instruction explicite contraire) :
 
 ## WORKFLOW TYPE
 
-### Phase 1 : Analyse & Architecture (en cours)
+### Phase 1 : Analyse & Architecture ✅ TERMINÉE
 
 1. ✅ Lire cahier des charges complet
-2. ⏳ Poser questions clarification si nécessaire
-3. ⏳ Proposer stack technique complète (backend, frontend, DB, déploiement)
-4. ⏳ Attendre validation stack
-5. ⏳ Générer structure projet complète
-6. ⏳ Concevoir schéma base de données complet
-7. ⏳ Créer roadmap détaillée avec agents
-8. ⏳ Créer fiches tous agents nécessaires
+2. ✅ Poser questions clarification si nécessaire
+3. ✅ Proposer stack technique complète (backend, frontend, DB, déploiement)
+4. ✅ Attendre validation stack
+5. ✅ Générer structure projet complète
+6. ✅ Concevoir schéma base de données complet
+7. ✅ Créer roadmap détaillée avec agents
+8. ✅ Créer fiches tous agents nécessaires
 
-### Phase 2 : Développement
+### Phase 2 : Développement ✅ TERMINÉE
 
-9. Sur demande : Fournir prompt agent à démarrer
-10. Intégrer livrables agents au fur et à mesure
-11. Coordonner synchronisation entre agents
-12. Résoudre conflits/incohérences
-13. Maintenir documentation à jour
+9. ✅ Fournir prompt agent à démarrer
+10. ✅ Intégrer livrables agents au fur et à mesure
+11. ✅ Coordonner synchronisation entre agents
+12. ✅ Résoudre conflits/incohérences
+13. ✅ Maintenir documentation à jour
 
-### Phase 3 : Intégration & Tests
+### Phase 3 : Intégration & Tests ✅ TERMINÉE
 
-14. Intégration complète tous modules
-15. Tests end-to-end
-16. Corrections bugs
-17. Optimisations performance
+14. ✅ Intégration complète tous modules
+15. ✅ Tests end-to-end manuels
+16. ✅ Corrections bugs
+17. ✅ Optimisations performance
 
-### Phase 4 : Livraison
+### Phase 4 : Livraison ✅ TERMINÉE
 
-18. Documentation finale
-19. Package déploiement
-20. Guide installation
-21. Recette fonctionnelle
+18. ✅ Documentation finale (27 fichiers, ~25000 lignes)
+19. ✅ Package déploiement (Docker Compose)
+20. ✅ Guide installation (INSTALL_DEV.md + INSTALL_PROD.md)
+21. ✅ Recette fonctionnelle (toutes features MVP validées)
+
+### Phase 5 : Déploiement Production ⏳ EN COURS
+
+22. ⏳ Tests déploiement serveur Ubuntu
+23. ⏳ Validation configuration production
+24. ⏳ Déploiement pilote
+25. ⏳ Formation utilisateurs
+
+## CONVENTIONS CRITIQUES
+
+### Base de données PostgreSQL
+
+**IMPORTANT - Configuration stricte :**
+```yaml
+# backend/docker-compose.yml
+POSTGRES_DB: xch_dev          # JAMAIS "xch_db" ! (erreur historique corrigée)
+POSTGRES_USER: xch_user
+POSTGRES_PASSWORD: (via .env)
+```
+
+**Fichiers de configuration :**
+- `backend/.env` : DATABASE_URL avec `xch_dev`
+- `backend/prisma/schema.prisma` : URL référence DATABASE_URL
+- `backend/init.sql` : Scripts d'init avec `xch_dev`
+
+**Raison :** La base s'appelle `xch_dev` depuis le début. Toute référence à `xch_db` est une erreur et causera des échecs de connexion.
+
+### Ports développement
+
+**Ports par défaut :**
+```
+Backend NestJS    : 3000
+Frontend Next.js  : 3001
+PostgreSQL        : 5432
+Redis             : 6379
+MinIO API         : 9000
+MinIO Console     : 9001
+```
+
+**Personnalisation (si conflits) :**
+Utiliser variables d'environnement dans `.env` :
+```bash
+BACKEND_PORT=3000
+FRONTEND_PORT=3001
+POSTGRES_PORT=5432
+REDIS_PORT=6379
+MINIO_PORT=9000
+MINIO_CONSOLE_PORT=9001
+```
+
+Consulter `docs/installation/DOCKER_PORTS.md` pour gestion avancée.
+
+### Structure documentation
+
+**Organisation (depuis 2026-01-03) :**
+```
+docs/
+├── 00-INDEX.md              ← Point d'entrée navigation
+├── installation/            ← Guides installation (dev, prod, Docker)
+├── architecture/            ← Stack technique, DB schema
+├── decisions/               ← ADR (Architecture Decision Records)
+├── guides/                  ← Guides développement
+├── status/                  ← PROJECT_STATUS.md (SOURCE VÉRITÉ)
+├── business/                ← Cahier des charges
+├── agents/                  ← Fiches agents spécialisés
+└── archive/                 ← Checkpoints historiques
+    ├── backend/
+    └── frontend/
+```
+
+**Fichiers racine (seulement 5) :**
+```
+README.md                    ← Vue d'ensemble projet
+CLAUDE.md                    ← Instructions lead technique (ce fichier)
+LIVRAISON_MVP_100.md        ← Document livraison finale
+DEVELOPMENT_LOG.md          ← Log sessions développement
+CHANGELOG.md                ← Évolutions par version
+```
+
+**SOURCE DE VÉRITÉ UNIQUE :**
+`docs/status/PROJECT_STATUS.md` - TOUJOURS consulter en premier pour connaître l'état réel du projet.
+
+### Scripts utiles
+
+**Backend :**
+```bash
+cd backend
+npm run start:dev            # Hot-reload développement
+npm run build                # Build production
+npx prisma migrate dev       # Migrations DB
+npx prisma db seed           # Seed data
+npx prisma studio            # GUI DB (http://localhost:5555)
+```
+
+**Frontend :**
+```bash
+cd frontend
+npm run dev                  # Dev server (http://localhost:3001)
+npm run build                # Build production
+npm run start                # Start production
+npm run generate-icons       # Générer PWA icons (192x192, 512x512)
+```
+
+**Docker :**
+```bash
+cd backend
+docker-compose up -d         # Démarrer infra (PostgreSQL, Redis, MinIO)
+docker-compose down          # Arrêter infra
+docker-compose logs -f       # Logs temps réel
+docker-compose ps            # Status conteneurs
+```
+
+**Vérification documentation :**
+```bash
+bash scripts/check-docs.sh   # Vérifier liens cassés (0 attendu)
+```
+
+### Git workflow
+
+**Branches :**
+- `main` : Production-ready (protected)
+- `develop` : Intégration développement
+- `feature/*` : Nouvelles fonctionnalités
+- `fix/*` : Corrections bugs
+- `docs/*` : Documentation
+
+**Commits conventionnels :**
+```
+feat: Nouvelle fonctionnalité
+fix: Correction bug
+docs: Documentation
+refactor: Refactoring code
+test: Ajout tests
+chore: Tâches maintenance
+```
 
 ## ÉTAT ACTUEL DU PROJET
 
-**Phase :** Analyse & Architecture (Étape 1-2)
+**Phase :** MVP Production-Ready ✅ | Déploiement pilote ⏳
 
-**Prochaine action attendue :** 
-Proposer stack technique complète après lecture cahier des charges.
+**Statut global :**
+- Backend : 100% (10 modules, ~100 endpoints)
+- Frontend : 100% (7 modules, 17 pages)
+- Documentation : 100% (réorganisée, complète)
+- Tests : 10% (tests manuels uniquement)
+- Déploiement : 30% (Docker Compose ready, CI/CD à configurer)
 
-**Fichiers projet existants :**
-- `CLAUDE.md` (ce fichier)
-- `/docs/cahier-des-charges.md` (spécifications complètes)
+**Prochaine action attendue :**
+Tests serveur + validation déploiement production + déploiement pilote
+
+**Source de vérité :**
+- `docs/status/PROJECT_STATUS.md` - État d'avancement détaillé (TOUJOURS consulter en premier)
+- `LIVRAISON_MVP_100.md` - Document de livraison finale
+- `docs/00-INDEX.md` - Navigation complète documentation
 
 ---
 

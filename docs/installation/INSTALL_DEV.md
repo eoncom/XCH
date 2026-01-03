@@ -924,7 +924,6 @@ declare -A ALT_PORTS=(
 )
 
 CONFLICTS=0
-ENV_FILE=".env.server-dev"
 
 echo "Vérification des ports..."
 echo ""
