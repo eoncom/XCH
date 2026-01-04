@@ -1,6 +1,6 @@
 # TODO - Backlog XCH
 
-**Dernière mise à jour :** 2026-01-03
+**Dernière mise à jour :** 2026-01-04
 **Version :** 1.0.0-MVP
 
 Ce fichier centralise toutes les tâches à effectuer, organisées par priorité.
@@ -29,10 +29,12 @@ _Aucune tâche urgente actuellement._
 4. ✅ Créer fichiers .env avec credentials sécurisés
 5. ✅ Déployer infrastructure Docker (PostgreSQL, Redis, MinIO)
 6. ✅ Corriger code backend (package.json, schema.prisma)
-7. ⏳ Build backend Docker (en cours ~15 min)
-8. ⏳ Tester API backend (health check, login)
-9. ⏳ Build et démarrer frontend
-10. ⏳ Tests fonctionnels complets
+7. ✅ Synchroniser Git serveur → local → GitHub (commits 49667f0, 8a17eaf)
+8. ❌ Build backend Docker (abandonné - trop lent, build jamais terminé)
+9. ⏳ Alternative déploiement backend à définir
+10. ⏳ Tester API backend (health check, login)
+11. ⏳ Build et démarrer frontend
+12. ⏳ Tests fonctionnels complets
 
 **Checklist infrastructure :**
 - [x] PostgreSQL démarre sans erreur (port 5433)
@@ -52,10 +54,22 @@ _Aucune tâche urgente actuellement._
 - ✅ Conflit port 3000 (Grafana) → Backend sur 3002
 - ✅ Package @casbin/typeorm-adapter inexistant → Remplacé par typeorm-adapter
 - ✅ Erreurs Prisma contraintes dupliquées → Ajout map avec noms uniques
+- ✅ Synchronisation Git serveur ↔ local ↔ GitHub
+
+**Problèmes non résolus (Session 5) :**
+- ❌ Build Docker backend trop lent (~15+ min npm install)
+- ❌ Backend jamais démarré sur serveur
+- ❌ Tests API impossible (backend non accessible)
+
+**Prochaines actions recommandées :**
+1. **Option A** : Générer package-lock.json en local, commit, rebuild avec npm ci
+2. **Option B** : Déployer backend en mode dev (npm run start:dev) sans Docker build
+3. **Option C** : Optimiser Dockerfile (cache layers, multi-stage plus agressif)
 
 **Documentation :**
 - [docs/installation/INSTALL_PROD.md](docs/installation/INSTALL_PROD.md)
 - Serveur: `/opt/xch-dev/XCH/DEPLOYMENT_REPORT.md`
+- GitHub commits: 49667f0, 8a17eaf
 
 ---
 
@@ -358,6 +372,6 @@ deploy:production:
 
 ---
 
-**Dernière révision :** 2026-01-03
+**Dernière révision :** 2026-01-04
 **Mainteneur :** Équipe XCH
-**Version :** 1.0
+**Version :** 1.1
