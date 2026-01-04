@@ -7,7 +7,7 @@ COPY package*.json ./
 COPY prisma ./prisma/
 
 # Install dependencies
-RUN npm install
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -28,7 +28,7 @@ COPY package*.json ./
 COPY prisma ./prisma/
 
 # Install production dependencies only
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 # Copy Prisma Client from builder
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma

@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies (legacy-peer-deps for react-leaflet compatibility)
+RUN npm ci --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -23,7 +23,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install production dependencies only
-RUN npm install --omit=dev
+RUN npm ci --omit=dev --legacy-peer-deps
 
 # Copy built application
 COPY --from=builder /app/.next ./.next
