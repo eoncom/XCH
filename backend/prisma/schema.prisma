@@ -508,9 +508,9 @@ model Photo {
   entityId   String
 
   // Polymorphic relations
-  site  Site?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  asset Asset? @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  task  Task?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  site  Site?  @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "photos_siteId_fkey")
+  asset Asset? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "photos_assetId_fkey")
+  task  Task?  @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "photos_taskId_fkey")
 
   // File
   fileUrl  String
@@ -539,8 +539,8 @@ model ExternalRef {
   entityId   String
 
   // Polymorphic relations
-  site  Site?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  asset Asset? @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  site  Site?  @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_refs_siteId_fkey")
+  asset Asset? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_refs_assetId_fkey")
 
   // Provider
   provider    String // netbox, uptime_kuma, fortimanager

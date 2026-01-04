@@ -340,6 +340,109 @@ Phase 5 (Deploy)     : ⏳  40% (fix init.sql débloqué)
 
 ---
 
-**Dernière mise à jour :** 2026-01-03
+## 2026-01-04
+
+### Session 5 : Déploiement serveur autonome
+**Durée :** ~3h
+**Status :** ⏳ En cours (Infrastructure ✅ | Backend build ⏳)
+
+**Actions :**
+- Connexion serveur Ubuntu (utilisateur claude-deploy)
+- Détection conflits ports (Grafana sur 3000, etc.)
+- Adaptation configuration ports (backend 3002, postgres 5433, redis 6380)
+- Création fichiers .env (racine + backend)
+- Déploiement infrastructure Docker (PostgreSQL, Redis, MinIO)
+- Création Dockerfiles backend + frontend
+- Correction package.json (@casbin/typeorm-adapter → typeorm-adapter)
+- Correction schema Prisma (relations polymorphiques avec map)
+- Lancement build backend Docker
+
+**Problèmes identifiés et résolus :**
+
+1. **Node.js absent sur serveur**
+   - Détection : `which node` retourne vide
+   - Impact : Impossible npm install direct
+   - Solution : Déploiement 100% Docker
+   - Status : ✅ Résolu
+
+2. **Conflit port 3000 (Grafana)**
+   - Détection : `docker ps` montre Grafana sur :3000
+   - Impact : Backend ne peut démarrer sur port par défaut
+   - Solution : Backend configuré sur port 3002
+   - Status : ✅ Résolu
+
+3. **Package npm @casbin/typeorm-adapter inexistant**
+   - Erreur : `404 Not Found - GET @casbin/typeorm-adapter`
+   - Impact : Échec npm install
+   - Solution : Remplacement par `typeorm-adapter` dans package.json
+   - Status : ✅ Résolu
+
+4. **Erreurs validation Prisma schema**
+   - Erreur : Contraintes dupliquées `photos_entityId_fkey` et `external_refs_entityId_fkey`
+   - Impact : Échec `npx prisma generate`
+   - Solution : Ajout attribut `map` avec noms uniques pour chaque relation
+   - Fichiers modifiés :
+     - Photo model (lignes 511-513) : photos_siteId_fkey, photos_assetId_fkey, photos_taskId_fkey
+     - ExternalRef model (lignes 542-543) : external_refs_siteId_fkey, external_refs_assetId_fkey
+   - Status : ✅ Résolu
+
+5. **Build Docker extrêmement lent**
+   - Cause : npm install de 999 packages sans cache ni package-lock.json
+   - Temps : ~12-15 min par stage (builder + production)
+   - Impact : Timeout builds, développement ralenti
+   - Solution court terme : Patience, laisser build terminer
+   - Solution long terme : Générer package-lock.json, commit dans Git
+   - Status : ⏳ En cours
+
+**Résultat actuel :**
+- ✅ Infrastructure 100% opérationnelle (PostgreSQL, Redis, MinIO)
+- ✅ Corrections code appliquées (package.json, schema.prisma, Dockerfiles)
+- ✅ Configuration environnement complète (.env)
+- ⏳ Build backend Docker en cours (estimation ~15 min total)
+- ⏳ Frontend non démarré (en attente backend)
+- ✅ Rapport déploiement créé sur serveur
+
+**Fichiers créés/modifiés (serveur) :**
+- `/opt/xch-dev/XCH/.env` (création)
+- `/opt/xch-dev/XCH/backend/.env` (création)
+- `/opt/xch-dev/XCH/backend/Dockerfile` (création)
+- `/opt/xch-dev/XCH/frontend/Dockerfile` (création)
+- `/opt/xch-dev/XCH/docker-compose.yml` (modification - ajout backend/frontend)
+- `/opt/xch-dev/XCH/backend/package.json` (correction typeorm-adapter)
+- `/opt/xch-dev/XCH/backend/prisma/schema.prisma` (correction contraintes)
+- `/opt/xch-dev/XCH/DEPLOYMENT_REPORT.md` (création)
+
+**Logs validation :**
+```
+PostgreSQL: database system is ready to accept connections
+MinIO: Bucket created successfully xch/xch-storage
+Redis: PONG
+Extensions: postgis 3.4.3, uuid-ossp 1.1
+```
+
+**Métriques :**
+- Containers déployés : 4 (postgres, redis, minio, minio-init)
+- Corrections code : 4 (package.json, schema.prisma x2, Dockerfiles x2)
+- Ports configurés : 6 (5433, 6380, 9000, 9001, 3002, 3001)
+- Temps npm install : ~12-15 min (en cours)
+- Packages npm : 999 (dev) + 497 (prod)
+
+**Notes :**
+- Serveur : xsrv (192.168.0.13)
+- Utilisateur : claude-deploy
+- Docker version : 28.5.2
+- Accès future backend : http://192.168.0.13:3002
+- Accès future frontend : http://192.168.0.13:3001
+
+**Prochaines étapes :**
+1. Attendre fin build backend (~5-10 min restantes)
+2. Vérifier démarrage backend (logs, health check)
+3. Tester API backend (Swagger, login admin)
+4. Build et démarrer frontend
+5. Tests fonctionnels complets
+
+---
+
+**Dernière mise à jour :** 2026-01-04
 **Mainteneur :** Équipe XCH
 **Format version :** 1.0

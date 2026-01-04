@@ -19,24 +19,26 @@ _Aucune tâche urgente actuellement._
 ### Tester déploiement serveur Ubuntu
 **Priorité :** Haute
 **Impact :** Validation production
-**Estimation :** 2-3h
-**Dépend de :** ✅ Fix init.sql (résolu)
+**Estimation :** 2-3h (Session 5 : ~3h effectuées)
+**Dépend de :** ✅ Fix init.sql (résolu Session 4)
 
 **Actions :**
 1. ✅ Corriger init.sql (fait Session 4)
-2. Push corrections sur repository Git
-3. Pull sur serveur Ubuntu (192.168.0.13)
-4. Lancer backend + frontend Docker Compose
-5. Vérifier tous services opérationnels
-6. Tester connectivité backend ↔ frontend
-7. Valider génération QR codes (MinIO)
-8. Tester recherche géospatiale (PostGIS)
+2. ✅ Connexion serveur (utilisateur claude-deploy)
+3. ✅ Adapter ports (backend 3002, postgres 5433, redis 6380)
+4. ✅ Créer fichiers .env avec credentials sécurisés
+5. ✅ Déployer infrastructure Docker (PostgreSQL, Redis, MinIO)
+6. ✅ Corriger code backend (package.json, schema.prisma)
+7. ⏳ Build backend Docker (en cours ~15 min)
+8. ⏳ Tester API backend (health check, login)
+9. ⏳ Build et démarrer frontend
+10. ⏳ Tests fonctionnels complets
 
 **Checklist infrastructure :**
-- [x] PostgreSQL démarre sans erreur
-- [ ] Redis connecté
-- [ ] MinIO accessible (http://192.168.0.13:9000)
-- [ ] Backend répond (http://192.168.0.13:3000/api/health)
+- [x] PostgreSQL démarre sans erreur (port 5433)
+- [x] Redis connecté (port 6380)
+- [x] MinIO accessible (http://192.168.0.13:9000)
+- [ ] Backend répond (http://192.168.0.13:3002/api/health)
 - [ ] Frontend accessible (http://192.168.0.13:3001)
 
 **Checklist fonctionnalités :**
@@ -45,8 +47,15 @@ _Aucune tâche urgente actuellement._
 - [ ] QR codes générés correctement
 - [ ] Recherche sites géospatiale OK
 
+**Problèmes résolus (Session 5) :**
+- ✅ Node.js absent → Déploiement 100% Docker
+- ✅ Conflit port 3000 (Grafana) → Backend sur 3002
+- ✅ Package @casbin/typeorm-adapter inexistant → Remplacé par typeorm-adapter
+- ✅ Erreurs Prisma contraintes dupliquées → Ajout map avec noms uniques
+
 **Documentation :**
-Suivre [docs/installation/INSTALL_PROD.md](docs/installation/INSTALL_PROD.md)
+- [docs/installation/INSTALL_PROD.md](docs/installation/INSTALL_PROD.md)
+- Serveur: `/opt/xch-dev/XCH/DEPLOYMENT_REPORT.md`
 
 ---
 

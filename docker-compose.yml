@@ -7,10 +7,10 @@ services:
     container_name: xch-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-xch_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xch_password}
-      POSTGRES_DB: ${POSTGRES_DB:-xch_db}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-XchSecure2024!}
+      POSTGRES_DB: ${POSTGRES_DB:-xch_dev}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -21,6 +21,7 @@ services:
       retries: 5
     networks:
       - xch-network
+    restart: unless-stopped
 
   # Redis
   redis:
@@ -28,7 +29,7 @@ services:
     container_name: xch-redis
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6380}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -38,6 +39,7 @@ services:
       retries: 5
     networks:
       - xch-network
+    restart: unless-stopped
 
   # MinIO (S3-compatible storage)
   minio:
@@ -45,11 +47,11 @@ services:
     container_name: xch-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-xch_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-XchMinIO2024SecureKey!}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -59,6 +61,7 @@ services:
       retries: 3
     networks:
       - xch-network
+    restart: unless-stopped
 
   # MinIO Client (mc) - Create buckets on startup
   minio-init:
@@ -68,61 +71,62 @@ services:
       - minio
     entrypoint: >
       /bin/sh -c "
-      sleep 5;
-      mc alias set xch http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin};
+      sleep 10;
+      mc alias set xch http://minio:9000 ${MINIO_ACCESS_KEY:-xch_minio_admin} ${MINIO_SECRET_KEY:-XchMinIO2024SecureKey!};
       mc mb xch/xch-storage --ignore-existing;
       mc mb xch/plans --ignore-existing;
       mc mb xch/photos --ignore-existing;
       mc mb xch/exports --ignore-existing;
       mc mb xch/qrcodes --ignore-existing;
       mc anonymous set download xch/xch-storage;
+      mc anonymous set download xch/qrcodes;
       exit 0;
       "
     networks:
       - xch-network
 
-  # Backend (NestJS) - Will be added later
-  # backend:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: Dockerfile
-  #   container_name: xch-backend
-  #   environment:
-  #     NODE_ENV: development
-  #     DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-  #     REDIS_HOST: redis
-  #     REDIS_PORT: 6379
-  #   ports:
-  #     - "3001:3001"
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #     - minio
-  #   volumes:
-  #     - ./backend:/app
-  #     - /app/node_modules
-  #   networks:
-  #     - xch-network
+  # Backend (NestJS)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: xch-backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - xch-network
+    restart: unless-stopped
+    command: >
+      sh -c "
+      npx prisma migrate deploy &&
+      npx prisma db seed &&
+      npm run start:prod
+      "
 
-  # Frontend (Next.js) - Will be added later
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   container_name: xch-frontend
-  #   environment:
-  #     NODE_ENV: development
-  #     NEXT_PUBLIC_API_URL: http://localhost:3001
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     - backend
-  #   volumes:
-  #     - ./frontend:/app
-  #     - /app/node_modules
-  #     - /app/.next
-  #   networks:
-  #     - xch-network
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: xch-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://192.168.0.13:3002
+    ports:
+      - "3001:3001"
+    depends_on:
+      - backend
+    networks:
+      - xch-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
