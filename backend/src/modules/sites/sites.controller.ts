@@ -7,6 +7,7 @@ import { FilterSiteDto } from './dto/filter-site.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
+import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('sites')
 @Controller('sites')
@@ -18,14 +19,14 @@ export class SitesController {
   @Post()
   @Resource('sites') @Action('create')
   @ApiOperation({ summary: 'Create new site' })
-  create(@Body() createSiteDto: CreateSiteDto, @Request() req) {
+  create(@Body() createSiteDto: CreateSiteDto, @Request() req: AuthRequest) {
     return this.sitesService.create(req.user.tenantId, createSiteDto);
   }
 
   @Get()
   @Resource('sites') @Action('read')
   @ApiOperation({ summary: 'Get all sites' })
-  findAll(@Query() filter: FilterSiteDto, @Request() req) {
+  findAll(@Query() filter: FilterSiteDto, @Request() req: AuthRequest) {
     return this.sitesService.findAll(req.user.tenantId, filter);
   }
 
@@ -36,7 +37,7 @@ export class SitesController {
     @Query('latitude') latitude: number,
     @Query('longitude') longitude: number,
     @Query('radius') radius: number,
-    @Request() req,
+    @Request() req: AuthRequest,
   ) {
     return this.sitesService.findNearby(latitude, longitude, radius || 10, req.user.tenantId);
   }
@@ -44,21 +45,21 @@ export class SitesController {
   @Get(':id')
   @Resource('sites') @Action('read')
   @ApiOperation({ summary: 'Get site by id' })
-  findOne(@Param('id') id: string, @Request() req) {
+  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.sitesService.findOne(id, req.user.tenantId);
   }
 
   @Patch(':id')
   @Resource('sites') @Action('update')
   @ApiOperation({ summary: 'Update site' })
-  update(@Param('id') id: string, @Body() updateSiteDto: UpdateSiteDto, @Request() req) {
+  update(@Param('id') id: string, @Body() updateSiteDto: UpdateSiteDto, @Request() req: AuthRequest) {
     return this.sitesService.update(id, req.user.tenantId, updateSiteDto);
   }
 
   @Delete(':id')
   @Resource('sites') @Action('delete')
   @ApiOperation({ summary: 'Delete site' })
-  remove(@Param('id') id: string, @Request() req) {
+  remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.sitesService.remove(id, req.user.tenantId);
   }
 }

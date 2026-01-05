@@ -6,6 +6,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -15,7 +16,7 @@ export class AuthController {
   @Post('login')
   @UseGuards(LocalAuthGuard)
   @ApiOperation({ summary: 'Login with email/password' })
-  async login(@Request() req, @Body() loginDto: LoginDto) {
+  async login(@Request() req: AuthRequest, @Body() loginDto: LoginDto) {
     return this.authService.login(req.user);
   }
 
@@ -35,7 +36,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
-  getProfile(@Request() req) {
+  getProfile(@Request() req: AuthRequest) {
     return req.user;
   }
 }

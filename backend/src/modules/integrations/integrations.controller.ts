@@ -12,9 +12,10 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IntegrationsService } from './integrations.service';
 import { SyncNetBoxSitesDto, SyncNetBoxDevicesDto, MapAssetToNetBoxDto } from './dto/sync-netbox.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../auth/guards/casbin.guard';
+import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource } from '../../common/decorators/permissions.decorator';
 import { Action } from '../../common/decorators/permissions.decorator';
+import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('integrations')
 @ApiBearerAuth()
@@ -53,7 +54,7 @@ export class IntegrationsController {
   @Resource('integrations')
   @Action('create')
   @ApiOperation({ summary: 'Sync sites from NetBox to XCH (READ-ONLY)' })
-  syncNetBoxSites(@Request() req, @Body() syncDto: SyncNetBoxSitesDto) {
+  syncNetBoxSites(@Request() req: AuthRequest, @Body() syncDto: SyncNetBoxSitesDto) {
     return this.integrationsService.syncNetBoxSites(req.user.tenantId, syncDto);
   }
 
@@ -61,7 +62,7 @@ export class IntegrationsController {
   @Resource('integrations')
   @Action('create')
   @ApiOperation({ summary: 'Sync devices from NetBox for a specific site (READ-ONLY)' })
-  syncNetBoxDevices(@Request() req, @Body() syncDto: SyncNetBoxDevicesDto) {
+  syncNetBoxDevices(@Request() req: AuthRequest, @Body() syncDto: SyncNetBoxDevicesDto) {
     return this.integrationsService.syncNetBoxDevices(req.user.tenantId, syncDto);
   }
 
@@ -69,7 +70,7 @@ export class IntegrationsController {
   @Resource('integrations')
   @Action('update')
   @ApiOperation({ summary: 'Manually map XCH asset to NetBox device' })
-  mapAssetToNetBox(@Request() req, @Body() mapDto: MapAssetToNetBoxDto) {
+  mapAssetToNetBox(@Request() req: AuthRequest, @Body() mapDto: MapAssetToNetBoxDto) {
     return this.integrationsService.mapAssetToNetBox(req.user.tenantId, mapDto);
   }
 
@@ -81,7 +82,7 @@ export class IntegrationsController {
   @ApiOperation({ summary: 'Update site health status from Uptime Kuma monitor' })
   updateSiteHealth(
     @Param('siteId') siteId: string,
-    @Request() req,
+    @Request() req: AuthRequest,
     @Query('monitor') monitorIdentifier: string,
   ) {
     return this.integrationsService.updateSiteHealthFromMonitor(
@@ -95,7 +96,7 @@ export class IntegrationsController {
   @Resource('integrations')
   @Action('update')
   @ApiOperation({ summary: 'Sync all sites health from Uptime Kuma' })
-  syncAllSitesHealth(@Request() req) {
+  syncAllSitesHealth(@Request() req: AuthRequest) {
     return this.integrationsService.syncAllSitesHealth(req.user.tenantId);
   }
 }

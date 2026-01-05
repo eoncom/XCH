@@ -14,7 +14,8 @@
       "Bash(git push:*)",
       "Bash(npm install)",
       "Bash(npm install:*)",
-      "Bash(scp:*)"
+      "Bash(scp:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

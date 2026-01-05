@@ -24,11 +24,13 @@ export class UsersService {
       ? await bcrypt.hash(createUserDto.password, 10)
       : null;
 
+    // Remove password from DTO before creating user
+    const { password, ...userDataWithoutPassword } = createUserDto;
+
     const user = await this.prisma.user.create({
       data: {
-        ...createUserDto,
+        ...userDataWithoutPassword,
         passwordHash,
-        password: undefined,
       },
       include: {
         tenant: true,

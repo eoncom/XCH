@@ -21,9 +21,10 @@ import { UpdateFloorPlanDto } from './dto/update-floor-plan.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../auth/guards/casbin.guard';
+import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource } from '../../common/decorators/permissions.decorator';
 import { Action } from '../../common/decorators/permissions.decorator';
+import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('floor-plans')
 @ApiBearerAuth()
@@ -36,7 +37,7 @@ export class FloorPlansController {
   @Resource('floor-plans')
   @Action('create')
   @ApiOperation({ summary: 'Create a new floor plan' })
-  create(@Request() req, @Body() createFloorPlanDto: CreateFloorPlanDto) {
+  create(@Request() req: AuthRequest, @Body() createFloorPlanDto: CreateFloorPlanDto) {
     return this.floorPlansService.create(req.user.tenantId, createFloorPlanDto);
   }
 
@@ -59,7 +60,7 @@ export class FloorPlansController {
   @UseInterceptors(FileInterceptor('file'))
   uploadFile(
     @Param('id') id: string,
-    @Request() req,
+    @Request() req: AuthRequest,
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) {
@@ -73,7 +74,7 @@ export class FloorPlansController {
   @Resource('floor-plans')
   @Action('read')
   @ApiOperation({ summary: 'Get all floor plans (optionally filtered by site)' })
-  findAll(@Request() req, @Query('siteId') siteId?: string) {
+  findAll(@Request() req: AuthRequest, @Query('siteId') siteId?: string) {
     return this.floorPlansService.findAll(req.user.tenantId, siteId);
   }
 
@@ -81,7 +82,7 @@ export class FloorPlansController {
   @Resource('floor-plans')
   @Action('read')
   @ApiOperation({ summary: 'Get latest floor plan version for site' })
-  findLatestForSite(@Param('siteId') siteId: string, @Request() req) {
+  findLatestForSite(@Param('siteId') siteId: string, @Request() req: AuthRequest) {
     return this.floorPlansService.findLatestForSite(siteId, req.user.tenantId);
   }
 
@@ -89,7 +90,7 @@ export class FloorPlansController {
   @Resource('floor-plans')
   @Action('read')
   @ApiOperation({ summary: 'Get floor plan by ID with all pins' })
-  findOne(@Param('id') id: string, @Request() req) {
+  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.floorPlansService.findOne(id, req.user.tenantId);
   }
 
@@ -97,7 +98,7 @@ export class FloorPlansController {
   @Resource('floor-plans')
   @Action('read')
   @ApiOperation({ summary: 'Get floor plan statistics (pins count by type)' })
-  getStats(@Param('id') id: string, @Request() req) {
+  getStats(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.floorPlansService.getStats(id, req.user.tenantId);
   }
 
@@ -107,7 +108,7 @@ export class FloorPlansController {
   @ApiOperation({ summary: 'Update floor plan metadata' })
   update(
     @Param('id') id: string,
-    @Request() req,
+    @Request() req: AuthRequest,
     @Body() updateFloorPlanDto: UpdateFloorPlanDto,
   ) {
     return this.floorPlansService.update(id, req.user.tenantId, updateFloorPlanDto);
@@ -117,7 +118,7 @@ export class FloorPlansController {
   @Resource('floor-plans')
   @Action('delete')
   @ApiOperation({ summary: 'Delete floor plan (and file)' })
-  remove(@Param('id') id: string, @Request() req) {
+  remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.floorPlansService.remove(id, req.user.tenantId);
   }
 
@@ -129,7 +130,7 @@ export class FloorPlansController {
   @ApiOperation({ summary: 'Create a pin on floor plan' })
   createPin(
     @Param('id') floorPlanId: string,
-    @Request() req,
+    @Request() req: AuthRequest,
     @Body() createPinDto: CreatePinDto,
   ) {
     return this.floorPlansService.createPin(floorPlanId, req.user.tenantId, createPinDto);
@@ -141,7 +142,7 @@ export class FloorPlansController {
   @ApiOperation({ summary: 'Get all pins for floor plan (optionally filtered by type)' })
   findPins(
     @Param('id') floorPlanId: string,
-    @Request() req,
+    @Request() req: AuthRequest,
     @Query('type') type?: string,
   ) {
     return this.floorPlansService.findPins(floorPlanId, req.user.tenantId, type);
@@ -154,7 +155,7 @@ export class FloorPlansController {
   updatePin(
     @Param('id') floorPlanId: string,
     @Param('pinId') pinId: string,
-    @Request() req,
+    @Request() req: AuthRequest,
     @Body() updatePinDto: UpdatePinDto,
   ) {
     return this.floorPlansService.updatePin(
@@ -172,7 +173,7 @@ export class FloorPlansController {
   removePin(
     @Param('id') floorPlanId: string,
     @Param('pinId') pinId: string,
-    @Request() req,
+    @Request() req: AuthRequest,
   ) {
     return this.floorPlansService.removePin(floorPlanId, pinId, req.user.tenantId);
   }
