@@ -8,7 +8,13 @@
       "Bash(ssh eon@192.168.0.1 \"cd /opt/xch && cat docker/postgres/init.sql | grep -n ''xch_''\")",
       "Bash(ssh eon@192.168.0.13 \"cd /opt/xch && cat docker/postgres/init.sql | grep -n ''xch_''\")",
       "Bash(ssh:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(scp:*)"
     ]
   }
 }
