@@ -6,6 +6,9 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 
+# Skip Chromium download for puppeteer (not needed in Docker)
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 # Install dependencies
 RUN npm ci
 
@@ -26,6 +29,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
+
+# Skip Chromium download for puppeteer
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Install production dependencies only
 RUN npm ci --omit=dev
