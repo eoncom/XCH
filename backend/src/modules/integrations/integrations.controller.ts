@@ -11,8 +11,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IntegrationsService } from './integrations.service';
 import { SyncNetBoxSitesDto, SyncNetBoxDevicesDto, MapAssetToNetBoxDto } from './dto/sync-netbox.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CasbinGuard } from '../auth/guards/casbin.guard';
 import { Resource } from '../../common/decorators/permissions.decorator';
 import { Action } from '../../common/decorators/permissions.decorator';
 

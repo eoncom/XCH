@@ -20,8 +20,8 @@ import { CreateFloorPlanDto } from './dto/create-floor-plan.dto';
 import { UpdateFloorPlanDto } from './dto/update-floor-plan.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CasbinGuard } from '../auth/guards/casbin.guard';
 import { Resource } from '../../common/decorators/permissions.decorator';
 import { Action } from '../../common/decorators/permissions.decorator';
 

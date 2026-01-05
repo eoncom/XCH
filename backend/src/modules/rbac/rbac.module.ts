@@ -1,6 +1,6 @@
 import { Module, Global } from '@nestjs/common';
 import { newEnforcer } from 'casbin';
-import { TypeORMAdapter } from '@casbin/typeorm-adapter';
+import { TypeORMAdapter } from 'typeorm-adapter';
 import { join } from 'path';
 
 @Global()
