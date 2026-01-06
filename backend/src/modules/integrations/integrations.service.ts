@@ -84,7 +84,7 @@ export class IntegrationsService {
             externalRefs: {
               some: {
                 externalId: mappedData.externalId,
-                externalSystem: 'netbox',
+                provider: 'netbox',
               },
             },
           },
@@ -99,7 +99,6 @@ export class IntegrationsService {
                 name: mappedData.name,
                 status: mappedData.status,
                 address: mappedData.address,
-                metadata: mappedData.metadata,
               },
             });
             results.updated++;
@@ -118,15 +117,14 @@ export class IntegrationsService {
             },
           });
 
-          // Create external reference
+          // Create external reference with metadata
           await this.prisma.externalRef.create({
             data: {
               entityType: 'SITE',
               entityId: newSite.id,
-              externalSystem: 'netbox',
-              externalId: externalId,
+              provider: 'netbox',
+              externalId: String(externalId),
               metadata,
-              tenantId,
             },
           });
 
@@ -153,7 +151,7 @@ export class IntegrationsService {
       where: { id: syncDto.siteId, tenantId },
       include: {
         externalRefs: {
-          where: { externalSystem: 'netbox' },
+          where: { provider: 'netbox' },
         },
       },
     });
@@ -195,7 +193,7 @@ export class IntegrationsService {
             externalRefs: {
               some: {
                 externalId: mappedData.externalId,
-                externalSystem: 'netbox',
+                provider: 'netbox',
               },
             },
           },
@@ -215,15 +213,14 @@ export class IntegrationsService {
             },
           });
 
-          // Create external reference
+          // Create external reference with metadata
           await this.prisma.externalRef.create({
             data: {
               entityType: 'ASSET',
               entityId: newAsset.id,
-              externalSystem: 'netbox',
-              externalId: externalId,
+              provider: 'netbox',
+              externalId: String(externalId),
               metadata,
-              tenantId,
             },
           });
 
@@ -280,8 +277,7 @@ export class IntegrationsService {
       where: {
         entityType: 'ASSET',
         entityId: asset.id,
-        externalSystem: 'netbox',
-        tenantId,
+        provider: 'netbox',
       },
     });
 
@@ -290,7 +286,7 @@ export class IntegrationsService {
         where: { id: existingRef.id },
         data: {
           externalId: netboxDevice.id.toString(),
-          metadata: {
+          connectivity: {
             netbox_url: netboxDevice.url,
             device_role: netboxDevice.device_role?.name,
             platform: netboxDevice.platform?.name,
@@ -302,14 +298,13 @@ export class IntegrationsService {
         data: {
           entityType: 'ASSET',
           entityId: asset.id,
-          externalSystem: 'netbox',
+          provider: 'netbox',
           externalId: netboxDevice.id.toString(),
-          metadata: {
+          connectivity: {
             netbox_url: netboxDevice.url,
             device_role: netboxDevice.device_role?.name,
             platform: netboxDevice.platform?.name,
           },
-          tenantId,
         },
       });
     }
@@ -351,8 +346,8 @@ export class IntegrationsService {
       where: { id: siteId },
       data: {
         healthStatus,
-        metadata: {
-          ...site.metadata,
+        connectivity: {
+          ...site.connectivity,
           monitoring: {
             source: 'uptime_kuma',
             monitor: monitorIdentifier,
@@ -389,7 +384,7 @@ export class IntegrationsService {
 
     for (const site of sites) {
       try {
-        const monitorIdentifier = site.metadata?.['monitoring']?.['monitor'];
+        const monitorIdentifier = site.connectivity?.['monitoring']?.['monitor'];
 
         if (!monitorIdentifier) {
           results.skipped++;

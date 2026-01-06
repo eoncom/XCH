@@ -171,6 +171,9 @@ export class AssetsService {
     // Validate serial number if type is being changed to critical type
     if (updateAssetDto.type && this.SERIAL_REQUIRED_TYPES.includes(updateAssetDto.type)) {
       const asset = await this.prisma.asset.findUnique({ where: { id } });
+      if (!asset) {
+        throw new NotFoundException('Asset not found');
+      }
       if (!asset.serialNumber && !updateAssetDto.serialNumber) {
         throw new BadRequestException(
           `Serial number is required for asset type: ${updateAssetDto.type}`,

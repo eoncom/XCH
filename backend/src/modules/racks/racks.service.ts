@@ -180,6 +180,7 @@ export class RacksService {
     // Check for overlaps with existing equipment
     const overlaps = rack.assets.filter(existingAsset => {
       if (existingAsset.id === mountDto.assetId) return false; // Skip if updating same asset
+      if (!existingAsset.rackPositionU || !existingAsset.rackHeightU) return false; // Skip if no position
 
       const existingStart = existingAsset.rackPositionU;
       const existingEnd = existingStart + existingAsset.rackHeightU - 1;
@@ -242,7 +243,7 @@ export class RacksService {
   async findAvailableSpaces(rackId: string, tenantId: string, requiredHeightU: number) {
     const rack = await this.findOne(rackId, tenantId);
 
-    const occupiedRanges = rack.assets.map(asset => ({
+    const occupiedRanges = rack.assets.filter(a => a.rackPositionU !== null && a.rackHeightU !== null).map(asset => ({
       start: asset.rackPositionU,
       end: asset.rackPositionU + asset.rackHeightU - 1,
     }));
@@ -255,6 +256,7 @@ export class RacksService {
       if (endPositionU > rack.heightU) break;
 
       const isAvailable = !occupiedRanges.some(range => {
+        if (range.start === null) return false;
         return (
           (positionU >= range.start && positionU <= range.end) ||
           (endPositionU >= range.start && endPositionU <= range.end) ||

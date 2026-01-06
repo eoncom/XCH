@@ -4,7 +4,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export class CreatePinDto {
   @ApiProperty({ enum: ['ASSET', 'POI', 'ISSUE', 'NETWORK'] })
   @IsEnum(['ASSET', 'POI', 'ISSUE', 'NETWORK'])
-  type: string;
+  pinType: string;
 
   @ApiProperty({ description: 'Normalized X coordinate (0.0 to 1.0)' })
   @IsNumber()
@@ -18,7 +18,7 @@ export class CreatePinDto {
   @Max(1)
   y: number;
 
-  @ApiProperty({ required: false, description: 'Asset ID (required for type=ASSET)' })
+  @ApiProperty({ required: false, description: 'Asset ID (required for pinType=ASSET)' })
   @IsString()
   @IsOptional()
   assetId?: string;

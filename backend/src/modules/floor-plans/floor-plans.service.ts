@@ -42,9 +42,12 @@ export class FloorPlansService {
 
     return await this.prisma.floorPlan.create({
       data: {
-        ...createFloorPlanDto,
-        tenantId,
+        siteId: createFloorPlanDto.siteId,
+        title: createFloorPlanDto.name,
         version,
+        fileUrl: '',
+        uploadedBy: tenantId,
+        notes: createFloorPlanDto.notes,
       },
       include: {
         site: true,
@@ -104,7 +107,7 @@ export class FloorPlansService {
       where: { id: floorPlanId },
       data: {
         fileUrl,
-        fileType: file.mimetype,
+        mimeType: file.mimetype,
         fileSize: file.size,
         uploadedAt: new Date(),
       },
@@ -149,7 +152,7 @@ export class FloorPlansService {
    */
   async findLatestForSite(siteId: string, tenantId: string) {
     const floorPlan = await this.prisma.floorPlan.findFirst({
-      where: { siteId, tenantId },
+      where: { siteId, site: { tenantId } },
       orderBy: { version: 'desc' },
       include: {
         site: true,
@@ -173,7 +176,7 @@ export class FloorPlansService {
    */
   async findOne(id: string, tenantId: string) {
     const floorPlan = await this.prisma.floorPlan.findFirst({
-      where: { id, tenantId },
+      where: { id, site: { tenantId } },
       include: {
         site: true,
         pins: {
@@ -257,7 +260,6 @@ export class FloorPlansService {
       data: {
         ...createPinDto,
         floorPlanId,
-        tenantId,
       },
       include: {
         asset: true,
@@ -271,9 +273,9 @@ export class FloorPlansService {
   async findPins(floorPlanId: string, tenantId: string, type?: string) {
     await this.findOne(floorPlanId, tenantId);
 
-    const where: any = { floorPlanId, tenantId };
+    const where: any = { floorPlanId };
     if (type) {
-      where.type = type;
+      where.pinType = type;
     }
 
     return await this.prisma.pin.findMany({
@@ -296,7 +298,7 @@ export class FloorPlansService {
   ) {
     // Verify pin exists and belongs to floor plan
     const pin = await this.prisma.pin.findFirst({
-      where: { id: pinId, floorPlanId, tenantId },
+      where: { id: pinId, floorPlanId },
     });
 
     if (!pin) {
@@ -333,7 +335,7 @@ export class FloorPlansService {
    */
   async removePin(floorPlanId: string, pinId: string, tenantId: string) {
     const pin = await this.prisma.pin.findFirst({
-      where: { id: pinId, floorPlanId, tenantId },
+      where: { id: pinId, floorPlanId },
     });
 
     if (!pin) {
@@ -352,11 +354,11 @@ export class FloorPlansService {
     await this.findOne(floorPlanId, tenantId);
 
     const pins = await this.prisma.pin.findMany({
-      where: { floorPlanId, tenantId },
+      where: { floorPlanId },
     });
 
     const statsByType = pins.reduce((acc, pin) => {
-      acc[pin.type] = (acc[pin.type] || 0) + 1;
+      acc[pin.pinType] = (acc[pin.pinType] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 

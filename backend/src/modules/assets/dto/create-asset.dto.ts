@@ -1,10 +1,11 @@
 import { IsString, IsOptional, IsEnum, IsNumber, IsObject, IsDateString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { AssetType, AssetStatus } from '@prisma/client';
 
 export class CreateAssetDto {
-  @ApiProperty({ enum: ['PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'ACCESS_POINT', 'TEAMS_ROOM', 'WEBCAM', 'DISPLAY', 'CAMERA', 'SERVER', 'PATCH_PANEL', 'PDU', 'OTHER'] })
-  @IsEnum(['PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'ACCESS_POINT', 'TEAMS_ROOM', 'WEBCAM', 'DISPLAY', 'CAMERA', 'SERVER', 'PATCH_PANEL', 'PDU', 'OTHER'])
-  type: string;
+  @ApiProperty({ enum: AssetType })
+  @IsEnum(AssetType)
+  type: AssetType;
 
   @ApiProperty()
   @IsString()
@@ -30,10 +31,10 @@ export class CreateAssetDto {
   @IsOptional()
   inventoryTag?: string;
 
-  @ApiProperty({ enum: ['IN_SERVICE', 'OUT_OF_SERVICE', 'IN_TRANSIT', 'STOCK', 'RETIRED'], default: 'IN_SERVICE' })
-  @IsEnum(['IN_SERVICE', 'OUT_OF_SERVICE', 'IN_TRANSIT', 'STOCK', 'RETIRED'])
+  @ApiProperty({ enum: AssetStatus, default: 'IN_SERVICE' })
+  @IsEnum(AssetStatus)
   @IsOptional()
-  status?: string;
+  status?: AssetStatus;
 
   @ApiProperty({ required: false })
   @IsString()
