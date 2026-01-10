@@ -128,7 +128,9 @@ export class FloorPlansService {
    * Find all floor plans for tenant (with optional filters)
    */
   async findAll(tenantId: string, siteId?: string) {
-    const where: any = { tenantId };
+    const where: any = {
+      site: { tenantId }  // Filter via site relation
+    };
     if (siteId) {
       where.siteId = siteId;
     }
