@@ -418,7 +418,12 @@ MVP TOTAL    ████████████████████ 100% (
 **Accès :**
 - Frontend : http://192.168.0.13:3001
 - Backend API : http://192.168.0.13:3002/api
-- Credentials demo : admin@xch.demo / admin123
+- Credentials demo :
+  - Admin: admin@xch.demo / admin123
+  - Manager: manager@xch.demo / manager123
+  - Technicien: tech@xch.demo / tech123
+  - Technicien2: tech2@xch.demo / tech123
+  - Viewer: viewer@xch.demo / viewer123
 
 **Infrastructure production :**
 - Backend : Port 3002 (conteneur xch-backend)
@@ -430,12 +435,26 @@ MVP TOTAL    ████████████████████ 100% (
 
 **Dernières corrections (2026-01-10) :**
 - ✅ Fix FloorPlans API (relation Prisma tenantId)
-- ✅ Seed data complet (3 sites, 9 assets, 4 tasks, 3 users, 2 racks, 1 provider)
+- ✅ Seed data COMPLET pour démo (5 sites, 36 assets, 15 tasks, 5 users, 6 racks, 3 providers)
 - ✅ Réseau Docker inter-containers (xch-network)
 - ✅ Backend démarré avec succès
 - ✅ Fix CORS configuration (FRONTEND_URL corrigé)
 - ✅ Validation API complète (tous endpoints testés)
 - ✅ Login fonctionnel avec credentials démo
+
+**Seed data démo complet (2026-01-10) :**
+```
+Users: 5 (admin, manager, 2 techs, 1 viewer)
+Sites: 5 (Paris, Lyon, Marseille, Bordeaux Datacenter, Toulouse)
+  - Paris La Défense: 12 assets, 2 racks 42U, 6 tasks
+  - Lyon Part-Dieu: 8 assets, 1 rack 24U, 3 tasks
+  - Marseille Vieux-Port: 3 assets (transit), 1 task
+  - Datacenter Bordeaux: 8 assets (infra critique), 2 racks 42U, 3 tasks
+  - Bureau Toulouse: 5 assets (R&D), 1 rack 24U, 2 tasks
+Assets: 36 (serveurs, switches, routeurs, firewalls, storage, printers, iPads, APs, visio, UPS, PDU)
+Tasks: 15 (3 TODO, 5 IN_PROGRESS, 4 DONE, 3 URGENT avec checklists)
+Providers: 3 (Integrator, Security, Datacenter)
+```
 
 **Tests API validés (2026-01-10) :**
 ```bash
@@ -445,19 +464,19 @@ POST /api/auth/login
 
 # Sites
 GET /api/sites
-✅ 200 OK - 3 sites (Paris, Lyon, Marseille)
+✅ 200 OK - 5 sites (Paris, Lyon, Marseille, Bordeaux, Toulouse)
 
 # Assets
 GET /api/assets
-✅ 200 OK - 9 assets (printers, iPads, switches, servers)
+✅ 200 OK - 36 assets (infrastructure complète réaliste)
 
 # Tasks
 GET /api/tasks
-✅ 200 OK - 4 tasks avec checklists
+✅ 200 OK - 15 tasks avec statuts variés + checklists
 
 # Racks
 GET /api/racks
-✅ 200 OK - 2 racks (42U, 24U)
+✅ 200 OK - 6 racks avec équipements montés
 
 # Floor Plans
 GET /api/floor-plans
