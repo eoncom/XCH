@@ -385,7 +385,7 @@ export class IntegrationsService {
 
     for (const site of sites) {
       try {
-        const monitorIdentifier = site.connectivity?.['monitoring']?.['monitor'];
+        const monitorIdentifier = (site.connectivity as any)?.['monitoring']?.['monitor'];
 
         if (!monitorIdentifier) {
           results.skipped++;

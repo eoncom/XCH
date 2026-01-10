@@ -1,6 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsNumber, IsObject } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { SiteStatus } from '@prisma/client';
+import { SiteStatus, HealthStatus } from '@prisma/client';
 
 export class CreateSiteDto {
   @ApiProperty()
@@ -11,10 +11,10 @@ export class CreateSiteDto {
   @IsString()
   name: string;
 
-  @ApiProperty({ enum: ['PREPARATION', 'ACTIVE', 'CLOSED'], default: 'ACTIVE' })
-  @IsEnum(['PREPARATION', 'ACTIVE', 'CLOSED'])
+  @ApiProperty({ enum: SiteStatus, default: SiteStatus.ACTIVE })
+  @IsEnum(SiteStatus)
   @IsOptional()
-  status?: string;
+  status?: SiteStatus;
 
   @ApiProperty()
   @IsString()
@@ -59,10 +59,10 @@ export class CreateSiteDto {
   @IsOptional()
   connectivity?: any;
 
-  @ApiProperty({ enum: ['OK', 'WARNING', 'CRITICAL', 'UNKNOWN'], default: 'UNKNOWN' })
-  @IsEnum(['OK', 'WARNING', 'CRITICAL', 'UNKNOWN'])
+  @ApiProperty({ enum: HealthStatus, default: HealthStatus.UNKNOWN })
+  @IsEnum(HealthStatus)
   @IsOptional()
-  healthStatus?: string;
+  healthStatus?: HealthStatus;
 
   @ApiProperty({ required: false })
   @IsString()

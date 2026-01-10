@@ -27,12 +27,17 @@ export class UsersService {
     // Remove password from DTO before creating user
     const { password, tenantId: dtoTenantId, ...userDataWithoutPassword } = createUserDto;
 
+    const userData: any = {
+      ...userDataWithoutPassword,
+      passwordHash,
+    };
+
+    if (dtoTenantId) {
+      userData.tenant = { connect: { id: dtoTenantId } };
+    }
+
     const user = await this.prisma.user.create({
-      data: {
-        ...userDataWithoutPassword,
-        ...(dtoTenantId && { tenant: { connect: { id: dtoTenantId } } }),
-        passwordHash,
-      },
+      data: userData,
       include: {
         tenant: true,
       },
