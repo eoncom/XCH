@@ -4,10 +4,10 @@ import type { Rack } from '@/types';
 export const racksApi = {
   getAll: (siteId?: string) => {
     const query = siteId ? `?siteId=${siteId}` : '';
-    return apiClient.get<Rack[]>(`/racks${query}`);
+    return apiClient.get<Rack[]>(`/api/racks${query}`);
   },
 
-  getById: (id: string) => apiClient.get<Rack>(`/racks/${id}`),
+  getById: (id: string) => apiClient.get<Rack>(`/api/racks/${id}`),
 
   create: (data: {
     siteId: string;
@@ -15,12 +15,12 @@ export const racksApi = {
     heightU: number;
     status: string;
     location?: string;
-  }) => apiClient.post<Rack>('/racks', data),
+  }) => apiClient.post<Rack>('/api/racks', data),
 
   update: (id: string, data: Partial<Rack>) =>
-    apiClient.patch<Rack>(`/racks/${id}`, data),
+    apiClient.patch<Rack>(`/api/racks/${id}`, data),
 
-  delete: (id: string) => apiClient.delete(`/racks/${id}`),
+  delete: (id: string) => apiClient.delete(`/api/racks/${id}`),
 
   mountEquipment: (
     rackId: string,
@@ -29,8 +29,8 @@ export const racksApi = {
       positionU: number;
       heightU: number;
     }
-  ) => apiClient.post(`/racks/${rackId}/mount`, data),
+  ) => apiClient.post(`/api/racks/${rackId}/mount`, data),
 
   unmountEquipment: (rackId: string, assetId: string) =>
-    apiClient.delete(`/racks/${rackId}/unmount/${assetId}`),
+    apiClient.delete(`/api/racks/${rackId}/unmount/${assetId}`),
 };

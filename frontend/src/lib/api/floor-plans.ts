@@ -4,14 +4,14 @@ import type { FloorPlan, Pin } from '@/types';
 export const floorPlansApi = {
   getAll: (siteId?: string) => {
     const query = siteId ? `?siteId=${siteId}` : '';
-    return apiClient.get<FloorPlan[]>(`/floor-plans${query}`);
+    return apiClient.get<FloorPlan[]>(`/api/floor-plans${query}`);
   },
 
-  getById: (id: string) => apiClient.get<FloorPlan>(`/floor-plans/${id}`),
+  getById: (id: string) => apiClient.get<FloorPlan>(`/api/floor-plans/${id}`),
 
   create: async (data: FormData) => {
     const token = localStorage.getItem('accessToken');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/floor-plans`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/floor-plans`, {
       method: 'POST',
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
@@ -23,17 +23,17 @@ export const floorPlansApi = {
   },
 
   update: (id: string, data: Partial<FloorPlan>) =>
-    apiClient.patch<FloorPlan>(`/floor-plans/${id}`, data),
+    apiClient.patch<FloorPlan>(`/api/floor-plans/${id}`, data),
 
-  delete: (id: string) => apiClient.delete(`/floor-plans/${id}`),
+  delete: (id: string) => apiClient.delete(`/api/floor-plans/${id}`),
 
   // Pins
   createPin: (floorPlanId: string, data: Omit<Pin, 'id' | 'createdAt' | 'updatedAt' | 'tenantId' | 'floorPlanId'>) =>
-    apiClient.post<Pin>(`/floor-plans/${floorPlanId}/pins`, data),
+    apiClient.post<Pin>(`/api/floor-plans/${floorPlanId}/pins`, data),
 
   updatePin: (floorPlanId: string, pinId: string, data: Partial<Pin>) =>
-    apiClient.patch<Pin>(`/floor-plans/${floorPlanId}/pins/${pinId}`, data),
+    apiClient.patch<Pin>(`/api/floor-plans/${floorPlanId}/pins/${pinId}`, data),
 
   deletePin: (floorPlanId: string, pinId: string) =>
-    apiClient.delete(`/floor-plans/${floorPlanId}/pins/${pinId}`),
+    apiClient.delete(`/api/floor-plans/${floorPlanId}/pins/${pinId}`),
 };

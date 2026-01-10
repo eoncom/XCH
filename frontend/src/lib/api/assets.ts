@@ -15,17 +15,17 @@ export const assetsApi = {
     if (params?.search) searchParams.append('search', params.search);
 
     const query = searchParams.toString();
-    return apiClient.get<Asset[]>(`/assets${query ? `?${query}` : ''}`);
+    return apiClient.get<Asset[]>(`/api/assets${query ? `?${query}` : ''}`);
   },
 
-  getById: (id: string) => apiClient.get<Asset>(`/assets/${id}`),
+  getById: (id: string) => apiClient.get<Asset>(`/api/assets/${id}`),
 
-  create: (data: CreateAssetDto) => apiClient.post<Asset>('/assets', data),
+  create: (data: CreateAssetDto) => apiClient.post<Asset>('/api/assets', data),
 
   update: (id: string, data: UpdateAssetDto) =>
-    apiClient.patch<Asset>(`/assets/${id}`, data),
+    apiClient.patch<Asset>(`/api/assets/${id}`, data),
 
-  delete: (id: string) => apiClient.delete(`/assets/${id}`),
+  delete: (id: string) => apiClient.delete(`/api/assets/${id}`),
 
   generateQRCode: (id: string) =>
     apiClient.post<{
@@ -33,10 +33,10 @@ export const assetsApi = {
       qrCodeDataUrl: string;
       qrUrl: string;
       token: string;
-    }>(`/assets/${id}/qr-code`, {}),
+    }>(`/api/assets/${id}/qr-code`, {}),
 
   verifyQRCode: (assetId: string, token: string) =>
     apiClient.get<{ valid: boolean; asset?: Asset }>(
-      `/assets/${assetId}/verify-qr?token=${token}`
+      `/api/assets/${assetId}/verify-qr?token=${token}`
     ),
 };

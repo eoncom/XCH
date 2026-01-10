@@ -34,6 +34,9 @@ export const useAuthStore = create<AuthState>()(
           localStorage.setItem('refreshToken', response.refreshToken);
           localStorage.setItem('user', JSON.stringify(response.user));
 
+          // Store in cookie (for middleware)
+          document.cookie = `accessToken=${response.accessToken}; path=/; max-age=900; SameSite=Lax`;
+
           set({
             user: response.user,
             accessToken: response.accessToken,
@@ -52,6 +55,9 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
+
+        // Clear cookie
+        document.cookie = 'accessToken=; path=/; max-age=0';
 
         set({
           user: null,

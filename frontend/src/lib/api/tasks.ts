@@ -15,18 +15,18 @@ export const tasksApi = {
     if (params?.assignedTo) searchParams.append('assignedTo', params.assignedTo);
 
     const query = searchParams.toString();
-    return apiClient.get<Task[]>(`/tasks${query ? `?${query}` : ''}`);
+    return apiClient.get<Task[]>(`/api/tasks${query ? `?${query}` : ''}`);
   },
 
-  getById: (id: string) => apiClient.get<Task>(`/tasks/${id}`),
+  getById: (id: string) => apiClient.get<Task>(`/api/tasks/${id}`),
 
-  create: (data: CreateTaskDto) => apiClient.post<Task>('/tasks', data),
+  create: (data: CreateTaskDto) => apiClient.post<Task>('/api/tasks', data),
 
   update: (id: string, data: UpdateTaskDto) =>
-    apiClient.patch<Task>(`/tasks/${id}`, data),
+    apiClient.patch<Task>(`/api/tasks/${id}`, data),
 
-  delete: (id: string) => apiClient.delete(`/tasks/${id}`),
+  delete: (id: string) => apiClient.delete(`/api/tasks/${id}`),
 
   updateChecklist: (id: string, checklist: any[]) =>
-    apiClient.patch<Task>(`/tasks/${id}`, { checklist }),
+    apiClient.patch<Task>(`/api/tasks/${id}`, { checklist }),
 };
