@@ -11,7 +11,7 @@ export class AssetsService {
   private readonly SERIAL_REQUIRED_TYPES = ['PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'TEAMS_ROOM'];
 
   constructor(
-    @Inject('PRISMA_CLIENT') private prisma: PrismaClient,
+    private prisma: PrismaClient,
     private qrCodeService: QRCodeService,
     private configService: ConfigService,
   ) {}

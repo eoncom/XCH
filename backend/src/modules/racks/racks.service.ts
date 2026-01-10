@@ -6,7 +6,7 @@ import { MountEquipmentDto } from './dto/mount-equipment.dto';
 
 @Injectable()
 export class RacksService {
-  constructor(@Inject('PRISMA_CLIENT') private prisma: PrismaClient) {}
+  constructor(private prisma: PrismaClient) {}
 
   async create(tenantId: string, createRackDto: CreateRackDto) {
     const existing = await this.prisma.rack.findFirst({

@@ -6,7 +6,7 @@ import { FilterSiteDto } from './dto/filter-site.dto';
 
 @Injectable()
 export class SitesService {
-  constructor(@Inject('PRISMA_CLIENT') private prisma: PrismaClient) {}
+  constructor(private prisma: PrismaClient) {}
 
   async create(tenantId: string, createSiteDto: CreateSiteDto) {
     const existing = await this.prisma.site.findFirst({

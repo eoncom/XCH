@@ -6,7 +6,7 @@ import { FilterTaskDto } from './dto/filter-task.dto';
 
 @Injectable()
 export class TasksService {
-  constructor(@Inject('PRISMA_CLIENT') private prisma: PrismaClient) {}
+  constructor(private prisma: PrismaClient) {}
 
   async create(tenantId: string, userId: string, createTaskDto: CreateTaskDto) {
     const task = await this.prisma.task.create({

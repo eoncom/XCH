@@ -4,7 +4,7 @@ import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 @Injectable()
 export class TenantsService {
-  constructor(@Inject('PRISMA_CLIENT') private prisma: PrismaClient) {}
+  constructor(private prisma: PrismaClient) {}
 
   async findOne(id: string) {
     const tenant = await this.prisma.tenant.findUnique({
