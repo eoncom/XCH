@@ -1,11 +1,11 @@
-import { Module, Global, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
+import { Module, Global, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
 @Global()
 @Module({
   providers: [
     {
-      provide: 'PRISMA_CLIENT',
+      provide: PrismaClient,
       useFactory: () => {
         const prisma = new PrismaClient({
           log: ['error', 'warn'],
@@ -14,10 +14,10 @@ import { PrismaClient } from '@prisma/client';
       },
     },
   ],
-  exports: ['PRISMA_CLIENT'],
+  exports: [PrismaClient],
 })
 export class DatabaseModule implements OnModuleInit, OnModuleDestroy {
-  constructor(@Inject('PRISMA_CLIENT') private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) {}
 
   async onModuleInit() {
     await this.prisma.$connect();
