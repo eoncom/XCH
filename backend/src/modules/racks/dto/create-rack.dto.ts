@@ -1,5 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsNumber, IsObject, Min, Max } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { RackType } from '@prisma/client';
 
 export class CreateRackDto {
   @ApiProperty()
@@ -17,9 +18,9 @@ export class CreateRackDto {
   heightU: number;
 
   @ApiProperty({ enum: ['WALL_MOUNTED', 'FLOOR_STANDING', 'ENCLOSED_CABINET'], default: 'FLOOR_STANDING' })
-  @IsEnum(['WALL_MOUNTED', 'FLOOR_STANDING', 'ENCLOSED_CABINET'])
+  @IsEnum(RackType)
   @IsOptional()
-  rackType?: string;
+  rackType?: RackType;
 
   @ApiProperty({ enum: ['IN_SERVICE', 'OUT_OF_SERVICE', 'PREPARATION'], default: 'IN_SERVICE' })
   @IsEnum(['IN_SERVICE', 'OUT_OF_SERVICE', 'PREPARATION'])

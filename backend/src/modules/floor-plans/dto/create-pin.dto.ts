@@ -1,10 +1,11 @@
 import { IsString, IsNumber, Min, Max, IsEnum, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { PinType } from '@prisma/client';
 
 export class CreatePinDto {
-  @ApiProperty({ enum: ['ASSET', 'POI', 'ISSUE', 'NETWORK'] })
-  @IsEnum(['ASSET', 'POI', 'ISSUE', 'NETWORK'])
-  pinType: string;
+  @ApiProperty({ enum: PinType })
+  @IsEnum(PinType)
+  pinType: PinType;
 
   @ApiProperty({ description: 'Normalized X coordinate (0.0 to 1.0)' })
   @IsNumber()
@@ -18,7 +19,7 @@ export class CreatePinDto {
   @Max(1)
   y: number;
 
-  @ApiProperty({ required: false, description: 'Asset ID (required for pinType=ASSET)' })
+  @ApiProperty({ required: false, description: 'Asset ID (for equipment pins)' })
   @IsString()
   @IsOptional()
   assetId?: string;

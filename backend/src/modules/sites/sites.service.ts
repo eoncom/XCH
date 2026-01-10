@@ -43,7 +43,7 @@ export class SitesService {
       siteData.healthStatus || 'UNKNOWN',
     );
 
-    return this.findOne(site[0].id, tenantId);
+    return this.findOne((site as any)[0].id, tenantId);
   }
 
   async findAll(tenantId: string, filter?: FilterSiteDto) {

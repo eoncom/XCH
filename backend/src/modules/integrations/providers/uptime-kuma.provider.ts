@@ -21,8 +21,8 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
       this.client = axios.create({
         baseURL,
         auth: {
-          username,
-          password,
+          username: username!,
+          password: password!,
         },
         timeout: 10000,
       });

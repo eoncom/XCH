@@ -1,5 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsNumber, IsObject } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { SiteStatus } from '@prisma/client';
 
 export class CreateSiteDto {
   @ApiProperty()

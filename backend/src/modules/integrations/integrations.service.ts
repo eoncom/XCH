@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { NetBoxProviderService } from './providers/netbox.provider';
+import { HealthStatus } from '@prisma/client';
 import { UptimeKumaProviderService } from './providers/uptime-kuma.provider';
 import { SyncNetBoxSitesDto, SyncNetBoxDevicesDto, MapAssetToNetBoxDto } from './dto/sync-netbox.dto';
 
@@ -286,7 +287,7 @@ export class IntegrationsService {
         where: { id: existingRef.id },
         data: {
           externalId: netboxDevice.id.toString(),
-          connectivity: {
+          metadata: {
             netbox_url: netboxDevice.url,
             device_role: netboxDevice.device_role?.name,
             platform: netboxDevice.platform?.name,
@@ -300,7 +301,7 @@ export class IntegrationsService {
           entityId: asset.id,
           provider: 'netbox',
           externalId: netboxDevice.id.toString(),
-          connectivity: {
+          metadata: {
             netbox_url: netboxDevice.url,
             device_role: netboxDevice.device_role?.name,
             platform: netboxDevice.platform?.name,
@@ -345,9 +346,9 @@ export class IntegrationsService {
     await this.prisma.site.update({
       where: { id: siteId },
       data: {
-        healthStatus,
+        healthStatus: healthStatus as HealthStatus,
         connectivity: {
-          ...site.connectivity,
+          ...((site.connectivity as any) || {}),
           monitoring: {
             source: 'uptime_kuma',
             monitor: monitorIdentifier,
@@ -361,7 +362,7 @@ export class IntegrationsService {
     this.logger.log(`Site ${siteId} health updated to ${healthStatus} from Uptime Kuma`);
     return {
       siteId,
-      healthStatus,
+      healthStatus: healthStatus as HealthStatus,
       monitor: monitorStatus,
     };
   }

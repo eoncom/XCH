@@ -19,7 +19,8 @@
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(git checkout:*)",
-      "Bash(1)"
+      "Bash(1)",
+      "Bash(git pull:*)"
     ]
   }
 }

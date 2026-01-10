@@ -241,12 +241,8 @@ export class FloorPlansService {
     // Verify floor plan exists
     await this.findOne(floorPlanId, tenantId);
 
-    // Validate asset association for ASSET type pins
-    if (createPinDto.type === 'ASSET') {
-      if (!createPinDto.assetId) {
-        throw new BadRequestException('assetId is required for pins of type ASSET');
-      }
-
+    // Validate asset if provided
+    if (createPinDto.assetId) {
       const asset = await this.prisma.asset.findFirst({
         where: { id: createPinDto.assetId, tenantId },
       });
@@ -306,7 +302,7 @@ export class FloorPlansService {
     }
 
     // Validate asset if changing to ASSET type or updating assetId
-    if (updatePinDto.type === 'ASSET' || updatePinDto.assetId) {
+    if (updatePinDto.assetId || pin.assetId) {
       const assetId = updatePinDto.assetId || pin.assetId;
       if (!assetId) {
         throw new BadRequestException('assetId is required for pins of type ASSET');

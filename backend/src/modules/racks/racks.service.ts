@@ -244,8 +244,8 @@ export class RacksService {
     const rack = await this.findOne(rackId, tenantId);
 
     const occupiedRanges = rack.assets.filter(a => a.rackPositionU !== null && a.rackHeightU !== null).map(asset => ({
-      start: asset.rackPositionU,
-      end: asset.rackPositionU + asset.rackHeightU - 1,
+      start: asset.rackPositionU!,
+      end: asset.rackPositionU! + asset.rackHeightU! - 1,
     }));
 
     const availableSpaces = [];

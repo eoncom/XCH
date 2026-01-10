@@ -1,5 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsDateString, IsArray, IsObject } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { TaskStatus, TaskPriority } from '@prisma/client';
 
 export class CreateTaskDto {
   @ApiProperty()
@@ -20,27 +21,27 @@ export class CreateTaskDto {
   @IsOptional()
   assetId?: string;
 
-  @ApiProperty({ enum: ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED'], default: 'TODO' })
-  @IsEnum(['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED'])
+  @ApiProperty({ enum: TaskStatus, default: TaskStatus.TODO })
+  @IsEnum(TaskStatus)
   @IsOptional()
-  status?: string;
+  status?: TaskStatus;
 
-  @ApiProperty({ enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'], default: 'MEDIUM' })
-  @IsEnum(['LOW', 'MEDIUM', 'HIGH', 'URGENT'])
+  @ApiProperty({ enum: TaskPriority, default: TaskPriority.MEDIUM })
+  @IsEnum(TaskPriority)
   @IsOptional()
-  priority?: string;
+  priority?: TaskPriority;
 
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
   assignedTo?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, type: Date })
   @IsDateString()
   @IsOptional()
   dueDate?: string;
 
-  @ApiProperty({ required: false, type: 'array', items: { type: 'object' } })
+  @ApiProperty({ required: false, type: [Object] })
   @IsArray()
   @IsOptional()
   checklist?: any[];
