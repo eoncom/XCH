@@ -17,6 +17,64 @@ Ce fichier track toutes les sessions de développement.
 
 ---
 
+## 2026-01-10
+
+### Session 7 : Finalisation déploiement + Fix bugs + Seed data
+**Durée :** ~1h30
+**Status :** ✅ Terminée
+
+**Actions principales :**
+1. **Fix FloorPlans 500 Error**
+   - Problème : `Unknown argument 'tenantId'` dans FloorPlansService.findAll()
+   - Cause : Modèle FloorPlan sans champ tenantId direct, relation via site
+   - Fix : Changé `where: {tenantId}` → `where: {site: {tenantId}}`
+   - Fichier : `backend/src/modules/floor-plans/floor-plans.service.ts:131`
+
+2. **Création Seed Demo Complet**
+   - Réécriture complète `backend/prisma/seed.ts` (489 lignes)
+   - 3 utilisateurs (admin, manager, tech) avec rôles
+   - 3 chantiers (Paris, Lyon, Marseille) avec statuts différents
+   - 9 assets variés (HP, Apple, Cisco, Dell, HPE, Ubiquiti)
+   - 2 racks (42U, 24U) avec équipements montés
+   - 4 tâches avec checklists et assignations
+   - 1 prestataire (TechNet Solutions)
+
+3. **Résolution Problème Réseau Docker Backend**
+   - Symptôme : Backend bloquait après AuthModule (timeout Redis/Bull)
+   - Solution :
+     * Créé réseau Docker `xch-network`
+     * Connecté containers PostgreSQL, Redis, MinIO au réseau
+     * Mis à jour .env backend avec hostnames Docker
+     * Recréé container backend sur réseau
+   - Résultat : Backend démarre correctement sur port 3002
+
+4. **Exécution Seed Production**
+   - Clean base : `TRUNCATE TABLE tenants CASCADE`
+   - Installé dépendances : `@types/bcrypt`, `typescript`, `ts-node`
+   - Exécuté : `npx tsx prisma/seed.ts`
+   - ✅ Seed completed avec toutes données demo
+
+**Configuration finale :**
+- Backend : port 3002 (3000 pris par Grafana)
+- Frontend : port 3001
+- Réseau : `xch-network` pour inter-container communication
+- Credentials demo : admin@xch.demo / admin123
+
+**Résultat :**
+- ✅ Backend démarré et connecté (PostgreSQL, Redis, MinIO)
+- ✅ Frontend accessible http://192.168.0.13:3001
+- ✅ Base de données peuplée avec données réalistes
+- ✅ FloorPlans API corrigé (fix relation Prisma)
+- ✅ Déploiement production fonctionnel
+
+**Fichiers modifiés :** 2
+- `backend/src/modules/floor-plans/floor-plans.service.ts`
+- `backend/prisma/seed.ts`
+
+**Commit :** `d01f656` - fix: replace FloorPlan tenantId filter with site relation + create comprehensive demo seed data
+
+---
+
 ## 2026-01-03
 
 ### Session 1 : Réorganisation documentation complète

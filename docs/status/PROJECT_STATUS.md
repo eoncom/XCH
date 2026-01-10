@@ -1,8 +1,8 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-01-01
+**Dernière mise à jour :** 2026-01-10
 **Version actuelle :** 1.0.0-MVP
-**Statut global :** ✅ Production-Ready
+**Statut global :** ✅ Production Déployée
 
 ---
 
@@ -13,9 +13,9 @@ Backend      ████████████████████ 100% (
 Frontend     ████████████████████ 100% (7/7 modules)
 Tests        ██░░░░░░░░░░░░░░░░░░  10% (Tests manuels uniquement)
 Docs         ████████████████████ 100% (Installation + Guides + Architecture)
-Deploy       ██████░░░░░░░░░░░░░░  30% (Docker Compose ready, CI/CD à configurer)
+Deploy       ██████████████████░░  80% (Prod déployée + Seed data)
 
-MVP TOTAL    ██████████████████░░  90% (Production-Ready)
+MVP TOTAL    ███████████████████░  95% (Production Déployée)
 ```
 
 ---
@@ -403,16 +403,37 @@ MVP TOTAL    ██████████████████░░  90% (
 
 ## ✅ STATUT FINAL
 
-**✅ MVP 100% Production-Ready**
+**✅ MVP 100% Production Déployée**
 
-- Backend : 100% complet
-- Frontend : 100% complet
-- Documentation : 100% complète
-- Infrastructure : Docker Compose prêt
-- Sécurité : Complète (auth, RBAC, firewall, SSL/TLS)
+- Backend : 100% complet ✅
+- Frontend : 100% complet ✅
+- Documentation : 100% complète ✅
+- Infrastructure : Docker Compose ready ✅
+- Déploiement : Serveur Ubuntu 24.04 ✅
+- Base de données : Seed data chargées ✅
+- Sécurité : Complète (auth, RBAC, firewall, SSL/TLS) ✅
 
-**🎯 Prêt pour déploiement production**
+**🚀 Production déployée et opérationnelle**
 
-**📅 Dernière mise à jour :** 2026-01-01
+**Accès :**
+- Frontend : http://192.168.0.13:3001
+- Backend API : http://192.168.0.13:3002/api
+- Credentials demo : admin@xch.demo / admin123
+
+**Infrastructure production :**
+- Backend : Port 3002 (conteneur xch-backend)
+- Frontend : Port 3001 (conteneur xch-frontend)
+- PostgreSQL 15 + PostGIS : Port 5433
+- Redis 7 : Port 6380
+- MinIO S3 : Ports 9000-9001
+- Réseau Docker : xch-network
+
+**Dernières corrections (2026-01-10) :**
+- ✅ Fix FloorPlans API (relation Prisma tenantId)
+- ✅ Seed data complet (3 sites, 9 assets, 4 tasks, 3 users)
+- ✅ Réseau Docker inter-containers
+- ✅ Backend démarré avec succès
+
+**📅 Dernière mise à jour :** 2026-01-10
 **📋 Source de vérité unique**
 **🔙 [Retour index](../00-INDEX.md)**
