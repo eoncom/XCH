@@ -108,7 +108,7 @@ services:
     command: >
       sh -c "
       npx prisma migrate deploy &&
-      npx prisma db seed &&
+      (npx prisma db seed || echo 'Seed skipped') &&
       npm run start:prod
       "
 
