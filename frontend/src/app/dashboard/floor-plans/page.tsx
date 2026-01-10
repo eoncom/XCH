@@ -21,12 +21,12 @@ import type { FloorPlan, Site } from '@/types';
 
 export default function FloorPlansPage() {
   const [search, setSearch] = useState('');
-  const [siteFilter, setSiteFilter] = useState<string>('');
+  const [siteFilter, setSiteFilter] = useState<string>('all');
   const router = useRouter();
 
   const { data: floorPlans, isLoading } = useQuery<FloorPlan[]>({
     queryKey: ['floor-plans', siteFilter],
-    queryFn: () => floorPlansApi.getAll(siteFilter || undefined),
+    queryFn: () => floorPlansApi.getAll(siteFilter !== 'all' ? siteFilter : undefined),
   });
 
   const { data: sites } = useQuery<Site[]>({
@@ -82,7 +82,7 @@ export default function FloorPlansPage() {
             <SelectValue placeholder="Tous les sites" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Tous les sites</SelectItem>
+            <SelectItem value="all">Tous les sites</SelectItem>
             {sites?.map((site) => (
               <SelectItem key={site.id} value={site.id}>
                 {site.name}

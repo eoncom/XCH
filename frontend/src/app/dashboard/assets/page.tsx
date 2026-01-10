@@ -51,16 +51,16 @@ const assetStatusLabels: Record<AssetStatus, string> = {
 
 export default function AssetsPage() {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [typeFilter, setTypeFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
   const router = useRouter();
 
   const { data: assets, isLoading } = useQuery<Asset[]>({
     queryKey: ['assets', { status: statusFilter, type: typeFilter, search }],
     queryFn: () =>
       assetsApi.getAll({
-        status: statusFilter || undefined,
-        type: typeFilter || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        type: typeFilter !== 'all' ? typeFilter : undefined,
         search: search || undefined,
       }),
   });
@@ -121,7 +121,7 @@ export default function AssetsPage() {
             <SelectValue placeholder="Tous les types" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Tous les types</SelectItem>
+            <SelectItem value="all">Tous les types</SelectItem>
             {Object.entries(assetTypeLabels).map(([value, label]) => (
               <SelectItem key={value} value={value}>
                 {label}
@@ -135,7 +135,7 @@ export default function AssetsPage() {
             <SelectValue placeholder="Tous les statuts" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Tous les statuts</SelectItem>
+            <SelectItem value="all">Tous les statuts</SelectItem>
             {Object.entries(assetStatusLabels).map(([value, label]) => (
               <SelectItem key={value} value={value}>
                 {label}

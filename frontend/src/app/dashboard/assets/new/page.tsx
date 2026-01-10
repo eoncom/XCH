@@ -195,7 +195,7 @@ export default function NewAssetPage() {
                     <SelectValue placeholder="Sélectionner un site" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Aucun</SelectItem>
+                    <SelectItem value="none">Aucun</SelectItem>
                     {sites?.map((site) => (
                       <SelectItem key={site.id} value={site.id}>
                         {site.name}
