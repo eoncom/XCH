@@ -48,6 +48,9 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 # Copy built application
 COPY --from=builder /app/dist ./dist
 
+# Copy Casbin configuration
+COPY --from=builder /app/casbin /casbin
+
 # Expose port
 EXPOSE 3002
 
