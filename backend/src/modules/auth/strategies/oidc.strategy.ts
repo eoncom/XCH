@@ -14,6 +14,8 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
 
     super({
       issuer: enabled ? config.get('OIDC_ISSUER') : 'http://localhost',
+      authorizationURL: enabled ? config.get('OIDC_AUTHORIZATION_URL') || `${config.get('OIDC_ISSUER')}/authorize` : 'http://localhost/authorize',
+      tokenURL: enabled ? config.get('OIDC_TOKEN_URL') || `${config.get('OIDC_ISSUER')}/token` : 'http://localhost/token',
       clientID: enabled ? config.get('OIDC_CLIENT_ID') : 'dummy',
       clientSecret: enabled ? config.get('OIDC_CLIENT_SECRET') : 'dummy',
       callbackURL: enabled ? config.get('OIDC_CALLBACK_URL') : 'http://localhost/callback',
