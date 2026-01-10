@@ -168,7 +168,7 @@ export default function TasksPage() {
 
   const { data: tasks, isLoading } = useQuery<Task[]>({
     queryKey: ['tasks'],
-    queryFn: tasksApi.getAll,
+    queryFn: () => tasksApi.getAll(),
   });
 
   const updateStatusMutation = useMutation({

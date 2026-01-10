@@ -1,16 +1,20 @@
 # TODO - Backlog XCH
 
-**Dernière mise à jour :** 2026-01-04
+**Dernière mise à jour :** 2026-01-10
 **Version :** 1.0.0-MVP
 
 Ce fichier centralise toutes les tâches à effectuer, organisées par priorité.
 
 ## 🔥 URGENT (Blocage - À faire MAINTENANT)
 
-_Aucune tâche urgente actuellement._
+**Aucune tâche urgente - Toutes résolues !** ✅
 
-**Dernière tâche résolue :**
-- ✅ Fix PostgreSQL init.sql (2026-01-03, Session 4) - `xch_db` → `xch_dev` corrigé
+**Dernières résolutions :**
+- ✅ Build frontend Konva/canvas SSR (2026-01-10, Session 6) - Résolu avec webpack externalize + @zxing fixes
+- ✅ CORS production (2026-01-10, Session 6) - Backend configure FRONTEND_URL
+- ✅ Déploiement backend complet (2026-01-10, Session 6) - API fonctionnelle sur port 3002
+- ✅ Déploiement frontend complet (2026-01-10, Session 6) - Application accessible sur port 3001
+- ✅ Fix init.sql PostgreSQL (2026-01-03, Session 4) - xch_db → xch_dev
 
 ---
 
@@ -19,35 +23,40 @@ _Aucune tâche urgente actuellement._
 ### Tester déploiement serveur Ubuntu
 **Priorité :** Haute
 **Impact :** Validation production
-**Estimation :** 2-3h (Session 5 : ~3h effectuées)
+**Estimation :** ✅ TERMINÉ (Session 5 : ~3h | Session 6 : ~4h)
 **Dépend de :** ✅ Fix init.sql (résolu Session 4)
+**Statut :** ✅ COMPLET (Backend ✅ | Frontend ✅ | CORS ✅)
 
 **Actions :**
-1. ✅ Corriger init.sql (fait Session 4)
-2. ✅ Connexion serveur (utilisateur claude-deploy)
-3. ✅ Adapter ports (backend 3002, postgres 5433, redis 6380)
-4. ✅ Créer fichiers .env avec credentials sécurisés
-5. ✅ Déployer infrastructure Docker (PostgreSQL, Redis, MinIO)
-6. ✅ Corriger code backend (package.json, schema.prisma)
-7. ✅ Synchroniser Git serveur → local → GitHub (commits 49667f0, 8a17eaf)
-8. ❌ Build backend Docker (abandonné - trop lent, build jamais terminé)
-9. ⏳ Alternative déploiement backend à définir
-10. ⏳ Tester API backend (health check, login)
-11. ⏳ Build et démarrer frontend
-12. ⏳ Tests fonctionnels complets
+1. ✅ Corriger init.sql (Session 4)
+2. ✅ Connexion serveur utilisateur claude-deploy (Session 5)
+3. ✅ Adapter ports (backend 3002, postgres 5433, redis 6380) (Session 5)
+4. ✅ Créer fichiers .env avec credentials sécurisés (Session 5)
+5. ✅ Déployer infrastructure Docker (PostgreSQL, Redis, MinIO) (Session 5)
+6. ✅ Corriger code backend (package.json, schema.prisma) (Session 5)
+7. ✅ Synchroniser Git serveur → local → GitHub (commits 49667f0, 8a17eaf) (Session 5)
+8. ✅ Correction 114 erreurs TypeScript backend (Session 6)
+9. ✅ Build et démarrage backend Docker (Session 6)
+10. ✅ Création schéma PostgreSQL + seed data (Session 6)
+11. ✅ Configuration RBAC Casbin 29 policies (Session 6)
+12. ✅ Tests API backend (health, login, protected endpoints) (Session 6)
+13. ✅ Résoudre problème Konva/canvas SSR (webpack + @zxing) (Session 6)
+14. ✅ Build et démarrage frontend Docker (Session 6)
+15. ✅ Configuration CORS production (FRONTEND_URL) (Session 6)
+16. ⏳ Tests fonctionnels complets application (prochaine session)
 
 **Checklist infrastructure :**
-- [x] PostgreSQL démarre sans erreur (port 5433)
-- [x] Redis connecté (port 6380)
-- [x] MinIO accessible (http://192.168.0.13:9000)
-- [ ] Backend répond (http://192.168.0.13:3002/api/health)
-- [ ] Frontend accessible (http://192.168.0.13:3001)
+- [x] PostgreSQL démarre sans erreur (port 5433) ✅
+- [x] Redis connecté (port 6380) ✅
+- [x] MinIO accessible (http://192.168.0.13:9000) ✅
+- [x] Backend répond (http://192.168.0.13:3002/api/health) ✅
+- [x] Frontend accessible (http://192.168.0.13:3001) ✅
 
 **Checklist fonctionnalités :**
-- [ ] Login fonctionnel
-- [ ] Upload fichier OK (FloorPlans)
-- [ ] QR codes générés correctement
-- [ ] Recherche sites géospatiale OK
+- [x] Login fonctionnel (API backend + CORS OK) ✅
+- [ ] Upload fichier OK (FloorPlans) - À tester
+- [ ] QR codes générés correctement - À tester
+- [ ] Recherche sites géospatiale OK - À tester
 
 **Problèmes résolus (Session 5) :**
 - ✅ Node.js absent → Déploiement 100% Docker
@@ -56,20 +65,30 @@ _Aucune tâche urgente actuellement._
 - ✅ Erreurs Prisma contraintes dupliquées → Ajout map avec noms uniques
 - ✅ Synchronisation Git serveur ↔ local ↔ GitHub
 
-**Problèmes non résolus (Session 5) :**
-- ❌ Build Docker backend trop lent (~15+ min npm install)
-- ❌ Backend jamais démarré sur serveur
-- ❌ Tests API impossible (backend non accessible)
+**Problèmes résolus (Session 6) :**
+- ✅ 114 erreurs TypeScript backend (DTOs enums, imports, DI, relations)
+- ✅ Build Docker backend (patience required ~15 min)
+- ✅ Database schema manquante → Migration SQL générée et appliquée
+- ✅ Seed data manquante → Tenant + Admin créés manuellement
+- ✅ RBAC policies manquantes → 29 policies insérées via SQL
+- ✅ Tests API backend → Login + protected endpoints fonctionnels
+- ✅ Frontend build Konva/canvas SSR → webpack externalize + @zxing fixes
+- ✅ Frontend Docker déployé → Accessible sur port 3001
+- ✅ CORS production → FRONTEND_URL configuré dans backend/.env
+- ✅ Application complète déployée et accessible
 
-**Prochaines actions recommandées :**
-1. **Option A** : Générer package-lock.json en local, commit, rebuild avec npm ci
-2. **Option B** : Déployer backend en mode dev (npm run start:dev) sans Docker build
-3. **Option C** : Optimiser Dockerfile (cache layers, multi-stage plus agressif)
+**Prochaines actions :**
+1. ✅ Résoudre Konva/canvas SSR (webpack externalize) - TERMINÉ
+2. ✅ Build frontend Docker - TERMINÉ
+3. ✅ Démarrer frontend container (port 3001) - TERMINÉ
+4. ✅ Configurer CORS production - TERMINÉ
+5. ⏳ Tests application complète (login, navigation, CRUD, QR, upload)
 
 **Documentation :**
 - [docs/installation/INSTALL_PROD.md](docs/installation/INSTALL_PROD.md)
 - Serveur: `/opt/xch-dev/XCH/DEPLOYMENT_REPORT.md`
 - GitHub commits: 49667f0, 8a17eaf
+- DEVELOPMENT_LOG.md Session 6 (détails complets)
 
 ---
 
@@ -372,6 +391,6 @@ deploy:production:
 
 ---
 
-**Dernière révision :** 2026-01-04
+**Dernière révision :** 2026-01-10
 **Mainteneur :** Équipe XCH
 **Version :** 1.1

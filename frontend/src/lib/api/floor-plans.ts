@@ -9,10 +9,18 @@ export const floorPlansApi = {
 
   getById: (id: string) => apiClient.get<FloorPlan>(`/floor-plans/${id}`),
 
-  create: (data: FormData) =>
-    apiClient.post<FloorPlan>('/floor-plans', data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  create: async (data: FormData) => {
+    const token = localStorage.getItem('accessToken');
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/floor-plans`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: data,
+    });
+    if (!response.ok) throw new Error('Upload failed');
+    return response.json();
+  },
 
   update: (id: string, data: Partial<FloorPlan>) =>
     apiClient.patch<FloorPlan>(`/floor-plans/${id}`, data),

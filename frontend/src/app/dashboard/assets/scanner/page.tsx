@@ -22,9 +22,12 @@ export default function QRScannerPage() {
     codeReaderRef.current = new BrowserMultiFormatReader();
 
     return () => {
-      // Cleanup on unmount
-      if (codeReaderRef.current) {
-        codeReaderRef.current.reset();
+      // Cleanup on unmount - stop any active streams
+      if (codeReaderRef.current && videoRef.current) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+        }
       }
     };
   }, []);
@@ -39,7 +42,7 @@ export default function QRScannerPage() {
 
       // Get video devices
       const videoInputDevices =
-        await codeReaderRef.current.listVideoInputDevices();
+        await BrowserMultiFormatReader.listVideoInputDevices();
 
       if (videoInputDevices.length === 0) {
         setError('Aucune caméra trouvée');
@@ -90,8 +93,13 @@ export default function QRScannerPage() {
   };
 
   const stopScanning = () => {
-    if (codeReaderRef.current) {
-      codeReaderRef.current.reset();
+    // Stop video stream
+    if (videoRef.current) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      videoRef.current.srcObject = null;
     }
     setIsScanning(false);
   };
