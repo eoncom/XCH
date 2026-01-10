@@ -1,4 +1,4 @@
-import { Module, Global, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Module, Global, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
 @Global()
@@ -17,7 +17,7 @@ import { PrismaClient } from '@prisma/client';
   exports: ['PRISMA_CLIENT'],
 })
 export class DatabaseModule implements OnModuleInit, OnModuleDestroy {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(@Inject('PRISMA_CLIENT') private readonly prisma: PrismaClient) {}
 
   async onModuleInit() {
     await this.prisma.$connect();
