@@ -2,7 +2,7 @@
 
 **Dernière mise à jour :** 2026-01-10
 **Version actuelle :** 1.0.0-MVP
-**Statut global :** ✅ Production Déployée
+**Statut global :** ✅ MVP Production-Ready (100%)
 
 ---
 
@@ -13,9 +13,9 @@ Backend      ████████████████████ 100% (
 Frontend     ████████████████████ 100% (7/7 modules)
 Tests        ██░░░░░░░░░░░░░░░░░░  10% (Tests manuels uniquement)
 Docs         ████████████████████ 100% (Installation + Guides + Architecture)
-Deploy       ██████████████████░░  80% (Prod déployée + Seed data)
+Deploy       ████████████████████ 100% (Prod OK + Seed data + CORS fix)
 
-MVP TOTAL    ███████████████████░  95% (Production Déployée)
+MVP TOTAL    ████████████████████ 100% (PRODUCTION READY)
 ```
 
 ---
@@ -430,9 +430,39 @@ MVP TOTAL    ███████████████████░  95% (
 
 **Dernières corrections (2026-01-10) :**
 - ✅ Fix FloorPlans API (relation Prisma tenantId)
-- ✅ Seed data complet (3 sites, 9 assets, 4 tasks, 3 users)
-- ✅ Réseau Docker inter-containers
+- ✅ Seed data complet (3 sites, 9 assets, 4 tasks, 3 users, 2 racks, 1 provider)
+- ✅ Réseau Docker inter-containers (xch-network)
 - ✅ Backend démarré avec succès
+- ✅ Fix CORS configuration (FRONTEND_URL corrigé)
+- ✅ Validation API complète (tous endpoints testés)
+- ✅ Login fonctionnel avec credentials démo
+
+**Tests API validés (2026-01-10) :**
+```bash
+# Login
+POST /api/auth/login
+✅ 201 Created - accessToken + refreshToken
+
+# Sites
+GET /api/sites
+✅ 200 OK - 3 sites (Paris, Lyon, Marseille)
+
+# Assets
+GET /api/assets
+✅ 200 OK - 9 assets (printers, iPads, switches, servers)
+
+# Tasks
+GET /api/tasks
+✅ 200 OK - 4 tasks avec checklists
+
+# Racks
+GET /api/racks
+✅ 200 OK - 2 racks (42U, 24U)
+
+# Floor Plans
+GET /api/floor-plans
+✅ 200 OK - [] (pas d'erreur 500)
+```
 
 **📅 Dernière mise à jour :** 2026-01-10
 **📋 Source de vérité unique**

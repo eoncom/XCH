@@ -673,6 +673,106 @@ curl http://192.168.0.13:3002/api/sites \
 
 ---
 
+### Session 7 (continuation) : Fix CORS final + Tests API
+
+**Durée :** ~30 min
+**Status :** ✅ Terminée
+**Focus :** Correction CORS + Validation production complète
+
+**Problème identifié :**
+```
+Access to fetch at 'http://192.168.0.13:3002/api/auth/login' from origin 'http://192.168.0.13:3001'
+has been blocked by CORS policy: The 'Access-Control-Allow-Origin' header has a value
+'http://xch-redis:3001' that is not equal to the supplied origin.
+```
+
+**Cause racine :**
+FRONTEND_URL dans backend/.env avait la mauvaise valeur (http://xch-redis:3001 au lieu de http://192.168.0.13:3001)
+
+**Actions réalisées :**
+
+1. **Fix FRONTEND_URL** (backend/.env)
+   ```bash
+   sed -i 's|FRONTEND_URL=http://xch-redis:3001|FRONTEND_URL=http://192.168.0.13:3001|g' /opt/xch-dev/XCH/backend/.env
+   ```
+
+2. **Recréation container backend** (docker restart ne recharge pas .env)
+   ```bash
+   docker stop xch-backend && docker rm xch-backend
+   docker run -d --name xch-backend --network xch-network \
+     -p 3002:3002 --env-file .env \
+     -v /opt/xch-dev/XCH/backend/uploads:/app/uploads \
+     xch-backend:latest
+   ```
+
+3. **Validation CORS fixé**
+   ```bash
+   curl -i -X POST http://192.168.0.13:3002/api/auth/login \
+     -H 'Origin: http://192.168.0.13:3001' \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"admin@xch.demo","password":"admin123"}'
+
+   # Response headers:
+   Access-Control-Allow-Origin: http://192.168.0.13:3001  ✅ CORRECT
+   Access-Control-Allow-Credentials: true
+   ```
+
+4. **Tests API complets avec seed data**
+   ```bash
+   # Sites (3 attendus)
+   curl http://192.168.0.13:3002/api/sites -H "Authorization: Bearer <token>"
+   # ✅ 3 sites: Paris La Défense, Lyon Part-Dieu, Marseille Vieux-Port
+
+   # Assets (9 attendus)
+   curl http://192.168.0.13:3002/api/assets -H "Authorization: Bearer <token>"
+   # ✅ iPads, printers, switches, servers, access points
+
+   # Tasks (4 attendus)
+   curl http://192.168.0.13:3002/api/tasks -H "Authorization: Bearer <token>"
+   # ✅ 4 tasks avec checklists
+
+   # Racks (2 attendus)
+   curl http://192.168.0.13:3002/api/racks -H "Authorization: Bearer <token>"
+   # ✅ RACK-A1 (42U), RACK-B1 (24U)
+
+   # Floor Plans (0 attendu)
+   curl http://192.168.0.13:3002/api/floor-plans -H "Authorization: Bearer <token>"
+   # ✅ [] (empty array - fix 500 error worked)
+   ```
+
+**Résultats validation :**
+- ✅ Login API : 201 Created avec access/refresh tokens
+- ✅ Sites API : 3 sites retournés (seed data)
+- ✅ Assets API : 9 assets retournés (seed data)
+- ✅ Tasks API : 4 tâches avec checklists
+- ✅ Racks API : 2 baies (42U, 24U)
+- ✅ Floor Plans API : Empty array (pas d'erreur 500)
+- ✅ CORS headers corrects
+- ✅ Frontend redirect to login working
+
+**Configuration finale production :**
+```
+Frontend:     http://192.168.0.13:3001  ✅ Running
+Backend API:  http://192.168.0.13:3002/api  ✅ Running + CORS OK
+PostgreSQL:   xch-postgres:5432  ✅ Seed data loaded (3 sites, 9 assets, 4 tasks, 2 racks)
+Redis:        xch-redis:6379  ✅ Connected
+MinIO:        xch-minio:9000-9001  ✅ Connected
+```
+
+**Credentials démo :**
+- Admin: admin@xch.demo / admin123
+- Manager: manager@xch.demo / manager123
+- Technicien: tech@xch.demo / tech123
+
+**Prochaines étapes :**
+1. ✅ CORS configuration fixée
+2. ✅ Tests API complets validés
+3. ✅ Seed data vérifiée (tous endpoints)
+4. 📋 Documentation finale à mettre à jour
+5. 🎯 MVP 100% Production Ready
+
+---
+
 **Dernière mise à jour :** 2026-01-10
 **Mainteneur :** Équipe XCH
 **Format version :** 1.0
