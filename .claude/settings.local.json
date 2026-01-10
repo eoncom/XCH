@@ -26,7 +26,9 @@
       "Bash(for file in modules/users/users.service.ts modules/sites/sites.service.ts modules/racks/racks.service.ts modules/assets/assets.service.ts modules/tasks/tasks.service.ts modules/tenants/tenants.service.ts modules/auth/auth.service.ts)",
       "Bash(do sed -i \"s/@Inject\\(''PRISMA_CLIENT''\\) //g\" \"$file\")",
       "Bash(echo:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(node:*)"
     ]
   }
 }

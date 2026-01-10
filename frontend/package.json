@@ -37,6 +37,9 @@
     "react-hot-toast": "^2.4.1",
     "use-image": "^1.1.1"
   },
+  "optionalDependencies": {
+    "canvas": "^2.11.2"
+  },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.6",
