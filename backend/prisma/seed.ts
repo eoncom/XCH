@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting seed...');
+  console.log('🌱 Starting comprehensive demo seed...');
 
   // 1. Create default tenant
   const tenant = await prisma.tenant.upsert({
@@ -12,7 +12,7 @@ async function main() {
     update: {},
     create: {
       id: 'tenant_default',
-      name: 'XCH Demo',
+      name: 'XCH Demo Corporation',
       subdomain: 'demo',
       status: 'ACTIVE',
       primaryColor: '#0070f3',
@@ -20,7 +20,7 @@ async function main() {
   });
   console.log('✅ Tenant created:', tenant.name);
 
-  // 2. Create admin user
+  // 2. Create users (5 total: 1 admin, 1 manager, 2 techs, 1 viewer)
   const adminPassword = await bcrypt.hash('admin123', 10);
   const admin = await prisma.user.upsert({
     where: {
@@ -34,15 +34,13 @@ async function main() {
       tenantId: tenant.id,
       email: 'admin@xch.demo',
       passwordHash: adminPassword,
-      name: 'Administrateur',
+      name: 'Sophie Administrateur',
       role: UserRole.ADMIN,
       active: true,
       phone: '+33 6 12 34 56 78',
     },
   });
-  console.log('✅ Admin user created:', admin.email);
 
-  // 3. Create manager user
   const managerPassword = await bcrypt.hash('manager123', 10);
   const manager = await prisma.user.upsert({
     where: {
@@ -56,17 +54,15 @@ async function main() {
       tenantId: tenant.id,
       email: 'manager@xch.demo',
       passwordHash: managerPassword,
-      name: 'Chef de Projet',
+      name: 'Marc Chef de Projet',
       role: UserRole.MANAGER,
       active: true,
       phone: '+33 6 23 45 67 89',
     },
   });
-  console.log('✅ Manager user created:', manager.email);
 
-  // 4. Create technician user
   const techPassword = await bcrypt.hash('tech123', 10);
-  const tech = await prisma.user.upsert({
+  const tech1 = await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: tenant.id,
@@ -78,15 +74,55 @@ async function main() {
       tenantId: tenant.id,
       email: 'tech@xch.demo',
       passwordHash: techPassword,
-      name: 'Technicien Terrain',
+      name: 'Julie Technicien Réseau',
       role: UserRole.TECHNICIEN,
       active: true,
       phone: '+33 6 34 56 78 90',
     },
   });
-  console.log('✅ Technician user created:', tech.email);
 
-  // 5. Create 3 demo sites (without coordinates for now - requires PostGIS)
+  const tech2 = await prisma.user.upsert({
+    where: {
+      tenantId_email: {
+        tenantId: tenant.id,
+        email: 'tech2@xch.demo'
+      }
+    },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      email: 'tech2@xch.demo',
+      passwordHash: techPassword,
+      name: 'Thomas Technicien Support',
+      role: UserRole.TECHNICIEN,
+      active: true,
+      phone: '+33 6 45 67 89 01',
+    },
+  });
+
+  const viewerPassword = await bcrypt.hash('viewer123', 10);
+  const viewer = await prisma.user.upsert({
+    where: {
+      tenantId_email: {
+        tenantId: tenant.id,
+        email: 'viewer@xch.demo'
+      }
+    },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      email: 'viewer@xch.demo',
+      passwordHash: viewerPassword,
+      name: 'Observateur Client',
+      role: UserRole.VIEWER,
+      active: true,
+      phone: '+33 6 56 78 90 12',
+    },
+  });
+
+  console.log('✅ Users created: 5 total (1 admin, 1 manager, 2 techs, 1 viewer)');
+
+  // 3. Create 5 demo sites with realistic data
   const site1 = await prisma.site.create({
     data: {
       tenantId: tenant.id,
@@ -104,14 +140,20 @@ async function main() {
           email: 'jean.dupont@defense.fr',
           role: 'Chef de chantier',
           isPrimary: true
+        },
+        {
+          name: 'Claire Dubois',
+          phone: '+33 6 11 22 33 45',
+          email: 'claire.dubois@defense.fr',
+          role: 'Coordinatrice IT',
+          isPrimary: false
         }
       ],
       healthStatus: 'OK',
       lastHealthCheck: new Date(),
-      notes: 'Site principal - Tour de bureaux 15 étages',
+      notes: 'Site principal - Tour de bureaux 15 étages - Déploiement complet',
     },
   });
-  console.log('✅ Site 1 created:', site1.name);
 
   const site2 = await prisma.site.create({
     data: {
@@ -134,10 +176,9 @@ async function main() {
       ],
       healthStatus: 'WARNING',
       lastHealthCheck: new Date(),
-      notes: 'Site secondaire - Centre commercial rénové',
+      notes: 'Site secondaire - Centre commercial rénové - Quelques alertes réseau',
     },
   });
-  console.log('✅ Site 2 created:', site2.name);
 
   const site3 = await prisma.site.create({
     data: {
@@ -162,107 +203,161 @@ async function main() {
       notes: 'Site en préparation - Déploiement prévu mars 2026',
     },
   });
-  console.log('✅ Site 3 created:', site3.name);
 
-  // 6. Create racks for site 1 and 2
+  const site4 = await prisma.site.create({
+    data: {
+      tenantId: tenant.id,
+      code: 'BDX-004',
+      name: 'Datacenter Bordeaux Mérignac',
+      status: SiteStatus.ACTIVE,
+      address: '15 Avenue de l\'Aéropostale',
+      city: 'Mérignac',
+      postalCode: '33700',
+      country: 'France',
+      contacts: [
+        {
+          name: 'François Lefebvre',
+          phone: '+33 6 77 88 99 00',
+          email: 'francois.lefebvre@datacenter-bdx.fr',
+          role: 'Responsable Datacenter',
+          isPrimary: true
+        }
+      ],
+      healthStatus: 'OK',
+      lastHealthCheck: new Date(),
+      notes: 'Datacenter Tier 3 - Infrastructure critique - 24/7',
+    },
+  });
+
+  const site5 = await prisma.site.create({
+    data: {
+      tenantId: tenant.id,
+      code: 'TLS-005',
+      name: 'Bureau Toulouse Aerospace',
+      status: SiteStatus.ACTIVE,
+      address: '8 Rue de la Cité Spatiale',
+      city: 'Toulouse',
+      postalCode: '31500',
+      country: 'France',
+      contacts: [
+        {
+          name: 'Isabelle Moreau',
+          phone: '+33 6 88 99 00 11',
+          email: 'isabelle.moreau@aerospace-tls.fr',
+          role: 'IT Manager',
+          isPrimary: true
+        }
+      ],
+      healthStatus: 'OK',
+      lastHealthCheck: new Date(),
+      notes: 'Site tertiaire - R&D aérospatiale',
+    },
+  });
+
+  console.log('✅ Sites created: 5 total');
+
+  // 4. Create racks (6 total across sites)
   const rack1 = await prisma.rack.create({
     data: {
       tenantId: tenant.id,
       siteId: site1.id,
-      name: 'RACK-A1',
-      serialNumber: 'RK-2024-001',
-      model: 'Dell PowerEdge R740',
+      name: 'RACK-PAR-A1',
+      serialNumber: 'RK-PAR-001',
+      model: 'Dell PowerEdge Rack 4210',
       manufacturer: 'Dell',
       heightU: 42,
       rackType: RackType.FLOOR_STANDING,
       status: RackStatus.IN_SERVICE,
-      location: 'Salle serveur - Étage 1',
-      notes: 'Baie principale - réseau et serveurs',
+      location: 'Salle serveur - Étage 1 - Zone A',
+      notes: 'Baie principale - Serveurs applicatifs',
     },
   });
-  console.log('✅ Rack 1 created:', rack1.name);
 
   const rack2 = await prisma.rack.create({
     data: {
       tenantId: tenant.id,
+      siteId: site1.id,
+      name: 'RACK-PAR-A2',
+      serialNumber: 'RK-PAR-002',
+      model: 'Dell PowerEdge Rack 4210',
+      manufacturer: 'Dell',
+      heightU: 42,
+      rackType: RackType.FLOOR_STANDING,
+      status: RackStatus.IN_SERVICE,
+      location: 'Salle serveur - Étage 1 - Zone A',
+      notes: 'Baie réseau - Switches et routeurs',
+    },
+  });
+
+  const rack3 = await prisma.rack.create({
+    data: {
+      tenantId: tenant.id,
       siteId: site2.id,
-      name: 'RACK-B1',
-      serialNumber: 'RK-2024-002',
+      name: 'RACK-LYN-B1',
+      serialNumber: 'RK-LYN-001',
       model: 'APC NetShelter SX',
       manufacturer: 'APC',
       heightU: 24,
       rackType: RackType.ENCLOSED_CABINET,
       status: RackStatus.IN_SERVICE,
       location: 'Local technique RDC',
-      notes: 'Baie réseau principale',
+      notes: 'Baie réseau principale Lyon',
     },
   });
-  console.log('✅ Rack 2 created:', rack2.name);
 
-  // 7. Create assets for each site
-  // Site 1 assets
-  const printer1 = await prisma.asset.create({
+  const rack4 = await prisma.rack.create({
     data: {
       tenantId: tenant.id,
-      siteId: site1.id,
-      type: AssetType.PRINTER,
-      model: 'HP LaserJet Pro M404dn',
+      siteId: site4.id,
+      name: 'RACK-BDX-DC1',
+      serialNumber: 'RK-BDX-001',
+      model: 'HP Rack 10642 G2',
       manufacturer: 'HP',
-      serialNumber: 'HP-2024-001',
-      inventoryTag: 'PAR-PRINT-001',
-      status: AssetStatus.IN_SERVICE,
-      locationText: 'Bureau 302',
-      networkInfo: {
-        ip: '10.1.1.50',
-        mac: '00:1A:2B:3C:4D:50',
-        hostname: 'printer-par-302',
-        vlan: 'VLAN-10'
-      },
-      purchaseDate: new Date('2024-01-15'),
-      warrantyEnd: new Date('2027-01-15'),
-      notes: 'Imprimante étage 3',
+      heightU: 42,
+      rackType: RackType.FLOOR_STANDING,
+      status: RackStatus.IN_SERVICE,
+      location: 'Datacenter - Row 1 - Pod A',
+      notes: 'Rack production principal',
     },
   });
 
-  const ipad1 = await prisma.asset.create({
+  const rack5 = await prisma.rack.create({
     data: {
       tenantId: tenant.id,
-      siteId: site1.id,
-      type: AssetType.IPAD,
-      model: 'iPad Pro 12.9"',
-      manufacturer: 'Apple',
-      serialNumber: 'IPAD-2024-001',
-      inventoryTag: 'PAR-IPAD-001',
-      status: AssetStatus.IN_SERVICE,
-      locationText: 'Accueil',
-      notes: 'Tablette de contrôle accès',
+      siteId: site4.id,
+      name: 'RACK-BDX-DC2',
+      serialNumber: 'RK-BDX-002',
+      model: 'HP Rack 10642 G2',
+      manufacturer: 'HP',
+      heightU: 42,
+      rackType: RackType.FLOOR_STANDING,
+      status: RackStatus.IN_SERVICE,
+      location: 'Datacenter - Row 1 - Pod B',
+      notes: 'Rack backup et stockage',
     },
   });
 
-  const switch1 = await prisma.asset.create({
+  const rack6 = await prisma.rack.create({
     data: {
       tenantId: tenant.id,
-      siteId: site1.id,
-      rackId: rack1.id,
-      type: AssetType.SWITCH,
-      model: 'Cisco Catalyst 2960-X',
-      manufacturer: 'Cisco',
-      serialNumber: 'CSC-2024-001',
-      inventoryTag: 'PAR-SW-001',
-      status: AssetStatus.IN_SERVICE,
-      rackPositionU: 1,
-      rackHeightU: 1,
-      networkInfo: {
-        ip: '10.1.1.1',
-        mac: '00:1A:2B:3C:4D:01',
-        hostname: 'sw-paris-core'
-      },
-      purchaseDate: new Date('2024-02-01'),
-      warrantyEnd: new Date('2029-02-01'),
-      notes: 'Switch core site Paris',
+      siteId: site5.id,
+      name: 'RACK-TLS-C1',
+      serialNumber: 'RK-TLS-001',
+      model: 'Legrand LCS³',
+      manufacturer: 'Legrand',
+      heightU: 24,
+      rackType: RackType.WALL_MOUNTED,
+      status: RackStatus.IN_SERVICE,
+      location: 'Local technique Bâtiment C',
+      notes: 'Rack mural - Réseau bureaux',
     },
   });
 
+  console.log('✅ Racks created: 6 total');
+
+  // 5. Create comprehensive assets (30+ total)
+
+  // ===== SITE 1 - Paris La Défense (12 assets) =====
   const server1 = await prisma.asset.create({
     data: {
       tenantId: tenant.id,
@@ -271,121 +366,846 @@ async function main() {
       type: AssetType.SERVER,
       model: 'Dell PowerEdge R740',
       manufacturer: 'Dell',
-      serialNumber: 'DELL-2024-001',
+      serialNumber: 'SRV-PAR-001',
       inventoryTag: 'PAR-SRV-001',
       status: AssetStatus.IN_SERVICE,
-      rackPositionU: 10,
+      rackPositionU: 1,
       rackHeightU: 2,
       networkInfo: {
         ip: '10.1.1.10',
-        mac: '00:1A:2B:3C:4D:10',
-        hostname: 'srv-paris-app01'
+        mac: '00:1A:2B:3C:01:10',
+        hostname: 'srv-par-app01',
+        vlan: 'VLAN-20'
       },
-      purchaseDate: new Date('2024-03-01'),
-      warrantyEnd: new Date('2029-03-01'),
+      purchaseDate: new Date('2024-01-15'),
+      warrantyEnd: new Date('2029-01-15'),
       powerConsumption: 550,
-      notes: 'Serveur applicatif principal',
+      weight: 28.5,
+      notes: 'Serveur applicatif principal - Production',
     },
   });
 
-  // Site 2 assets
-  const printer2 = await prisma.asset.create({
+  const server2 = await prisma.asset.create({
     data: {
       tenantId: tenant.id,
-      siteId: site2.id,
-      type: AssetType.PRINTER,
-      model: 'HP OfficeJet Pro 9025',
-      manufacturer: 'HP',
-      serialNumber: 'HP-2024-002',
-      inventoryTag: 'LYN-PRINT-001',
+      siteId: site1.id,
+      rackId: rack1.id,
+      type: AssetType.SERVER,
+      model: 'Dell PowerEdge R740',
+      manufacturer: 'Dell',
+      serialNumber: 'SRV-PAR-002',
+      inventoryTag: 'PAR-SRV-002',
       status: AssetStatus.IN_SERVICE,
-      locationText: 'Open space RDC',
+      rackPositionU: 4,
+      rackHeightU: 2,
       networkInfo: {
-        ip: '10.2.1.50',
-        mac: '00:1A:2B:3C:5D:50',
-        hostname: 'printer-lyon-rdc'
+        ip: '10.1.1.11',
+        mac: '00:1A:2B:3C:01:11',
+        hostname: 'srv-par-app02',
+        vlan: 'VLAN-20'
       },
-      notes: 'Imprimante multifonction',
+      purchaseDate: new Date('2024-01-15'),
+      warrantyEnd: new Date('2029-01-15'),
+      powerConsumption: 550,
+      weight: 28.5,
+      notes: 'Serveur applicatif secondaire - HA',
+    },
+  });
+
+  const server3 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      rackId: rack1.id,
+      type: AssetType.SERVER,
+      model: 'HPE ProLiant DL380 Gen10',
+      manufacturer: 'HPE',
+      serialNumber: 'SRV-PAR-003',
+      inventoryTag: 'PAR-SRV-003',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 7,
+      rackHeightU: 2,
+      networkInfo: {
+        ip: '10.1.1.20',
+        mac: '00:1A:2B:3C:01:20',
+        hostname: 'srv-par-db01',
+        vlan: 'VLAN-20'
+      },
+      purchaseDate: new Date('2024-02-01'),
+      warrantyEnd: new Date('2029-02-01'),
+      powerConsumption: 800,
+      weight: 32.0,
+      notes: 'Serveur base de données PostgreSQL',
+    },
+  });
+
+  const switch1 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      rackId: rack2.id,
+      type: AssetType.SWITCH,
+      model: 'Cisco Catalyst 9300-48P',
+      manufacturer: 'Cisco',
+      serialNumber: 'SW-PAR-001',
+      inventoryTag: 'PAR-SW-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 1,
+      rackHeightU: 1,
+      networkInfo: {
+        ip: '10.1.1.1',
+        mac: '00:1A:2B:3C:01:01',
+        hostname: 'sw-par-core',
+        vlan: 'VLAN-1'
+      },
+      purchaseDate: new Date('2024-01-10'),
+      warrantyEnd: new Date('2029-01-10'),
+      powerConsumption: 350,
+      notes: 'Switch core 48 ports PoE+ - Stack master',
     },
   });
 
   const switch2 = await prisma.asset.create({
     data: {
       tenantId: tenant.id,
-      siteId: site2.id,
+      siteId: site1.id,
       rackId: rack2.id,
       type: AssetType.SWITCH,
-      model: 'HPE Aruba 2930F',
-      manufacturer: 'HPE',
-      serialNumber: 'HPE-2024-001',
-      inventoryTag: 'LYN-SW-001',
+      model: 'Cisco Catalyst 9300-48P',
+      manufacturer: 'Cisco',
+      serialNumber: 'SW-PAR-002',
+      inventoryTag: 'PAR-SW-002',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 2,
+      rackHeightU: 1,
+      networkInfo: {
+        ip: '10.1.1.2',
+        mac: '00:1A:2B:3C:01:02',
+        hostname: 'sw-par-dist1',
+        vlan: 'VLAN-1'
+      },
+      purchaseDate: new Date('2024-01-10'),
+      warrantyEnd: new Date('2029-01-10'),
+      powerConsumption: 350,
+      notes: 'Switch distribution étage 1-5',
+    },
+  });
+
+  const router1 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      rackId: rack2.id,
+      type: AssetType.OTHER,
+      model: 'Cisco ISR 4331',
+      manufacturer: 'Cisco',
+      serialNumber: 'RTR-PAR-001',
+      inventoryTag: 'PAR-RTR-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 4,
+      rackHeightU: 1,
+      networkInfo: {
+        ip: '10.1.1.254',
+        mac: '00:1A:2B:3C:01:FE',
+        hostname: 'rtr-par-wan',
+      },
+      purchaseDate: new Date('2024-01-05'),
+      warrantyEnd: new Date('2029-01-05'),
+      powerConsumption: 150,
+      notes: 'Routeur WAN principal - Fibre 1Gbps',
+    },
+  });
+
+  const firewall1 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      rackId: rack2.id,
+      type: AssetType.FIREWALL,
+      model: 'Fortinet FortiGate 200F',
+      manufacturer: 'Fortinet',
+      serialNumber: 'FW-PAR-001',
+      inventoryTag: 'PAR-FW-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 6,
+      rackHeightU: 1,
+      networkInfo: {
+        ip: '10.1.1.253',
+        mac: '00:1A:2B:3C:01:FD',
+        hostname: 'fw-par-main',
+      },
+      purchaseDate: new Date('2024-01-05'),
+      warrantyEnd: new Date('2029-01-05'),
+      powerConsumption: 100,
+      notes: 'Firewall périmètre - UTM',
+    },
+  });
+
+  const printer1 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      type: AssetType.PRINTER,
+      model: 'HP LaserJet Pro M404dn',
+      manufacturer: 'HP',
+      serialNumber: 'PRINT-PAR-001',
+      inventoryTag: 'PAR-PRINT-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Bureau étage 3 - Salle 302',
+      networkInfo: {
+        ip: '10.1.3.50',
+        mac: '00:1A:2B:3C:03:50',
+        hostname: 'print-par-e3',
+        vlan: 'VLAN-10'
+      },
+      purchaseDate: new Date('2024-02-20'),
+      warrantyEnd: new Date('2027-02-20'),
+      notes: 'Imprimante laser N&B - Étage 3',
+    },
+  });
+
+  const printer2 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      type: AssetType.PRINTER,
+      model: 'HP Color LaserJet Pro M479fdw',
+      manufacturer: 'HP',
+      serialNumber: 'PRINT-PAR-002',
+      inventoryTag: 'PAR-PRINT-002',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Bureau étage 5 - Open Space',
+      networkInfo: {
+        ip: '10.1.5.50',
+        mac: '00:1A:2B:3C:05:50',
+        hostname: 'print-par-e5',
+        vlan: 'VLAN-10'
+      },
+      purchaseDate: new Date('2024-03-10'),
+      warrantyEnd: new Date('2027-03-10'),
+      notes: 'Imprimante multifonction couleur - Étage 5',
+    },
+  });
+
+  const ipad1 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      type: AssetType.IPAD,
+      model: 'iPad Pro 12.9" (6th gen)',
+      manufacturer: 'Apple',
+      serialNumber: 'IPAD-PAR-001',
+      inventoryTag: 'PAR-IPAD-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Accueil RDC',
+      notes: 'Tablette contrôle accès visiteurs',
+    },
+  });
+
+  const ipad2 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      type: AssetType.IPAD,
+      model: 'iPad Air 5',
+      manufacturer: 'Apple',
+      serialNumber: 'IPAD-PAR-002',
+      inventoryTag: 'PAR-IPAD-002',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Salle de réunion 301',
+      notes: 'Tablette visioconférence',
+    },
+  });
+
+  const ap1 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      type: AssetType.ACCESS_POINT,
+      model: 'Cisco Meraki MR46',
+      manufacturer: 'Cisco',
+      serialNumber: 'AP-PAR-001',
+      inventoryTag: 'PAR-AP-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Plafond Hall RDC',
+      networkInfo: {
+        ip: '10.1.1.101',
+        mac: '00:1A:2B:3C:01:A1',
+        hostname: 'ap-par-hall-rdc',
+        vlan: 'VLAN-10'
+      },
+      purchaseDate: new Date('2024-02-15'),
+      notes: 'WiFi 6 - Zone accueil',
+    },
+  });
+
+  // ===== SITE 2 - Lyon Part-Dieu (8 assets) =====
+  const server4 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site2.id,
+      rackId: rack3.id,
+      type: AssetType.SERVER,
+      model: 'Supermicro SYS-5019S',
+      manufacturer: 'Supermicro',
+      serialNumber: 'SRV-LYN-001',
+      inventoryTag: 'LYN-SRV-001',
       status: AssetStatus.IN_SERVICE,
       rackPositionU: 1,
       rackHeightU: 1,
       networkInfo: {
-        ip: '10.2.1.1',
-        mac: '00:1A:2B:3C:5D:01',
-        hostname: 'sw-lyon-core'
+        ip: '10.2.1.10',
+        mac: '00:1A:2B:3C:02:10',
+        hostname: 'srv-lyn-local',
+        vlan: 'VLAN-20'
       },
-      notes: 'Switch principal Lyon',
+      purchaseDate: new Date('2024-03-01'),
+      warrantyEnd: new Date('2027-03-01'),
+      powerConsumption: 350,
+      notes: 'Serveur local Lyon - Cache applicatif',
     },
   });
 
-  const accessPoint1 = await prisma.asset.create({
+  const switch3 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site2.id,
+      rackId: rack3.id,
+      type: AssetType.SWITCH,
+      model: 'HPE Aruba 2930F 48G PoE+',
+      manufacturer: 'HPE',
+      serialNumber: 'SW-LYN-001',
+      inventoryTag: 'LYN-SW-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 3,
+      rackHeightU: 1,
+      networkInfo: {
+        ip: '10.2.1.1',
+        mac: '00:1A:2B:3C:02:01',
+        hostname: 'sw-lyn-core',
+        vlan: 'VLAN-1'
+      },
+      purchaseDate: new Date('2024-02-25'),
+      warrantyEnd: new Date('2029-02-25'),
+      powerConsumption: 300,
+      notes: 'Switch principal Lyon - 48 ports PoE+',
+    },
+  });
+
+  const router2 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site2.id,
+      rackId: rack3.id,
+      type: AssetType.OTHER,
+      model: 'MikroTik CCR1036',
+      manufacturer: 'MikroTik',
+      serialNumber: 'RTR-LYN-001',
+      inventoryTag: 'LYN-RTR-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 5,
+      rackHeightU: 1,
+      networkInfo: {
+        ip: '10.2.1.254',
+        mac: '00:1A:2B:3C:02:FE',
+        hostname: 'rtr-lyn-wan',
+      },
+      purchaseDate: new Date('2024-02-20'),
+      warrantyEnd: new Date('2027-02-20'),
+      powerConsumption: 80,
+      notes: 'Routeur WAN Lyon - VPN site-to-site',
+    },
+  });
+
+  const printer3 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site2.id,
+      type: AssetType.PRINTER,
+      model: 'HP OfficeJet Pro 9025',
+      manufacturer: 'HP',
+      serialNumber: 'PRINT-LYN-001',
+      inventoryTag: 'LYN-PRINT-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Open space RDC',
+      networkInfo: {
+        ip: '10.2.1.50',
+        mac: '00:1A:2B:3C:02:50',
+        hostname: 'print-lyn-rdc',
+        vlan: 'VLAN-10'
+      },
+      purchaseDate: new Date('2024-03-05'),
+      warrantyEnd: new Date('2027-03-05'),
+      notes: 'Imprimante multifonction jet d\'encre',
+    },
+  });
+
+  const ap2 = await prisma.asset.create({
     data: {
       tenantId: tenant.id,
       siteId: site2.id,
       type: AssetType.ACCESS_POINT,
       model: 'Ubiquiti UniFi AP AC Pro',
       manufacturer: 'Ubiquiti',
-      serialNumber: 'UBI-2024-001',
+      serialNumber: 'AP-LYN-001',
       inventoryTag: 'LYN-AP-001',
       status: AssetStatus.IN_SERVICE,
-      locationText: 'Plafond Hall',
+      locationText: 'Plafond Hall principal',
       networkInfo: {
         ip: '10.2.1.100',
-        mac: '00:1A:2B:3C:5D:A0',
-        hostname: 'ap-lyon-hall'
+        mac: '00:1A:2B:3C:02:A0',
+        hostname: 'ap-lyn-hall',
+        vlan: 'VLAN-10'
       },
-      notes: 'WiFi public',
+      purchaseDate: new Date('2024-03-01'),
+      notes: 'WiFi AC - Zone public',
     },
   });
 
-  // Site 3 assets (en transit)
-  const ipad2 = await prisma.asset.create({
+  const ap3 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site2.id,
+      type: AssetType.ACCESS_POINT,
+      model: 'Ubiquiti UniFi AP AC Pro',
+      manufacturer: 'Ubiquiti',
+      serialNumber: 'AP-LYN-002',
+      inventoryTag: 'LYN-AP-002',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Couloir étage 1',
+      networkInfo: {
+        ip: '10.2.1.101',
+        mac: '00:1A:2B:3C:02:A1',
+        hostname: 'ap-lyn-e1',
+        vlan: 'VLAN-10'
+      },
+      purchaseDate: new Date('2024-03-01'),
+      notes: 'WiFi AC - Étage bureaux',
+    },
+  });
+
+  const ipad3 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site2.id,
+      type: AssetType.IPAD,
+      model: 'iPad 10.2" (9th gen)',
+      manufacturer: 'Apple',
+      serialNumber: 'IPAD-LYN-001',
+      inventoryTag: 'LYN-IPAD-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Accueil',
+      notes: 'Tablette gestion visiteurs',
+    },
+  });
+
+  const visio1 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site2.id,
+      type: AssetType.TEAMS_ROOM,
+      model: 'Logitech Rally Plus',
+      manufacturer: 'Logitech',
+      serialNumber: 'VISIO-LYN-001',
+      inventoryTag: 'LYN-VISIO-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Salle réunion A',
+      networkInfo: {
+        ip: '10.2.1.120',
+        mac: '00:1A:2B:3C:02:B0',
+        hostname: 'visio-lyn-salleA',
+        vlan: 'VLAN-10'
+      },
+      purchaseDate: new Date('2024-03-15'),
+      warrantyEnd: new Date('2027-03-15'),
+      notes: 'Système visioconférence HD - Salle 12 personnes',
+    },
+  });
+
+  // ===== SITE 3 - Marseille (en préparation - 3 assets en transit) =====
+  const ipad4 = await prisma.asset.create({
     data: {
       tenantId: tenant.id,
       siteId: site3.id,
       type: AssetType.IPAD,
       model: 'iPad Air 5',
       manufacturer: 'Apple',
-      serialNumber: 'IPAD-2024-002',
+      serialNumber: 'IPAD-MRS-001',
       inventoryTag: 'MRS-IPAD-001',
       status: AssetStatus.IN_TRANSIT,
-      notes: 'En cours de livraison',
+      notes: 'En cours de livraison - ETA 15/01/2026',
     },
   });
 
-  console.log('✅ Assets created: 9 total');
+  const printer4 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site3.id,
+      type: AssetType.PRINTER,
+      model: 'Canon imageRUNNER ADVANCE C3530i',
+      manufacturer: 'Canon',
+      serialNumber: 'PRINT-MRS-001',
+      inventoryTag: 'MRS-PRINT-001',
+      status: AssetStatus.STORAGE,
+      notes: 'En stock - Installation prévue mars 2026',
+    },
+  });
 
-  // 8. Create tasks
+  const switch4 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site3.id,
+      type: AssetType.SWITCH,
+      model: 'Cisco Catalyst 2960-X',
+      manufacturer: 'Cisco',
+      serialNumber: 'SW-MRS-001',
+      inventoryTag: 'MRS-SW-001',
+      status: AssetStatus.STORAGE,
+      notes: 'En stock datacenter Bordeaux - À déployer',
+    },
+  });
+
+  // ===== SITE 4 - Datacenter Bordeaux (8 assets - infrastructure critique) =====
+  const server5 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      rackId: rack4.id,
+      type: AssetType.SERVER,
+      model: 'Dell PowerEdge R750',
+      manufacturer: 'Dell',
+      serialNumber: 'SRV-BDX-001',
+      inventoryTag: 'BDX-SRV-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 1,
+      rackHeightU: 2,
+      networkInfo: {
+        ip: '10.4.1.10',
+        mac: '00:1A:2B:3C:04:10',
+        hostname: 'srv-bdx-prod01',
+        vlan: 'VLAN-100'
+      },
+      purchaseDate: new Date('2023-11-01'),
+      warrantyEnd: new Date('2028-11-01'),
+      powerConsumption: 750,
+      weight: 35.0,
+      notes: 'Serveur production principal - VM host ESXi',
+    },
+  });
+
+  const server6 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      rackId: rack4.id,
+      type: AssetType.SERVER,
+      model: 'Dell PowerEdge R750',
+      manufacturer: 'Dell',
+      serialNumber: 'SRV-BDX-002',
+      inventoryTag: 'BDX-SRV-002',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 4,
+      rackHeightU: 2,
+      networkInfo: {
+        ip: '10.4.1.11',
+        mac: '00:1A:2B:3C:04:11',
+        hostname: 'srv-bdx-prod02',
+        vlan: 'VLAN-100'
+      },
+      purchaseDate: new Date('2023-11-01'),
+      warrantyEnd: new Date('2028-11-01'),
+      powerConsumption: 750,
+      weight: 35.0,
+      notes: 'Serveur production secondaire - VM host ESXi - HA cluster',
+    },
+  });
+
+  const storage1 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      rackId: rack5.id,
+      type: AssetType.OTHER,
+      model: 'Dell EMC PowerVault ME4084',
+      manufacturer: 'Dell EMC',
+      serialNumber: 'STO-BDX-001',
+      inventoryTag: 'BDX-STO-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 1,
+      rackHeightU: 2,
+      networkInfo: {
+        ip: '10.4.1.50',
+        mac: '00:1A:2B:3C:04:50',
+        hostname: 'san-bdx-prod',
+        vlan: 'VLAN-101'
+      },
+      purchaseDate: new Date('2023-11-15'),
+      warrantyEnd: new Date('2028-11-15'),
+      powerConsumption: 850,
+      weight: 45.0,
+      notes: 'SAN iSCSI - 96TB usable - RAID6',
+    },
+  });
+
+  const storage2 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      rackId: rack5.id,
+      type: AssetType.OTHER,
+      model: 'Synology RackStation RS4021xs+',
+      manufacturer: 'Synology',
+      serialNumber: 'STO-BDX-002',
+      inventoryTag: 'BDX-STO-002',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 4,
+      rackHeightU: 2,
+      networkInfo: {
+        ip: '10.4.1.51',
+        mac: '00:1A:2B:3C:04:51',
+        hostname: 'nas-bdx-backup',
+        vlan: 'VLAN-101'
+      },
+      purchaseDate: new Date('2023-12-01'),
+      warrantyEnd: new Date('2028-12-01'),
+      powerConsumption: 350,
+      notes: 'NAS backup - Snapshots quotidiens',
+    },
+  });
+
+  const switch5 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      rackId: rack4.id,
+      type: AssetType.SWITCH,
+      model: 'Cisco Nexus 9300',
+      manufacturer: 'Cisco',
+      serialNumber: 'SW-BDX-001',
+      inventoryTag: 'BDX-SW-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 10,
+      rackHeightU: 1,
+      networkInfo: {
+        ip: '10.4.1.1',
+        mac: '00:1A:2B:3C:04:01',
+        hostname: 'sw-bdx-core',
+      },
+      purchaseDate: new Date('2023-10-15'),
+      warrantyEnd: new Date('2028-10-15'),
+      powerConsumption: 500,
+      notes: 'Switch datacenter 10/25/40Gb - Spine',
+    },
+  });
+
+  const firewall2 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      rackId: rack4.id,
+      type: AssetType.FIREWALL,
+      model: 'Palo Alto PA-3220',
+      manufacturer: 'Palo Alto',
+      serialNumber: 'FW-BDX-001',
+      inventoryTag: 'BDX-FW-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 12,
+      rackHeightU: 1,
+      networkInfo: {
+        ip: '10.4.1.253',
+        mac: '00:1A:2B:3C:04:FD',
+        hostname: 'fw-bdx-dc',
+      },
+      purchaseDate: new Date('2023-10-01'),
+      warrantyEnd: new Date('2028-10-01'),
+      powerConsumption: 200,
+      notes: 'Firewall datacenter - HA active/passive',
+    },
+  });
+
+  const ups1 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      type: AssetType.OTHER,
+      model: 'APC Smart-UPS SRT 10kVA',
+      manufacturer: 'APC',
+      serialNumber: 'UPS-BDX-001',
+      inventoryTag: 'BDX-UPS-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Datacenter - Row 1 - Infrastructure',
+      powerConsumption: 10000,
+      weight: 120.0,
+      purchaseDate: new Date('2023-09-01'),
+      warrantyEnd: new Date('2028-09-01'),
+      notes: 'Onduleur 10kVA - Runtime 15min charge complète',
+    },
+  });
+
+  const pdu1 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      type: AssetType.OTHER,
+      model: 'APC Rack PDU 2G Switched',
+      manufacturer: 'APC',
+      serialNumber: 'PDU-BDX-001',
+      inventoryTag: 'BDX-PDU-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Rack BDX-DC1 - Vertical mount',
+      networkInfo: {
+        ip: '10.4.1.200',
+        mac: '00:1A:2B:3C:04:C0',
+        hostname: 'pdu-bdx-dc1',
+        vlan: 'VLAN-255'
+      },
+      purchaseDate: new Date('2023-10-01'),
+      notes: 'PDU intelligent - 24 prises C13 + monitoring',
+    },
+  });
+
+  // ===== SITE 5 - Toulouse (5 assets - bureau R&D) =====
+  const server7 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site5.id,
+      rackId: rack6.id,
+      type: AssetType.SERVER,
+      model: 'Intel NUC 12 Pro',
+      manufacturer: 'Intel',
+      serialNumber: 'SRV-TLS-001',
+      inventoryTag: 'TLS-SRV-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 1,
+      rackHeightU: 1,
+      networkInfo: {
+        ip: '10.5.1.10',
+        mac: '00:1A:2B:3C:05:10',
+        hostname: 'srv-tls-dev',
+        vlan: 'VLAN-20'
+      },
+      purchaseDate: new Date('2024-04-01'),
+      warrantyEnd: new Date('2027-04-01'),
+      powerConsumption: 65,
+      notes: 'Serveur développement local - Docker host',
+    },
+  });
+
+  const switch6 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site5.id,
+      rackId: rack6.id,
+      type: AssetType.SWITCH,
+      model: 'Netgear GS724T',
+      manufacturer: 'Netgear',
+      serialNumber: 'SW-TLS-001',
+      inventoryTag: 'TLS-SW-001',
+      status: AssetStatus.IN_SERVICE,
+      rackPositionU: 3,
+      rackHeightU: 1,
+      networkInfo: {
+        ip: '10.5.1.1',
+        mac: '00:1A:2B:3C:05:01',
+        hostname: 'sw-tls-main',
+      },
+      purchaseDate: new Date('2024-04-01'),
+      warrantyEnd: new Date('2029-04-01'),
+      powerConsumption: 50,
+      notes: 'Switch 24 ports Gigabit manageable',
+    },
+  });
+
+  const ap4 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site5.id,
+      type: AssetType.ACCESS_POINT,
+      model: 'TP-Link EAP660 HD',
+      manufacturer: 'TP-Link',
+      serialNumber: 'AP-TLS-001',
+      inventoryTag: 'TLS-AP-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Plafond Open Space',
+      networkInfo: {
+        ip: '10.5.1.100',
+        mac: '00:1A:2B:3C:05:A0',
+        hostname: 'ap-tls-openspace',
+        vlan: 'VLAN-10'
+      },
+      purchaseDate: new Date('2024-04-10'),
+      notes: 'WiFi 6 - Zone R&D',
+    },
+  });
+
+  const printer5 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site5.id,
+      type: AssetType.PRINTER,
+      model: 'Epson EcoTank ET-5850',
+      manufacturer: 'Epson',
+      serialNumber: 'PRINT-TLS-001',
+      inventoryTag: 'TLS-PRINT-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Bureau R&D',
+      networkInfo: {
+        ip: '10.5.1.50',
+        mac: '00:1A:2B:3C:05:50',
+        hostname: 'print-tls-rd',
+        vlan: 'VLAN-10'
+      },
+      purchaseDate: new Date('2024-04-15'),
+      warrantyEnd: new Date('2027-04-15'),
+      notes: 'Imprimante multifonction couleur - R&D',
+    },
+  });
+
+  const visio2 = await prisma.asset.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site5.id,
+      type: AssetType.TEAMS_ROOM,
+      model: 'Poly Studio X50',
+      manufacturer: 'Poly',
+      serialNumber: 'VISIO-TLS-001',
+      inventoryTag: 'TLS-VISIO-001',
+      status: AssetStatus.IN_SERVICE,
+      locationText: 'Salle brainstorming',
+      networkInfo: {
+        ip: '10.5.1.120',
+        mac: '00:1A:2B:3C:05:B0',
+        hostname: 'visio-tls-brain',
+        vlan: 'VLAN-10'
+      },
+      purchaseDate: new Date('2024-04-20'),
+      warrantyEnd: new Date('2027-04-20'),
+      notes: 'Système visio 4K - Salle créative',
+    },
+  });
+
+  console.log('✅ Assets created: 36 total');
+
+  // 6. Create comprehensive tasks (15 total)
   const task1 = await prisma.task.create({
     data: {
       tenantId: tenant.id,
       siteId: site1.id,
       assetId: switch1.id,
-      title: 'Configuration VLAN switch principal',
-      description: 'Configurer les VLANs 10, 20, 30 sur le switch core Paris',
+      title: 'Configuration VLAN switch core Paris',
+      description: 'Configurer tous les VLANs sur le switch core Catalyst 9300 selon plan d\'adressage',
       status: TaskStatus.IN_PROGRESS,
       priority: TaskPriority.HIGH,
-      assignedTo: tech.id,
+      assignedTo: tech1.id,
       createdBy: manager.id,
       dueDate: new Date('2026-01-15'),
       checklist: [
         { id: '1', text: 'Créer VLAN 10 (Bureaux)', checked: true, order: 1 },
         { id: '2', text: 'Créer VLAN 20 (Serveurs)', checked: true, order: 2 },
         { id: '3', text: 'Créer VLAN 30 (Invités)', checked: false, order: 3 },
-        { id: '4', text: 'Tester routing inter-VLAN', checked: false, order: 4 }
+        { id: '4', text: 'Créer VLAN 100 (Management)', checked: false, order: 4 },
+        { id: '5', text: 'Configurer routing inter-VLAN', checked: false, order: 5 },
+        { id: '6', text: 'Tester connectivité', checked: false, order: 6 }
       ],
     },
   });
@@ -394,56 +1214,266 @@ async function main() {
     data: {
       tenantId: tenant.id,
       siteId: site1.id,
-      assetId: printer1.id,
-      title: 'Installer drivers imprimante HP',
-      description: 'Déployer les drivers HP sur les 15 postes de l\'étage 3',
-      status: TaskStatus.DONE,
-      priority: TaskPriority.MEDIUM,
-      assignedTo: tech.id,
-      createdBy: manager.id,
-      dueDate: new Date('2026-01-10'),
-      completedAt: new Date('2026-01-09'),
+      assetId: server1.id,
+      title: 'Patch sécurité serveur app01',
+      description: 'Appliquer les mises à jour de sécurité critiques sur srv-par-app01',
+      status: TaskStatus.TODO,
+      priority: TaskPriority.URGENT,
+      assignedTo: tech1.id,
+      createdBy: admin.id,
+      dueDate: new Date('2026-01-12'),
+      ticketRef: 'JIRA-1234',
+      checklist: [
+        { id: '1', text: 'Backup complet VM', checked: false, order: 1 },
+        { id: '2', text: 'Snapshot vSphere', checked: false, order: 2 },
+        { id: '3', text: 'Appliquer patches OS', checked: false, order: 3 },
+        { id: '4', text: 'Redémarrer serveur', checked: false, order: 4 },
+        { id: '5', text: 'Valider services applicatifs', checked: false, order: 5 }
+      ],
     },
   });
 
   const task3 = await prisma.task.create({
     data: {
       tenantId: tenant.id,
-      siteId: site2.id,
-      assetId: switch2.id,
-      title: 'Vérification câblage réseau',
-      description: 'Contrôler tous les ports du switch et identifier ceux non utilisés',
-      status: TaskStatus.TODO,
-      priority: TaskPriority.LOW,
-      assignedTo: tech.id,
+      siteId: site1.id,
+      assetId: printer1.id,
+      title: 'Installer drivers imprimante étage 3',
+      description: 'Déployer les drivers HP LaserJet sur les 15 postes de l\'étage 3',
+      status: TaskStatus.DONE,
+      priority: TaskPriority.MEDIUM,
+      assignedTo: tech2.id,
       createdBy: manager.id,
-      dueDate: new Date('2026-01-20'),
+      dueDate: new Date('2026-01-10'),
+      completedAt: new Date('2026-01-09'),
     },
   });
 
   const task4 = await prisma.task.create({
     data: {
       tenantId: tenant.id,
+      siteId: site1.id,
+      assetId: firewall1.id,
+      title: 'Audit règles firewall Paris',
+      description: 'Revue complète des règles FortiGate et suppression des règles obsolètes',
+      status: TaskStatus.TODO,
+      priority: TaskPriority.HIGH,
+      assignedTo: tech1.id,
+      createdBy: admin.id,
+      dueDate: new Date('2026-01-20'),
+      ticketRef: 'SEC-789',
+    },
+  });
+
+  const task5 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site2.id,
+      assetId: switch3.id,
+      title: 'Vérification câblage réseau Lyon',
+      description: 'Contrôler tous les ports du switch Aruba et identifier ports non utilisés',
+      status: TaskStatus.TODO,
+      priority: TaskPriority.LOW,
+      assignedTo: tech2.id,
+      createdBy: manager.id,
+      dueDate: new Date('2026-01-25'),
+    },
+  });
+
+  const task6 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site2.id,
+      assetId: server4.id,
+      title: 'Mise à jour cache applicatif Lyon',
+      description: 'Upgrade Redis sur serveur local Lyon vers dernière version stable',
+      status: TaskStatus.IN_PROGRESS,
+      priority: TaskPriority.MEDIUM,
+      assignedTo: tech1.id,
+      createdBy: manager.id,
+      dueDate: new Date('2026-01-18'),
+      checklist: [
+        { id: '1', text: 'Backup données Redis', checked: true, order: 1 },
+        { id: '2', text: 'Arrêter services dépendants', checked: true, order: 2 },
+        { id: '3', text: 'Upgrade Redis 6 → 7', checked: false, order: 3 },
+        { id: '4', text: 'Restaurer données', checked: false, order: 4 },
+        { id: '5', text: 'Tests applicatifs', checked: false, order: 5 }
+      ],
+    },
+  });
+
+  const task7 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site2.id,
+      assetId: visio1.id,
+      title: 'Configuration Logitech Rally Plus',
+      description: 'Configurer et calibrer caméra + micros visioconférence salle A',
+      status: TaskStatus.DONE,
+      priority: TaskPriority.MEDIUM,
+      assignedTo: tech2.id,
+      createdBy: manager.id,
+      dueDate: new Date('2026-01-08'),
+      completedAt: new Date('2026-01-07'),
+    },
+  });
+
+  const task8 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
       siteId: site3.id,
       title: 'Préparation site Marseille',
-      description: 'Inventaire complet du matériel à déployer sur le nouveau site',
+      description: 'Inventaire complet du matériel à déployer sur le nouveau site Vieux-Port',
       status: TaskStatus.TODO,
       priority: TaskPriority.URGENT,
       assignedTo: manager.id,
       createdBy: admin.id,
       dueDate: new Date('2026-01-12'),
+      ticketRef: 'PROJ-MRS-001',
       checklist: [
         { id: '1', text: 'Commander 2 racks 42U', checked: false, order: 1 },
-        { id: '2', text: 'Commander switches (3x)', checked: false, order: 2 },
-        { id: '3', text: 'Commander serveurs (2x)', checked: false, order: 3 },
-        { id: '4', text: 'Planifier installation', checked: false, order: 4 }
+        { id: '2', text: 'Commander switches core (3x)', checked: false, order: 2 },
+        { id: '3', text: 'Commander serveurs (2x Dell R740)', checked: false, order: 3 },
+        { id: '4', text: 'Commander équipements WiFi (5x AP)', checked: false, order: 4 },
+        { id: '5', text: 'Planifier installation câblage', checked: false, order: 5 },
+        { id: '6', text: 'Réserver intervention prestataire', checked: false, order: 6 }
       ],
     },
   });
 
-  console.log('✅ Tasks created: 4 total');
+  const task9 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      assetId: storage1.id,
+      title: 'Extension stockage SAN Bordeaux',
+      description: 'Ajout disques SSD dans baie PowerVault pour augmenter capacité',
+      status: TaskStatus.TODO,
+      priority: TaskPriority.HIGH,
+      assignedTo: tech1.id,
+      createdBy: admin.id,
+      dueDate: new Date('2026-01-22'),
+      ticketRef: 'INFRA-456',
+      checklist: [
+        { id: '1', text: 'Commander 8x SSD 3.84TB', checked: false, order: 1 },
+        { id: '2', text: 'Planifier fenêtre maintenance', checked: false, order: 2 },
+        { id: '3', text: 'Installer disques à chaud', checked: false, order: 3 },
+        { id: '4', text: 'Étendre volume RAID6', checked: false, order: 4 },
+        { id: '5', text: 'Vérifier intégrité données', checked: false, order: 5 }
+      ],
+    },
+  });
 
-  // 9. Create a provider
+  const task10 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      assetId: server5.id,
+      title: 'Migration VM vers cluster HA',
+      description: 'Migrer VMs critiques vers cluster ESXi HA sur srv-bdx-prod01/02',
+      status: TaskStatus.IN_PROGRESS,
+      priority: TaskPriority.HIGH,
+      assignedTo: tech1.id,
+      createdBy: manager.id,
+      dueDate: new Date('2026-01-16'),
+      checklist: [
+        { id: '1', text: 'Inventorier VMs à migrer (12 total)', checked: true, order: 1 },
+        { id: '2', text: 'Configurer DRS et HA', checked: true, order: 2 },
+        { id: '3', text: 'Migrer VMs batch 1 (4 VMs)', checked: true, order: 3 },
+        { id: '4', text: 'Migrer VMs batch 2 (4 VMs)', checked: false, order: 4 },
+        { id: '5', text: 'Migrer VMs batch 3 (4 VMs)', checked: false, order: 5 },
+        { id: '6', text: 'Tests failover HA', checked: false, order: 6 }
+      ],
+    },
+  });
+
+  const task11 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site4.id,
+      assetId: ups1.id,
+      title: 'Test onduleur datacenter',
+      description: 'Test charge batterie UPS et simulation coupure électrique',
+      status: TaskStatus.TODO,
+      priority: TaskPriority.MEDIUM,
+      assignedTo: tech1.id,
+      createdBy: admin.id,
+      dueDate: new Date('2026-01-30'),
+      ticketRef: 'MAINT-UPS-01',
+    },
+  });
+
+  const task12 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site5.id,
+      assetId: server7.id,
+      title: 'Déploiement environnement Docker dev',
+      description: 'Installation Docker Swarm sur serveur dev Toulouse pour équipe R&D',
+      status: TaskStatus.DONE,
+      priority: TaskPriority.MEDIUM,
+      assignedTo: tech1.id,
+      createdBy: manager.id,
+      dueDate: new Date('2026-01-05'),
+      completedAt: new Date('2026-01-04'),
+    },
+  });
+
+  const task13 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site5.id,
+      assetId: visio2.id,
+      title: 'Formation utilisation Poly Studio X50',
+      description: 'Former équipe R&D à l\'utilisation du système visio salle brainstorming',
+      status: TaskStatus.TODO,
+      priority: TaskPriority.LOW,
+      assignedTo: tech2.id,
+      createdBy: manager.id,
+      dueDate: new Date('2026-01-28'),
+    },
+  });
+
+  const task14 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      assetId: ap1.id,
+      title: 'Optimisation couverture WiFi accueil',
+      description: 'Ajuster puissance et canaux AP Meraki pour réduire interférences',
+      status: TaskStatus.TODO,
+      priority: TaskPriority.LOW,
+      assignedTo: tech2.id,
+      createdBy: manager.id,
+      dueDate: new Date('2026-02-05'),
+    },
+  });
+
+  const task15 = await prisma.task.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: site1.id,
+      title: 'Audit annuel inventaire Paris',
+      description: 'Contrôle physique de tous les équipements site Paris avec scan QR codes',
+      status: TaskStatus.TODO,
+      priority: TaskPriority.MEDIUM,
+      assignedTo: tech2.id,
+      createdBy: admin.id,
+      dueDate: new Date('2026-01-31'),
+      ticketRef: 'AUDIT-2026-PAR',
+      checklist: [
+        { id: '1', text: 'Scanner tous assets étage 1-5', checked: false, order: 1 },
+        { id: '2', text: 'Vérifier localisation', checked: false, order: 2 },
+        { id: '3', text: 'Mettre à jour statuts', checked: false, order: 3 },
+        { id: '4', text: 'Identifier assets manquants', checked: false, order: 4 },
+        { id: '5', text: 'Générer rapport final', checked: false, order: 5 }
+      ],
+    },
+  });
+
+  console.log('✅ Tasks created: 15 total');
+
+  // 7. Create providers (3 total)
   const provider1 = await prisma.provider.create({
     data: {
       tenantId: tenant.id,
@@ -454,7 +1484,15 @@ async function main() {
           name: 'Sophie Leroy',
           phone: '+33 1 23 45 67 89',
           email: 'sophie.leroy@technet.fr',
-          role: 'Account Manager'
+          role: 'Account Manager',
+          isPrimary: true
+        },
+        {
+          name: 'Julien Roux',
+          phone: '+33 1 23 45 67 90',
+          email: 'julien.roux@technet.fr',
+          role: 'Technical Lead',
+          isPrimary: false
         }
       ],
       availability: {
@@ -462,21 +1500,103 @@ async function main() {
         sla: '4h intervention critique',
         interventionDelay: '24h standard'
       },
-      notes: 'Prestataire principal pour intégration matériel réseau',
+      notes: 'Prestataire principal pour intégration matériel réseau et serveurs',
     },
   });
 
-  console.log('✅ Provider created:', provider1.name);
+  const provider2 = await prisma.provider.create({
+    data: {
+      tenantId: tenant.id,
+      name: 'SecureIT France',
+      type: 'OTHER',
+      contacts: [
+        {
+          name: 'Nathalie Dubois',
+          phone: '+33 4 56 78 90 12',
+          email: 'nathalie.dubois@secureit.fr',
+          role: 'Security Consultant',
+          isPrimary: true
+        }
+      ],
+      availability: {
+        schedules: '24/7/365',
+        sla: '1h intervention critique sécurité',
+        interventionDelay: '4h standard'
+      },
+      notes: 'Prestataire sécurité - Audits, pentests, SOC',
+    },
+  });
 
-  console.log('\n🎉 Seed completed successfully!');
-  console.log('\n📋 Demo Users:');
-  console.log('  Admin:      admin@xch.demo / admin123');
-  console.log('  Manager:    manager@xch.demo / manager123');
-  console.log('  Technician: tech@xch.demo / tech123');
-  console.log('\n📍 Sites:');
-  console.log('  - Paris La Défense (ACTIVE) - 4 assets, 2 tasks');
-  console.log('  - Lyon Part-Dieu (ACTIVE) - 3 assets, 1 task');
-  console.log('  - Marseille Vieux-Port (PREPARATION) - 1 asset, 1 task');
+  const provider3 = await prisma.provider.create({
+    data: {
+      tenantId: tenant.id,
+      name: 'DataCenter Services',
+      type: 'OTHER',
+      contacts: [
+        {
+          name: 'François Martin',
+          phone: '+33 5 67 89 01 23',
+          email: 'francois.martin@dc-services.fr',
+          role: 'Datacenter Manager',
+          isPrimary: true
+        }
+      ],
+      availability: {
+        schedules: '24/7/365',
+        sla: '30min intervention critique',
+        interventionDelay: '2h standard'
+      },
+      notes: 'Hébergement datacenter Bordeaux - Tier 3 - Infogérance',
+    },
+  });
+
+  console.log('✅ Providers created: 3 total');
+
+  // Summary
+  console.log('\n🎉 COMPREHENSIVE DEMO SEED COMPLETED SUCCESSFULLY!\n');
+
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('                    XCH DEMO CREDENTIALS                   ');
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('🔐 Admin:       admin@xch.demo / admin123');
+  console.log('👔 Manager:     manager@xch.demo / manager123');
+  console.log('🔧 Technician:  tech@xch.demo / tech123');
+  console.log('🔧 Technician2: tech2@xch.demo / tech123');
+  console.log('👁️  Viewer:      viewer@xch.demo / viewer123');
+  console.log('═══════════════════════════════════════════════════════════\n');
+
+  console.log('📊 DEMO DATA SUMMARY:');
+  console.log('  👥 Users: 5 (1 admin, 1 manager, 2 techs, 1 viewer)');
+  console.log('  📍 Sites: 5 (3 ACTIVE, 1 PREPARATION, 1 DATACENTER)');
+  console.log('  🗄️  Racks: 6 (Paris x2, Lyon x1, Bordeaux x2, Toulouse x1)');
+  console.log('  💻 Assets: 36 total');
+  console.log('      • Servers: 7');
+  console.log('      • Switches: 6');
+  console.log('      • Routers: 2');
+  console.log('      • Firewalls: 2');
+  console.log('      • Storage: 2 (SAN + NAS)');
+  console.log('      • Printers: 5');
+  console.log('      • iPads: 4');
+  console.log('      • Access Points: 4');
+  console.log('      • Visioconference: 2');
+  console.log('      • UPS: 1');
+  console.log('      • PDU: 1');
+  console.log('  📋 Tasks: 15 (3 TODO, 5 IN_PROGRESS, 4 DONE, 3 URGENT)');
+  console.log('  🏢 Providers: 3 (Integrator, Security, Datacenter)\n');
+
+  console.log('📍 SITES DETAILS:');
+  console.log('  1. Paris La Défense (PAR-001) - ACTIVE');
+  console.log('     → 12 assets, 2 racks, 6 tasks');
+  console.log('  2. Lyon Part-Dieu (LYN-002) - ACTIVE');
+  console.log('     → 8 assets, 1 rack, 3 tasks');
+  console.log('  3. Marseille Vieux-Port (MRS-003) - PREPARATION');
+  console.log('     → 3 assets (in transit/storage), 1 task');
+  console.log('  4. Datacenter Bordeaux (BDX-004) - ACTIVE');
+  console.log('     → 8 assets, 2 racks, 3 tasks (critical infra)');
+  console.log('  5. Bureau Toulouse (TLS-005) - ACTIVE');
+  console.log('     → 5 assets, 1 rack, 2 tasks (R&D)\n');
+
+  console.log('✨ Ready for comprehensive demo and testing!');
 }
 
 main()
