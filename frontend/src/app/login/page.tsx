@@ -83,7 +83,7 @@ export default function LoginPage() {
           <div className="mt-4 text-center">
             <Button
               variant="link"
-              onClick={() => (window.location.href = 'http://localhost:3000/auth/oidc')}
+              onClick={() => (window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/auth/oidc`)}
             >
               Se connecter avec SSO
             </Button>
