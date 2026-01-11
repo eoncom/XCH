@@ -41,26 +41,26 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     queryFn: () => sitesApi.getById(id),
   });
 
-  // Load site assets
-  const { data: assets = [] } = useQuery<Asset[]>({
-    queryKey: ['assets', { siteId: id }],
-    queryFn: () => assetsApi.getAll({ siteId: id }),
-    enabled: !!id,
+  // Load site assets (filter by siteId)
+  const {data: allAssets = []} = useQuery<Asset[]>({
+    queryKey: ['assets'],
+    queryFn: () => assetsApi.getAll(),
   });
+  const assets = allAssets.filter(a => a.siteId === id);
 
   // Load site racks
   const { data: racks = [] } = useQuery<Rack[]>({
     queryKey: ['racks', { siteId: id }],
-    queryFn: () => racksApi.getAll({ siteId: id }),
+    queryFn: () => racksApi.getAll(id),
     enabled: !!id,
   });
 
-  // Load site tasks
-  const { data: tasks = [] } = useQuery<Task[]>({
-    queryKey: ['tasks', { siteId: id }],
-    queryFn: () => tasksApi.getAll({ siteId: id }),
-    enabled: !!id,
+  // Load site tasks (filter by siteId)
+  const {data: allTasks = []} = useQuery<Task[]>({
+    queryKey: ['tasks'],
+    queryFn: () => tasksApi.getAll(),
   });
+  const tasks = allTasks.filter(t => t.siteId === id);
 
   const activeTasks = tasks.filter(t => t.status !== 'DONE');
 
