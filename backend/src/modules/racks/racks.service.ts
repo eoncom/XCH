@@ -106,7 +106,7 @@ export class RacksService {
           select: {
             id: true,
             type: true,
-            brand: true,
+            manufacturer: true,
             model: true,
             serialNumber: true,
             rackPositionU: true,
@@ -123,7 +123,7 @@ export class RacksService {
 
     // Calculate occupation
     const totalU = rack.heightU;
-    const usedU = rack.assets.reduce((sum, asset) => sum + (asset.rackHeightU || 0), 0);
+    const usedU = rack.assets.reduce((sum: number, asset) => sum + (asset.rackHeightU || 0), 0);
     const freeU = totalU - usedU;
     const occupationPercent = (usedU / totalU) * 100;
 
@@ -155,7 +155,7 @@ export class RacksService {
   async remove(id: string, tenantId: string) {
     const rack = await this.findOne(id, tenantId);
 
-    if (rack.assets.length > 0) {
+    if (rack.assets && rack.assets.length > 0) {
       throw new BadRequestException('Cannot delete rack with mounted equipment. Unmount all equipment first.');
     }
 
@@ -264,10 +264,12 @@ export class RacksService {
   async findAvailableSpaces(rackId: string, tenantId: string, requiredHeightU: number) {
     const rack = await this.findOne(rackId, tenantId);
 
-    const occupiedRanges = rack.assets.filter(a => a.rackPositionU !== null && a.rackHeightU !== null).map(asset => ({
-      start: asset.rackPositionU!,
-      end: asset.rackPositionU! + asset.rackHeightU! - 1,
-    }));
+    const occupiedRanges = rack.assets
+      .filter((a: any) => a.rackPositionU !== null && a.rackHeightU !== null)
+      .map((asset: any) => ({
+        start: asset.rackPositionU!,
+        end: asset.rackPositionU! + asset.rackHeightU! - 1,
+      }));
 
     const availableSpaces = [];
 
@@ -276,7 +278,7 @@ export class RacksService {
 
       if (endPositionU > rack.heightU) break;
 
-      const isAvailable = !occupiedRanges.some(range => {
+      const isAvailable = !occupiedRanges.some((range: { start: number; end: number }) => {
         if (range.start === null) return false;
         return (
           (positionU >= range.start && positionU <= range.end) ||

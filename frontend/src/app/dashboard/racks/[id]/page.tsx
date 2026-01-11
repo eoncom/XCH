@@ -276,7 +276,7 @@ export default function RackDetailPage({
                           href={`/dashboard/assets/${asset.id}`}
                           className="text-sm font-medium hover:underline"
                         >
-                          {asset.brand} {asset.model}
+                          {asset.manufacturer} {asset.model}
                         </Link>
                         <p className="text-xs text-muted-foreground">
                           U{asset.rackPositionU} ({asset.rackHeightU}U)
@@ -322,7 +322,7 @@ export default function RackDetailPage({
                 <SelectContent>
                   {availableAssets?.map((asset) => (
                     <SelectItem key={asset.id} value={asset.id}>
-                      {asset.brand} {asset.model} - {asset.serialNumber}
+                      {asset.manufacturer} {asset.model} - {asset.serialNumber}
                     </SelectItem>
                   ))}
                 </SelectContent>

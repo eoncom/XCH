@@ -233,7 +233,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                             href={`/dashboard/assets/${asset.id}`}
                             className="font-medium hover:underline"
                           >
-                            {asset.brand} {asset.model}
+                            {asset.manufacturer} {asset.model}
                           </Link>
                           <p className="text-sm text-muted-foreground">
                             {asset.type} • {asset.serialNumber}

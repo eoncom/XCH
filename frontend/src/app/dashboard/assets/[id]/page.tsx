@@ -133,7 +133,7 @@ export default function AssetDetailPage({
             <Package className="h-8 w-8 text-muted-foreground" />
             <div>
               <h1 className="text-3xl font-bold">
-                {asset.brand} {asset.model}
+                {asset.manufacturer} {asset.model}
               </h1>
               <p className="text-muted-foreground">
                 {assetTypeLabels[asset.type]}
@@ -196,12 +196,12 @@ export default function AssetDetailPage({
                   <p className="text-lg">{assetStatusLabels[asset.status]}</p>
                 </div>
 
-                {asset.brand && (
+                {asset.manufacturer && (
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">
                       Marque
                     </label>
-                    <p className="text-lg">{asset.brand}</p>
+                    <p className="text-lg">{asset.manufacturer}</p>
                   </div>
                 )}
 
@@ -364,7 +364,7 @@ export default function AssetDetailPage({
           <DialogHeader>
             <DialogTitle>Confirmer la suppression</DialogTitle>
             <DialogDescription>
-              Êtes-vous sûr de vouloir supprimer l'équipement &quot;{asset.brand}{' '}
+              Êtes-vous sûr de vouloir supprimer l'équipement &quot;{asset.manufacturer}{' '}
               {asset.model}&quot; ? Cette action est irréversible.
             </DialogDescription>
           </DialogHeader>

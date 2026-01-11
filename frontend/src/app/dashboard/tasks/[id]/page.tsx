@@ -328,7 +328,7 @@ export default function TaskDetailPage({
                       href={`/dashboard/assets/${task.asset.id}`}
                       className="text-sm text-blue-600 hover:underline"
                     >
-                      {task.asset.brand} {task.asset.model}
+                      {task.asset.manufacturer} {task.asset.model}
                     </Link>
                   </div>
                 </div>

@@ -69,7 +69,7 @@ export default function AssetsPage() {
     const searchLower = search.toLowerCase();
     return (
       asset.model?.toLowerCase().includes(searchLower) ||
-      asset.brand?.toLowerCase().includes(searchLower) ||
+      asset.manufacturer?.toLowerCase().includes(searchLower) ||
       asset.serialNumber?.toLowerCase().includes(searchLower) ||
       assetTypeLabels[asset.type].toLowerCase().includes(searchLower)
     );
@@ -159,7 +159,7 @@ export default function AssetsPage() {
                     <Package className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <CardTitle className="text-lg">
-                        {asset.brand} {asset.model}
+                        {asset.manufacturer} {asset.model}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground">
                         {assetTypeLabels[asset.type]}

@@ -77,7 +77,7 @@ export default function RackVisualization({
           <Text
             x={PADDING + 60}
             y={y + (asset.rackHeightU! * UNIT_HEIGHT) / 2 - 8}
-            text={`${asset.brand} ${asset.model} (${asset.rackHeightU}U)`}
+            text={`${asset.manufacturer} ${asset.model} (${asset.rackHeightU}U)`}
             fontSize={12}
             fontFamily="sans-serif"
             fill="#ffffff"

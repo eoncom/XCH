@@ -67,7 +67,7 @@ export interface Asset {
   tenantId: string;
   siteId?: string;
   type: AssetType;
-  brand?: string;
+  manufacturer?: string;
   model?: string;
   serialNumber?: string;
   status: AssetStatus;
