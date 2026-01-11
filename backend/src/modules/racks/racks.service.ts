@@ -57,9 +57,11 @@ export class RacksService {
             name: true,
           },
         },
-        _count: {
+        assets: {
           select: {
-            assets: true,
+            id: true,
+            rackHeightU: true,
+            rackPositionU: true,
           },
         },
       },
@@ -68,7 +70,25 @@ export class RacksService {
       },
     });
 
-    return racks;
+    // Calculate occupation for each rack
+    return racks.map(rack => {
+      const usedU = rack.assets.reduce((sum, asset) => sum + (asset.rackHeightU || 0), 0);
+      const freeU = rack.heightU - usedU;
+      const occupationPercent = Math.round((usedU / rack.heightU) * 100);
+
+      return {
+        ...rack,
+        occupation: {
+          totalU: rack.heightU,
+          usedU,
+          freeU,
+          percent: occupationPercent,
+        },
+        _count: {
+          assets: rack.assets.length,
+        },
+      };
+    });
   }
 
   async findOne(id: string, tenantId: string) {
@@ -86,6 +106,7 @@ export class RacksService {
           select: {
             id: true,
             type: true,
+            brand: true,
             model: true,
             serialNumber: true,
             rackPositionU: true,

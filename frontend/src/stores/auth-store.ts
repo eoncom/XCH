@@ -75,6 +75,10 @@ export const useAuthStore = create<AuthState>()(
       setTokens: (accessToken: string, refreshToken: string) => {
         localStorage.setItem('accessToken', accessToken);
         localStorage.setItem('refreshToken', refreshToken);
+
+        // Update cookie for middleware (15 minutes)
+        document.cookie = `accessToken=${accessToken}; path=/; max-age=900; SameSite=Lax`;
+
         set({ accessToken, refreshToken, isAuthenticated: true });
       },
     }),

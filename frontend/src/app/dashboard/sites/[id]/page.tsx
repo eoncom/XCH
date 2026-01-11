@@ -16,9 +16,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { sitesApi } from '@/lib/api/sites';
-import { ArrowLeft, MapPin, Edit, Trash2 } from 'lucide-react';
+import { assetsApi } from '@/lib/api/assets';
+import { racksApi } from '@/lib/api/racks';
+import { tasksApi } from '@/lib/api/tasks';
+import { ArrowLeft, MapPin, Edit, Trash2, Package } from 'lucide-react';
 import Link from 'next/link';
-import type { Site } from '@/types';
+import type { Site, Asset, Rack, Task } from '@/types';
 
 const healthStatusColors = {
   HEALTHY: 'success' as const,
@@ -37,6 +40,29 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     queryKey: ['site', id],
     queryFn: () => sitesApi.getById(id),
   });
+
+  // Load site assets
+  const { data: assets = [] } = useQuery<Asset[]>({
+    queryKey: ['assets', { siteId: id }],
+    queryFn: () => assetsApi.getAll({ siteId: id }),
+    enabled: !!id,
+  });
+
+  // Load site racks
+  const { data: racks = [] } = useQuery<Rack[]>({
+    queryKey: ['racks', { siteId: id }],
+    queryFn: () => racksApi.getAll({ siteId: id }),
+    enabled: !!id,
+  });
+
+  // Load site tasks
+  const { data: tasks = [] } = useQuery<Task[]>({
+    queryKey: ['tasks', { siteId: id }],
+    queryFn: () => tasksApi.getAll({ siteId: id }),
+    enabled: !!id,
+  });
+
+  const activeTasks = tasks.filter(t => t.status !== 'DONE');
 
   const deleteMutation = useMutation({
     mutationFn: () => sitesApi.delete(id),
@@ -162,7 +188,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                 <CardTitle className="text-sm font-medium">Équipements</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold">0</p>
+                <p className="text-3xl font-bold">{assets.length}</p>
                 <p className="text-sm text-muted-foreground">Total</p>
               </CardContent>
             </Card>
@@ -171,7 +197,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                 <CardTitle className="text-sm font-medium">Baies</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold">0</p>
+                <p className="text-3xl font-bold">{racks.length}</p>
                 <p className="text-sm text-muted-foreground">Total</p>
               </CardContent>
             </Card>
@@ -180,7 +206,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                 <CardTitle className="text-sm font-medium">Tâches</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold">0</p>
+                <p className="text-3xl font-bold">{activeTasks.length}</p>
                 <p className="text-sm text-muted-foreground">En cours</p>
               </CardContent>
             </Card>
@@ -189,24 +215,90 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
         <TabsContent value="assets">
           <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">Liste des équipements à venir</p>
+            <CardHeader>
+              <CardTitle>Équipements ({assets.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {assets.length > 0 ? (
+                <div className="space-y-3">
+                  {assets.map((asset) => (
+                    <div
+                      key={asset.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Package className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <Link
+                            href={`/dashboard/assets/${asset.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            {asset.brand} {asset.model}
+                          </Link>
+                          <p className="text-sm text-muted-foreground">
+                            {asset.type} • {asset.serialNumber}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge>{asset.status}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center py-12 text-muted-foreground">
+                  Aucun équipement sur ce site
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="tasks">
           <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">Liste des tâches à venir</p>
+            <CardHeader>
+              <CardTitle>Tâches ({tasks.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {tasks.length > 0 ? (
+                <div className="space-y-3">
+                  {tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div>
+                        <Link
+                          href={`/dashboard/tasks/${task.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {task.title}
+                        </Link>
+                        <p className="text-sm text-muted-foreground">
+                          {task.description}
+                        </p>
+                      </div>
+                      <Badge>{task.status}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center py-12 text-muted-foreground">
+                  Aucune tâche pour ce site
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="plans">
           <Card>
+            <CardHeader>
+              <CardTitle>Plans d'étage</CardTitle>
+            </CardHeader>
             <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">Plans de sol à venir</p>
+              <p className="text-muted-foreground">
+                Fonctionnalité à venir - Upload et visualisation de plans
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
