@@ -44,18 +44,18 @@ const assetTypeLabels: Record<AssetType, string> = {
 };
 
 const assetStatusColors = {
-  IN_STOCK: 'secondary',
-  ACTIVE: 'success',
-  INACTIVE: 'secondary',
-  MAINTENANCE: 'warning',
+  IN_SERVICE: 'success',
+  OUT_OF_SERVICE: 'secondary',
+  IN_TRANSIT: 'warning',
+  STOCK: 'secondary',
   RETIRED: 'error',
 } as const;
 
 const assetStatusLabels: Record<AssetStatus, string> = {
-  IN_STOCK: 'En stock',
-  ACTIVE: 'Actif',
-  INACTIVE: 'Inactif',
-  MAINTENANCE: 'Maintenance',
+  IN_SERVICE: 'En service',
+  OUT_OF_SERVICE: 'Hors service',
+  IN_TRANSIT: 'En transit',
+  STOCK: 'En stock',
   RETIRED: 'Retiré',
 };
 

@@ -2,32 +2,131 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { apiClient } from '@/lib/api-client';
-import { MapPin, Package, Server, CheckSquare } from 'lucide-react';
+import { sitesApi } from '@/lib/api/sites';
+import { assetsApi } from '@/lib/api/assets';
+import { racksApi } from '@/lib/api/racks';
+import { tasksApi } from '@/lib/api/tasks';
+import { MapPin, Package, Server, CheckSquare, MapIcon } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { useMemo } from 'react';
+
+// Import Leaflet dynamically to avoid SSR issues
+const MapContainer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.MapContainer),
+  { ssr: false }
+);
+const TileLayer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.TileLayer),
+  { ssr: false }
+);
+const Marker = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Marker),
+  { ssr: false }
+);
+const Popup = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Popup),
+  { ssr: false }
+);
 
 interface DashboardStats {
   sites: { total: number; active: number; critical: number };
-  assets: { total: number; inStock: number; active: number };
+  assets: { total: number; inService: number; inStock: number };
   racks: { total: number; activeU: number; totalU: number };
   tasks: { total: number; todo: number; inProgress: number; done: number };
 }
 
 export default function DashboardPage() {
-  const { data: stats, isLoading } = useQuery<DashboardStats>({
-    queryKey: ['dashboard-stats'],
-    queryFn: async () => {
-      // Fetch stats from API (mock data for now)
-      return {
-        sites: { total: 42, active: 38, critical: 2 },
-        assets: { total: 156, inStock: 24, active: 132 },
-        racks: { total: 18, activeU: 524, totalU: 756 },
-        tasks: { total: 89, todo: 23, inProgress: 12, done: 54 },
-      };
-    },
+  // Fetch real data from APIs
+  const { data: sites = [], isLoading: sitesLoading } = useQuery({
+    queryKey: ['sites'],
+    queryFn: sitesApi.getAll,
   });
 
+  const { data: assets = [], isLoading: assetsLoading } = useQuery({
+    queryKey: ['assets'],
+    queryFn: () => assetsApi.getAll(),
+  });
+
+  const { data: racks = [], isLoading: racksLoading } = useQuery({
+    queryKey: ['racks'],
+    queryFn: () => racksApi.getAll(),
+  });
+
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => tasksApi.getAll(),
+  });
+
+  // Calculate stats from real data
+  const stats: DashboardStats = useMemo(() => {
+    // Sites stats
+    const activeSites = sites.filter((s) => s.status === 'ACTIVE').length;
+    const criticalSites = sites.filter(
+      (s) => s.healthStatus === 'CRITICAL' || s.healthStatus === 'WARNING'
+    ).length;
+
+    // Assets stats
+    const inServiceAssets = assets.filter((a) => a.status === 'IN_SERVICE').length;
+    const inStockAssets = assets.filter((a) => a.status === 'STOCK').length;
+
+    // Racks stats (calculate used U)
+    let totalUsedU = 0;
+    let totalAvailableU = 0;
+    racks.forEach((rack) => {
+      totalAvailableU += rack.heightU;
+      // Calculate used U from mounted assets
+      const mountedAssets = assets.filter((a) => a.rackId === rack.id && a.rackPositionU);
+      mountedAssets.forEach((asset) => {
+        totalUsedU += asset.rackHeightU || 1;
+      });
+    });
+
+    // Tasks stats
+    const todoTasks = tasks.filter((t) => t.status === 'TODO').length;
+    const inProgressTasks = tasks.filter((t) => t.status === 'IN_PROGRESS').length;
+    const doneTasks = tasks.filter((t) => t.status === 'DONE').length;
+
+    return {
+      sites: {
+        total: sites.length,
+        active: activeSites,
+        critical: criticalSites,
+      },
+      assets: {
+        total: assets.length,
+        inService: inServiceAssets,
+        inStock: inStockAssets,
+      },
+      racks: {
+        total: racks.length,
+        activeU: totalUsedU,
+        totalU: totalAvailableU,
+      },
+      tasks: {
+        total: tasks.length,
+        todo: todoTasks,
+        inProgress: inProgressTasks,
+        done: doneTasks,
+      },
+    };
+  }, [sites, assets, racks, tasks]);
+
+  const isLoading = sitesLoading || assetsLoading || racksLoading || tasksLoading;
+
+  // Default center (France)
+  const mapCenter: [number, number] = useMemo(() => {
+    if (sites.length === 0) return [46.603354, 1.888334]; // Center of France
+
+    // Center map on first site with coordinates
+    const siteWithCoords = sites.find((s) => s.latitude && s.longitude);
+    if (siteWithCoords) {
+      return [siteWithCoords.latitude!, siteWithCoords.longitude!];
+    }
+    return [46.603354, 1.888334];
+  }, [sites]);
+
   if (isLoading) {
-    return <div className="text-center">Chargement...</div>;
+    return <div className="text-center py-8">Chargement des données...</div>;
   }
 
   return (
@@ -45,9 +144,9 @@ export default function DashboardPage() {
             <MapPin className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.sites.total}</div>
+            <div className="text-2xl font-bold">{stats.sites.total}</div>
             <p className="text-xs text-muted-foreground">
-              {stats?.sites.active} actifs • {stats?.sites.critical} critiques
+              {stats.sites.active} actifs • {stats.sites.critical} alertes
             </p>
           </CardContent>
         </Card>
@@ -58,9 +157,9 @@ export default function DashboardPage() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.assets.total}</div>
+            <div className="text-2xl font-bold">{stats.assets.total}</div>
             <p className="text-xs text-muted-foreground">
-              {stats?.assets.active} actifs • {stats?.assets.inStock} en stock
+              {stats.assets.inService} en service • {stats.assets.inStock} en stock
             </p>
           </CardContent>
         </Card>
@@ -71,9 +170,9 @@ export default function DashboardPage() {
             <Server className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.racks.total}</div>
+            <div className="text-2xl font-bold">{stats.racks.total}</div>
             <p className="text-xs text-muted-foreground">
-              {stats?.racks.activeU}U / {stats?.racks.totalU}U utilisés
+              {stats.racks.activeU}U / {stats.racks.totalU}U utilisés
             </p>
           </CardContent>
         </Card>
@@ -84,23 +183,104 @@ export default function DashboardPage() {
             <CheckSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.tasks.total}</div>
+            <div className="text-2xl font-bold">{stats.tasks.total}</div>
             <p className="text-xs text-muted-foreground">
-              {stats?.tasks.inProgress} en cours • {stats?.tasks.todo} à faire
+              {stats.tasks.inProgress} en cours • {stats.tasks.todo} à faire
             </p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Sites Map */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MapIcon className="h-5 w-5" />
+            Carte des chantiers
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[400px] rounded-md overflow-hidden border">
+            {typeof window !== 'undefined' && (
+              <MapContainer
+                center={mapCenter}
+                zoom={6}
+                style={{ height: '100%', width: '100%' }}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                {sites
+                  .filter((site) => site.latitude && site.longitude)
+                  .map((site) => (
+                    <Marker
+                      key={site.id}
+                      position={[site.latitude!, site.longitude!]}
+                    >
+                      <Popup>
+                        <div className="p-2">
+                          <h3 className="font-semibold">{site.name}</h3>
+                          <p className="text-sm text-gray-600">{site.code}</p>
+                          {site.city && (
+                            <p className="text-sm">{site.city}</p>
+                          )}
+                          <p className="text-xs mt-1">
+                            Statut: <span className="font-medium">{site.status}</span>
+                          </p>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+              </MapContainer>
+            )}
+          </div>
+          {sites.filter((s) => s.latitude && s.longitude).length === 0 && (
+            <div className="flex items-center justify-center h-[400px] text-sm text-muted-foreground">
+              Aucun chantier avec coordonnées GPS disponible
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Recent Activity */}
       <Card>
         <CardHeader>
-          <CardTitle>Activité récente</CardTitle>
+          <CardTitle>Sites récents</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-sm text-muted-foreground">
-            <p>Les activités récentes s'afficheront ici.</p>
-          </div>
+          {sites.length > 0 ? (
+            <div className="space-y-3">
+              {sites.slice(0, 5).map((site) => (
+                <div
+                  key={site.id}
+                  className="flex items-center justify-between border-b pb-2 last:border-0"
+                >
+                  <div>
+                    <p className="font-medium">{site.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {site.city} • {site.code}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                        site.status === 'ACTIVE'
+                          ? 'bg-green-50 text-green-700'
+                          : site.status === 'PREPARATION'
+                          ? 'bg-yellow-50 text-yellow-700'
+                          : 'bg-gray-50 text-gray-700'
+                      }`}
+                    >
+                      {site.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Aucun site disponible</p>
+          )}
         </CardContent>
       </Card>
     </div>

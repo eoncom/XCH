@@ -23,7 +23,7 @@ import Link from 'next/link';
 const siteSchema = z.object({
   code: z.string().min(1, 'Le code est requis'),
   name: z.string().min(1, 'Le nom est requis'),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'MAINTENANCE']),
+  status: z.enum(['PREPARATION', 'ACTIVE', 'CLOSED']),
   address: z.string().optional(),
   city: z.string().optional(),
   postalCode: z.string().optional(),
@@ -114,16 +114,16 @@ export default function NewSitePage() {
                 <Select
                   value={status}
                   onValueChange={(value) =>
-                    setValue('status', value as 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE')
+                    setValue('status', value as 'PREPARATION' | 'ACTIVE' | 'CLOSED')
                   }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="PREPARATION">Préparation</SelectItem>
                     <SelectItem value="ACTIVE">Actif</SelectItem>
-                    <SelectItem value="INACTIVE">Inactif</SelectItem>
-                    <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                    <SelectItem value="CLOSED">Fermé</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

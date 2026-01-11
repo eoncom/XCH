@@ -37,10 +37,10 @@ const assetTypeLabels: Record<AssetType, string> = {
 };
 
 const assetStatusLabels: Record<AssetStatus, string> = {
-  IN_STOCK: 'En stock',
-  ACTIVE: 'Actif',
-  INACTIVE: 'Inactif',
-  MAINTENANCE: 'Maintenance',
+  IN_SERVICE: 'En service',
+  OUT_OF_SERVICE: 'Hors service',
+  IN_TRANSIT: 'En transit',
+  STOCK: 'En stock',
   RETIRED: 'Retiré',
 };
 
@@ -58,7 +58,7 @@ const assetSchema = z.object({
     'CABLE',
     'OTHER',
   ]),
-  status: z.enum(['IN_STOCK', 'ACTIVE', 'INACTIVE', 'MAINTENANCE', 'RETIRED']),
+  status: z.enum(['IN_SERVICE', 'OUT_OF_SERVICE', 'IN_TRANSIT', 'STOCK', 'RETIRED']),
   siteId: z.string().optional(),
   brand: z.string().optional(),
   model: z.string().optional(),
@@ -81,7 +81,7 @@ export default function NewAssetPage() {
     resolver: zodResolver(assetSchema),
     defaultValues: {
       type: 'OTHER',
-      status: 'IN_STOCK',
+      status: 'STOCK',
     },
   });
 

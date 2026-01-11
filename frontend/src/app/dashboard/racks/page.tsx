@@ -21,15 +21,15 @@ import Link from 'next/link';
 import type { Rack, RackStatus, Site } from '@/types';
 
 const rackStatusColors = {
-  ACTIVE: 'success',
-  INACTIVE: 'secondary',
-  MAINTENANCE: 'warning',
+  IN_SERVICE: 'success',
+  OUT_OF_SERVICE: 'secondary',
+  PREPARATION: 'warning',
 } as const;
 
 const rackStatusLabels: Record<RackStatus, string> = {
-  ACTIVE: 'Actif',
-  INACTIVE: 'Inactif',
-  MAINTENANCE: 'Maintenance',
+  IN_SERVICE: 'En service',
+  OUT_OF_SERVICE: 'Hors service',
+  PREPARATION: 'Préparation',
 };
 
 export default function RacksPage() {

@@ -98,7 +98,7 @@ export default function SitesMap({
           <p style="margin-top: 4px; font-size: 12px;">
             <span style="padding: 2px 6px; background: ${
               site.status === 'ACTIVE' ? '#10b981' :
-              site.status === 'MAINTENANCE' ? '#f59e0b' : '#6b7280'
+              site.status === 'PREPARATION' ? '#f59e0b' : '#6b7280'
             }; color: white; border-radius: 4px;">${site.status}</span>
           </p>
         </div>

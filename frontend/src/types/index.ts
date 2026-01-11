@@ -25,7 +25,7 @@ export interface AuthResponse {
 }
 
 // Site types
-export type SiteStatus = 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE';
+export type SiteStatus = 'PREPARATION' | 'ACTIVE' | 'CLOSED';
 export type HealthStatus = 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
 
 export interface Site {
@@ -60,7 +60,7 @@ export type AssetType =
   | 'CABLE'
   | 'OTHER';
 
-export type AssetStatus = 'IN_STOCK' | 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'RETIRED';
+export type AssetStatus = 'IN_SERVICE' | 'OUT_OF_SERVICE' | 'IN_TRANSIT' | 'STOCK' | 'RETIRED';
 
 export interface Asset {
   id: string;
@@ -87,7 +87,7 @@ export interface Asset {
 }
 
 // Rack types
-export type RackStatus = 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE';
+export type RackStatus = 'IN_SERVICE' | 'OUT_OF_SERVICE' | 'PREPARATION';
 
 export interface Rack {
   id: string;
