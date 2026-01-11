@@ -1,6 +1,6 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-01-10
+**Dernière mise à jour :** 2026-01-11
 **Version actuelle :** 1.0.0-MVP
 **Statut global :** ✅ MVP Production-Ready (100%)
 
@@ -72,20 +72,21 @@ MVP TOTAL    ████████████████████ 100% (
 ### Frontend - 100% TERMINÉ ✅
 
 **Statut :** Production-Ready
-**Date fin :** 2026-01-01
-**Modules livrés :** 7/7
+**Date fin :** 2026-01-11
+**Modules livrés :** 8/8
 
 | # | Module | Pages | Features Clés |
 |---|--------|-------|---------------|
-| 1 | **Dashboard** | 1 | Stats overview, cartes métriques, navigation |
+| 1 | **Dashboard** | 1 | Stats API réelles, carte Leaflet interactive, navigation |
 | 2 | **Sites** | 3 | Liste, carte Leaflet interactive, détail, CRUD |
 | 3 | **Assets** | 3 | CRUD, génération QR codes, scanner caméra PWA |
 | 4 | **Tasks** | 2 | Kanban drag & drop, checklist interactive |
 | 5 | **Racks** | 3 | Visualisation 2D Konva, mount/unmount équipements |
 | 6 | **FloorPlans** | 3 | Upload, viewer Konva (zoom/pan), pins interactifs |
-| 7 | **Settings** | 2 | Profil utilisateur, config tenant, intégrations |
+| 7 | **Users** | 1 | Liste utilisateurs, statistiques par rôle |
+| 8 | **Settings** | 2 | Profil utilisateur, config tenant, intégrations |
 
-**Total pages :** 17 pages fonctionnelles
+**Total pages :** 18 pages fonctionnelles
 
 **Stack technique :**
 - Next.js 15.1.3 (App Router)
@@ -108,11 +109,11 @@ MVP TOTAL    ████████████████████ 100% (
 - ✅ PWA manifest + icons (192x192, 512x512)
 
 **Métriques :**
-- ~40+ composants React
-- ~4000+ lignes de code TypeScript
-- 17 pages fonctionnelles
+- ~45+ composants React
+- ~4500+ lignes de code TypeScript
+- 18 pages fonctionnelles
 - 9 composants UI shadcn/ui
-- 7 modules métier complets
+- 8 modules métier complets
 
 **Documentation :**
 - ✅ Frontend README (frontend/README.md)

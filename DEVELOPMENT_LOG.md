@@ -773,6 +773,80 @@ MinIO:        xch-minio:9000-9001  ✅ Connected
 
 ---
 
-**Dernière mise à jour :** 2026-01-10
+## 2026-01-11
+
+### Session 8 : Sync Frontend - Dashboard API Data + Users Page + Type Fixes
+**Durée :** ~45 min
+**Status :** ✅ Terminée
+
+**Actions principales :**
+1. **Commit modifications frontend non documentées**
+   - Commit `37d6cac` : feat: Dashboard with real API data + Users page + Fix TypeScript types
+   - 12 fichiers modifiés, 464 insertions, 73 suppressions
+   - Push vers GitHub réussi
+
+2. **Synchronisation serveur production**
+   - Création archive frontend-updates-latest.tar.gz
+   - Transfert via SCP vers serveur (192.168.0.13)
+   - Extraction fichiers modifiés dans /opt/xch-dev/XCH
+
+3. **Rebuild et redémarrage frontend**
+   - Build Docker réussi en ~63s (0 erreurs TypeScript)
+   - Container xch-frontend recréé et démarré
+   - Frontend opérationnel sur port 3001
+
+**Modifications frontend (Session post-7) :**
+
+**Dashboard (frontend/src/app/dashboard/page.tsx) :**
+- ✅ Utilise maintenant les vraies données API (sites, assets, racks, tasks)
+- ✅ Statistiques calculées dynamiquement depuis données réelles
+- ✅ Carte Leaflet interactive ajoutée avec marqueurs sites
+- ✅ Import dynamique composants Leaflet (évite SSR issues)
+
+**Page Users créée (frontend/src/app/dashboard/users/page.tsx) :**
+- ✅ Liste complète utilisateurs avec rôles
+- ✅ Statistiques (total users, par rôle)
+- ✅ Badges colorés par rôle (Admin, Manager, Technicien, Viewer)
+
+**Types TypeScript corrigés (frontend/src/types/index.ts) :**
+- ✅ AssetStatus: `IN_SERVICE | OUT_OF_SERVICE | IN_TRANSIT | STOCK | RETIRED`
+- ✅ SiteStatus: `PREPARATION | ACTIVE | CLOSED`
+- ✅ RackStatus: `IN_SERVICE | OUT_OF_SERVICE | PREPARATION`
+
+**Pages mises à jour (dropdowns status corrects) :**
+- frontend/src/app/dashboard/assets/[id]/page.tsx
+- frontend/src/app/dashboard/assets/new/page.tsx
+- frontend/src/app/dashboard/assets/page.tsx
+- frontend/src/app/dashboard/racks/[id]/page.tsx
+- frontend/src/app/dashboard/racks/page.tsx
+- frontend/src/app/dashboard/sites/[id]/edit/page.tsx
+- frontend/src/app/dashboard/sites/new/page.tsx
+
+**Résultat :**
+- ✅ Frontend rebuild avec 0 erreurs TypeScript
+- ✅ Container redémarré et opérationnel (Ready in 1168ms)
+- ✅ API backend fonctionnelle (login testé avec JWT tokens)
+- ✅ Tous containers XCH UP (backend 19h, frontend 8s, infra 7 jours)
+
+**Tests validation :**
+```bash
+# Frontend accessible
+curl http://192.168.0.13:3001/
+# ✅ 307 Redirect to /login (correct)
+
+# Backend API login
+curl -X POST http://192.168.0.13:3002/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@xch.demo","password":"admin123"}'
+# ✅ 200 OK - accessToken + refreshToken retournés
+```
+
+**Fichiers modifiés :** 12
+**Commit :** 37d6cac
+**Build time :** ~63s (0 errors)
+
+---
+
+**Dernière mise à jour :** 2026-01-11
 **Mainteneur :** Équipe XCH
-**Format version :** 1.0
+**Format version :** 1.1
