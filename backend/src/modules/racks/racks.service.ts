@@ -153,7 +153,19 @@ export class RacksService {
   }
 
   async remove(id: string, tenantId: string) {
-    const rack = await this.findOne(id, tenantId);
+    // Check if rack exists and has equipment
+    const rack = await this.prisma.rack.findFirst({
+      where: { id, tenantId },
+      include: {
+        assets: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!rack) {
+      throw new NotFoundException('Rack not found');
+    }
 
     if (rack.assets && rack.assets.length > 0) {
       throw new BadRequestException('Cannot delete rack with mounted equipment. Unmount all equipment first.');
@@ -167,7 +179,25 @@ export class RacksService {
   }
 
   async mountEquipment(rackId: string, tenantId: string, mountDto: MountEquipmentDto) {
-    const rack = await this.findOne(rackId, tenantId);
+    // Get rack with assets for validation
+    const rack = await this.prisma.rack.findFirst({
+      where: { id: rackId, tenantId },
+      include: {
+        site: true,
+        assets: {
+          select: {
+            id: true,
+            model: true,
+            rackPositionU: true,
+            rackHeightU: true,
+          },
+        },
+      },
+    });
+
+    if (!rack) {
+      throw new NotFoundException('Rack not found');
+    }
 
     // Validate equipment belongs to same tenant and site
     const asset = await this.prisma.asset.findFirst({
@@ -199,7 +229,7 @@ export class RacksService {
     }
 
     // Check for overlaps with existing equipment
-    const overlaps = rack.assets.filter(existingAsset => {
+    const overlaps = rack.assets.filter((existingAsset) => {
       if (existingAsset.id === mountDto.assetId) return false; // Skip if updating same asset
       if (!existingAsset.rackPositionU || !existingAsset.rackHeightU) return false; // Skip if no position
 
@@ -218,7 +248,7 @@ export class RacksService {
 
     if (overlaps.length > 0) {
       throw new BadRequestException(
-        `Position U ${mountDto.positionU} to ${endPositionU} overlaps with existing equipment: ${overlaps.map(a => `${a.model} (${a.rackPositionU}U)`).join(', ')}`,
+        `Position U ${mountDto.positionU} to ${endPositionU} overlaps with existing equipment: ${overlaps.map((a) => `${a.model} (${a.rackPositionU}U)`).join(', ')}`,
       );
     }
 
@@ -239,10 +269,22 @@ export class RacksService {
   }
 
   async unmountEquipment(rackId: string, assetId: string, tenantId: string) {
-    const rack = await this.findOne(rackId, tenantId);
+    // Verify rack exists and asset is mounted in it
+    const rack = await this.prisma.rack.findFirst({
+      where: { id: rackId, tenantId },
+      include: {
+        assets: {
+          where: { id: assetId },
+          select: { id: true },
+        },
+      },
+    });
 
-    const asset = rack.assets.find(a => a.id === assetId);
-    if (!asset) {
+    if (!rack) {
+      throw new NotFoundException('Rack not found');
+    }
+
+    if (!rack.assets || rack.assets.length === 0) {
       throw new NotFoundException('Equipment not found in this rack');
     }
 
@@ -264,9 +306,17 @@ export class RacksService {
   async findAvailableSpaces(rackId: string, tenantId: string, requiredHeightU: number) {
     const rack = await this.findOne(rackId, tenantId);
 
-    const occupiedRanges = rack.assets
-      .filter((a: any) => a.rackPositionU !== null && a.rackHeightU !== null)
-      .map((asset: any) => ({
+    // Type-safe handling of assets with explicit type
+    interface MountedAsset {
+      rackPositionU: number | null;
+      rackHeightU: number | null;
+    }
+
+    const rackAssets = rack.assets as unknown as MountedAsset[];
+
+    const occupiedRanges = rackAssets
+      .filter((a) => a.rackPositionU !== null && a.rackHeightU !== null)
+      .map((asset) => ({
         start: asset.rackPositionU!,
         end: asset.rackPositionU! + asset.rackHeightU! - 1,
       }));
@@ -278,8 +328,7 @@ export class RacksService {
 
       if (endPositionU > rack.heightU) break;
 
-      const isAvailable = !occupiedRanges.some((range: { start: number; end: number }) => {
-        if (range.start === null) return false;
+      const isAvailable = !occupiedRanges.some((range) => {
         return (
           (positionU >= range.start && positionU <= range.end) ||
           (endPositionU >= range.start && endPositionU <= range.end) ||
