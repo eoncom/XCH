@@ -1,0 +1,38 @@
+# Docker Compose pour tests E2E
+# Lance les tests Playwright dans un container Docker
+
+version: '3.8'
+
+services:
+  # Service de tests E2E
+  playwright-tests:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.e2e
+    container_name: xch-e2e-tests
+    environment:
+      # URLs vers serveur XCH (depuis réseau Docker)
+      - PLAYWRIGHT_BASE_URL=http://192.168.0.13:3001
+      - PLAYWRIGHT_API_URL=http://192.168.0.13:3002
+      # Configuration CI
+      - CI=true
+    volumes:
+      # Monter rapports pour accès depuis host
+      - ./frontend/playwright-report:/app/playwright-report
+      - ./frontend/test-results:/app/test-results
+    networks:
+      - xch-network
+    # Ne pas redémarrer automatiquement (run once)
+    restart: "no"
+    # Options Playwright
+    command: >
+      npx playwright test
+      --reporter=html,junit
+      --output=test-results
+      --retries=2
+      --workers=2
+
+networks:
+  xch-network:
+    external: true
+    name: xch_xch-network

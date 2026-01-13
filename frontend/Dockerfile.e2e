@@ -1,0 +1,29 @@
+# Dockerfile pour tests E2E Playwright
+# Image basée sur image officielle Playwright avec tous les navigateurs
+
+FROM mcr.microsoft.com/playwright:v1.57.0-jammy
+
+# Définir répertoire de travail
+WORKDIR /app
+
+# Copier package files
+COPY package.json package-lock.json ./
+
+# Installer dépendances (legacy-peer-deps pour compatibilité React 19)
+RUN npm ci --legacy-peer-deps
+
+# Copier configuration Playwright
+COPY playwright.config.ts ./
+COPY .env.e2e ./
+
+# Copier tous les tests E2E
+COPY e2e/ ./e2e/
+
+# Créer répertoires pour rapports
+RUN mkdir -p playwright-report test-results
+
+# Variable d'environnement pour CI
+ENV CI=true
+
+# Commande par défaut: lancer tous les tests
+CMD ["npx", "playwright", "test"]

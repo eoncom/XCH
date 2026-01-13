@@ -111,12 +111,7 @@ export default defineConfig({
     },
   ],
 
-  // Serveur Web local (optionnel)
-  // Démarre automatiquement Next.js avant les tests
-  webServer: process.env.CI ? undefined : {
-    command: 'npm run dev',
-    url: 'http://localhost:3001',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000, // 2 minutes pour démarrer Next.js
-  },
+  // Serveur Web - XCH tourne sur serveur distant uniquement
+  // Pas de webServer local car application sur 192.168.0.13
+  // webServer: undefined,
 });
