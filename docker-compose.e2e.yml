@@ -10,18 +10,19 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.e2e
     container_name: xch-e2e-tests
+    # Utiliser le réseau xch-network pour accéder aux services via DNS
+    networks:
+      - xch-network
     environment:
-      # URLs vers serveur XCH (depuis réseau Docker)
-      - PLAYWRIGHT_BASE_URL=http://192.168.0.13:3001
-      - PLAYWRIGHT_API_URL=http://192.168.0.13:3002
+      # URLs vers services XCH via DNS Docker
+      - PLAYWRIGHT_BASE_URL=http://frontend:3001
+      - PLAYWRIGHT_API_URL=http://backend:3002
       # Configuration CI
       - CI=true
     volumes:
       # Monter rapports pour accès depuis host
-      - ./frontend/playwright-report:/app/playwright-report
-      - ./frontend/test-results:/app/test-results
-    networks:
-      - xch-network
+      - ./frontend/playwright-report-host:/app/playwright-report
+      - ./frontend/test-results-host:/app/test-results
     # Ne pas redémarrer automatiquement (run once)
     restart: "no"
     # Options Playwright
@@ -32,6 +33,7 @@ services:
       --retries=2
       --workers=2
 
+# Utiliser le réseau existant créé par docker-compose.yml principal
 networks:
   xch-network:
     external: true
