@@ -1,0 +1,93 @@
+#!/bin/bash
+# XCH - Git Hook Post-Commit : Auto-update Documentation
+# S'exécute automatiquement après chaque commit Git
+# Maintient PROJECT_STATUS.md et DEVELOPMENT_LOG.md à jour
+
+set -e
+
+PROJECT_ROOT=$(git rev-parse --show-toplevel)
+TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
+COMMIT_SHA=$(git rev-parse --short HEAD)
+COMMIT_MSG=$(git log -1 --pretty=%B)
+AUTHOR=$(git log -1 --pretty=%an)
+
+echo "🤖 [Post-Commit Hook] Mise à jour automatique de la documentation..."
+
+# Fonction pour détecter le type de changement
+detect_change_type() {
+    local commit_msg="$1"
+
+    if [[ "$commit_msg" =~ ^feat ]]; then
+        echo "feature"
+    elif [[ "$commit_msg" =~ ^fix ]]; then
+        echo "bugfix"
+    elif [[ "$commit_msg" =~ ^docs ]]; then
+        echo "documentation"
+    elif [[ "$commit_msg" =~ ^test ]]; then
+        echo "tests"
+    elif [[ "$commit_msg" =~ ^refactor ]]; then
+        echo "refactoring"
+    elif [[ "$commit_msg" =~ ^chore ]]; then
+        echo "chore"
+    else
+        echo "other"
+    fi
+}
+
+# Fonction pour compter les fichiers modifiés par catégorie
+count_changes() {
+    local backend_files=$(git diff-tree --no-commit-id --name-only -r HEAD | grep -c "^backend/" || echo 0)
+    local frontend_files=$(git diff-tree --no-commit-id --name-only -r HEAD | grep -c "^frontend/" || echo 0)
+    local doc_files=$(git diff-tree --no-commit-id --name-only -r HEAD | grep -c "^docs/" || echo 0)
+    local test_files=$(git diff-tree --no-commit-id --name-only -r HEAD | grep -c "e2e\|test\|spec" || echo 0)
+
+    echo "$backend_files|$frontend_files|$doc_files|$test_files"
+}
+
+CHANGE_TYPE=$(detect_change_type "$COMMIT_MSG")
+CHANGES=$(count_changes)
+IFS='|' read -r BACKEND_CHANGES FRONTEND_CHANGES DOC_CHANGES TEST_CHANGES <<< "$CHANGES"
+
+# Mise à jour automatique PROJECT_STATUS.md
+if [ -f "$PROJECT_ROOT/docs/status/PROJECT_STATUS.md" ]; then
+    # Update "Dernière mise à jour" timestamp
+    sed -i "s/^\*\*Dernière mise à jour :\*\*.*/\*\*Dernière mise à jour :\*\* $TIMESTAMP (Auto-update)/" \
+        "$PROJECT_ROOT/docs/status/PROJECT_STATUS.md"
+
+    echo "✅ PROJECT_STATUS.md mis à jour automatiquement"
+fi
+
+# Ajout automatique d'une entrée dans DEVELOPMENT_LOG.md
+if [ -f "$PROJECT_ROOT/DEVELOPMENT_LOG.md" ] && [ "$CHANGE_TYPE" != "chore" ]; then
+    # Ne log que si c'est un changement significatif (pas chore)
+
+    cat >> "$PROJECT_ROOT/DEVELOPMENT_LOG.md" << EOF
+
+---
+
+## Auto-Log: Commit $COMMIT_SHA
+
+**Date:** $TIMESTAMP
+**Auteur:** $AUTHOR
+**Type:** $CHANGE_TYPE
+
+**Message commit:**
+\`\`\`
+$COMMIT_MSG
+\`\`\`
+
+**Fichiers modifiés:**
+- Backend: $BACKEND_CHANGES fichiers
+- Frontend: $FRONTEND_CHANGES fichiers
+- Documentation: $DOC_CHANGES fichiers
+- Tests: $TEST_CHANGES fichiers
+
+**SHA:** $COMMIT_SHA
+
+EOF
+
+    echo "✅ DEVELOPMENT_LOG.md mis à jour automatiquement (commit $COMMIT_SHA)"
+fi
+
+echo "🎉 Documentation auto-update terminée!"
+exit 0

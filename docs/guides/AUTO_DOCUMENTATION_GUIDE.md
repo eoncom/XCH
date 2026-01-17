@@ -1,0 +1,637 @@
+# Guide - Documentation Automatique XCH
+
+**Objectif :** Éliminer la maintenance manuelle de la documentation grâce à l'automatisation.
+
+**Problème identifié :** On perd un temps fou à re-check et mettre à jour la documentation plusieurs jours après les modifications.
+
+**Solution :** Système de documentation automatique multi-niveaux.
+
+---
+
+## 🎯 Système de Documentation Automatique
+
+### 3 Niveaux d'Automatisation
+
+| Niveau | Outil | Fréquence | Description |
+|--------|-------|-----------|-------------|
+| **1. Git Hook** | `.claude/hooks/post-commit` | À chaque commit | Mise à jour immédiate après commit |
+| **2. Agent Local** | `scripts/auto-doc-agent.sh` | Toutes les 60s | Surveillance continue en arrière-plan |
+| **3. GitHub Actions** | `.github/workflows/auto-doc-update.yml` | Push + Cron daily | Mise à jour cloud automatique |
+
+---
+
+## 📋 Niveau 1 : Git Hook Post-Commit
+
+**Fichier :** `.claude/hooks/post-commit`
+
+### Fonctionnement
+
+S'exécute **automatiquement après chaque commit Git** local.
+
+**Actions :**
+1. Détecte le type de changement (feat, fix, docs, test, etc.)
+2. Compte les fichiers modifiés par catégorie (backend, frontend, docs, tests)
+3. Met à jour `PROJECT_STATUS.md` (timestamp)
+4. Ajoute entrée automatique dans `DEVELOPMENT_LOG.md`
+
+### Installation
+
+```bash
+# Rendre le hook exécutable
+chmod +x .claude/hooks/post-commit
+
+# Créer lien symbolique dans .git/hooks/ (Git ignore .claude/hooks par défaut)
+ln -s ../../.claude/hooks/post-commit .git/hooks/post-commit
+```
+
+### Test
+
+```bash
+# Faire un commit de test
+git add README.md
+git commit -m "test: Test auto-documentation"
+
+# Vérifier que DEVELOPMENT_LOG.md contient la nouvelle entrée
+tail -n 30 DEVELOPMENT_LOG.md
+```
+
+### Exemple de Sortie
+
+```markdown
+---
+
+## Auto-Log: Commit a1b2c3d
+
+**Date:** 2026-01-17 14:35:22
+**Auteur:** Claude
+**Type:** feature
+
+**Message commit:**
+```
+feat: Add user profile editing feature
+```
+
+**Fichiers modifiés:**
+- Backend: 3 fichiers
+- Frontend: 5 fichiers
+- Documentation: 1 fichiers
+- Tests: 2 fichiers
+
+**SHA:** a1b2c3d
+```
+
+---
+
+## 🤖 Niveau 2 : Agent Local Auto-Doc
+
+**Fichier :** `scripts/auto-doc-agent.sh`
+
+### Fonctionnement
+
+Agent qui **tourne en arrière-plan** et surveille les changements toutes les 60 secondes.
+
+**Actions :**
+1. Détecte nouveaux commits
+2. Analyse changements (modules affectés, lignes de code modifiées)
+3. Met à jour `PROJECT_STATUS.md`
+4. Génère `AUTO_PROGRESS_REPORT.md` (statistiques actualisées)
+
+### Installation
+
+```bash
+# Rendre exécutable
+chmod +x scripts/auto-doc-agent.sh
+
+# Démarrer l'agent en arrière-plan
+./scripts/auto-doc-agent.sh start
+
+# Vérifier le statut
+./scripts/auto-doc-agent.sh status
+```
+
+### Commandes
+
+```bash
+# Démarrer l'agent
+./scripts/auto-doc-agent.sh start
+
+# Arrêter l'agent
+./scripts/auto-doc-agent.sh stop
+
+# Redémarrer l'agent
+./scripts/auto-doc-agent.sh restart
+
+# Voir le statut
+./scripts/auto-doc-agent.sh status
+
+# Exécution unique (sans daemon)
+./scripts/auto-doc-agent.sh once
+```
+
+### Logs
+
+```bash
+# Voir les logs en temps réel
+tail -f .claude/auto-doc-agent.log
+```
+
+### Exemple de Sortie
+
+**AUTO_PROGRESS_REPORT.md** généré automatiquement :
+
+```markdown
+# Rapport de Progression Automatique
+
+**Généré automatiquement par:** Auto-Doc Agent
+**Dernière mise à jour:** 2026-01-17 14:40:15
+
+## 📊 Statistiques Commits (7 derniers jours)
+
+Backend commits:
+- a1b2c3d | Claude | 2 hours ago | feat: Add user profile editing
+- d4e5f6g | Claude | 5 hours ago | fix: Correct RBAC permissions
+
+Frontend commits:
+- h7i8j9k | Claude | 1 hour ago | feat: Add profile edit modal
+- l0m1n2o | Claude | 3 hours ago | fix: Fix logout button styling
+
+## 📈 Métriques Code
+
+Backend TypeScript:
+8456 lines
+
+Frontend TypeScript:
+12345 lines
+
+Fichiers de tests E2E:
+58 specs
+```
+
+---
+
+## ☁️ Niveau 3 : GitHub Actions Workflow
+
+**Fichier :** `.github/workflows/auto-doc-update.yml`
+
+### Fonctionnement
+
+Workflow GitHub Actions qui **s'exécute automatiquement** sur :
+- Push sur branches `main` et `develop`
+- Cron daily (tous les jours à 2h UTC)
+- Exécution manuelle (workflow_dispatch)
+
+**Actions :**
+1. Analyse code changes (fichiers modifiés, lignes de code totales)
+2. Met à jour `PROJECT_STATUS.md`
+3. Génère `AUTO_PROGRESS_REPORT.md`
+4. Met à jour `CHANGELOG.md`
+5. Commit et push automatiquement (avec `[skip ci]` pour éviter boucle)
+
+### Déclencheurs
+
+```yaml
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/src/**'
+      - 'frontend/src/**'
+      - 'frontend/e2e/**'
+  schedule:
+    - cron: '0 2 * * *'  # Tous les jours à 2h UTC
+  workflow_dispatch:  # Exécution manuelle
+```
+
+### Exécution Manuelle
+
+1. Aller sur GitHub → Actions
+2. Sélectionner workflow "Auto-Update Documentation"
+3. Cliquer "Run workflow"
+4. Choisir la branche (main ou develop)
+5. Cliquer "Run workflow"
+
+### Exemple de Commit Auto-généré
+
+```
+docs(auto): Update documentation [skip ci]
+
+Auto-generated by GitHub Actions workflow
+
+Changes:
+- Backend files: 3
+- Frontend files: 5
+- Test files: 2
+
+Commit: a1b2c3d4e5f6g7h8i9j0
+Workflow: Auto-Update Documentation
+```
+
+### Permissions Requises
+
+Le workflow nécessite `contents: write` pour commit automatique.
+
+**Configuration GitHub :**
+1. Repository Settings → Actions → General
+2. Workflow permissions → ✅ "Read and write permissions"
+3. Save
+
+---
+
+## 📊 Fichiers Maintenus Automatiquement
+
+### 1. PROJECT_STATUS.md
+
+**Localisation :** `docs/status/PROJECT_STATUS.md`
+
+**Mis à jour par :**
+- ✅ Git Hook (timestamp)
+- ✅ Agent Local (timestamp)
+- ✅ GitHub Actions (timestamp)
+
+**Contenu mis à jour :**
+- Timestamp "Dernière mise à jour"
+
+**Exemple :**
+```markdown
+**Dernière mise à jour :** 2026-01-17 14:45:30 (Auto-update via GitHub Actions)
+```
+
+---
+
+### 2. DEVELOPMENT_LOG.md
+
+**Localisation :** `DEVELOPMENT_LOG.md`
+
+**Mis à jour par :**
+- ✅ Git Hook (entrée auto-log après chaque commit significatif)
+
+**Contenu ajouté :**
+- Date/heure commit
+- Auteur
+- Type de changement
+- Message commit
+- Fichiers modifiés par catégorie
+
+**Exemple :**
+```markdown
+## Auto-Log: Commit a1b2c3d
+
+**Date:** 2026-01-17 14:35:22
+**Auteur:** Claude
+**Type:** feature
+
+**Message commit:**
+feat: Add user profile editing
+
+**Fichiers modifiés:**
+- Backend: 3 fichiers
+- Frontend: 5 fichiers
+```
+
+---
+
+### 3. AUTO_PROGRESS_REPORT.md
+
+**Localisation :** `docs/status/AUTO_PROGRESS_REPORT.md`
+
+**Mis à jour par :**
+- ✅ Agent Local (toutes les 60s si nouveau commit)
+- ✅ GitHub Actions (sur push + cron daily)
+
+**Contenu généré :**
+- Statistiques commits (7 derniers jours)
+- Métriques code (lignes backend/frontend, nombre tests)
+- Top 20 fichiers récemment modifiés
+- Contributeurs actifs (30 derniers jours)
+- Activité par jour (7 derniers jours)
+
+**Exemple :**
+```markdown
+# Rapport de Progression Automatique XCH
+
+**Généré automatiquement par:** GitHub Actions
+**Dernière mise à jour:** 2026-01-17 14:50:00 UTC
+
+## 📊 Statistiques Code Actuelles
+
+| Catégorie | Valeur |
+|-----------|--------|
+| Lignes Backend | 8456 |
+| Lignes Frontend | 12345 |
+| Tests E2E | 58 specs |
+```
+
+---
+
+### 4. CHANGELOG.md
+
+**Localisation :** `CHANGELOG.md`
+
+**Mis à jour par :**
+- ✅ GitHub Actions (sur push avec changements backend/frontend)
+
+**Contenu ajouté :**
+- Entrée datée avec commit SHA
+- Fichiers modifiés par catégorie
+- Message commit
+
+**Exemple :**
+```markdown
+## [Unreleased]
+
+### 2026-01-17 - Commit a1b2c3d
+
+**Fichiers modifiés:**
+- Backend: 3 fichiers
+- Frontend: 5 fichiers
+- Tests: 2 fichiers
+
+**Message commit:**
+```
+feat: Add user profile editing feature
+```
+```
+
+---
+
+## 🎯 Avantages du Système
+
+### 1. Temps Gagné
+
+| Tâche Manuelle | Temps Avant | Temps Maintenant |
+|----------------|-------------|------------------|
+| Mise à jour PROJECT_STATUS.md | 5 min | 0 min (automatique) |
+| Mise à jour DEVELOPMENT_LOG.md | 10-15 min | 0 min (automatique) |
+| Génération rapport progression | 20-30 min | 0 min (automatique) |
+| Mise à jour CHANGELOG.md | 5-10 min | 0 min (automatique) |
+| **TOTAL par session** | **40-60 min** | **0 min** |
+
+**Gain de temps : ~50 minutes par session de développement**
+
+---
+
+### 2. Documentation Toujours à Jour
+
+- ✅ Timestamp mis à jour automatiquement
+- ✅ Statistiques code calculées en temps réel
+- ✅ Historique commits tracké automatiquement
+- ✅ Aucun risque d'oubli de mise à jour
+
+---
+
+### 3. Traçabilité Complète
+
+- ✅ Chaque commit génère une entrée dans DEVELOPMENT_LOG.md
+- ✅ AUTO_PROGRESS_REPORT.md montre l'activité récente
+- ✅ CHANGELOG.md maintenu automatiquement
+
+---
+
+## 🚀 Démarrage Rapide
+
+### Setup Complet (5 minutes)
+
+```bash
+# 1. Installer Git Hook
+chmod +x .claude/hooks/post-commit
+ln -s ../../.claude/hooks/post-commit .git/hooks/post-commit
+
+# 2. Démarrer Agent Local
+chmod +x scripts/auto-doc-agent.sh
+./scripts/auto-doc-agent.sh start
+
+# 3. Vérifier Agent
+./scripts/auto-doc-agent.sh status
+
+# 4. Activer GitHub Actions Workflow
+# (déjà configuré, s'exécute automatiquement sur push)
+
+# 5. Configurer permissions GitHub
+# Repository Settings → Actions → General
+# Workflow permissions → "Read and write permissions"
+
+# 6. Tester
+git add README.md
+git commit -m "test: Test auto-documentation system"
+git push
+
+# 7. Vérifier résultats
+tail -n 50 DEVELOPMENT_LOG.md
+cat docs/status/AUTO_PROGRESS_REPORT.md
+```
+
+### Vérification Fonctionnement
+
+```bash
+# Logs Git Hook
+# (affichés après chaque commit)
+
+# Logs Agent Local
+tail -f .claude/auto-doc-agent.log
+
+# Logs GitHub Actions
+# Voir sur GitHub → Actions → "Auto-Update Documentation"
+```
+
+---
+
+## 🛠️ Configuration Avancée
+
+### Personnaliser Fréquence Agent Local
+
+**Éditer** `scripts/auto-doc-agent.sh` :
+
+```bash
+# Changer ligne 94
+sleep 60  # 60 secondes
+
+# Exemple : toutes les 5 minutes
+sleep 300
+```
+
+### Personnaliser Cron GitHub Actions
+
+**Éditer** `.github/workflows/auto-doc-update.yml` :
+
+```yaml
+schedule:
+  - cron: '0 2 * * *'  # Tous les jours à 2h UTC
+
+# Exemples :
+# - cron: '0 */6 * * *'    # Toutes les 6 heures
+# - cron: '0 0 * * 0'      # Tous les dimanches à minuit
+# - cron: '0 8,20 * * *'   # Tous les jours à 8h et 20h
+```
+
+### Exclure Certains Commits du Log
+
+**Éditer** `.claude/hooks/post-commit` ligne 58 :
+
+```bash
+if [ -f "$PROJECT_ROOT/DEVELOPMENT_LOG.md" ] && [ "$CHANGE_TYPE" != "chore" ]; then
+    # Ne log que si c'est un changement significatif
+
+# Ajouter d'autres types à exclure :
+if [ "$CHANGE_TYPE" != "chore" ] && [ "$CHANGE_TYPE" != "docs" ]; then
+```
+
+---
+
+## 🐛 Dépannage
+
+### Git Hook ne s'exécute pas
+
+**Problème :** Pas de sortie après commit
+
+**Solutions :**
+1. Vérifier permissions exécutables :
+   ```bash
+   chmod +x .claude/hooks/post-commit
+   ls -la .claude/hooks/post-commit
+   ```
+
+2. Vérifier lien symbolique :
+   ```bash
+   ls -la .git/hooks/post-commit
+   # Doit pointer vers ../../.claude/hooks/post-commit
+   ```
+
+3. Tester manuellement :
+   ```bash
+   ./.claude/hooks/post-commit
+   ```
+
+---
+
+### Agent Local ne démarre pas
+
+**Problème :** `./scripts/auto-doc-agent.sh start` échoue
+
+**Solutions :**
+1. Vérifier permissions :
+   ```bash
+   chmod +x scripts/auto-doc-agent.sh
+   ```
+
+2. Vérifier logs :
+   ```bash
+   cat .claude/auto-doc-agent.log
+   ```
+
+3. Tester en mode `once` :
+   ```bash
+   ./scripts/auto-doc-agent.sh once
+   ```
+
+---
+
+### GitHub Actions échoue
+
+**Problème :** Workflow "Auto-Update Documentation" échoue
+
+**Solutions :**
+1. Vérifier permissions :
+   - Repository Settings → Actions → General
+   - Workflow permissions → "Read and write permissions"
+
+2. Vérifier logs workflow :
+   - GitHub → Actions → Sélectionner run échoué
+   - Lire les logs détaillés
+
+3. Exécuter manuellement :
+   - Actions → "Auto-Update Documentation" → "Run workflow"
+
+---
+
+## 📚 Références
+
+### Fichiers Système
+
+| Fichier | Description |
+|---------|-------------|
+| `.claude/hooks/post-commit` | Git Hook exécuté après chaque commit |
+| `scripts/auto-doc-agent.sh` | Agent local surveillance continue |
+| `.github/workflows/auto-doc-update.yml` | Workflow GitHub Actions |
+| `.claude/auto-doc-agent.log` | Logs agent local |
+| `.claude/auto-doc-agent.pid` | PID agent local |
+| `.claude/last_processed_commit` | Dernier commit traité par agent |
+
+### Fichiers Documentation
+
+| Fichier | Mis à jour par | Fréquence |
+|---------|----------------|-----------|
+| `docs/status/PROJECT_STATUS.md` | Hook + Agent + Actions | Chaque commit + 60s + Push |
+| `DEVELOPMENT_LOG.md` | Hook | Chaque commit |
+| `docs/status/AUTO_PROGRESS_REPORT.md` | Agent + Actions | 60s + Push + Daily |
+| `CHANGELOG.md` | Actions | Push |
+
+---
+
+## 🎓 Bonnes Pratiques
+
+### 1. Commits Conventionnels
+
+Utiliser les préfixes conventionnels pour classification automatique :
+
+```bash
+feat: Nouvelle fonctionnalité
+fix: Correction bug
+docs: Documentation
+test: Tests
+refactor: Refactoring
+chore: Maintenance
+```
+
+### 2. Messages Commits Descriptifs
+
+Le message est inclus dans les logs automatiques :
+
+```bash
+# ❌ Mauvais
+git commit -m "fix"
+
+# ✅ Bon
+git commit -m "fix: Correct RBAC Manager permissions for TECHNICIEN role"
+```
+
+### 3. Vérifier Logs Agent
+
+Surveiller régulièrement les logs pour détecter erreurs :
+
+```bash
+tail -f .claude/auto-doc-agent.log
+```
+
+### 4. Review AUTO_PROGRESS_REPORT.md
+
+Consulter le rapport automatique pour vue d'ensemble :
+
+```bash
+cat docs/status/AUTO_PROGRESS_REPORT.md
+```
+
+---
+
+## 📞 Support
+
+### En cas de problème
+
+1. Vérifier logs :
+   - Git Hook : sortie console après commit
+   - Agent Local : `.claude/auto-doc-agent.log`
+   - GitHub Actions : GitHub → Actions → Workflow logs
+
+2. Tester manuellement chaque niveau :
+   - Hook : `./.claude/hooks/post-commit`
+   - Agent : `./scripts/auto-doc-agent.sh once`
+   - Actions : Exécution manuelle sur GitHub
+
+3. Consulter cette documentation : `docs/guides/AUTO_DOCUMENTATION_GUIDE.md`
+
+---
+
+**Système de Documentation Automatique XCH - Zéro maintenance manuelle ! 🚀**
+
+**Créé le :** 2026-01-17
+**Dernière mise à jour :** 2026-01-17
+**Version :** 1.0

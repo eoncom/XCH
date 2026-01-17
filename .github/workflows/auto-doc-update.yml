@@ -1,0 +1,215 @@
+name: Auto-Update Documentation
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/src/**'
+      - 'frontend/src/**'
+      - 'frontend/e2e/**'
+  schedule:
+    # Tous les jours à 2h du matin UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # Permet exécution manuelle
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Permission pour commit auto
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Historique complet pour analyse
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Analyze code changes
+        id: analyze
+        run: |
+          echo "🔍 Analyse des changements de code..."
+
+          # Compter fichiers modifiés
+          BACKEND_FILES=$(git diff --name-only HEAD~1 HEAD | grep -c "^backend/" || echo 0)
+          FRONTEND_FILES=$(git diff --name-only HEAD~1 HEAD | grep -c "^frontend/" || echo 0)
+          TEST_FILES=$(git diff --name-only HEAD~1 HEAD | grep -c "e2e\|test\|spec" || echo 0)
+          DOC_FILES=$(git diff --name-only HEAD~1 HEAD | grep -c "^docs/" || echo 0)
+
+          echo "backend_files=$BACKEND_FILES" >> $GITHUB_OUTPUT
+          echo "frontend_files=$FRONTEND_FILES" >> $GITHUB_OUTPUT
+          echo "test_files=$TEST_FILES" >> $GITHUB_OUTPUT
+          echo "doc_files=$DOC_FILES" >> $GITHUB_OUTPUT
+
+          # Compter lignes de code totales
+          BACKEND_LINES=$(find backend/src -name "*.ts" | xargs wc -l | tail -1 | awk '{print $1}' || echo 0)
+          FRONTEND_LINES=$(find frontend/src -name "*.ts" -o -name "*.tsx" | xargs wc -l | tail -1 | awk '{print $1}' || echo 0)
+          E2E_TESTS=$(find frontend/e2e -name "*.spec.ts" | wc -l || echo 0)
+
+          echo "backend_lines=$BACKEND_LINES" >> $GITHUB_OUTPUT
+          echo "frontend_lines=$FRONTEND_LINES" >> $GITHUB_OUTPUT
+          echo "e2e_tests=$E2E_TESTS" >> $GITHUB_OUTPUT
+
+      - name: Update PROJECT_STATUS.md
+        run: |
+          echo "📝 Mise à jour PROJECT_STATUS.md..."
+
+          TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S UTC')
+          STATUS_FILE="docs/status/PROJECT_STATUS.md"
+
+          if [ -f "$STATUS_FILE" ]; then
+            # Update timestamp
+            sed -i "s/^\*\*Dernière mise à jour :\*\*.*/\*\*Dernière mise à jour :\*\* $TIMESTAMP (Auto-update via GitHub Actions)/" "$STATUS_FILE"
+
+            echo "✅ PROJECT_STATUS.md mis à jour"
+          else
+            echo "⚠️ PROJECT_STATUS.md introuvable"
+          fi
+
+      - name: Generate AUTO_PROGRESS_REPORT.md
+        run: |
+          echo "📊 Génération rapport de progression automatique..."
+
+          OUTPUT="docs/status/AUTO_PROGRESS_REPORT.md"
+          TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S UTC')
+
+          cat > "$OUTPUT" << EOF
+          # Rapport de Progression Automatique XCH
+
+          **Généré automatiquement par:** GitHub Actions
+          **Dernière mise à jour:** $TIMESTAMP
+          **Commit:** ${{ github.sha }}
+          **Branch:** ${{ github.ref_name }}
+
+          ---
+
+          ## 📊 Statistiques Code Actuelles
+
+          | Catégorie | Valeur |
+          |-----------|--------|
+          | **Lignes Backend (TypeScript)** | ${{ steps.analyze.outputs.backend_lines }} |
+          | **Lignes Frontend (TypeScript/TSX)** | ${{ steps.analyze.outputs.frontend_lines }} |
+          | **Tests E2E (Playwright)** | ${{ steps.analyze.outputs.e2e_tests }} specs |
+          | **Commits totaux** | $(git rev-list --count HEAD) |
+
+          ---
+
+          ## 🔄 Changements Récents (7 derniers jours)
+
+          ### Backend
+          $(git log --since="7 days ago" --oneline --no-merges -- backend/ | head -10 || echo "Aucun changement")
+
+          ### Frontend
+          $(git log --since="7 days ago" --oneline --no-merges -- frontend/ | head -10 || echo "Aucun changement")
+
+          ### Tests E2E
+          $(git log --since="7 days ago" --oneline --no-merges -- frontend/e2e/ | head -10 || echo "Aucun changement")
+
+          ---
+
+          ## 📁 Top 20 Fichiers Récemment Modifiés
+
+          \`\`\`
+          $(git log --since="7 days ago" --name-only --pretty=format: | sort | uniq -c | sort -rn | head -20)
+          \`\`\`
+
+          ---
+
+          ## 👥 Contributeurs Actifs (30 derniers jours)
+
+          $(git shortlog -sn --since="30 days ago" || echo "Aucun contributeur")
+
+          ---
+
+          ## 📈 Activité par Jour (7 derniers jours)
+
+          $(git log --since="7 days ago" --pretty=format:"%ad" --date=short | sort | uniq -c || echo "Aucune activité")
+
+          ---
+
+          **Prochain rapport:** $(date -d '+1 day' '+%Y-%m-%d %H:%M UTC' || date '+%Y-%m-%d %H:%M UTC')
+          EOF
+
+          echo "✅ Rapport généré: $OUTPUT"
+
+      - name: Update CHANGELOG.md
+        if: steps.analyze.outputs.backend_files > 0 || steps.analyze.outputs.frontend_files > 0
+        run: |
+          echo "📝 Mise à jour CHANGELOG.md..."
+
+          CHANGELOG="CHANGELOG.md"
+          TIMESTAMP=$(date '+%Y-%m-%d')
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+
+          if [ -f "$CHANGELOG" ]; then
+            # Ajouter entrée au début du changelog (après le header)
+            sed -i "/^## \[Unreleased\]/a\\
+            \\
+            ### $TIMESTAMP - Commit $COMMIT_SHA\\
+            \\
+            **Fichiers modifiés:**\\
+            - Backend: ${{ steps.analyze.outputs.backend_files }} fichiers\\
+            - Frontend: ${{ steps.analyze.outputs.frontend_files }} fichiers\\
+            - Tests: ${{ steps.analyze.outputs.test_files }} fichiers\\
+            \\
+            **Message commit:**\\
+            \`\`\`\\
+            $COMMIT_MSG\\
+            \`\`\`\\
+            " "$CHANGELOG"
+
+            echo "✅ CHANGELOG.md mis à jour"
+          fi
+
+      - name: Commit and push changes
+        run: |
+          git add docs/status/PROJECT_STATUS.md || true
+          git add docs/status/AUTO_PROGRESS_REPORT.md || true
+          git add CHANGELOG.md || true
+
+          if git diff --staged --quiet; then
+            echo "ℹ️ Aucun changement de documentation à commiter"
+          else
+            git commit -m "docs(auto): Update documentation [skip ci]
+
+            Auto-generated by GitHub Actions workflow
+
+            Changes:
+            - Backend files: ${{ steps.analyze.outputs.backend_files }}
+            - Frontend files: ${{ steps.analyze.outputs.frontend_files }}
+            - Test files: ${{ steps.analyze.outputs.test_files }}
+
+            Commit: ${{ github.sha }}
+            Workflow: ${{ github.workflow }}"
+
+            git push
+
+            echo "✅ Documentation committed and pushed"
+          fi
+
+      - name: Create summary
+        if: always()
+        run: |
+          echo "## 📊 Documentation Auto-Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Code Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend lines: ${{ steps.analyze.outputs.backend_lines }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend lines: ${{ steps.analyze.outputs.frontend_lines }}" >> $GITHUB_STEP_SUMMARY
+          echo "- E2E tests: ${{ steps.analyze.outputs.e2e_tests }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Recent Changes" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend files: ${{ steps.analyze.outputs.backend_files }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend files: ${{ steps.analyze.outputs.frontend_files }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Test files: ${{ steps.analyze.outputs.test_files }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Doc files: ${{ steps.analyze.outputs.doc_files }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Documentation updated successfully!**" >> $GITHUB_STEP_SUMMARY
