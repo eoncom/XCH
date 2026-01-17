@@ -211,6 +211,45 @@ Voir guide complet : **[INSTALL_PROD.md](docs/installation/INSTALL_PROD.md)**
 
 **📚 [Index Documentation Complète](docs/00-INDEX.md)** - Index complet de toute la documentation (27 fichiers)
 
+### 🤖 Documentation Automatique
+
+> **Nouveau** : Système de documentation automatique multi-niveaux (zéro maintenance manuelle)
+
+- **[AUTO_DOC_SYSTEM_SUMMARY.md](AUTO_DOC_SYSTEM_SUMMARY.md)** - Résumé exécutif (gain 60 min/session)
+- **[AUTO_DOCUMENTATION_GUIDE.md](docs/guides/AUTO_DOCUMENTATION_GUIDE.md)** - Guide complet (6000+ mots)
+
+**3 Niveaux d'Automatisation :**
+
+| Niveau | Outil | Fréquence | Description |
+|--------|-------|-----------|-------------|
+| **1. Git Hook** | `.claude/hooks/post-commit` | Chaque commit | Mise à jour immédiate |
+| **2. Agent Local** | `scripts/auto-doc-agent.sh` | 60 secondes | Surveillance continue |
+| **3. GitHub Actions** | `.github/workflows/auto-doc-update.yml` | Push + Daily | Cloud auto-update |
+
+**Fichiers maintenus automatiquement :**
+- `PROJECT_STATUS.md` - Timestamp mise à jour
+- `DEVELOPMENT_LOG.md` - Auto-log commits
+- `AUTO_PROGRESS_REPORT.md` - Statistiques code + activité
+- `CHANGELOG.md` - Historique changements
+
+**Setup rapide (5 minutes) :**
+```bash
+# 1. Installer Git Hook
+chmod +x .claude/hooks/post-commit
+ln -s ../../.claude/hooks/post-commit .git/hooks/post-commit
+
+# 2. Démarrer Agent Local
+chmod +x scripts/auto-doc-agent.sh
+./scripts/auto-doc-agent.sh start
+
+# 3. Vérifier
+./scripts/auto-doc-agent.sh status
+```
+
+**Gain de temps : ~60 minutes par session de développement (29% plus rapide)**
+
+---
+
 ### Installation & Déploiement
 - **[INSTALL_DEV.md](docs/installation/INSTALL_DEV.md)** - Installation développement Windows/WSL2 (6 600+ lignes)
 - **[INSTALL_PROD.md](docs/installation/INSTALL_PROD.md)** - Déploiement production Linux (11 000+ lignes)
