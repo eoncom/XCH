@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import * as compression from 'compression';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -17,8 +18,11 @@ async function bootstrap() {
   app.use(helmet());
   app.enableCors({
     origin: configService.get('FRONTEND_URL', 'http://localhost:3000'),
-    credentials: true,
+    credentials: true, // ✅ CRITICAL pour cookies cross-origin
   });
+
+  // Cookie parser (required for HTTP-only cookies auth)
+  app.use(cookieParser());
 
   // Compression
   app.use(compression());

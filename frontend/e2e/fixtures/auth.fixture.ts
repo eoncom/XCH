@@ -3,14 +3,13 @@ import { test as base, Page } from '@playwright/test';
 /**
  * Fixture d'authentification pour tests E2E
  *
- * Fournit des méthodes pour login/logout et gestion de session
+ * Utilise les cookies HTTP-only (plus de localStorage pour tokens)
  */
 
 export interface AuthUser {
   email: string;
   password: string;
   role: 'ADMIN' | 'MANAGER' | 'TECHNICIEN' | 'VIEWER';
-  token?: string;
 }
 
 // Utilisateurs de test (doivent exister en DB ou être seedés)
@@ -100,6 +99,7 @@ export const test = base.extend<AuthFixture>({
 
 /**
  * Fonction helper pour login
+ * ✅ Utilise cookies HTTP-only (automatiques Playwright)
  */
 async function login(page: Page, user: AuthUser): Promise<void> {
   // Naviguer vers page login
@@ -109,24 +109,27 @@ async function login(page: Page, user: AuthUser): Promise<void> {
   await page.waitForSelector('form');
 
   // Remplir le formulaire
-  await page.fill('input[name="email"]', user.email);
-  await page.fill('input[name="password"]', user.password);
+  await page.fill('#email', user.email);
+  await page.fill('#password', user.password);
 
   // Soumettre
   await page.click('button[type="submit"]');
 
-  // Attendre redirection vers dashboard
+  // Attendre redirection vers dashboard (backend set cookies automatiquement)
   await page.waitForURL('/dashboard', { timeout: 10000 });
 
-  // Vérifier que le token est stocké en localStorage
-  const token = await page.evaluate(() => localStorage.getItem('xch_token'));
-  if (!token) {
-    throw new Error('Login failed: No token stored');
+  // ✅ Vérifier que le cookie accessToken existe (HTTP-only)
+  const cookies = await page.context().cookies();
+  const accessTokenCookie = cookies.find(c => c.name === 'accessToken');
+
+  if (!accessTokenCookie) {
+    throw new Error('Login failed: No accessToken cookie set');
   }
 }
 
 /**
  * Fonction helper pour logout
+ * ✅ Cookies HTTP-only effacés automatiquement par backend
  */
 async function logout(page: Page): Promise<void> {
   // Vérifier qu'on est authentifié
@@ -134,31 +137,29 @@ async function logout(page: Page): Promise<void> {
     return;
   }
 
-  // Aller au dashboard pour avoir accès au menu
-  await page.goto('/dashboard');
-
-  // Ouvrir le menu utilisateur
-  await page.click('[data-testid="user-menu"]');
-
-  // Cliquer sur logout
+  // Cliquer directement sur le bouton logout (visible dans dashboard layout)
   await page.click('[data-testid="logout-button"]');
 
   // Attendre redirection vers login
   await page.waitForURL('/login', { timeout: 5000 });
 
-  // Vérifier que le token est supprimé
-  const token = await page.evaluate(() => localStorage.getItem('xch_token'));
-  if (token) {
-    throw new Error('Logout failed: Token still stored');
+  // ✅ Vérifier que les cookies sont supprimés
+  const cookies = await page.context().cookies();
+  const accessTokenCookie = cookies.find(c => c.name === 'accessToken');
+
+  if (accessTokenCookie) {
+    throw new Error('Logout failed: accessToken cookie still exists');
   }
 }
 
 /**
  * Fonction helper pour vérifier authentification
+ * ✅ Vérifie présence cookie accessToken (HTTP-only)
  */
 async function isAuthenticated(page: Page): Promise<boolean> {
-  const token = await page.evaluate(() => localStorage.getItem('xch_token'));
-  return !!token;
+  const cookies = await page.context().cookies();
+  const accessTokenCookie = cookies.find(c => c.name === 'accessToken');
+  return !!accessTokenCookie && !!accessTokenCookie.value;
 }
 
 export { expect } from '@playwright/test';

@@ -13,52 +13,48 @@ export class ApiError extends Error {
 
 class ApiClient {
   private baseURL: string;
+  private isRefreshing: boolean = false;
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
   }
 
-  private getToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('accessToken');
-  }
+  private async refreshToken(): Promise<boolean> {
+    if (typeof window === 'undefined') return false;
+    if (this.isRefreshing) return false; // Prevent concurrent refresh
 
-  private async refreshToken(): Promise<string | null> {
-    if (typeof window === 'undefined') return null;
-
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (!refreshToken) return null;
+    this.isRefreshing = true;
 
     try {
+      // ✅ Call refresh endpoint (uses refreshToken cookie automatically)
       const response = await fetch(`${this.baseURL}/api/auth/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
+        credentials: 'include', // ✅ CRITICAL - sends refreshToken cookie
       });
 
+      this.isRefreshing = false;
+
       if (response.ok) {
-        const { accessToken } = await response.json();
-        localStorage.setItem('accessToken', accessToken);
-        return accessToken;
+        // Backend has set new accessToken cookie
+        return true;
       }
     } catch (error) {
       console.error('Token refresh failed', error);
+      this.isRefreshing = false;
     }
 
-    return null;
+    return false;
   }
 
   async fetch<T = any>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const token = this.getToken();
-
     const config: RequestInit = {
       ...options,
+      credentials: 'include', // ✅ CRITICAL - sends/receives cookies automatically
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
         ...options.headers,
       },
     };
@@ -67,19 +63,13 @@ class ApiClient {
 
     // Handle 401 - Try refresh token
     if (response.status === 401 && typeof window !== 'undefined') {
-      const newToken = await this.refreshToken();
+      const refreshed = await this.refreshToken();
 
-      if (newToken) {
-        // Retry request with new token
-        config.headers = {
-          ...config.headers,
-          Authorization: `Bearer ${newToken}`,
-        };
+      if (refreshed) {
+        // Retry request with new accessToken cookie (automatic)
         response = await fetch(`${this.baseURL}${endpoint}`, config);
       } else {
-        // Refresh failed - redirect to login
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+        // Refresh failed - clear cache and redirect to login
         localStorage.removeItem('user');
         window.location.href = '/login';
         throw new ApiError(401, 'Session expired');
@@ -124,16 +114,14 @@ class ApiClient {
   }
 
   async upload<T = any>(endpoint: string, file: File): Promise<T> {
-    const token = this.getToken();
     const formData = new FormData();
     formData.append('file', file);
 
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       method: 'POST',
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
+      credentials: 'include', // ✅ CRITICAL
       body: formData,
+      // ✅ NO Content-Type header for FormData (browser sets multipart/form-data)
     });
 
     if (!response.ok) {

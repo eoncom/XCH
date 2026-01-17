@@ -1,94 +1,112 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User, LoginCredentials, AuthResponse } from '@/types';
-import { apiClient } from '@/lib/api-client';
+import type { User, LoginCredentials } from '@/types';
 
 interface AuthState {
   user: User | null;
-  accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  checkSession: () => Promise<void>;
   setUser: (user: User) => void;
-  setTokens: (accessToken: string, refreshToken: string) => void;
 }
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
-      accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
 
       login: async (credentials: LoginCredentials) => {
         set({ isLoading: true });
         try {
-          const response: AuthResponse = await apiClient.post('/api/auth/login', credentials);
+          // ✅ Cookies HTTP-only gérés automatiquement par fetch credentials: 'include'
+          const response = await fetch(`${API_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', // ✅ CRITICAL - sends/receives cookies
+            body: JSON.stringify(credentials),
+          });
 
-          // Store in localStorage (for API client)
-          localStorage.setItem('accessToken', response.accessToken);
-          localStorage.setItem('refreshToken', response.refreshToken);
-          localStorage.setItem('user', JSON.stringify(response.user));
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Login failed');
+          }
 
-          // Store in cookie (for middleware)
-          document.cookie = `accessToken=${response.accessToken}; path=/; max-age=900; SameSite=Lax`;
+          const { user } = await response.json();
+
+          // ✅ Store only user data (tokens are in HTTP-only cookies)
+          localStorage.setItem('user', JSON.stringify(user));
 
           set({
-            user: response.user,
-            accessToken: response.accessToken,
-            refreshToken: response.refreshToken,
+            user,
             isAuthenticated: true,
             isLoading: false,
           });
-        } catch (error) {
+        } catch (error: any) {
           set({ isLoading: false });
           throw error;
         }
       },
 
-      logout: () => {
-        // Clear localStorage
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
+      logout: async () => {
+        try {
+          // ✅ Call backend to clear HTTP-only cookies
+          await fetch(`${API_URL}/api/auth/logout`, {
+            method: 'POST',
+            credentials: 'include',
+          });
+        } catch (error) {
+          console.error('Logout API call failed:', error);
+        }
 
-        // Clear cookie
-        document.cookie = 'accessToken=; path=/; max-age=0';
+        // Clear local cache
+        localStorage.removeItem('user');
 
         set({
           user: null,
-          accessToken: null,
-          refreshToken: null,
           isAuthenticated: false,
         });
+      },
+
+      checkSession: async () => {
+        set({ isLoading: true });
+        try {
+          // ✅ Verify session via accessToken cookie (automatic)
+          const response = await fetch(`${API_URL}/api/auth/session`, {
+            credentials: 'include',
+          });
+
+          if (response.ok) {
+            const { user } = await response.json();
+            localStorage.setItem('user', JSON.stringify(user));
+            set({ user, isAuthenticated: true, isLoading: false });
+          } else {
+            // Session expired or invalid
+            localStorage.removeItem('user');
+            set({ user: null, isAuthenticated: false, isLoading: false });
+          }
+        } catch (error) {
+          console.error('Session check failed:', error);
+          localStorage.removeItem('user');
+          set({ user: null, isAuthenticated: false, isLoading: false });
+        }
       },
 
       setUser: (user: User) => {
         localStorage.setItem('user', JSON.stringify(user));
         set({ user });
       },
-
-      setTokens: (accessToken: string, refreshToken: string) => {
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
-
-        // Update cookie for middleware (15 minutes)
-        document.cookie = `accessToken=${accessToken}; path=/; max-age=900; SameSite=Lax`;
-
-        set({ accessToken, refreshToken, isAuthenticated: true });
-      },
     }),
     {
       name: 'auth-storage',
       partialize: (state) => ({
         user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
-        isAuthenticated: state.isAuthenticated,
+        // ✅ DO NOT persist isAuthenticated (calculated via session check)
       }),
     }
   )
