@@ -1,0 +1,15 @@
+Projet XCH - Démarrage Session
+
+Contexte :
+- Local : C:\xampp\htdocs\XCH
+- Serveur : ssh xch-deploy → /opt/xch-dev/XCH
+
+Lis pour contexte :
+1. docs/status/PROJECT_STATUS.md (source vérité)
+2. TODO.md (priorités)
+3. DEVELOPMENT_LOG.md (dernière session)
+
+Mission :
+1. Résume état projet (1 paragraphe)
+2. Top 3 tâches prioritaires
+3. Demande confirmation avant démarrage
