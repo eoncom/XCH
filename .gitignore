@@ -8,6 +8,9 @@ coverage/
 .nyc_output
 test-results/
 playwright-report/
+# E2E artifacts (host-mounted volumes)
+frontend/playwright-report-host/
+frontend/test-results-host/
 
 # Next.js
 frontend/.next/
@@ -66,3 +69,21 @@ temp/
 
 # MinIO data
 minio-data/
+
+# Claude Code temporary directories
+tmpclaude-*-cwd/
+backend/tmpclaude-*-cwd/
+frontend/tmpclaude-*-cwd/
+
+# Session archives (development)
+*.tar.gz
+session*-*.tar.gz
+e2e-tests-*.tar.gz
+frontend-*.tar.gz
+backend-*.tar.gz
+
+# SQL scripts temporaires
+create-test-users.sql
+
+# Claude settings (local only)
+.claude/settings.local.json
