@@ -413,6 +413,6 @@ deploy:production:
 
 ---
 
-**Dernière révision :** 2026-01-10
+**Dernière révision :** 2026-01-17
 **Mainteneur :** Équipe XCH
-**Version :** 1.1
+**Version :** 1.2
