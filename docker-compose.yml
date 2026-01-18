@@ -107,8 +107,8 @@ services:
     restart: unless-stopped
     command: >
       sh -c "
-      npx prisma migrate deploy &&
-      (npx prisma db seed || echo 'Seed skipped') &&
+      npm run prisma:migrate:deploy &&
+      (npm run prisma:seed || echo 'Seed skipped') &&
       npm run start:prod
       "
 
@@ -119,11 +119,26 @@ services:
       dockerfile: Dockerfile
     container_name: xch-frontend
     environment:
-      NEXT_PUBLIC_API_URL: http://192.168.0.13:3002
+      NEXT_PUBLIC_API_URL: https://xchapi.eoncom.io
     ports:
       - "3001:3001"
     depends_on:
       - backend
+    networks:
+      - xch-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: xch-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
     networks:
       - xch-network
     restart: unless-stopped
