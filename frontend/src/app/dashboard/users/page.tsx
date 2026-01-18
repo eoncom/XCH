@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { usersApi } from '@/lib/api/users';
 import { Users, UserPlus, Mail, Phone, Shield } from 'lucide-react';
+import Link from 'next/link';
 import type { User } from '@/types';
 
 export default function UsersPage() {
@@ -71,9 +72,11 @@ export default function UsersPage() {
           </h1>
           <p className="text-muted-foreground">Gestion des utilisateurs de la plateforme</p>
         </div>
-        <Button>
-          <UserPlus className="h-4 w-4 mr-2" />
-          Ajouter un utilisateur
+        <Button asChild>
+          <Link href="/dashboard/users/new">
+            <UserPlus className="h-4 w-4 mr-2" />
+            Ajouter un utilisateur
+          </Link>
         </Button>
       </div>
 
@@ -164,8 +167,10 @@ export default function UsersPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm">
-                    Modifier
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/dashboard/users/${user.id}/edit`}>
+                      Modifier
+                    </Link>
                   </Button>
                 </div>
               </div>
