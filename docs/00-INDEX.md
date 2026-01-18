@@ -259,6 +259,55 @@
 
 ---
 
+## Systèmes d'automatisation
+
+### automation/AUTO_PWA_ICONS.md
+**📍 Chemin:** [`automation/AUTO_PWA_ICONS.md`](automation/AUTO_PWA_ICONS.md)
+**📝 Description:** Système automatique de génération des icônes PWA
+**🎯 Audience:** Développeurs, DevOps
+**✅ Statut:** Actif et fonctionnel (2026-01-18)
+**📋 Contient:**
+- Génération automatique via prebuild hook
+- 5 icônes PNG générées automatiquement (192px, 512px, 180px, 32px, 16px)
+- Source unique: `frontend/public/icon.svg`
+- Script: `frontend/scripts/generate-pwa-icons.js`
+- Technologies: sharp library (Node.js)
+- Usage: `npm run build` → génère automatiquement les icônes
+- **Aucune action manuelle requise**
+
+**🔑 Avantages:**
+- ✅ Génération automatique à chaque build
+- ✅ Icônes toujours synchronisées avec icon.svg
+- ✅ Qualité uniforme garantie
+- ✅ Résout les erreurs 404 PWA manifest
+- ✅ Pas besoin de rappeler la génération
+
+**📝 Commit:** 9cdbf31 - feat(pwa): Add automatic PWA icons generation system
+
+### Status: AUTO_PROGRESS_REPORT.md
+**📍 Chemin:** [`status/AUTO_PROGRESS_REPORT.md`](status/AUTO_PROGRESS_REPORT.md)
+**📝 Description:** Rapport de progression automatique généré par GitHub Actions
+**🎯 Audience:** Chef de projet, Équipe
+**✅ Statut:** Actif (workflow auto-doc-update.yml)
+**📋 Contient:**
+- Statistiques code actuelles (lignes backend/frontend, tests E2E)
+- Changements récents (7 derniers jours par module)
+- Top 20 fichiers récemment modifiés
+- Contributeurs actifs (30 derniers jours)
+- Activité par jour (7 derniers jours)
+- Mis à jour automatiquement chaque push sur main/develop
+- **Génération automatique quotidienne (cron 2h UTC)**
+
+**🔑 Avantages:**
+- ✅ Rapport toujours à jour sans intervention manuelle
+- ✅ Métriques objectives sur progression
+- ✅ Historique activité développement
+- ✅ Pas besoin de créer rapports manuellement
+
+**📝 Workflow:** .github/workflows/auto-doc-update.yml
+
+---
+
 ## Sessions de développement
 
 ### sessions/session-13-ssl-deployment.md
