@@ -72,7 +72,7 @@ export default function RackDetailPage({
   const [mountAssetId, setMountAssetId] = useState('');
   const [mountHeightU, setMountHeightU] = useState('1');
 
-  const { data: rack, isLoading } = useQuery<Rack>({
+  const { data: rack, isLoading, error, isError } = useQuery<Rack>({
     queryKey: ['rack', id],
     queryFn: () => racksApi.getById(id),
   });
@@ -136,6 +136,18 @@ export default function RackDetailPage({
 
   if (isLoading) {
     return <div className="text-center py-12">Chargement...</div>;
+  }
+
+  if (isError) {
+    const errorMessage = error instanceof Error ? error.message : 'Erreur lors du chargement de la baie';
+    return (
+      <div className="text-center py-12 space-y-4">
+        <p className="text-destructive">{errorMessage}</p>
+        <Button variant="outline" asChild>
+          <Link href="/dashboard/racks">Retour aux baies</Link>
+        </Button>
+      </div>
+    );
   }
 
   if (!rack) {
