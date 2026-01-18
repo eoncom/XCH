@@ -1470,3 +1470,170 @@ Frontend Next.js                                : "Ready in 1247ms" log ✅
 **Dernière mise à jour :** 2026-01-11
 **Mainteneur :** Équipe XCH
 **Format version :** 1.2
+
+## 2026-01-17
+
+### Session 13 : SSL Production Deployment avec Nginx Proxy Manager
+**Durée :** ~2h
+**Status :** ✅ Terminée avec infrastructure SSL complète
+
+**Actions principales :**
+1. **Configuration Nginx Proxy Manager**
+   - Certificat SSL wildcard `*.eoncom.io` déjà présent
+   - Création Proxy Host #1: `xch.eoncom.io` → `192.168.0.39:3001` (frontend)
+   - Création Proxy Host #2: `xchapi.eoncom.io` → `192.168.0.39:3002` (backend)
+   - Force SSL + HTTP/2 + HSTS activés sur les 2 hosts
+   - Block Common Exploits + Websockets Support activés
+
+2. **Docker Compose Production**
+   - Configuration conteneurs sur ports mappés:
+     - Backend: 192.168.0.39:3002 → conteneur xch-backend:3002
+     - Frontend: 192.168.0.39:3001 → conteneur xch-frontend:3001
+     - PostgreSQL: 192.168.0.39:5433 → conteneur xch-postgres:5432
+     - Redis: 192.168.0.39:6380 → conteneur xch-redis:6379
+     - MinIO: 192.168.0.39:9000-9001 → conteneur xch-minio:9000-9001
+   - Réseau Docker: `xch-network`
+   - Volumes persistants: postgres-data, redis-data, minio-data
+
+3. **Variables Environnement Production**
+   - `backend/.env.production` créé avec:
+     - `FRONTEND_URL=https://xch.eoncom.io`
+     - `BACKEND_URL=https://xchapi.eoncom.io`
+     - `CORS_ORIGIN=https://xch.eoncom.io`
+   - `frontend/.env.local` mis à jour:
+     - `NEXT_PUBLIC_API_URL=https://xchapi.eoncom.io`
+
+4. **Tests Validation**
+   - ✅ https://xch.eoncom.io accessible (SSL valide)
+   - ✅ https://xchapi.eoncom.io/api/health accessible
+   - ✅ Login page charge sans erreur
+   - ⚠️ Login fonctionnel mais redirection dashboard bloquée (découverte Session 14)
+
+**Problèmes identifiés :**
+1. **Cookies non partagés entre sous-domaines**
+   - Cookie `accessToken` créé sur `xchapi.eoncom.io`
+   - Non accessible depuis `xch.eoncom.io` (frontend)
+   - Impact: Login réussi mais session non reconnue
+
+**Résultat :**
+- ✅ SSL production opérationnel (HTTPS forcé)
+- ✅ 2 Proxy Hosts configurés et actifs
+- ✅ Infrastructure Docker prête
+- ⚠️ Auth nécessite corrections (Session 14)
+
+**Fichiers modifiés :** 4
+- `docker-compose.yml` - Ajout configuration production
+- `backend/.env.production` - Variables environnement HTTPS
+- `docker/nginx/nginx.conf` - Configuration reverse proxy (si ajouté)
+- Documentation guides (NGINX_PROXY_MANAGER_SETUP.md)
+
+**Documentation créée :**
+- `NGINX_PROXY_MANAGER_SETUP.md` (guide configuration NPM)
+- `SESSION_13_*.md` (7 fichiers - à fusionner)
+
+**Commits :** (À créer - Phase 4)
+
+---
+
+## 2026-01-18
+
+### Session 14 : Auth Cross-Domain Cookies Fix
+**Durée :** ~2h
+**Status :** ✅ Terminée - Auth production 100% fonctionnelle
+
+**Actions principales :**
+1. **Diagnostic Problème Auth**
+   - Symptôme: Login OK mais dashboard reste sur `/login`
+   - F5 (refresh) renvoie à `/login` systématiquement
+   - Cause identifiée: Cookie `accessToken` domain = `xchapi.eoncom.io` (non partagé)
+   - DevTools → Application → Cookies: domain sans `.` au début
+
+2. **Backend: Partage Cookies Cross-Subdomain**
+   - Fichier: `backend/src/modules/auth/auth.controller.ts`
+   - Modification ligne 29-45: Ajout `domain: '.eoncom.io'` à tous cookies
+   - `accessToken`: httpOnly, secure, sameSite `none`, domain `.eoncom.io`, 15 min
+   - `refreshToken`: httpOnly, secure, sameSite `none`, domain `.eoncom.io`, 7 jours
+   - Endpoint `/api/auth/refresh` (ligne 79-86): Ajout domain `.eoncom.io`
+   - Endpoint `/api/auth/logout` (ligne 98-99): Ajout domain `.eoncom.io` dans clearCookie
+
+3. **Frontend: Middleware Désactivé**
+   - Fichier: `frontend/src/middleware.ts`
+   - Problème: Next.js Edge Runtime ne lit pas cookies HTTP-only cross-domain en SSR
+   - Solution: Désactivation complète middleware, auth gérée 100% client-side
+   - Commentaire explicatif ajouté: incompatibilité SSR + cookies cross-domain
+
+4. **Frontend: Auth Client-Side**
+   - Fichier: `frontend/src/app/dashboard/layout.tsx`
+   - Ajout state `sessionChecked` pour éviter flash de redirection
+   - useEffect `checkSession()` avec `.finally(() => setSessionChecked(true))`
+   - Redirection uniquement après `sessionChecked && !isAuthenticated`
+   - Loading spinner pendant vérification session
+
+5. **Déploiement Production**
+   - Backend: Build + déploiement via SSH (dist/main.js)
+   - Frontend: Build + déploiement via SSH (.next/)
+   - Restart conteneurs: `docker restart xch-backend xch-frontend`
+
+6. **Tests Validation**
+   - ✅ Login avec `admin@xch.demo` / `admin123` → Redirection dashboard immédiate
+   - ✅ Cookie `accessToken` domain = `.eoncom.io` (avec point!)
+   - ✅ F5 (refresh) sur dashboard → Reste sur dashboard (session persistante)
+   - ✅ Logout → Cookies supprimés, redirect `/login`
+   - ✅ Onglet fermé/réouvert → Session conservée (7 jours refreshToken)
+
+**Problèmes résolus :**
+1. ✅ Cookies non partagés entre sous-domaines
+2. ✅ Redirection dashboard bloquée après login
+3. ✅ F5 renvoie à login (session non persistante)
+4. ✅ Middleware Next.js incompatible cookies cross-domain
+
+**Problèmes mineurs identifiés :**
+- ⚠️ Icônes PWA manquantes (icon-192.png, icon-512.png) - 404
+- ⚠️ CSP warnings (Content Security Policy report-only)
+- Impact: Aucun - PWA fonctionne, juste warnings console
+
+**Résultat :**
+- ✅ Authentification production 100% fonctionnelle
+- ✅ Login → dashboard → F5 → logout → cycle complet OK
+- ✅ Cookies partagés cross-subdomain (`.eoncom.io`)
+- ✅ Session persistante multi-onglets
+- ✅ UX fluide (pas de flash redirection)
+
+**Fichiers modifiés :** 3
+- `backend/src/modules/auth/auth.controller.ts` - Cookies domain `.eoncom.io`
+- `frontend/src/app/dashboard/layout.tsx` - Session check avec loading
+- `frontend/src/middleware.ts` - Désactivé (auth client-side)
+
+**Documentation créée :**
+- `SESSION_14_AUTH_FIX.md` (résolution détaillée)
+- `SESSION_14_SUMMARY.md` (résumé exécutif)
+- `docs/guides/PWA_ICONS_SETUP.md` (guide génération icônes)
+
+**Commits :** (À créer - Phase 4)
+- fix(auth): Resolve cross-domain cookie authentication
+- feat(frontend): Disable SSR middleware, add client-side auth check
+- docs: Add session 14 auth cookies resolution guide
+
+**Métriques :**
+- Durée: ~2h (diagnostic 30 min, corrections 1h, tests 30 min)
+- Lignes code modifiées: ~50 (backend 20, frontend 30)
+- Documentation: 3 guides (~800 lignes)
+
+**Architecture Validation:**
+- ✅ Cookies HTTP-only (protection XSS)
+- ✅ Secure flag (HTTPS uniquement)
+- ✅ SameSite None (cross-subdomain autorisé)
+- ✅ Domain `.eoncom.io` (partagé entre tous sous-domaines)
+- ✅ Auth client-side (évite limitations SSR)
+
+**Prochaines actions recommandées :**
+1. 📱 Générer icônes PWA (icon-192.png, icon-512.png)
+2. 🧪 Tests E2E validation auth (Playwright)
+3. 📊 Monitoring production (Uptime Kuma + Sentry)
+4. 🔒 Rate limiting API (protection brute-force)
+
+---
+
+**Dernière mise à jour :** 2026-01-18
+**Mainteneur :** Équipe XCH
+**Format version :** 1.3

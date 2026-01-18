@@ -1,8 +1,8 @@
 # DOCS_INDEX.md - Index de la documentation XCH
 
-**Date:** 2026-01-01
+**Date:** 2026-01-18
 **Projet:** XCH - Gestion IT Chantiers Temporaires
-**Version:** 1.0
+**Version:** 1.0.3
 
 ---
 
@@ -40,6 +40,17 @@
 - Workflow de développement par phases
 - Gestion des agents spécialisés
 - Contraintes MVP non-négociables
+
+### CHANGELOG.md
+**📍 Chemin:** [`CHANGELOG.md`](CHANGELOG.md)
+**📝 Description:** Journal des modifications du projet (format Keep a Changelog)
+**🎯 Audience:** Tous
+**📋 Contient:**
+- v1.0.3 (2026-01-18): SSL Production + Auth Cross-Domain
+- v1.0.2 (2026-01-17): CI/CD GitHub Actions
+- v1.0.1 (2026-01-13): Tests E2E Playwright
+- v1.0.0 (2026-01-01): MVP Complet Production-Ready
+- Versions antérieures (0.3.0 → 0.1.0)
 
 ---
 
@@ -224,6 +235,53 @@
 - Composants UI (shadcn/ui)
 - State management (Zustand + TanStack Query)
 - Intégrations (Leaflet, Konva.js, QR scanner)
+
+### guides/NGINX_PROXY_PRODUCTION.md
+**📍 Chemin:** [`guides/NGINX_PROXY_PRODUCTION.md`](guides/NGINX_PROXY_PRODUCTION.md)
+**📝 Description:** Guide configuration Nginx Proxy Manager pour production SSL
+**🎯 Audience:** DevOps, Administrateurs Système
+**📋 Contient:**
+- Configuration certificat SSL wildcard `*.eoncom.io`
+- Création Proxy Hosts (frontend + backend)
+- Force SSL + HTTP/2 + HSTS
+- Websockets Support + Block Exploits
+- Validation déploiement HTTPS
+
+### guides/PWA_ICONS_SETUP.md
+**📍 Chemin:** [`guides/PWA_ICONS_SETUP.md`](guides/PWA_ICONS_SETUP.md)
+**📝 Description:** Guide génération icônes PWA (Progressive Web App)
+**🎯 Audience:** Développeurs Frontend
+**📋 Contient:**
+- 4 solutions génération icônes (ImageMagick, Script bash, Services en ligne, Canvas HTML)
+- Tailles requises PWA (192x192px, 512x512px)
+- Procédure déploiement production
+- Validation icônes accessibles
+
+---
+
+## Sessions de développement
+
+### sessions/session-13-ssl-deployment.md
+**📍 Chemin:** [`sessions/session-13-ssl-deployment.md`](sessions/session-13-ssl-deployment.md)
+**📝 Description:** Session 13 - SSL Production Deployment (2026-01-17/18)
+**🎯 Audience:** DevOps, Lead Technique
+**📋 Contient:**
+- Configuration Nginx Proxy Manager
+- Docker Compose production
+- Variables environnement HTTPS
+- Tests validation SSL
+- Problèmes identifiés (cookies cross-domain)
+
+### sessions/session-14-auth-cookies.md
+**📍 Chemin:** [`sessions/session-14-auth-cookies.md`](sessions/session-14-auth-cookies.md)
+**📝 Description:** Session 14 - Auth Cross-Domain Cookies Fix (2026-01-18)
+**🎯 Audience:** Développeurs Backend/Frontend, Lead Technique
+**📋 Contient:**
+- Diagnostic problème cookies cross-subdomain
+- Solution: domain `.eoncom.io` dans tous cookies
+- Middleware Next.js désactivé (incompatibilité SSR)
+- Auth client-side avec `checkSession()`
+- Tests validation complète
 
 ---
 

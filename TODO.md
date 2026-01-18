@@ -1,7 +1,7 @@
 # TODO - Backlog XCH
 
-**Dernière mise à jour :** 2026-01-17
-**Version :** 1.0.2-MVP
+**Dernière mise à jour :** 2026-01-18
+**Version :** 1.0.3-MVP
 
 Ce fichier centralise toutes les tâches à effectuer, organisées par priorité.
 
@@ -10,11 +10,11 @@ Ce fichier centralise toutes les tâches à effectuer, organisées par priorité
 **Aucune tâche urgente - Toutes résolues !** ✅
 
 **Dernières résolutions :**
-- ✅ Build frontend Konva/canvas SSR (2026-01-10, Session 6) - Résolu avec webpack externalize + @zxing fixes
-- ✅ CORS production (2026-01-10, Session 6) - Backend configure FRONTEND_URL
-- ✅ Déploiement backend complet (2026-01-10, Session 6) - API fonctionnelle sur port 3002
-- ✅ Déploiement frontend complet (2026-01-10, Session 6) - Application accessible sur port 3001
-- ✅ Fix init.sql PostgreSQL (2026-01-03, Session 4) - xch_db → xch_dev
+- ✅ SSL Production (2026-01-18, Session 13) - Nginx Proxy Manager + wildcard *.eoncom.io
+- ✅ Auth cross-domain cookies (2026-01-18, Session 14) - domain: '.eoncom.io'
+- ✅ Middleware Next.js (2026-01-18, Session 14) - Désactivé, auth client-side
+- ✅ Build frontend Konva/canvas SSR (2026-01-10, Session 6) - webpack externalize
+- ✅ CORS production (2026-01-10, Session 6) - FRONTEND_URL configuré
 
 ---
 
@@ -89,6 +89,47 @@ Ce fichier centralise toutes les tâches à effectuer, organisées par priorité
 - Serveur: `/opt/xch-dev/XCH/DEPLOYMENT_REPORT.md`
 - GitHub commits: 49667f0, 8a17eaf
 - DEVELOPMENT_LOG.md Session 6 (détails complets)
+
+---
+
+### Générer icônes PWA manquantes
+**Priorité :** Haute
+**Impact :** UX (avertissements console 404)
+**Estimation :** 30 min
+**Référence :** [docs/guides/PWA_ICONS_SETUP.md](docs/guides/PWA_ICONS_SETUP.md)
+
+**Problème identifié (Session 14) :**
+```
+GET https://xch.eoncom.io/icon-192.png 404 (Not Found)
+GET https://xch.eoncom.io/icon-512.png 404 (Not Found)
+```
+
+**Actions:**
+1. [ ] Créer `frontend/public/icon.svg` (logo XCH)
+2. [ ] Générer icon-192.png (192x192px)
+3. [ ] Générer icon-512.png (512x512px)
+4. [ ] Optionnel: favicon.ico (32x32px)
+5. [ ] Optionnel: apple-touch-icon.png (180x180px)
+
+**Solutions disponibles:**
+- Option 1: ImageMagick (`convert icon.svg -resize 192x192 icon-192.png`)
+- Option 2: Script bash `frontend/scripts/generate-pwa-icons.sh`
+- Option 3: Service en ligne (RealFaviconGenerator, Favicon.io)
+- Option 4: Canvas HTML (générateur temporaire)
+
+**Déploiement:**
+```bash
+# Frontend build + deploy
+cd frontend
+npm run build
+scp public/icon*.png xch-deploy:/path/to/frontend/public/
+docker restart xch-frontend
+```
+
+**Validation:**
+- https://xch.eoncom.io/icon-192.png → 200 OK
+- https://xch.eoncom.io/icon-512.png → 200 OK
+- Console DevTools: aucune erreur 404 icônes
 
 ---
 
