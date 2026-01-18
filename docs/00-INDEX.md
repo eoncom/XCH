@@ -261,6 +261,30 @@
 
 ## Systèmes d'automatisation
 
+### automation/AUTO_DOCUMENTATION.md
+**📍 Chemin:** [`automation/AUTO_DOCUMENTATION.md`](automation/AUTO_DOCUMENTATION.md)
+**📝 Description:** Système automatique de mise à jour de la documentation
+**🎯 Audience:** Développeurs, Lead Technique
+**✅ Statut:** Actif et fonctionnel (2026-01-18)
+**📋 Contient:**
+- Mise à jour automatique via Git hook pre-commit
+- PROJECT_STATUS.md timestamp auto-updaté
+- DEVELOPMENT_LOG.md entrées ajoutées automatiquement (≥3 fichiers)
+- Script: `scripts/auto-update-docs.sh`
+- Hook: `.git/hooks/pre-commit`
+- Usage: `git commit` → met automatiquement à jour la documentation
+- **Aucune action manuelle requise - Plus besoin de rappeler**
+
+**🔑 Avantages:**
+- ✅ Mise à jour automatique à chaque commit code
+- ✅ Documentation toujours synchronisée avec le code
+- ✅ Timestamp PROJECT_STATUS.md toujours à jour
+- ✅ Historique DEVELOPMENT_LOG.md complet automatiquement
+- ✅ Désactivable temporairement: `git commit --no-verify`
+- ✅ Pas besoin de dire "mets à jour la doc" ou "fais un commit"
+
+**📝 Commit:** 2144d0b - feat(automation): Add automatic documentation update system
+
 ### automation/AUTO_PWA_ICONS.md
 **📍 Chemin:** [`automation/AUTO_PWA_ICONS.md`](automation/AUTO_PWA_ICONS.md)
 **📝 Description:** Système automatique de génération des icônes PWA
