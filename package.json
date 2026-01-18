@@ -1,0 +1,25 @@
+{
+  "name": "xch",
+  "version": "1.0.3",
+  "description": "XCH - IT Management System for Temporary Sites",
+  "scripts": {
+    "update-docs": "bash scripts/auto-update-docs.sh",
+    "install-hooks": "bash scripts/install-git-hooks.sh",
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "test:e2e": "cd frontend && npm run test:e2e"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eoncom/XCH.git"
+  },
+  "author": "XCH Team",
+  "license": "UNLICENSED",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ]
+}
