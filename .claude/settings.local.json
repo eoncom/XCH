@@ -29,7 +29,23 @@
       "Bash(done)",
       "Bash(npx prisma migrate dev:*)",
       "Bash(node:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(ping:*)",
+      "Bash(git diff:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWs4eDI4YXYwMDAxYmg0OGZwcndqeGFvIiwiZW1haWwiOiJhZG1pbkB4Y2guZGVtbyIsInJvbGUiOiJBRE1JTiIsInRlbmFudElkIjoidGVuYW50X2RlZmF1bHQiLCJpYXQiOjE3NjgxNTk0NzYsImV4cCI6MTc2ODE2MDM3Nn0.z809bkElvilafqlUqLcKcC-9a-tbvgLtr8Z639biiPs\")",
+      "Bash(python:*)",
+      "Bash(tar:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker compose:*)",
+      "Bash(rsync:*)",
+      "Bash(git restore:*)",
+      "Bash(npx tsc:*)",
+      "Bash(NEXT_PUBLIC_API_URL=http://192.168.0.13:3002 npm run build:*)",
+      "Bash(NEXT_PUBLIC_API_URL=https://xchapi.eoncom.io npm run build:*)",
+      "Bash(docker cp:*)",
+      "Bash(test:*)",
+      "Bash(git reset:*)",
+      "Bash(git fetch:*)"
     ]
   }
 }
