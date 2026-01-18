@@ -28,16 +28,18 @@ export class AuthController {
     // Set HTTP-only cookies (secure authentication)
     res.cookie('accessToken', result.accessToken, {
       httpOnly: true, // ✅ Protection XSS - not accessible via JavaScript
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      sameSite: 'lax', // Protection CSRF
+      secure: true, // ✅ HTTPS enforced (Nginx Proxy Manager with SSL)
+      sameSite: 'none', // ✅ Allow cross-subdomain (xch.domain.com ↔ api.xch.domain.com)
+      domain: '.eoncom.io', // ✅ Share cookie across all subdomains (xch.eoncom.io, xchapi.eoncom.io)
       maxAge: 15 * 60 * 1000, // 15 minutes
       path: '/',
     });
 
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: true, // ✅ HTTPS enforced
+      sameSite: 'none', // ✅ Cross-subdomain
+      domain: '.eoncom.io', // ✅ Share cookie across all subdomains
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       path: '/api/auth/refresh', // ✅ Restrict cookie to refresh endpoint only
     });
@@ -78,8 +80,9 @@ export class AuthController {
     // Set new accessToken cookie
     res.cookie('accessToken', result.accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'none',
+      domain: '.eoncom.io', // ✅ Share cookie across all subdomains
       maxAge: 15 * 60 * 1000, // 15 minutes
       path: '/',
     });
@@ -94,8 +97,8 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Cookies cleared successfully' })
   async logout(@Res({ passthrough: true }) res: Response) {
     // Clear authentication cookies
-    res.clearCookie('accessToken', { path: '/' });
-    res.clearCookie('refreshToken', { path: '/api/auth/refresh' });
+    res.clearCookie('accessToken', { path: '/', domain: '.eoncom.io', secure: true, sameSite: 'none' });
+    res.clearCookie('refreshToken', { path: '/api/auth/refresh', domain: '.eoncom.io', secure: true, sameSite: 'none' });
 
     return { success: true };
   }

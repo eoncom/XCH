@@ -1,28 +1,14 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+// ⚠️ DISABLED - HTTP-only cookies with cross-subdomain don't work reliably in Next.js Edge Middleware
+// Auth protection is handled client-side via useAuthStore + checkSession in layout.tsx
+
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // Public routes
-  const publicRoutes = ['/login', '/auth/oidc/callback'];
-  if (publicRoutes.includes(pathname)) {
-    return NextResponse.next();
-  }
-
-  // Check for auth token in cookie or header
-  const token = request.cookies.get('accessToken')?.value;
-
-  if (!token) {
-    // Redirect to login if not authenticated
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('from', pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
+  // Allow all requests - auth is checked client-side
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|manifest.json).*)'],
 };

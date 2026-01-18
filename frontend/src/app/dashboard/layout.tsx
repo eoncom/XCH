@@ -36,27 +36,42 @@ const adminNavigation = [
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, logout, checkSession } = useAuthStore();
+  const { user, isAuthenticated, logout, checkSession, isLoading } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   // ✅ Check session on mount (verify HTTP-only cookie is valid)
   useEffect(() => {
-    checkSession();
+    checkSession().finally(() => setSessionChecked(true));
   }, [checkSession]);
 
+  // Only redirect after session check is complete
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (sessionChecked && !isAuthenticated) {
       router.push('/login');
     }
-  }, [isAuthenticated, router]);
+  }, [sessionChecked, isAuthenticated, router]);
 
   const handleLogout = async () => {
     await logout();
     router.push('/login');
   };
 
+  // Show loading while checking session
+  if (!sessionChecked || isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Chargement...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect handled by useEffect above
   if (!isAuthenticated || !user) {
     return null;
   }
