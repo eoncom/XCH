@@ -94,10 +94,15 @@ export interface Rack {
   tenantId: string;
   siteId: string;
   name: string;
+  serialNumber?: string;
+  model?: string;
+  manufacturer?: string;
   heightU: number;
+  rackType?: 'WALL_MOUNTED' | 'FLOOR_STANDING' | 'ENCLOSED_CABINET';
   status: RackStatus;
   location?: string;
-  metadata?: any;
+  specs?: any;
+  notes?: string;
   createdAt: string;
   updatedAt: string;
   site?: Site;

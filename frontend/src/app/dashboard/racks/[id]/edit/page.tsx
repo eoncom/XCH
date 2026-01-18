@@ -76,10 +76,10 @@ export default function EditRackPage() {
       setValue('siteId', rack.siteId);
       setValue('heightU', rack.heightU);
       setValue('status', rack.status);
-      setValue('manufacturer', rack.metadata?.manufacturer || '');
-      setValue('model', rack.metadata?.model || '');
+      setValue('manufacturer', rack.manufacturer || '');
+      setValue('model', rack.model || '');
       setValue('location', rack.location || '');
-      setValue('notes', rack.metadata?.notes || '');
+      setValue('notes', rack.notes || '');
     }
   }, [rack, setValue]);
 
