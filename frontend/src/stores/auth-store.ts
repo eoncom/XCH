@@ -107,7 +107,14 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         // ✅ DO NOT persist isAuthenticated (calculated via session check)
+        // ✅ DO NOT persist isLoading (prevents form lock on page refresh)
       }),
+      // ✅ Reset isLoading to false on hydration (prevents stuck loading state)
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.isLoading = false;
+        }
+      },
     }
   )
 );

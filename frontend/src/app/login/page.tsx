@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,10 +10,21 @@ import { showToast } from '@/lib/toast';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isLoading } = useAuthStore();
+  const { login, isLoading, isAuthenticated, checkSession } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+
+  // ✅ Auto-redirect if already authenticated
+  useEffect(() => {
+    const verifySession = async () => {
+      await checkSession();
+      if (isAuthenticated) {
+        router.push('/dashboard');
+      }
+    };
+    verifySession();
+  }, [isAuthenticated, checkSession, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
