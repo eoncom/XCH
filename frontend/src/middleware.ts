@@ -10,5 +10,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|manifest.json).*)'],
+  // Exclude: API routes, Next.js internals, static files (icons, manifest, favicon)
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|manifest.json|.*\\.png|.*\\.ico|.*\\.svg|apple-touch-icon).*)'],
 };
