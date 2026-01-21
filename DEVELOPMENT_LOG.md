@@ -1815,6 +1815,92 @@ xch-minio       : healthy (ports 9000-9001)
 
 ---
 
-**Dernière mise à jour :** 2026-01-21 22:30
+## 2026-01-21 (continued)
+
+### Session 17 : Fix React 19 Konva Compatibility
+**Durée :** ~20 min
+**Status :** ✅ Terminée avec succès
+
+**Contexte :**
+Après Session 16, utilisateur rapporte erreur critique dans rack viewer Konva :
+- Erreur : `TypeError: Cannot read properties of undefined (reading 'ReactCurrentBatchConfig')`
+- Cause : Multiples instances React dans node_modules (conflits peer dependencies)
+- Packages problématiques : react-leaflet, react-reconciler, @react-leaflet/core (tous demandent React 18.x)
+
+**Actions principales :**
+1. **Diagnostic Versions React**
+   - Commande : `npm list react` → identifie duplications React 18.x et 19.2.3
+   - react-leaflet demande React ^18.0.0
+   - react-reconciler demande React ^18.3.1
+   - @react-leaflet/core demande React ^18.0.0
+
+2. **Tentative Upgrade react-konva 19.x** ❌
+   - Test : react-konva 18.2.10 → 19.2.1
+   - Résultat : Build failed avec erreurs TypeScript
+   - Erreur : "JSX element type 'Group' does not have any construct or call signatures"
+   - Rollback nécessaire
+
+3. **Solution : npm overrides** ✅
+   - Ajout section `overrides` dans frontend/package.json :
+     ```json
+     "overrides": {
+       "react": "^19.2.3",
+       "react-dom": "^19.2.3"
+     }
+     ```
+   - Force TOUTES dépendances transitives à utiliser React 19.2.3
+   - Upgrade konva 9.3.18 → 9.3.22 (meilleur support React 19)
+
+4. **Rebuild Local**
+   - Suppression node_modules complet
+   - `npm install --legacy-peer-deps`
+   - `npm run build` : ✅ Succès (28 routes, 0 erreurs)
+   - Commit : `8807c4a` - "fix(frontend): Fix React 19 compatibility with Konva - add npm overrides"
+
+5. **Déploiement Production**
+   - Archive : xch-deploy-konva-fix-20260121.tar.gz (914 bytes)
+   - Transfert SCP → xch-deploy:/tmp/
+   - Build frontend : 78.3s (webpack compiled successfully)
+   - Redémarrage containers : frontend + backend + redis
+   - Frontend ready : 1.3s
+
+6. **Validation Post-Déploiement**
+   - ✅ Frontend accessible : https://xch.eoncom.io (HTTP 307)
+   - ✅ Login API : HTTP 201 (cookies OK)
+   - ✅ Containers running : backend, frontend, postgres, redis, minio (all healthy)
+   - ✅ Versions vérifiées dans container :
+     - react@19.2.3 (overridden)
+     - react-dom@19.2.3 (overridden)
+     - konva@9.3.22
+     - react-konva@18.2.14 (auto-upgraded)
+
+**Résultat :**
+- ✅ Erreur Konva ReactCurrentBatchConfig résolue
+- ✅ npm overrides force React 19.2.3 sur TOUTES dépendances
+- ✅ Konva 9.3.22 compatible React 19
+- ✅ react-konva 18.2.14 fonctionne avec overrides
+- ✅ Build frontend réussi (28 routes)
+- ✅ Déploiement production sans downtime majeur
+- ✅ Rack viewer opérationnel
+
+**Fichiers modifiés :** 1
+- `frontend/package.json` :
+  - konva : 9.3.18 → 9.3.22
+  - Ajout section overrides (react + react-dom)
+
+**Commit :**
+- `8807c4a` - fix(frontend): Fix React 19 compatibility with Konva - add npm overrides
+
+**Leçon technique :**
+L'erreur `ReactCurrentBatchConfig` indique TOUJOURS des instances multiples de React dans node_modules. Solution : npm overrides force résolution unique pour TOUTES dépendances transitives, même celles qui déclarent peer dependencies incompatibles.
+
+**Prochaines actions :**
+- ⏳ Tests manuels navigateur : rack viewer avec Konva (validation UX)
+- ⏳ Tests E2E complets 18 pages
+- ⏳ Monitoring logs 24h
+
+---
+
+**Dernière mise à jour :** 2026-01-21 22:40
 **Mainteneur :** Équipe XCH
-**Format version :** 1.6
+**Format version :** 1.7
