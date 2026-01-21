@@ -78,12 +78,14 @@ export default function RackDetailPage({
   });
 
   const { data: availableAssets } = useQuery<Asset[]>({
-    queryKey: ['assets', { siteId: rack?.siteId, status: 'IN_STOCK' }],
-    queryFn: () =>
-      assetsApi.getAll({
-        siteId: rack?.siteId,
-        status: 'IN_STOCK',
-      }),
+    queryKey: ['assets', { siteId: rack?.siteId, available: true }],
+    queryFn: async () => {
+      if (!rack?.siteId) return [];
+      // Récupérer tous les assets du site
+      const allAssets = await assetsApi.getAll({ siteId: rack.siteId });
+      // Filtrer ceux qui ne sont pas déjà montés dans une baie
+      return allAssets.filter(asset => !asset.rackId);
+    },
     enabled: !!rack?.siteId,
   });
 
@@ -247,13 +249,12 @@ export default function RackDetailPage({
                 <p className="text-sm font-medium mb-2">Utilisation</p>
                 <div className="w-full bg-muted rounded-full h-2">
                   <div
-                    className={`h-2 rounded-full transition-all ${
-                      usagePercent >= 90
-                        ? 'bg-red-500'
-                        : usagePercent >= 70
+                    className={`h-2 rounded-full transition-all ${usagePercent >= 90
+                      ? 'bg-red-500'
+                      : usagePercent >= 70
                         ? 'bg-yellow-500'
                         : 'bg-green-500'
-                    }`}
+                      }`}
                     style={{ width: `${usagePercent}%` }}
                   />
                 </div>
