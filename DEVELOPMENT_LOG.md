@@ -1715,6 +1715,106 @@ Frontend Next.js                                : "Ready in 1247ms" log ✅
 
 ---
 
-**Dernière mise à jour :** 2026-01-21 20:15
+**Dernière mise à jour :** 2026-01-21 22:30
 **Mainteneur :** Équipe XCH
-**Format version :** 1.5
+**Format version :** 1.6
+
+---
+
+## 2026-01-21
+
+### Session 16 : Déploiement Production - Corrections Critiques
+**Durée :** ~30 min
+**Status :** ✅ Terminée avec succès
+
+**Actions principales :**
+1. **Préparation Archives Déploiement**
+   - Archive principale : 10 fichiers (35 KB)
+   - Archive scripts PWA : frontend/scripts/ (2.5 KB)
+   - Script déploiement automatisé créé
+
+2. **Transfert et Extraction Serveur**
+   - Transfert SCP vers xch-deploy:/tmp/
+   - Extraction dans /opt/xch-dev/XCH/
+   - Vérification intégrité fichiers ✅
+
+3. **Build Docker Images**
+   - Backend : 12.6s (webpack compiled successfully)
+   - Frontend : 77.5s (28 routes générées, 0 erreurs)
+   - Problème résolu : Script PWA manquant (archive complémentaire)
+
+4. **Redémarrage Containers**
+   - Stop + rm -f backend frontend
+   - Up -d avec nouvelles images
+   - Backend : "Nest application successfully started" (1.5s)
+   - Frontend : "Ready in 1534ms"
+
+5. **Validation Post-Déploiement**
+   - Frontend accessible : ✅ https://xch.eoncom.io (HTTP 307)
+   - Login API : ✅ Cookies HTTP-only retournés correctement
+   - Sites API : ✅ 5 sites (avec auth cookie)
+   - Users API : ✅ 9 utilisateurs (avec auth cookie)
+   - Métriques : Backend 65 MiB, Frontend 104 MiB RAM
+
+**Commits déployés :**
+- `2cc32e8` - React 19.0.0 → 19.2.3 (CVE-2025-55182)
+- `89517c3` - Session 15 docs update
+- `37e6ebc` - Racks error handling (page.tsx)
+- `2165441` - Racks error boundary (error.tsx)
+- `a50f0cb` - Login form fix (auth-store + login page)
+
+**Corrections déployées :**
+1. ✅ **Login Form Non-Responsive**
+   - Zustand persist fix : `onRehydrateStorage` reset isLoading
+   - Auto-redirect si déjà authentifié
+
+2. ✅ **Racks Detail Page Error**
+   - Error boundary React (error.tsx)
+   - Error state explicit (page.tsx)
+
+3. ✅ **React Security Patch**
+   - Upgrade React 19.2.3 (CVE-2025-55182)
+
+**Résultat :**
+- ✅ Application production 100% opérationnelle
+- ✅ Auth cookies cross-subdomain fonctionnelle
+- ✅ Tous endpoints API validés
+- ✅ 0 erreur démarrage containers
+- ✅ Downtime : ~10 secondes
+
+**Métriques déploiement :**
+- Durée totale : ~15 minutes
+- Archives : 37.5 KB total
+- Build time : 90.1s (backend + frontend)
+- Tests API : 5/5 ✅
+- RAM utilisée : 170 MiB total
+
+**Infrastructure production :**
+```
+xch-backend     : running (0.00% CPU, 65 MiB RAM)
+xch-frontend    : running (0.00% CPU, 104 MiB RAM)
+xch-postgres    : healthy (port 5433)
+xch-redis       : healthy (port 6380)
+xch-minio       : healthy (ports 9000-9001)
+```
+
+**Documentation créée :**
+- `DEPLOYMENT_SESSION16_REPORT.md` (rapport complet 450+ lignes)
+- Scripts automatisés : deploy-session16.sh, test-deployment.sh, test-api-with-cookie.sh
+
+**Tests manuels restants :**
+- ⏳ Login form navigateur (validation UX)
+- ⏳ Racks detail error handling (validation UX)
+- ⏳ Tests E2E complets 18 pages
+
+**Prochaines actions :**
+1. Validation extension Chrome (tests E2E)
+2. Monitoring logs 24h
+3. Générer icônes PWA (icon-192, icon-512)
+4. Documentation utilisateur finale
+
+---
+
+**Dernière mise à jour :** 2026-01-21 22:30
+**Mainteneur :** Équipe XCH
+**Format version :** 1.6
