@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Stage, Layer, Image as KonvaImage, Circle, Text, Group } from 'react-konva';
+import type Konva from 'konva';
 import type { FloorPlan, Pin, PinType } from '@/types';
 
 // Custom hook to load image
