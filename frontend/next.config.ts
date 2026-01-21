@@ -11,13 +11,13 @@ const nextConfig: NextConfig = {
   },
   // Webpack configuration to handle Konva SSR issues
   webpack: (config, { isServer }) => {
-    if (isServer) {
-      // Externalize canvas module for server-side rendering
-      // Konva requires canvas for SSR but it's not needed in our use case
-      config.externals = config.externals || [];
-      if (Array.isArray(config.externals)) {
-        config.externals.push('canvas');
-      }
+    // Externalize canvas module for both server and client
+    // Konva requires canvas for Node.js but it's not needed in browser
+    config.externals = config.externals || [];
+    if (Array.isArray(config.externals)) {
+      config.externals.push('canvas');
+    } else if (typeof config.externals === 'object') {
+      config.externals['canvas'] = 'canvas';
     }
     return config;
   },
