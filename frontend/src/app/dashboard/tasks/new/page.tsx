@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,6 +56,7 @@ type TaskFormData = z.infer<typeof taskSchema>;
 
 export default function NewTaskPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     register,
     handleSubmit,
@@ -88,6 +89,11 @@ export default function NewTaskPage() {
   const createMutation = useMutation({
     mutationFn: (data: CreateTaskDto) => tasksApi.create(data),
     onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      if (task.siteId) {
+        queryClient.invalidateQueries({ queryKey: ['sites', task.siteId] });
+      }
       router.push(`/dashboard/tasks/${task.id}`);
     },
   });

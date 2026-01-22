@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -73,6 +73,7 @@ type AssetFormData = z.infer<typeof assetSchema>;
 export default function EditAssetPage() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const assetId = params.id as string;
 
   const {
@@ -110,7 +111,12 @@ export default function EditAssetPage() {
 
   const updateMutation = useMutation({
     mutationFn: (data: UpdateAssetDto) => assetsApi.update(assetId, data),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['assets', assetId] });
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      if (result.siteId) {
+        queryClient.invalidateQueries({ queryKey: ['sites', result.siteId] });
+      }
       router.push(`/dashboard/assets/${assetId}`);
     },
   });

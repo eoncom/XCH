@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -58,6 +58,7 @@ type TaskFormData = z.infer<typeof taskSchema>;
 export default function EditTaskPage() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const taskId = params.id as string;
 
   const {
@@ -106,7 +107,12 @@ export default function EditTaskPage() {
 
   const updateMutation = useMutation({
     mutationFn: (data: UpdateTaskDto) => tasksApi.update(taskId, data),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', taskId] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      if (result.siteId) {
+        queryClient.invalidateQueries({ queryKey: ['sites', result.siteId] });
+      }
       router.push(`/dashboard/tasks/${taskId}`);
     },
   });

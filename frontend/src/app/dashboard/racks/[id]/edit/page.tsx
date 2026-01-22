@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,6 +48,7 @@ type RackFormData = z.infer<typeof rackSchema>;
 export default function EditRackPage() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const rackId = params.id as string;
 
   const {
@@ -85,7 +86,12 @@ export default function EditRackPage() {
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<RackFormData>) => racksApi.update(rackId, data),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['racks', rackId] });
+      queryClient.invalidateQueries({ queryKey: ['racks'] });
+      if (result.siteId) {
+        queryClient.invalidateQueries({ queryKey: ['sites', result.siteId] });
+      }
       router.push(`/dashboard/racks/${rackId}`);
     },
   });

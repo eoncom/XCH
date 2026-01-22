@@ -4,7 +4,7 @@ import { use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,7 @@ export default function EditSitePage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const { data: site, isLoading } = useQuery<Site>({
     queryKey: ['site', id],
@@ -73,6 +74,8 @@ export default function EditSitePage({
   const updateMutation = useMutation({
     mutationFn: (data: SiteFormData) => sitesApi.update(id, data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sites', id] });
+      queryClient.invalidateQueries({ queryKey: ['sites'] });
       router.push(`/dashboard/sites/${id}`);
     },
   });

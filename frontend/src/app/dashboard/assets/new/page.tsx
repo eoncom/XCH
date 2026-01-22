@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -71,6 +71,7 @@ type AssetFormData = z.infer<typeof assetSchema>;
 
 export default function NewAssetPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     register,
     handleSubmit,
@@ -93,6 +94,11 @@ export default function NewAssetPage() {
   const createMutation = useMutation({
     mutationFn: (data: CreateAssetDto) => assetsApi.create(data),
     onSuccess: (asset) => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      if (asset.siteId) {
+        queryClient.invalidateQueries({ queryKey: ['sites', asset.siteId] });
+      }
       router.push(`/dashboard/assets/${asset.id}`);
     },
   });

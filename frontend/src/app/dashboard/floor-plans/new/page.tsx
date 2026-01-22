@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,7 @@ type FloorPlanFormData = z.infer<typeof floorPlanSchema>;
 
 export default function NewFloorPlanPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
 
@@ -57,6 +58,11 @@ export default function NewFloorPlanPage() {
   const createMutation = useMutation({
     mutationFn: (formData: FormData) => floorPlansApi.create(formData),
     onSuccess: (plan) => {
+      queryClient.invalidateQueries({ queryKey: ['floor-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      if (plan.siteId) {
+        queryClient.invalidateQueries({ queryKey: ['sites', plan.siteId] });
+      }
       showToast.success('Plan créé avec succès');
       router.push(`/dashboard/floor-plans/${plan.id}`);
     },

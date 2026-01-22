@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,6 +46,7 @@ type RackFormData = z.infer<typeof rackSchema>;
 
 export default function NewRackPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     register,
     handleSubmit,
@@ -68,6 +69,11 @@ export default function NewRackPage() {
   const createMutation = useMutation({
     mutationFn: (data: RackFormData) => racksApi.create(data),
     onSuccess: (rack) => {
+      queryClient.invalidateQueries({ queryKey: ['racks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      if (rack.siteId) {
+        queryClient.invalidateQueries({ queryKey: ['sites', rack.siteId] });
+      }
       router.push(`/dashboard/racks/${rack.id}`);
     },
   });
