@@ -36,9 +36,39 @@ export class FloorPlansController {
   @Post()
   @Resource('floor-plans')
   @Action('create')
-  @ApiOperation({ summary: 'Create a new floor plan' })
-  create(@Request() req: AuthRequest, @Body() createFloorPlanDto: CreateFloorPlanDto) {
-    return this.floorPlansService.create(req.user.tenantId, createFloorPlanDto);
+  @ApiOperation({ summary: 'Create a new floor plan with optional file upload' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+        siteId: { type: 'string' },
+        name: { type: 'string' },
+        floor: { type: 'string' },
+        building: { type: 'string' },
+        notes: { type: 'string' },
+      },
+      required: ['siteId', 'name'],
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async create(
+    @Request() req: AuthRequest,
+    @Body() createFloorPlanDto: CreateFloorPlanDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const floorPlan = await this.floorPlansService.create(req.user.tenantId, createFloorPlanDto);
+
+    // If file is provided, upload it immediately
+    if (file) {
+      return this.floorPlansService.uploadFile(floorPlan.id, req.user.tenantId, file);
+    }
+
+    return floorPlan;
   }
 
   @Post(':id/upload')
