@@ -37,10 +37,10 @@ export default function FloorPlansPage() {
   const filteredFloorPlans = floorPlans?.filter((plan) => {
     const searchLower = search.toLowerCase();
     return (
-      plan.name.toLowerCase().includes(searchLower) ||
+      plan.title?.toLowerCase().includes(searchLower) ||
       plan.floor?.toLowerCase().includes(searchLower) ||
       plan.building?.toLowerCase().includes(searchLower) ||
-      plan.site?.name.toLowerCase().includes(searchLower)
+      plan.site?.name?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -105,7 +105,7 @@ export default function FloorPlansPage() {
                   <div className="flex items-center gap-2">
                     <FileImage className="h-5 w-5 text-muted-foreground" />
                     <div>
-                      <CardTitle className="text-lg">{plan.name}</CardTitle>
+                      <CardTitle className="text-lg">{plan.title}</CardTitle>
                       <p className="text-sm text-muted-foreground">
                         v{plan.version}
                       </p>

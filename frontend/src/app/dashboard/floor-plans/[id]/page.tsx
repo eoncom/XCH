@@ -170,7 +170,7 @@ export default function FloorPlanDetailPage({
             </Link>
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">{floorPlan.name}</h1>
+            <h1 className="text-3xl font-bold">{floorPlan.title}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="secondary">v{floorPlan.version}</Badge>
               {floorPlan.floor && (
@@ -400,7 +400,7 @@ export default function FloorPlanDetailPage({
           <DialogHeader>
             <DialogTitle>Confirmer la suppression</DialogTitle>
             <DialogDescription>
-              Êtes-vous sûr de vouloir supprimer le plan &quot;{floorPlan.name}&quot; ?
+              Êtes-vous sûr de vouloir supprimer le plan &quot;{floorPlan.title}&quot; ?
               Cette action est irréversible.
             </DialogDescription>
           </DialogHeader>

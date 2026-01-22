@@ -168,17 +168,19 @@ export interface FloorPlan {
   id: string;
   tenantId: string;
   siteId: string;
-  name: string;
+  title: string;              // Changed from 'name' to match backend
   floor?: string;
   building?: string;
   version: number;
   fileUrl?: string;
   fileType?: string;
   fileSize?: number;
+  mimeType?: string;
+  uploadedBy?: string;
   uploadedAt?: string;
   notes?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
   site?: Site;
   pins?: Pin[];
 }

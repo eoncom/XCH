@@ -26,7 +26,7 @@ import type { Site } from '@/types';
 
 const floorPlanSchema = z.object({
   siteId: z.string().min(1, 'Le site est requis'),
-  name: z.string().min(1, 'Le nom est requis'),
+  title: z.string().min(1, 'Le nom est requis'),
   floor: z.string().optional(),
   building: z.string().optional(),
   notes: z.string().optional(),
@@ -106,7 +106,7 @@ export default function NewFloorPlanPage() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('siteId', data.siteId);
-    formData.append('name', data.name);
+    formData.append('title', data.title);
     if (data.floor) formData.append('floor', data.floor);
     if (data.building) formData.append('building', data.building);
     if (data.notes) formData.append('notes', data.notes);
@@ -155,14 +155,14 @@ export default function NewFloorPlanPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="name">Nom du plan *</Label>
+                <Label htmlFor="title">Nom du plan *</Label>
                 <Input
-                  id="name"
-                  {...register('name')}
+                  id="title"
+                  {...register('title')}
                   placeholder="RDC - Zone principale"
                 />
-                {errors.name && (
-                  <p className="text-sm text-red-600">{errors.name.message}</p>
+                {errors.title && (
+                  <p className="text-sm text-red-600">{errors.title.message}</p>
                 )}
               </div>
 
