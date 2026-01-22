@@ -1,11 +1,28 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// ⚠️ DISABLED - HTTP-only cookies with cross-subdomain don't work reliably in Next.js Edge Middleware
-// Auth protection is handled client-side via useAuthStore + checkSession in layout.tsx
+// ✅ RE-ENABLED (Session 18): Cookies with domain='.eoncom.io' now work correctly
+// Backend sets cookies with domain='.eoncom.io' (Session 14), allowing middleware to read them
 
 export function middleware(request: NextRequest) {
-  // Allow all requests - auth is checked client-side
+  const { pathname } = request.nextUrl;
+
+  // Allow public routes
+  const publicRoutes = ['/login', '/register'];
+  if (publicRoutes.includes(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Check if user is authenticated via accessToken cookie
+  const accessToken = request.cookies.get('accessToken');
+
+  // If no access token, redirect to login
+  if (!accessToken) {
+    const loginUrl = new URL('/login', request.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // User is authenticated, allow request
   return NextResponse.next();
 }
 
