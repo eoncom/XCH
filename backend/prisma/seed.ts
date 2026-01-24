@@ -133,8 +133,6 @@ async function main() {
       city: 'Paris La Défense',
       postalCode: '92800',
       country: 'France',
-      latitude: 48.8919,
-      longitude: 2.2372,
       contacts: [
         {
           name: 'Jean Dupont',
@@ -151,7 +149,7 @@ async function main() {
           isPrimary: false
         }
       ],
-      healthStatus: 'OK',
+      healthStatus: 'HEALTHY',
       lastHealthCheck: new Date(),
       notes: 'Site principal - Tour de bureaux 15 étages - Déploiement complet',
     },
@@ -167,8 +165,6 @@ async function main() {
       city: 'Lyon',
       postalCode: '69003',
       country: 'France',
-      latitude: 45.7602,
-      longitude: 4.8594,
       contacts: [
         {
           name: 'Marie Martin',
@@ -194,8 +190,6 @@ async function main() {
       city: 'Marseille',
       postalCode: '13002',
       country: 'France',
-      latitude: 43.2954,
-      longitude: 5.3730,
       contacts: [
         {
           name: 'Pierre Bernard',
@@ -220,8 +214,6 @@ async function main() {
       city: 'Mérignac',
       postalCode: '33700',
       country: 'France',
-      latitude: 44.8364,
-      longitude: -0.6874,
       contacts: [
         {
           name: 'François Lefebvre',
@@ -231,7 +223,7 @@ async function main() {
           isPrimary: true
         }
       ],
-      healthStatus: 'OK',
+      healthStatus: 'HEALTHY',
       lastHealthCheck: new Date(),
       notes: 'Datacenter Tier 3 - Infrastructure critique - 24/7',
     },
@@ -247,8 +239,6 @@ async function main() {
       city: 'Toulouse',
       postalCode: '31500',
       country: 'France',
-      latitude: 43.6108,
-      longitude: 1.4397,
       contacts: [
         {
           name: 'Isabelle Moreau',
@@ -258,13 +248,31 @@ async function main() {
           isPrimary: true
         }
       ],
-      healthStatus: 'OK',
+      healthStatus: 'HEALTHY',
       lastHealthCheck: new Date(),
       notes: 'Site tertiaire - R&D aérospatiale',
     },
   });
 
-  console.log('✅ Sites created: 5 total');
+  // Update coordinates using raw SQL (PostGIS)
+  const siteCoordinates = [
+    { id: site1.id, latitude: 48.8919, longitude: 2.2372 },   // Paris La Défense
+    { id: site2.id, latitude: 45.7602, longitude: 4.8594 },   // Lyon Part-Dieu
+    { id: site3.id, latitude: 43.2954, longitude: 5.3730 },   // Marseille Vieux-Port
+    { id: site4.id, latitude: 44.8364, longitude: -0.6874 },  // Bordeaux Mérignac
+    { id: site5.id, latitude: 43.6108, longitude: 1.4397 },   // Toulouse Aerospace
+  ];
+
+  for (const coord of siteCoordinates) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE "sites" SET coordinates = ST_SetSRID(ST_MakePoint($1, $2), 4326) WHERE id = $3`,
+      coord.longitude,
+      coord.latitude,
+      coord.id
+    );
+  }
+
+  console.log('✅ Sites created: 5 total (with GPS coordinates)');
 
   // 4. Create racks (6 total across sites)
   const rack1 = await prisma.rack.create({

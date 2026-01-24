@@ -9,24 +9,17 @@ import { tasksApi } from '@/lib/api/tasks';
 import { MapPin, Package, Server, CheckSquare, MapIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 
-// Import Leaflet dynamically to avoid SSR issues
-const MapContainer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.MapContainer),
-  { ssr: false }
-);
-const TileLayer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.TileLayer),
-  { ssr: false }
-);
-const Marker = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Marker),
-  { ssr: false }
-);
-const Popup = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Popup),
-  { ssr: false }
-);
+// Dynamically import map component (client-side only)
+const SitesMap = dynamic(() => import('@/components/maps/SitesMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[400px] flex items-center justify-center bg-gray-50 rounded-md">
+      Chargement de la carte...
+    </div>
+  ),
+});
 
 interface DashboardStats {
   sites: { total: number; active: number; critical: number };
@@ -112,17 +105,16 @@ export default function DashboardPage() {
   }, [sites, assets, racks, tasks]);
 
   const isLoading = sitesLoading || assetsLoading || racksLoading || tasksLoading;
+  const router = useRouter();
 
-  // Default center (France)
-  const mapCenter: [number, number] = useMemo(() => {
-    if (sites.length === 0) return [46.603354, 1.888334]; // Center of France
+  // Handle site click on map
+  const handleSiteClick = (site: any) => {
+    router.push(`/dashboard/sites/${site.id}`);
+  };
 
-    // Center map on first site with coordinates
-    const siteWithCoords = sites.find((s) => s.latitude && s.longitude);
-    if (siteWithCoords) {
-      return [siteWithCoords.latitude!, siteWithCoords.longitude!];
-    }
-    return [46.603354, 1.888334];
+  // Check if we have sites with coordinates
+  const sitesWithCoords = useMemo(() => {
+    return sites.filter((s) => s.latitude != null && s.longitude != null);
   }, [sites]);
 
   if (isLoading) {
@@ -200,43 +192,14 @@ export default function DashboardPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[400px] rounded-md overflow-hidden border">
-            {typeof window !== 'undefined' && (
-              <MapContainer
-                center={mapCenter}
-                zoom={6}
-                style={{ height: '100%', width: '100%' }}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                {sites
-                  .filter((site) => site.latitude && site.longitude)
-                  .map((site) => (
-                    <Marker
-                      key={site.id}
-                      position={[site.latitude!, site.longitude!]}
-                    >
-                      <Popup>
-                        <div className="p-2">
-                          <h3 className="font-semibold">{site.name}</h3>
-                          <p className="text-sm text-gray-600">{site.code}</p>
-                          {site.city && (
-                            <p className="text-sm">{site.city}</p>
-                          )}
-                          <p className="text-xs mt-1">
-                            Statut: <span className="font-medium">{site.status}</span>
-                          </p>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-              </MapContainer>
-            )}
-          </div>
-          {sites.filter((s) => s.latitude && s.longitude).length === 0 && (
-            <div className="flex items-center justify-center h-[400px] text-sm text-muted-foreground">
+          {sitesWithCoords.length > 0 ? (
+            <SitesMap
+              sites={sites}
+              onSiteClick={handleSiteClick}
+              height="400px"
+            />
+          ) : (
+            <div className="h-[400px] flex items-center justify-center rounded-md border bg-gray-50 text-sm text-muted-foreground">
               Aucun chantier avec coordonnées GPS disponible
             </div>
           )}

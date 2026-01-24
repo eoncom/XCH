@@ -47,57 +47,112 @@ export class SitesService {
   }
 
   async findAll(tenantId: string, filter?: FilterSiteDto) {
-    const where: any = { tenantId };
+    // Build WHERE clause for raw query
+    let whereClause = `s."tenantId" = $1`;
+    const params: any[] = [tenantId];
+    let paramIndex = 2;
 
     if (filter?.status) {
-      where.status = filter.status;
+      whereClause += ` AND s.status = $${paramIndex}`;
+      params.push(filter.status);
+      paramIndex++;
     }
 
     if (filter?.healthStatus) {
-      where.healthStatus = filter.healthStatus;
+      whereClause += ` AND s."healthStatus" = $${paramIndex}`;
+      params.push(filter.healthStatus);
+      paramIndex++;
     }
 
     if (filter?.search) {
-      where.OR = [
-        { name: { contains: filter.search, mode: 'insensitive' } },
-        { code: { contains: filter.search, mode: 'insensitive' } },
-        { city: { contains: filter.search, mode: 'insensitive' } },
-        { address: { contains: filter.search, mode: 'insensitive' } },
-      ];
+      whereClause += ` AND (
+        s.name ILIKE $${paramIndex} OR
+        s.code ILIKE $${paramIndex} OR
+        s.city ILIKE $${paramIndex} OR
+        s.address ILIKE $${paramIndex}
+      )`;
+      params.push(`%${filter.search}%`);
+      paramIndex++;
     }
 
-    const sites = await this.prisma.site.findMany({
-      where,
-      orderBy: {
-        updatedAt: 'desc',
-      },
-    });
+    // Use raw query to extract latitude/longitude from PostGIS coordinates
+    const sites = await this.prisma.$queryRawUnsafe(`
+      SELECT
+        s.id,
+        s."tenantId",
+        s.code,
+        s.name,
+        s.status,
+        s.address,
+        s.city,
+        s."postalCode",
+        s.country,
+        s.contacts,
+        s."accessNotes",
+        s.connectivity,
+        s."healthStatus",
+        s."lastHealthCheck",
+        s.notes,
+        s."createdAt",
+        s."updatedAt",
+        ST_Y(s.coordinates::geometry) as latitude,
+        ST_X(s.coordinates::geometry) as longitude
+      FROM "sites" s
+      WHERE ${whereClause}
+      ORDER BY s."updatedAt" DESC
+    `, ...params);
 
     return sites;
   }
 
   async findOne(id: string, tenantId: string) {
-    const site = await this.prisma.site.findFirst({
-      where: {
-        id,
-        tenantId,
-      },
-      include: {
-        _count: {
-          select: {
-            assets: true,
-            racks: true,
-            tasks: true,
-          },
-        },
-      },
-    });
+    // Use raw query to extract latitude/longitude from PostGIS coordinates
+    const sites = await this.prisma.$queryRawUnsafe(`
+      SELECT
+        s.id,
+        s."tenantId",
+        s.code,
+        s.name,
+        s.status,
+        s.address,
+        s.city,
+        s."postalCode",
+        s.country,
+        s.contacts,
+        s."accessNotes",
+        s.connectivity,
+        s."healthStatus",
+        s."lastHealthCheck",
+        s.notes,
+        s."createdAt",
+        s."updatedAt",
+        ST_Y(s.coordinates::geometry) as latitude,
+        ST_X(s.coordinates::geometry) as longitude,
+        (SELECT COUNT(*) FROM "assets" a WHERE a."siteId" = s.id) as "_count_assets",
+        (SELECT COUNT(*) FROM "racks" r WHERE r."siteId" = s.id) as "_count_racks",
+        (SELECT COUNT(*) FROM "tasks" t WHERE t."siteId" = s.id) as "_count_tasks"
+      FROM "sites" s
+      WHERE s.id = $1 AND s."tenantId" = $2
+    `, id, tenantId);
 
-    if (!site) {
+    if (!sites || (sites as any[]).length === 0) {
       throw new NotFoundException('Site not found');
     }
 
-    return site;
+    const site = (sites as any[])[0];
+
+    // Transform counts to match Prisma include format
+    return {
+      ...site,
+      _count: {
+        assets: Number(site._count_assets) || 0,
+        racks: Number(site._count_racks) || 0,
+        tasks: Number(site._count_tasks) || 0,
+      },
+      _count_assets: undefined,
+      _count_racks: undefined,
+      _count_tasks: undefined,
+    };
   }
 
   async update(id: string, tenantId: string, updateSiteDto: UpdateSiteDto) {
