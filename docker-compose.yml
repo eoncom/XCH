@@ -107,8 +107,7 @@ services:
     restart: unless-stopped
     command: >
       sh -c "
-      npm run prisma:migrate:deploy &&
-      (npm run prisma:seed || echo 'Seed skipped') &&
+      npx prisma generate &&
       npm run start:prod
       "
 
