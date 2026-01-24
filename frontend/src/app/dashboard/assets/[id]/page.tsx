@@ -95,6 +95,10 @@ export default function AssetDetailPage({
       });
       queryClient.invalidateQueries({ queryKey: ['asset', id] });
     },
+    onError: (error) => {
+      console.error('Erreur génération QR Code:', error);
+      alert(`Erreur lors de la génération du QR Code: ${error.message}`);
+    },
   });
 
   const handleDelete = () => {

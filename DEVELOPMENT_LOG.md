@@ -2191,3 +2191,24 @@ fix(frontend): Change FloorPlan field from 'name' to 'title' to match backend AP
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-01-24
+
+**Date:** 2026-01-24 11:43:58
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 4
+
+**Commit message:**
+```
+feat(frontend): Re-enable Next.js middleware with cross-subdomain cookie support
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

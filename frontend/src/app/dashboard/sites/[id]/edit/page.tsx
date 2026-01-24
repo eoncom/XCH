@@ -29,8 +29,16 @@ const siteSchema = z.object({
   address: z.string().optional(),
   city: z.string().optional(),
   postalCode: z.string().optional(),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
+  latitude: z.union([z.number(), z.nan(), z.string()]).optional().transform((val) => {
+    if (typeof val === 'string' && val === '') return undefined;
+    if (typeof val === 'number' && !isNaN(val)) return val;
+    return undefined;
+  }),
+  longitude: z.union([z.number(), z.nan(), z.string()]).optional().transform((val) => {
+    if (typeof val === 'string' && val === '') return undefined;
+    if (typeof val === 'number' && !isNaN(val)) return val;
+    return undefined;
+  }),
 });
 
 type SiteFormData = z.infer<typeof siteSchema>;
@@ -81,12 +89,7 @@ export default function EditSitePage({
   });
 
   const onSubmit = (data: SiteFormData) => {
-    const payload = {
-      ...data,
-      latitude: data.latitude ? Number(data.latitude) : undefined,
-      longitude: data.longitude ? Number(data.longitude) : undefined,
-    };
-    updateMutation.mutate(payload);
+    updateMutation.mutate(data);
   };
 
   const status = watch('status');

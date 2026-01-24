@@ -20,6 +20,67 @@ Ce fichier centralise toutes les tâches à effectuer, organisées par priorité
 
 ## ⚡ HAUTE PRIORITÉ (Cette semaine)
 
+### Tests complets frontend + Validation refresh automatique
+**Priorité :** Critique
+**Impact :** UX - Données ne se rafraîchissent pas automatiquement après mutations
+**Estimation :** 2-3h (automatique Claude Chrome) | 3-4h (manuel)
+**Référence :**
+- [PROMPT_TEST_COMPLET_FRONTEND.md](PROMPT_TEST_COMPLET_FRONTEND.md) - Prompt Claude Chrome Extension
+- [ANALYSE_REFRESH_AUTOMATIQUE.md](ANALYSE_REFRESH_AUTOMATIQUE.md) - Diagnostic technique
+- [GUIDE_TESTS_FRONTEND.md](GUIDE_TESTS_FRONTEND.md) - Instructions simples
+
+**Problème identifié :**
+- 18 fichiers avec mutations `useMutation`
+- Seulement 6 fichiers avec `invalidateQueries()`
+- **12 fichiers manquent invalidation cache** (66% pages sans refresh auto)
+- Utilisateur doit rafraîchir (F5) ou changer page pour voir nouvelles données
+
+**Actions :**
+1. [ ] Lancer tests automatiques Claude Chrome Extension (Option 1 recommandée)
+   - Ouvrir https://xch.eoncom.io dans Chrome
+   - Copier prompt depuis PROMPT_TEST_COMPLET_FRONTEND.md
+   - Laisser Claude tester 18 pages automatiquement
+   - Récupérer rapport Markdown avec bugs identifiés
+2. [ ] OU Tests manuels (Option 2)
+   - Suivre checklist dans GUIDE_TESTS_FRONTEND.md
+   - Tester refresh automatique pour chaque page
+   - Créer rapport bugs
+3. [ ] Analyser rapport tests
+4. [ ] Corriger fichiers identifiés (ajouter `invalidateQueries`)
+5. [ ] Déployer corrections en production
+6. [ ] Re-tester validation finale
+
+**Fichiers à corriger (déjà identifiés) :**
+- Sites : new/page.tsx, [id]/edit/page.tsx
+- Assets : new/page.tsx, [id]/edit/page.tsx
+- Tasks : new/page.tsx, [id]/edit/page.tsx
+- Racks : new/page.tsx, [id]/edit/page.tsx
+- FloorPlans : new/page.tsx
+- Users : page.tsx, new/page.tsx, [id]/edit/page.tsx
+
+**Template correction (copier-coller) :**
+```typescript
+import { useQueryClient } from '@tanstack/react-query'
+
+const queryClient = useQueryClient()
+
+const createMutation = useMutation({
+  mutationFn: (data) => api.create(data),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['module-name'] })
+    toast.success('Créé avec succès')
+    router.push('/dashboard/module-name')
+  }
+})
+```
+
+**Résultat attendu :**
+- ✅ 100% mutations avec invalidation cache
+- ✅ Données se rafraîchissent automatiquement SANS F5
+- ✅ UX fluide et professionnelle
+
+---
+
 ### Tester déploiement serveur Ubuntu
 **Priorité :** Haute
 **Impact :** Validation production

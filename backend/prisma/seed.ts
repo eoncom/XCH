@@ -133,6 +133,8 @@ async function main() {
       city: 'Paris La Défense',
       postalCode: '92800',
       country: 'France',
+      latitude: 48.8919,
+      longitude: 2.2372,
       contacts: [
         {
           name: 'Jean Dupont',
@@ -165,6 +167,8 @@ async function main() {
       city: 'Lyon',
       postalCode: '69003',
       country: 'France',
+      latitude: 45.7602,
+      longitude: 4.8594,
       contacts: [
         {
           name: 'Marie Martin',
@@ -190,6 +194,8 @@ async function main() {
       city: 'Marseille',
       postalCode: '13002',
       country: 'France',
+      latitude: 43.2954,
+      longitude: 5.3730,
       contacts: [
         {
           name: 'Pierre Bernard',
@@ -214,6 +220,8 @@ async function main() {
       city: 'Mérignac',
       postalCode: '33700',
       country: 'France',
+      latitude: 44.8364,
+      longitude: -0.6874,
       contacts: [
         {
           name: 'François Lefebvre',
@@ -239,6 +247,8 @@ async function main() {
       city: 'Toulouse',
       postalCode: '31500',
       country: 'France',
+      latitude: 43.6108,
+      longitude: 1.4397,
       contacts: [
         {
           name: 'Isabelle Moreau',

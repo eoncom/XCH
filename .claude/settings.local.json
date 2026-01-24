@@ -45,7 +45,17 @@
       "Bash(docker cp:*)",
       "Bash(test:*)",
       "Bash(git reset:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Bash(head:*)",
+      "Bash(npm view:*)",
+      "Bash(npm run dev:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force\")",
+      "Bash(npm ls:*)",
+      "Bash(npm run test:e2e:*)",
+      "Bash(npx playwright install chromium)",
+      "Bash(PLAYWRIGHT_BASE_URL=https://xch.eoncom.io npm run test:e2e:*)",
+      "Bash(bash:*)"
     ]
   }
 }

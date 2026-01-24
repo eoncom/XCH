@@ -27,8 +27,16 @@ const siteSchema = z.object({
   address: z.string().optional(),
   city: z.string().optional(),
   postalCode: z.string().optional(),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
+  latitude: z.union([z.number(), z.nan(), z.string()]).optional().transform((val) => {
+    if (typeof val === 'string' && val === '') return undefined;
+    if (typeof val === 'number' && !isNaN(val)) return val;
+    return undefined;
+  }),
+  longitude: z.union([z.number(), z.nan(), z.string()]).optional().transform((val) => {
+    if (typeof val === 'string' && val === '') return undefined;
+    if (typeof val === 'number' && !isNaN(val)) return val;
+    return undefined;
+  }),
 });
 
 type SiteFormData = z.infer<typeof siteSchema>;
@@ -56,16 +64,14 @@ export default function NewSitePage() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       router.push('/dashboard/sites');
     },
+    onError: (error) => {
+      console.error('Erreur création chantier:', error);
+      alert(`Erreur lors de la création: ${error.message}`);
+    },
   });
 
   const onSubmit = (data: SiteFormData) => {
-    // Convert latitude and longitude from strings to numbers
-    const payload = {
-      ...data,
-      latitude: data.latitude ? Number(data.latitude) : undefined,
-      longitude: data.longitude ? Number(data.longitude) : undefined,
-    };
-    createMutation.mutate(payload);
+    createMutation.mutate(data);
   };
 
   const status = watch('status');
@@ -181,6 +187,19 @@ export default function NewSitePage() {
                 </div>
               </div>
             </div>
+
+            {Object.keys(errors).length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                <p className="text-sm text-red-800 font-medium">Erreurs de validation:</p>
+                <ul className="list-disc list-inside text-sm text-red-700 mt-1">
+                  {Object.entries(errors).map(([field, error]) => (
+                    <li key={field}>
+                      {field}: {error?.message?.toString() || 'Erreur inconnue'}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2">
               <Button

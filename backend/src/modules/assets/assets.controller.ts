@@ -52,7 +52,7 @@ export class AssetsController {
     return this.assetsService.findOne(id, req.user.tenantId);
   }
 
-  @Get(':id/qrcode')
+  @Post(':id/qr-code')
   @Resource('assets') @Action('read')
   @ApiOperation({ summary: 'Generate QR code for asset' })
   generateQRCode(@Param('id') id: string, @Request() req: AuthRequest) {
