@@ -27,10 +27,10 @@ export class SitesService {
 
     const { latitude, longitude, ...siteData } = createSiteDto;
 
-    const site = await this.prisma.$executeRawUnsafe(
+    const result = await this.prisma.$queryRawUnsafe<{id: string}[]>(
       `INSERT INTO "sites" ("id", "tenantId", "code", "name", "status", "address", "city", "postalCode", "country", "coordinates", "healthStatus", "createdAt", "updatedAt")
        VALUES (gen_random_uuid(), $1, $2, $3, $4::"SiteStatus", $5, $6, $7, $8, ${coordinates ? `ST_GeomFromText($9, 4326)` : 'NULL'}, $10::"HealthStatus", NOW(), NOW())
-       RETURNING *`,
+       RETURNING id`,
       tenantId,
       siteData.code,
       siteData.name,
@@ -43,7 +43,7 @@ export class SitesService {
       siteData.healthStatus || 'UNKNOWN',
     );
 
-    return this.findOne((site as any)[0].id, tenantId);
+    return this.findOne(result[0].id, tenantId);
   }
 
   async findAll(tenantId: string, filter?: FilterSiteDto) {
