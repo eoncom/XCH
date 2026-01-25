@@ -55,7 +55,9 @@
       "Bash(npm run test:e2e:*)",
       "Bash(npx playwright install chromium)",
       "Bash(PLAYWRIGHT_BASE_URL=https://xch.eoncom.io npm run test:e2e:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(git tag -a v1.0.4 -m \"$\\(cat <<''EOF''\nXCH MVP v1.0.4 - Production Stable\n\n## Highlights\n- 100% MVP features implemented\n- Multi-agent architecture strategy documented\n- Prisma migration system initialized\n- Cache invalidation fixes applied\n\n## Backend\n- NestJS 10 with ~100 REST endpoints\n- PostgreSQL 15 + PostGIS for geolocation\n- JWT authentication + Casbin RBAC \\(4 roles\\)\n- MinIO S3 storage integration\n- Audit logging system\n\n## Frontend\n- Next.js 15 + React 19\n- 18 pages across 7 modules\n- TanStack Query with proper cache invalidation\n- PWA ready with icons and manifest\n- Responsive mobile-first design\n\n## Modules\n- Sites \\(Chantiers\\) with interactive map\n- Assets \\(Equipements\\) with QR codes\n- Racks \\(Baies\\) 4U-42U with equipment mounting\n- Tasks with Kanban board and checklists\n- Floor Plans with pin editor\n- Users with role-based access\n\n## Known Issues\n- E2E tests: 2/57 passing \\(SSR/CSR cookie sync issue\\)\n- Unit test coverage: minimal\n\n## Infrastructure\n- Docker Compose deployment\n- Prisma baseline migration established\n- CI/CD workflow \\(partial\\)\n\nFull documentation at docs/00-INDEX.md\nEOF\n\\)\")",
+      "Bash(git merge:*)"
     ]
   }
 }

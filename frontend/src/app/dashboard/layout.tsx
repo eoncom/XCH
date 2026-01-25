@@ -163,7 +163,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <p className="text-sm font-medium text-gray-900">{user.name}</p>
             <p className="text-xs text-gray-500">{user.role}</p>
           </div>
-          <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={handleLogout}
+            data-testid="logout-button"
+          >
             <LogOut className="mr-3 h-5 w-5" />
             Déconnexion
           </Button>

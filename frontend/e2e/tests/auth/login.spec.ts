@@ -8,27 +8,26 @@ import { test, expect, TEST_USERS } from '../../fixtures/auth.fixture';
  * - Login réussi avec différents rôles
  * - Login échoué (mauvais credentials)
  * - Redirection après login
- * - Persistance de session
+ * - Persistance de session (via cookies HTTP-only)
  */
 
 test.describe('Authentification - Login', () => {
   test.beforeEach(async ({ page }) => {
     // S'assurer qu'on est déconnecté
     await page.context().clearCookies();
-    await page.evaluate(() => localStorage.clear());
     await page.goto('/login');
   });
 
   test('devrait afficher le formulaire de login', async ({ page }) => {
     // Vérifier présence du formulaire
     await expect(page.locator('form')).toBeVisible();
-    await expect(page.locator('input[name="email"]')).toBeVisible();
-    await expect(page.locator('input[name="password"]')).toBeVisible();
+    await expect(page.locator('#email')).toBeVisible();
+    await expect(page.locator('#password')).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeVisible();
 
     // Vérifier labels
-    await expect(page.locator('text=Email')).toBeVisible();
-    await expect(page.locator('text=Mot de passe, text=Password')).toBeVisible();
+    await expect(page.locator('label[for="email"]')).toBeVisible();
+    await expect(page.locator('label[for="password"]')).toBeVisible();
   });
 
   test('devrait se connecter avec admin', async ({ page, loginAsAdmin }) => {
@@ -59,24 +58,24 @@ test.describe('Authentification - Login', () => {
   });
 
   test('devrait échouer avec email invalide', async ({ page }) => {
-    await page.fill('input[name="email"]', 'invalid@email.com');
-    await page.fill('input[name="password"]', 'WrongPassword123!');
+    await page.fill('#email', 'invalid@email.com');
+    await page.fill('#password', 'WrongPassword123!');
     await page.click('button[type="submit"]');
 
-    // Attendre message d'erreur
-    await expect(page.locator('[role="alert"], .error, text=Identifiants invalides, text=Invalid credentials')).toBeVisible({ timeout: 5000 });
+    // Attendre message d'erreur (div avec classe destructive ou texte erreur)
+    await expect(page.locator('.bg-destructive\\/10, [role="alert"]')).toBeVisible({ timeout: 5000 });
 
     // Vérifier qu'on reste sur /login
     await expect(page).toHaveURL('/login');
   });
 
   test('devrait échouer avec mot de passe invalide', async ({ page }) => {
-    await page.fill('input[name="email"]', TEST_USERS.admin.email);
-    await page.fill('input[name="password"]', 'WrongPassword!');
+    await page.fill('#email', TEST_USERS.admin.email);
+    await page.fill('#password', 'WrongPassword!');
     await page.click('button[type="submit"]');
 
     // Message d'erreur
-    await expect(page.locator('[role="alert"], .error')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.bg-destructive\\/10, [role="alert"]')).toBeVisible({ timeout: 5000 });
     await expect(page).toHaveURL('/login');
   });
 
@@ -84,11 +83,11 @@ test.describe('Authentification - Login', () => {
     // Soumettre formulaire vide
     await page.click('button[type="submit"]');
 
-    // Vérifier validation HTML5 ou messages d'erreur
-    const emailInput = page.locator('input[name="email"]');
-    const passwordInput = page.locator('input[name="password"]');
+    // Vérifier validation HTML5
+    const emailInput = page.locator('#email');
+    const passwordInput = page.locator('#password');
 
-    // Au moins un champ doit être en erreur
+    // Au moins un champ doit être en erreur (HTML5 validation)
     const emailInvalid = await emailInput.evaluate((el: HTMLInputElement) => !el.validity.valid);
     const passwordInvalid = await passwordInput.evaluate((el: HTMLInputElement) => !el.validity.valid);
 
@@ -102,12 +101,13 @@ test.describe('Authentification - Login', () => {
     // Recharger la page
     await page.reload();
 
-    // Vérifier toujours sur dashboard
+    // Vérifier toujours sur dashboard (cookie HTTP-only persiste)
     await expect(page).toHaveURL('/dashboard');
 
-    // Vérifier token toujours présent
-    const token = await page.evaluate(() => localStorage.getItem('xch_token'));
-    expect(token).toBeTruthy();
+    // Vérifier cookie accessToken présent
+    const cookies = await page.context().cookies();
+    const accessToken = cookies.find(c => c.name === 'accessToken');
+    expect(accessToken).toBeTruthy();
   });
 
   test('devrait rediriger vers /dashboard si déjà connecté', async ({ page, loginAsAdmin }) => {

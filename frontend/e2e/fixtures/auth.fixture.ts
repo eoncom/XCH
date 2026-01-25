@@ -12,26 +12,26 @@ export interface AuthUser {
   role: 'ADMIN' | 'MANAGER' | 'TECHNICIEN' | 'VIEWER';
 }
 
-// Utilisateurs de test (doivent exister en DB ou être seedés)
+// Utilisateurs de test (correspondent aux seed data en production)
 export const TEST_USERS = {
   admin: {
-    email: 'admin@xch.local',
-    password: 'Admin123!',
+    email: 'admin@xch.demo',
+    password: 'admin123',
     role: 'ADMIN' as const,
   },
   manager: {
-    email: 'manager@xch.local',
-    password: 'Manager123!',
+    email: 'manager@xch.demo',
+    password: 'manager123',
     role: 'MANAGER' as const,
   },
   technicien: {
-    email: 'tech@xch.local',
-    password: 'Tech123!',
+    email: 'tech@xch.demo',
+    password: 'tech123',
     role: 'TECHNICIEN' as const,
   },
   viewer: {
-    email: 'viewer@xch.local',
-    password: 'Viewer123!',
+    email: 'viewer@xch.demo',
+    password: 'viewer123',
     role: 'VIEWER' as const,
   },
 };
