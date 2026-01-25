@@ -12,6 +12,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { Site } from '@/types';
+import { ExportMenu } from '@/components/ui/export-menu';
+import { exportSites } from '@/lib/export-utils';
 
 // Dynamically import map component (client-side only)
 const SitesMap = dynamic(() => import('@/components/maps/SitesMap'), {
@@ -50,6 +52,18 @@ export default function SitesPage() {
     router.push(`/dashboard/sites/${site.id}`);
   };
 
+  const handleExport = (format: 'excel' | 'pdf' | 'csv') => {
+    if (!filteredSites) return;
+    const exportData = filteredSites.map((site) => ({
+      name: site.name,
+      code: site.code,
+      status: site.status,
+      address: site.address || '',
+      healthStatus: site.healthStatus,
+    }));
+    exportSites(exportData, format);
+  };
+
   if (isLoading) {
     return <div className="text-center">Chargement des chantiers...</div>;
   }
@@ -61,12 +75,19 @@ export default function SitesPage() {
           <h1 className="text-3xl font-bold">Chantiers</h1>
           <p className="text-muted-foreground">Gérez vos sites de déploiement</p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/sites/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Nouveau chantier
-          </Link>
-        </Button>
+        <div className="flex items-center gap-4">
+          <ExportMenu
+            onExport={handleExport}
+            disabled={!filteredSites?.length}
+            label="Exporter"
+          />
+          <Button asChild>
+            <Link href="/dashboard/sites/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Nouveau chantier
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Search */}

@@ -7,10 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { User, Building2, Plug, Save } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette } from 'lucide-react';
+import { useTheme } from 'next-themes';
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
+  const { theme, setTheme } = useTheme();
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSaveProfile = () => {
@@ -35,6 +37,10 @@ export default function SettingsPage() {
           <TabsTrigger value="profile">
             <User className="mr-2 h-4 w-4" />
             Profil
+          </TabsTrigger>
+          <TabsTrigger value="appearance">
+            <Palette className="mr-2 h-4 w-4" />
+            Apparence
           </TabsTrigger>
           <TabsTrigger value="tenant">
             <Building2 className="mr-2 h-4 w-4" />
@@ -122,6 +128,88 @@ export default function SettingsPage() {
                   <Save className="mr-2 h-4 w-4" />
                   Mettre à jour le mot de passe
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Appearance Tab */}
+        <TabsContent value="appearance" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Thème</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Choisissez le thème de l'interface utilisateur
+                </p>
+                <div className="grid grid-cols-3 gap-4">
+                  <button
+                    onClick={() => setTheme('light')}
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
+                      theme === 'light'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-muted hover:border-muted-foreground/50'
+                    }`}
+                  >
+                    <div className="h-16 w-16 rounded-lg bg-white border border-gray-200 flex items-center justify-center mb-3 shadow-sm">
+                      <Sun className="h-8 w-8 text-yellow-500" />
+                    </div>
+                    <span className="font-medium">Clair</span>
+                    <span className="text-xs text-muted-foreground mt-1">Mode jour</span>
+                  </button>
+
+                  <button
+                    onClick={() => setTheme('dark')}
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
+                      theme === 'dark'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-muted hover:border-muted-foreground/50'
+                    }`}
+                  >
+                    <div className="h-16 w-16 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center mb-3 shadow-sm">
+                      <Moon className="h-8 w-8 text-slate-400" />
+                    </div>
+                    <span className="font-medium">Sombre</span>
+                    <span className="text-xs text-muted-foreground mt-1">Mode nuit</span>
+                  </button>
+
+                  <button
+                    onClick={() => setTheme('system')}
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
+                      theme === 'system'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-muted hover:border-muted-foreground/50'
+                    }`}
+                  >
+                    <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-white to-slate-900 border border-gray-300 flex items-center justify-center mb-3 shadow-sm">
+                      <Monitor className="h-8 w-8 text-gray-600" />
+                    </div>
+                    <span className="font-medium">Système</span>
+                    <span className="text-xs text-muted-foreground mt-1">Auto</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-2">Prévisualisation</h4>
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center">
+                      <span className="text-primary-foreground font-bold">XCH</span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">Exemple de carte</p>
+                      <p className="text-sm text-muted-foreground">Texte secondaire</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm">Bouton primaire</Button>
+                    <Button size="sm" variant="outline">Secondaire</Button>
+                    <Button size="sm" variant="ghost">Ghost</Button>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

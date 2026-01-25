@@ -19,6 +19,8 @@ import { sitesApi } from '@/lib/api/sites';
 import { Plus, Search, Server, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import type { Rack, RackStatus, Site } from '@/types';
+import { ExportMenu } from '@/components/ui/export-menu';
+import { exportToPDF, exportToExcel, exportToCSV } from '@/lib/export-utils';
 
 const rackStatusColors = {
   IN_SERVICE: 'success',
@@ -56,6 +58,61 @@ export default function RacksPage() {
     );
   });
 
+  const handleExport = (format: 'excel' | 'pdf' | 'csv') => {
+    if (!filteredRacks) return;
+
+    const exportData = filteredRacks.map((rack) => {
+      const occupiedUnits = rack.assets?.reduce(
+        (sum, asset) => sum + (asset.rackHeightU || 0),
+        0
+      ) || 0;
+      const usagePercent = Math.round((occupiedUnits / rack.heightU) * 100);
+
+      return {
+        name: rack.name,
+        heightU: rack.heightU,
+        status: rackStatusLabels[rack.status],
+        site: rack.site?.name || '-',
+        location: rack.location || '-',
+        occupiedU: occupiedUnits,
+        availableU: rack.heightU - occupiedUnits,
+        usage: `${usagePercent}%`,
+        assetsCount: rack.assets?.length || 0,
+      };
+    });
+
+    const options = {
+      filename: `xch-racks-${new Date().toISOString().split('T')[0]}`,
+      title: 'Liste des Baies',
+      subtitle: `${exportData.length} baie(s)`,
+      columns: [
+        { header: 'Nom', key: 'name', width: 20 },
+        { header: 'Taille', key: 'heightU', width: 10 },
+        { header: 'Statut', key: 'status', width: 15 },
+        { header: 'Chantier', key: 'site', width: 25 },
+        { header: 'Emplacement', key: 'location', width: 20 },
+        { header: 'Occupé (U)', key: 'occupiedU', width: 12 },
+        { header: 'Dispo (U)', key: 'availableU', width: 12 },
+        { header: 'Usage', key: 'usage', width: 10 },
+        { header: 'Équipements', key: 'assetsCount', width: 12 },
+      ],
+      data: exportData,
+    };
+
+    switch (format) {
+      case 'pdf':
+        exportToPDF(options);
+        break;
+      case 'csv':
+        exportToCSV(options);
+        break;
+      case 'excel':
+      default:
+        exportToExcel(options);
+        break;
+    }
+  };
+
   if (isLoading) {
     return <div className="text-center">Chargement des baies...</div>;
   }
@@ -67,12 +124,19 @@ export default function RacksPage() {
           <h1 className="text-3xl font-bold">Baies</h1>
           <p className="text-muted-foreground">Gérez vos baies et équipements montés</p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/racks/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Nouvelle baie
-          </Link>
-        </Button>
+        <div className="flex items-center gap-4">
+          <ExportMenu
+            onExport={handleExport}
+            disabled={!filteredRacks?.length}
+            label="Exporter"
+          />
+          <Button asChild>
+            <Link href="/dashboard/racks/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Nouvelle baie
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
