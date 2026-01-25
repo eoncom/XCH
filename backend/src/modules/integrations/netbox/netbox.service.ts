@@ -120,7 +120,7 @@ export interface NetboxRack {
   last_updated?: string;
 }
 
-interface NetboxPaginatedResponse<T> {
+export interface NetboxPaginatedResponse<T> {
   count: number;
   next: string | null;
   previous: string | null;
@@ -333,7 +333,7 @@ export class NetboxService implements OnModuleInit {
     }
 
     try {
-      const response = await this.request<{ netbox-version: string }>('get', '/status/');
+      const response = await this.request<{ 'netbox-version': string }>('get', '/status/');
       return {
         status: 'healthy',
         version: response['netbox-version'],

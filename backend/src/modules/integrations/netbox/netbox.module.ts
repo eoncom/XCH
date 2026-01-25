@@ -4,7 +4,6 @@ import { ConfigModule } from '@nestjs/config';
 import { NetboxService } from './netbox.service';
 import { NetboxController } from './netbox.controller';
 import { NetboxSyncService } from './netbox-sync.service';
-import { PrismaService } from '../../../prisma/prisma.service';
 
 @Module({
   imports: [
@@ -15,7 +14,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
     ConfigModule,
   ],
   controllers: [NetboxController],
-  providers: [NetboxService, NetboxSyncService, PrismaService],
+  providers: [NetboxService, NetboxSyncService],
   exports: [NetboxService, NetboxSyncService],
 })
 export class NetboxModule {}

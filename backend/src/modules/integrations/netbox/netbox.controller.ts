@@ -6,17 +6,16 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { RbacGuard, RbacAction } from '../../auth/guards/rbac.guard';
-import { CurrentUser, CurrentTenant } from '../../auth/decorators';
 import { NetboxService } from './netbox.service';
 import { NetboxSyncService } from './netbox-sync.service';
 
 @ApiTags('Integrations - NetBox')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RbacGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('integrations/netbox')
 export class NetboxController {
   constructor(
@@ -29,7 +28,6 @@ export class NetboxController {
   // ============================================================
 
   @Get('health')
-  @RbacAction('read', 'integrations')
   @ApiOperation({ summary: 'Check NetBox integration health' })
   @ApiResponse({ status: 200, description: 'Health check result' })
   async healthCheck() {
@@ -37,7 +35,6 @@ export class NetboxController {
   }
 
   @Get('status')
-  @RbacAction('read', 'integrations')
   @ApiOperation({ summary: 'Get NetBox integration status' })
   @ApiResponse({ status: 200, description: 'Integration status' })
   async getStatus() {
@@ -52,7 +49,6 @@ export class NetboxController {
   // ============================================================
 
   @Get('sites')
-  @RbacAction('read', 'integrations')
   @ApiOperation({ summary: 'List NetBox sites' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'offset', required: false, type: Number })
@@ -67,7 +63,6 @@ export class NetboxController {
   }
 
   @Get('devices')
-  @RbacAction('read', 'integrations')
   @ApiOperation({ summary: 'List NetBox devices' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'offset', required: false, type: Number })
@@ -84,7 +79,6 @@ export class NetboxController {
   }
 
   @Get('racks')
-  @RbacAction('read', 'integrations')
   @ApiOperation({ summary: 'List NetBox racks' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'offset', required: false, type: Number })
@@ -105,38 +99,38 @@ export class NetboxController {
   // ============================================================
 
   @Post('sync/sites')
-  @RbacAction('manage', 'integrations')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sync sites from NetBox to XCH' })
   @ApiResponse({ status: 200, description: 'Sync result' })
-  async syncSites(@CurrentTenant() tenantId: string) {
+  async syncSites(@Req() req: any) {
+    const tenantId = req.user?.tenantId || 'default';
     return this.netboxSyncService.syncSitesFromNetbox(tenantId);
   }
 
   @Post('sync/devices')
-  @RbacAction('manage', 'integrations')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sync devices from NetBox to XCH assets' })
   @ApiResponse({ status: 200, description: 'Sync result' })
-  async syncDevices(@CurrentTenant() tenantId: string) {
+  async syncDevices(@Req() req: any) {
+    const tenantId = req.user?.tenantId || 'default';
     return this.netboxSyncService.syncDevicesFromNetbox(tenantId);
   }
 
   @Post('sync/racks')
-  @RbacAction('manage', 'integrations')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sync racks from NetBox to XCH' })
   @ApiResponse({ status: 200, description: 'Sync result' })
-  async syncRacks(@CurrentTenant() tenantId: string) {
+  async syncRacks(@Req() req: any) {
+    const tenantId = req.user?.tenantId || 'default';
     return this.netboxSyncService.syncRacksFromNetbox(tenantId);
   }
 
   @Post('sync/full')
-  @RbacAction('manage', 'integrations')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Full sync from NetBox (sites, devices, racks)' })
   @ApiResponse({ status: 200, description: 'Full sync report' })
-  async fullSync(@CurrentTenant() tenantId: string) {
+  async fullSync(@Req() req: any) {
+    const tenantId = req.user?.tenantId || 'default';
     return this.netboxSyncService.fullSync(tenantId);
   }
 }

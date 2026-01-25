@@ -1,16 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
+import { PrismaClient, SiteStatus, AssetType, AssetStatus, RackType, RackStatus } from '@prisma/client';
 import { NetboxService, NetboxSite, NetboxDevice, NetboxRack } from './netbox.service';
-import { SiteStatus, AssetType, AssetStatus, RackType, RackStatus } from '@prisma/client';
 
-interface SyncResult {
+export interface SyncResult {
   created: number;
   updated: number;
   skipped: number;
   errors: string[];
 }
 
-interface SyncReport {
+export interface SyncReport {
   timestamp: Date;
   sites: SyncResult;
   devices: SyncResult;
@@ -24,7 +23,7 @@ export class NetboxSyncService {
 
   constructor(
     private readonly netboxService: NetboxService,
-    private readonly prisma: PrismaService,
+    private readonly prisma: PrismaClient,
   ) {}
 
   // ============================================================
