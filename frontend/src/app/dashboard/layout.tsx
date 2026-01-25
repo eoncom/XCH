@@ -13,6 +13,7 @@ import {
   Users,
   LogOut,
   Menu,
+  LayoutDashboard,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -20,9 +21,11 @@ import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { DashboardSkeleton } from '@/components/ui/skeleton';
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutTemplate },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Chantiers', href: '/dashboard/sites', icon: MapPin },
   { name: 'Équipements', href: '/dashboard/assets', icon: Package },
   { name: 'Baies', href: '/dashboard/racks', icon: Server },
@@ -42,7 +45,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
 
-  // ✅ Check session on mount (verify HTTP-only cookie is valid)
+  // Check session on mount (verify HTTP-only cookie is valid)
   useEffect(() => {
     checkSession().finally(() => setSessionChecked(true));
   }, [checkSession]);
@@ -59,13 +62,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.push('/login');
   };
 
-  // Show loading while checking session
+  // Show skeleton while checking session
   if (!sessionChecked || isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-gray-600">Chargement...</p>
+      <div className="flex h-screen bg-background">
+        {/* Skeleton sidebar */}
+        <div className="hidden lg:flex lg:w-64 lg:flex-col lg:border-r lg:bg-card">
+          <div className="flex h-16 items-center border-b px-6">
+            <div className="h-6 w-20 animate-pulse rounded bg-muted" />
+          </div>
+          <div className="flex-1 p-4 space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-10 animate-pulse rounded bg-muted" />
+            ))}
+          </div>
+        </div>
+        {/* Skeleton main */}
+        <div className="flex-1 p-6">
+          <DashboardSkeleton />
         </div>
       </div>
     );
@@ -79,11 +93,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isAdmin = user.role === 'ADMIN';
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-background">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -91,23 +105,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <div
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-lg transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-64 transform bg-card border-r shadow-lg transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
         <div className="flex h-16 items-center justify-between border-b px-6">
           <h1 className="text-xl font-bold text-primary">XCH</h1>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
-        <nav className="flex-1 space-y-1 px-3 py-4">
+        <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
           {navigation.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -115,15 +132,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 key={item.name}
                 href={item.href}
                 className={cn(
-                  'group flex items-center rounded-md px-3 py-2 text-sm font-medium',
+                  'group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
                   isActive
-                    ? 'bg-primary text-white'
-                    : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 )}
                 onClick={() => setSidebarOpen(false)}
               >
                 <item.icon
-                  className={cn('mr-3 h-5 w-5 flex-shrink-0', isActive ? 'text-white' : 'text-gray-400')}
+                  className={cn(
+                    'mr-3 h-5 w-5 flex-shrink-0 transition-colors',
+                    isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-accent-foreground'
+                  )}
                 />
                 {item.name}
               </Link>
@@ -133,6 +153,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {isAdmin && (
             <>
               <div className="my-4 border-t" />
+              <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Administration
+              </p>
               {adminNavigation.map((item) => {
                 const isActive = pathname === item.href;
                 return (
@@ -140,15 +163,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     key={item.name}
                     href={item.href}
                     className={cn(
-                      'group flex items-center rounded-md px-3 py-2 text-sm font-medium',
+                      'group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
                       isActive
-                        ? 'bg-primary text-white'
-                        : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                     )}
                     onClick={() => setSidebarOpen(false)}
                   >
                     <item.icon
-                      className={cn('mr-3 h-5 w-5 flex-shrink-0', isActive ? 'text-white' : 'text-gray-400')}
+                      className={cn(
+                        'mr-3 h-5 w-5 flex-shrink-0 transition-colors',
+                        isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-accent-foreground'
+                      )}
                     />
                     {item.name}
                   </Link>
@@ -160,12 +186,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="border-t p-4">
           <div className="mb-3 px-3">
-            <p className="text-sm font-medium text-gray-900">{user.name}</p>
-            <p className="text-xs text-gray-500">{user.role}</p>
+            <p className="text-sm font-medium text-foreground">{user.name}</p>
+            <p className="text-xs text-muted-foreground">{user.role}</p>
           </div>
           <Button
             variant="ghost"
-            className="w-full justify-start"
+            className="w-full justify-start text-muted-foreground hover:text-foreground"
             onClick={handleLogout}
             data-testid="logout-button"
           >
@@ -178,15 +204,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Mobile header */}
-        <div className="flex h-16 items-center border-b bg-white px-4 lg:hidden">
-          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
-            <Menu className="h-5 w-5" />
-          </Button>
-          <h1 className="ml-4 text-xl font-bold text-primary">XCH</h1>
+        <div className="flex h-16 items-center justify-between border-b bg-card px-4 lg:hidden">
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
+              <Menu className="h-5 w-5" />
+            </Button>
+            <h1 className="ml-4 text-xl font-bold text-primary">XCH</h1>
+          </div>
+          <ThemeToggle />
         </div>
 
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-6 bg-background">
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
       </div>
