@@ -671,18 +671,71 @@ Créer une issue GitHub avec le label `documentation`.
 
 ---
 
+## Stratégie V2 & Multi-Agents
+
+### V2_STRATEGY_PROPOSAL.md
+**📍 Chemin:** [`V2_STRATEGY_PROPOSAL.md`](V2_STRATEGY_PROPOSAL.md)
+**📝 Description:** Proposition stratégique complète pour V2 + architecture multi-agents
+**🎯 Audience:** Lead Technique, Product Owner, Équipe
+**📅 Date:** 2026-01-25
+**📋 Contient:**
+- Audit complet état V1 actuel
+- Architecture multi-agents (6 agents spécialisés)
+- Stratégie V1 stable / V2 parallèle
+- POC intégrations NetBox + Uptime Kuma
+- Planning 8 semaines
+
+### Fiches Agents
+
+#### agents/ORCHESTRATOR.md
+**📍 Chemin:** [`agents/ORCHESTRATOR.md`](agents/ORCHESTRATOR.md)
+**📝 Description:** Agent principal - Coordination et décisions architecture
+**🎯 Rôle:** Lead Technique, coordination inter-agents
+
+#### agents/AGENT_DB.md
+**📍 Chemin:** [`agents/AGENT_DB.md`](agents/AGENT_DB.md)
+**📝 Description:** Agent DB/Prisma - Gestion exclusive schéma base de données
+**🎯 Rôle:** Migrations, schema, optimisation queries
+
+#### agents/AGENT_BACKEND.md
+**📍 Chemin:** [`agents/AGENT_BACKEND.md`](agents/AGENT_BACKEND.md)
+**📝 Description:** Agent Backend - Développement API NestJS
+**🎯 Rôle:** Controllers, services, intégrations
+
+#### agents/AGENT_FRONTEND.md
+**📍 Chemin:** [`agents/AGENT_FRONTEND.md`](agents/AGENT_FRONTEND.md)
+**📝 Description:** Agent Frontend - Développement interface Next.js
+**🎯 Rôle:** Pages, composants, UX
+
+#### agents/AGENT_TESTS.md
+**📍 Chemin:** [`agents/AGENT_TESTS.md`](agents/AGENT_TESTS.md)
+**📝 Description:** Agent Tests - Qualité et couverture tests
+**🎯 Rôle:** E2E Playwright, unitaires, reporting
+
+#### agents/AGENT_DOCS.md
+**📍 Chemin:** [`agents/AGENT_DOCS.md`](agents/AGENT_DOCS.md)
+**📝 Description:** Agent Documentation - Maintien documentation
+**🎯 Rôle:** README, ADR, guides, changelogs
+
+#### agents/AGENT_CICD.md
+**📍 Chemin:** [`agents/AGENT_CICD.md`](agents/AGENT_CICD.md)
+**📝 Description:** Agent CI/CD - Pipelines automatisation
+**🎯 Rôle:** GitHub Actions, déploiement, gates
+
+---
+
 ## Version
 
-- **Version du document**: 1.0
-- **Dernière mise à jour**: 2026-01-01
+- **Version du document**: 1.1
+- **Dernière mise à jour**: 2026-01-25
 - **Mainteneur**: Équipe XCH
 - **Prochaine revue**: À chaque livraison majeure
 
 ---
 
 ✅ **INDEX COMPLET DE LA DOCUMENTATION XCH**
-📚 **27 fichiers documentés**
-🎯 **Production-ready**
+📚 **35 fichiers documentés** (27 V1 + 8 V2/Agents)
+🎯 **Production-ready + V2 Strategy**
 
-**Dernière mise à jour:** 2026-01-01
-**Projet:** XCH MVP 100% Complet
+**Dernière mise à jour:** 2026-01-25
+**Projet:** XCH V1.0.4 + V2 Strategy

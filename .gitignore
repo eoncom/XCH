@@ -60,8 +60,9 @@ Thumbs.db
 docker/volumes/
 *.log
 
-# Prisma
-backend/prisma/migrations/**/migration.sql
+# Prisma - Note: migration.sql files SHOULD be committed for proper migration tracking
+# Only exclude generated client
+backend/node_modules/.prisma/
 
 # Uploads (development)
 uploads/
