@@ -39,7 +39,7 @@ export class SitesService {
       siteData.city,
       siteData.postalCode || null,
       siteData.country || 'France',
-      ...(coordinates ? [coordinates.replace('POINT(', '').replace(')', '')] : []),
+      ...(coordinates ? [coordinates] : []),
       siteData.healthStatus || 'UNKNOWN',
     );
 
