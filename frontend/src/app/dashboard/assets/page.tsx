@@ -14,7 +14,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ExportMenu } from '@/components/ui/export-menu';
+import { CardSkeleton } from '@/components/ui/skeleton';
 import { assetsApi } from '@/lib/api/assets';
+import { exportAssets } from '@/lib/export-utils';
 import { Plus, Search, QrCode, Package } from 'lucide-react';
 import Link from 'next/link';
 import type { Asset, AssetType, AssetStatus } from '@/types';
@@ -75,27 +78,58 @@ export default function AssetsPage() {
     );
   });
 
+  // Handle export
+  const handleExport = (format: 'excel' | 'pdf' | 'csv') => {
+    if (!filteredAssets) return;
+
+    const exportData = filteredAssets.map((asset) => ({
+      type: assetTypeLabels[asset.type],
+      brand: asset.manufacturer || '',
+      model: asset.model || '',
+      serialNumber: asset.serialNumber || '',
+      status: assetStatusLabels[asset.status],
+      siteName: asset.site?.name || '',
+    }));
+
+    exportAssets(exportData, format);
+  };
+
   if (isLoading) {
-    return <div className="text-center">Chargement des équipements...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="h-8 w-48 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-64 animate-pulse rounded bg-muted mt-2" />
+          </div>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Équipements</h1>
+          <h1 className="text-3xl font-bold text-foreground">Équipements</h1>
           <p className="text-muted-foreground">
-            Gérez votre inventaire d'équipements
+            Gérez votre inventaire d'équipements ({filteredAssets?.length || 0})
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <ExportMenu onExport={handleExport} disabled={!filteredAssets?.length} />
           <Button variant="outline" asChild>
             <Link href="/dashboard/assets/scanner">
               <QrCode className="mr-2 h-4 w-4" />
               Scanner QR
             </Link>
           </Button>
-          <Button asChild>
+          <Button asChild className="press-effect">
             <Link href="/dashboard/assets/new">
               <Plus className="mr-2 h-4 w-4" />
               Nouvel équipement
@@ -150,7 +184,7 @@ export default function AssetsPage() {
         {filteredAssets?.map((asset) => (
           <Card
             key={asset.id}
-            className="hover:shadow-lg transition-shadow cursor-pointer"
+            className="hover-lift cursor-pointer border-border"
           >
             <Link href={`/dashboard/assets/${asset.id}`}>
               <CardHeader>
@@ -158,7 +192,7 @@ export default function AssetsPage() {
                   <div className="flex items-center gap-2">
                     <Package className="h-5 w-5 text-muted-foreground" />
                     <div>
-                      <CardTitle className="text-lg">
+                      <CardTitle className="text-lg text-foreground">
                         {asset.manufacturer} {asset.model}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground">
@@ -176,13 +210,13 @@ export default function AssetsPage() {
                   {asset.serialNumber && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">S/N:</span>
-                      <span className="font-mono">{asset.serialNumber}</span>
+                      <span className="font-mono text-foreground">{asset.serialNumber}</span>
                     </div>
                   )}
                   {asset.site && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Site:</span>
-                      <span>{asset.site.name}</span>
+                      <span className="text-foreground">{asset.site.name}</span>
                     </div>
                   )}
                   {asset.qrCodeUrl && (
