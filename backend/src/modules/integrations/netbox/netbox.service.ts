@@ -184,7 +184,7 @@ export class NetboxService implements OnModuleInit {
         }),
       );
       return response.data;
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof AxiosError) {
         this.logger.error(
           `NetBox API error: ${error.response?.status} ${error.response?.statusText}`,
@@ -338,10 +338,10 @@ export class NetboxService implements OnModuleInit {
         status: 'healthy',
         version: response['netbox-version'],
       };
-    } catch (error) {
+    } catch (error: unknown) {
       return {
         status: 'unhealthy',
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }

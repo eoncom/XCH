@@ -133,9 +133,10 @@ export class IntegrationsService {
         } else {
           results.skipped++;
         }
-      } catch (error) {
-        this.logger.error(`Failed to sync NetBox site ${netboxSite.name}`, error.message);
-        results.errors.push(`${netboxSite.name}: ${error.message}`);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Failed to sync NetBox site ${netboxSite.name}`, errorMessage);
+        results.errors.push(`${netboxSite.name}: ${errorMessage}`);
       }
     }
 
@@ -229,12 +230,13 @@ export class IntegrationsService {
         } else {
           results.skipped++;
         }
-      } catch (error) {
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         this.logger.error(
           `Failed to sync NetBox device ${netboxDevice.name}`,
-          error.message,
+          errorMessage,
         );
-        results.errors.push(`${netboxDevice.name}: ${error.message}`);
+        results.errors.push(`${netboxDevice.name}: ${errorMessage}`);
       }
     }
 
@@ -394,9 +396,10 @@ export class IntegrationsService {
 
         await this.updateSiteHealthFromMonitor(site.id, tenantId, monitorIdentifier);
         results.updated++;
-      } catch (error) {
-        this.logger.error(`Failed to update health for site ${site.id}`, error.message);
-        results.errors.push(`${site.name}: ${error.message}`);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Failed to update health for site ${site.id}`, errorMessage);
+        results.errors.push(`${site.name}: ${errorMessage}`);
       }
     }
 

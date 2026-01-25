@@ -68,9 +68,10 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
           endpoint: this.client.defaults.baseURL,
         },
       };
-    } catch (error) {
+    } catch (error: unknown) {
       // If 401/403, credentials are wrong but service is reachable
-      if (error.response?.status === 401 || error.response?.status === 403) {
+      const axiosError = error as { response?: { status?: number } };
+      if (axiosError.response?.status === 401 || axiosError.response?.status === 403) {
         this.status = 'error';
         return {
           success: false,
@@ -79,11 +80,12 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
       }
 
       this.status = 'error';
-      this.logger.error('Uptime Kuma connection test failed', error.message);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Uptime Kuma connection test failed', errorMessage);
 
       return {
         success: false,
-        message: `Connection failed: ${error.message}`,
+        message: `Connection failed: ${errorMessage}`,
       };
     }
   }
@@ -105,8 +107,9 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
 
       this.logger.log(`Fetched ${response.data?.length || 0} monitors from Uptime Kuma`);
       return response.data || [];
-    } catch (error) {
-      this.logger.error('Failed to fetch monitors from Uptime Kuma', error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Failed to fetch monitors from Uptime Kuma', errorMessage);
 
       // Return empty array instead of throwing (circuit breaker pattern)
       this.logger.warn('Returning empty monitors list due to API error');
@@ -143,8 +146,9 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
         uptime: monitor.uptime || 0,
         lastCheck: new Date(monitor.last_check || Date.now()),
       };
-    } catch (error) {
-      this.logger.error(`Failed to get monitor status for ${identifier}`, error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to get monitor status for ${identifier}`, errorMessage);
       return null;
     }
   }
@@ -163,8 +167,9 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
       });
 
       return response.data || [];
-    } catch (error) {
-      this.logger.error(`Failed to get heartbeats for monitor ${monitorId}`, error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to get heartbeats for monitor ${monitorId}`, errorMessage);
       return [];
     }
   }

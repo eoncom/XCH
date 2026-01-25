@@ -64,13 +64,14 @@ export class NetBoxProviderService implements NetBoxProvider {
           pythonVersion: response.data?.python_version || 'unknown',
         },
       };
-    } catch (error) {
+    } catch (error: unknown) {
       this.status = 'error';
-      this.logger.error('NetBox connection test failed', error.message);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('NetBox connection test failed', errorMessage);
 
       return {
         success: false,
-        message: `Connection failed: ${error.message}`,
+        message: `Connection failed: ${errorMessage}`,
       };
     }
   }
@@ -90,8 +91,9 @@ export class NetBoxProviderService implements NetBoxProvider {
 
       this.logger.log(`Fetched ${response.data.results?.length || 0} sites from NetBox`);
       return response.data.results || [];
-    } catch (error) {
-      this.logger.error('Failed to fetch sites from NetBox', error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Failed to fetch sites from NetBox', errorMessage);
       throw error;
     }
   }
@@ -116,8 +118,9 @@ export class NetBoxProviderService implements NetBoxProvider {
         `Fetched ${response.data.results?.length || 0} devices for NetBox site ${siteId}`,
       );
       return response.data.results || [];
-    } catch (error) {
-      this.logger.error(`Failed to fetch devices for site ${siteId}`, error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to fetch devices for site ${siteId}`, errorMessage);
       throw error;
     }
   }
@@ -149,8 +152,9 @@ export class NetBoxProviderService implements NetBoxProvider {
       }
 
       return devices[0];
-    } catch (error) {
-      this.logger.error(`Failed to search device by serial ${serialNumber}`, error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to search device by serial ${serialNumber}`, errorMessage);
       throw error;
     }
   }

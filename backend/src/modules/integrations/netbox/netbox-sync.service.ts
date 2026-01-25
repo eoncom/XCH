@@ -103,8 +103,9 @@ export class NetboxSyncService {
         for (const nbSite of response.results) {
           try {
             await this.syncSingleSite(tenantId, nbSite, result);
-          } catch (error) {
-            result.errors.push(`Site ${nbSite.name}: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            result.errors.push(`Site ${nbSite.name}: ${errorMessage}`);
           }
         }
 
@@ -115,8 +116,9 @@ export class NetboxSyncService {
       this.logger.log(
         `Sites sync complete: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped`,
       );
-    } catch (error) {
-      result.errors.push(`Sync failed: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      result.errors.push(`Sync failed: ${errorMessage}`);
       this.logger.error('Sites sync failed', error);
     }
 
@@ -223,8 +225,9 @@ export class NetboxSyncService {
         for (const nbDevice of response.results) {
           try {
             await this.syncSingleDevice(tenantId, nbDevice, result);
-          } catch (error) {
-            result.errors.push(`Device ${nbDevice.name}: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            result.errors.push(`Device ${nbDevice.name}: ${errorMessage}`);
           }
         }
 
@@ -235,8 +238,9 @@ export class NetboxSyncService {
       this.logger.log(
         `Devices sync complete: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped`,
       );
-    } catch (error) {
-      result.errors.push(`Sync failed: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      result.errors.push(`Sync failed: ${errorMessage}`);
       this.logger.error('Devices sync failed', error);
     }
 
@@ -339,8 +343,9 @@ export class NetboxSyncService {
         for (const nbRack of response.results) {
           try {
             await this.syncSingleRack(tenantId, nbRack, result);
-          } catch (error) {
-            result.errors.push(`Rack ${nbRack.name}: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            result.errors.push(`Rack ${nbRack.name}: ${errorMessage}`);
           }
         }
 
@@ -351,8 +356,9 @@ export class NetboxSyncService {
       this.logger.log(
         `Racks sync complete: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped`,
       );
-    } catch (error) {
-      result.errors.push(`Sync failed: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      result.errors.push(`Sync failed: ${errorMessage}`);
       this.logger.error('Racks sync failed', error);
     }
 
