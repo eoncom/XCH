@@ -29,7 +29,7 @@ export class SitesService {
 
     const site = await this.prisma.$executeRawUnsafe(
       `INSERT INTO "sites" ("id", "tenantId", "code", "name", "status", "address", "city", "postalCode", "country", "coordinates", "healthStatus", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, ${coordinates ? `ST_GeomFromText($9, 4326)` : 'NULL'}, $10, NOW(), NOW())
+       VALUES (gen_random_uuid(), $1, $2, $3, $4::"SiteStatus", $5, $6, $7, $8, ${coordinates ? `ST_GeomFromText($9, 4326)` : 'NULL'}, $10::"HealthStatus", NOW(), NOW())
        RETURNING *`,
       tenantId,
       siteData.code,
