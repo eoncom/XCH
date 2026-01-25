@@ -19,7 +19,7 @@ import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
-import { ArrowLeft, MapPin, Edit, Trash2, Package } from 'lucide-react';
+import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Wifi, Globe, Shield, Clock, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import type { Site, Asset, Rack, Task } from '@/types';
 
@@ -178,8 +178,169 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                   </div>
                 </div>
               )}
+
+              {site.notes && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Notes</label>
+                  <p className="text-sm mt-1">{site.notes}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* Contacts */}
+          {site.contacts && site.contacts.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Contacts
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {site.contacts.map((contact, index) => (
+                    <div key={index} className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{contact.name}</p>
+                          {contact.isPrimary && (
+                            <Badge variant="outline" className="text-xs">Principal</Badge>
+                          )}
+                        </div>
+                        {contact.role && (
+                          <p className="text-sm text-muted-foreground">{contact.role}</p>
+                        )}
+                        <div className="flex flex-wrap gap-4 mt-2">
+                          {contact.phone && (
+                            <a href={`tel:${contact.phone}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
+                              <Phone className="h-3 w-3" />
+                              {contact.phone}
+                            </a>
+                          )}
+                          {contact.email && (
+                            <a href={`mailto:${contact.email}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
+                              <Mail className="h-3 w-3" />
+                              {contact.email}
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Connectivity */}
+          {site.connectivity && (site.connectivity.primary || site.connectivity.backup) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wifi className="h-5 w-5" />
+                  Connectivité
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {site.connectivity.primary && (
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Connexion principale</p>
+                      <div className="space-y-1">
+                        {site.connectivity.primary.type && (
+                          <p className="text-sm"><strong>Type:</strong> {site.connectivity.primary.type}</p>
+                        )}
+                        {site.connectivity.primary.provider && (
+                          <p className="text-sm"><strong>Opérateur:</strong> {site.connectivity.primary.provider}</p>
+                        )}
+                        {site.connectivity.primary.ref && (
+                          <p className="text-sm"><strong>Réf:</strong> {site.connectivity.primary.ref}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {site.connectivity.backup && (
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Connexion de secours</p>
+                      <div className="space-y-1">
+                        {site.connectivity.backup.type && (
+                          <p className="text-sm"><strong>Type:</strong> {site.connectivity.backup.type}</p>
+                        )}
+                        {site.connectivity.backup.provider && (
+                          <p className="text-sm"><strong>Opérateur:</strong> {site.connectivity.backup.provider}</p>
+                        )}
+                        {site.connectivity.backup.ref && (
+                          <p className="text-sm"><strong>Réf:</strong> {site.connectivity.backup.ref}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {site.connectivity.cutProcedure && (
+                  <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <p className="text-sm font-medium flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+                      <AlertTriangle className="h-4 w-4" />
+                      Procédure en cas de coupure
+                    </p>
+                    <p className="text-sm mt-1 text-yellow-700 dark:text-yellow-300">{site.connectivity.cutProcedure}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Access Notes */}
+          {site.accessNotes && (site.accessNotes.schedules || site.accessNotes.badges || site.accessNotes.procedures || site.accessNotes.safety) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Informations d'accès
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {site.accessNotes.schedules && (
+                    <div className="flex items-start gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground mt-1" />
+                      <div>
+                        <p className="text-sm font-medium">Horaires</p>
+                        <p className="text-sm text-muted-foreground">{site.accessNotes.schedules}</p>
+                      </div>
+                    </div>
+                  )}
+                  {site.accessNotes.badges && (
+                    <div className="flex items-start gap-2">
+                      <Shield className="h-4 w-4 text-muted-foreground mt-1" />
+                      <div>
+                        <p className="text-sm font-medium">Badges</p>
+                        <p className="text-sm text-muted-foreground">{site.accessNotes.badges}</p>
+                      </div>
+                    </div>
+                  )}
+                  {site.accessNotes.procedures && (
+                    <div className="flex items-start gap-2">
+                      <Globe className="h-4 w-4 text-muted-foreground mt-1" />
+                      <div>
+                        <p className="text-sm font-medium">Procédures</p>
+                        <p className="text-sm text-muted-foreground">{site.accessNotes.procedures}</p>
+                      </div>
+                    </div>
+                  )}
+                  {site.accessNotes.safety && (
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-muted-foreground mt-1" />
+                      <div>
+                        <p className="text-sm font-medium">Sécurité</p>
+                        <p className="text-sm text-muted-foreground">{site.accessNotes.safety}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Statistiques */}
           <div className="grid md:grid-cols-3 gap-4">

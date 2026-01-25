@@ -28,6 +28,35 @@ export interface AuthResponse {
 export type SiteStatus = 'PREPARATION' | 'ACTIVE' | 'CLOSED';
 export type HealthStatus = 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
 
+export interface SiteContact {
+  name: string;
+  phone?: string;
+  email?: string;
+  role?: string;
+  isPrimary?: boolean;
+}
+
+export interface SiteConnectivity {
+  primary?: {
+    type?: string;
+    provider?: string;
+    ref?: string;
+  };
+  backup?: {
+    type?: string;
+    provider?: string;
+    ref?: string;
+  };
+  cutProcedure?: string;
+}
+
+export interface SiteAccessNotes {
+  schedules?: string;
+  badges?: string;
+  procedures?: string;
+  safety?: string;
+}
+
 export interface Site {
   id: string;
   tenantId: string;
@@ -38,9 +67,13 @@ export interface Site {
   address?: string;
   city?: string;
   postalCode?: string;
+  country?: string;
   latitude?: number;
   longitude?: number;
-  contacts?: any;
+  contacts?: SiteContact[];
+  connectivity?: SiteConnectivity;
+  accessNotes?: SiteAccessNotes;
+  notes?: string;
   metadata?: any;
   createdAt: string;
   updatedAt: string;

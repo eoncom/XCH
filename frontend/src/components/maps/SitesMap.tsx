@@ -89,28 +89,30 @@ export default function SitesMap({
         );
       }
 
-      // Add popup
+      // Add popup with link to detail page
+      const statusColor = site.status === 'ACTIVE' ? '#10b981' :
+                         site.status === 'PREPARATION' ? '#f59e0b' : '#6b7280';
+      const healthColor = site.healthStatus === 'HEALTHY' ? '#10b981' :
+                         site.healthStatus === 'WARNING' ? '#f59e0b' :
+                         site.healthStatus === 'CRITICAL' ? '#ef4444' : '#6b7280';
+
       const popupContent = `
-        <div>
-          <h3 style="font-weight: bold; margin-bottom: 4px;">${site.name}</h3>
+        <div style="min-width: 200px;">
+          <h3 style="font-weight: bold; margin-bottom: 4px; font-size: 14px;">${site.name}</h3>
           <p style="margin: 0; font-size: 12px; color: #666;">${site.code}</p>
-          ${site.city ? `<p style="margin: 0; font-size: 12px;">${site.city}</p>` : ''}
-          <p style="margin-top: 4px; font-size: 12px;">
-            <span style="padding: 2px 6px; background: ${
-              site.status === 'ACTIVE' ? '#10b981' :
-              site.status === 'PREPARATION' ? '#f59e0b' : '#6b7280'
-            }; color: white; border-radius: 4px;">${site.status}</span>
-          </p>
+          ${site.city ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Ville:</strong> ${site.city}</p>` : ''}
+          ${site.address ? `<p style="margin: 4px 0; font-size: 11px; color: #666;">${site.address}</p>` : ''}
+          <div style="margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap;">
+            <span style="padding: 2px 6px; background: ${statusColor}; color: white; border-radius: 4px; font-size: 11px;">${site.status}</span>
+            <span style="padding: 2px 6px; background: ${healthColor}; color: white; border-radius: 4px; font-size: 11px;">${site.healthStatus}</span>
+          </div>
+          <a href="/dashboard/sites/${site.id}"
+             style="display: inline-block; margin-top: 10px; padding: 6px 12px; background: #3b82f6; color: white; text-decoration: none; border-radius: 4px; font-size: 12px; font-weight: 500;">
+            Voir le détail
+          </a>
         </div>
       `;
-      marker.bindPopup(popupContent);
-
-      // Add click handler
-      if (onSiteClick) {
-        marker.on('click', () => {
-          onSiteClick(site);
-        });
-      }
+      marker.bindPopup(popupContent, { maxWidth: 280 });
 
       markers.push(marker);
       markersLayerRef.current?.addLayer(marker);

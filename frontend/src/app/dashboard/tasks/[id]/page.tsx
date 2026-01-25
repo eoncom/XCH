@@ -239,7 +239,7 @@ export default function TaskDetailPage({
                       item.checked ? 'line-through text-muted-foreground' : ''
                     }`}
                   >
-                    {item.text}
+                    {item.text || (item as any).title || 'Sans titre'}
                   </span>
                   <Button
                     variant="ghost"

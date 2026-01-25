@@ -2359,3 +2359,24 @@ fix(backend): Fix NetBox module imports and exports
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-01-25
+
+**Date:** 2026-01-25 23:48:40
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 4
+
+**Commit message:**
+```
+feat(frontend): Add exports to Sites/Racks pages and theme selector
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
