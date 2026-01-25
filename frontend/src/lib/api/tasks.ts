@@ -28,5 +28,5 @@ export const tasksApi = {
   delete: (id: string) => apiClient.delete(`/api/tasks/${id}`),
 
   updateChecklist: (id: string, checklist: any[]) =>
-    apiClient.patch<Task>(`/api/tasks/${id}`, { checklist }),
+    apiClient.patch<Task>(`/api/tasks/${id}/checklist`, { checklist }),
 };
