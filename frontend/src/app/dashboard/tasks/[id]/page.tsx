@@ -118,14 +118,20 @@ export default function TaskDetailPage({
   const addChecklistItem = () => {
     if (!task || !newChecklistItem.trim()) return;
 
+    // Filter out invalid items before adding new one
+    const validChecklist = (task.checklist || []).filter(
+      (item): item is ChecklistItem =>
+        item && typeof item === 'object' && !Array.isArray(item) && 'id' in item
+    );
+
     const newItem: ChecklistItem = {
       id: `temp-${Date.now()}`,
       text: newChecklistItem,
       checked: false,
-      order: (task.checklist?.length || 0) + 1,
+      order: validChecklist.length + 1,
     };
 
-    const updatedChecklist = [...(task.checklist || []), newItem];
+    const updatedChecklist = [...validChecklist, newItem];
     updateChecklistMutation.mutate(updatedChecklist);
     setNewChecklistItem('');
   };
