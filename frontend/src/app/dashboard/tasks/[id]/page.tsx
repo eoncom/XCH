@@ -102,7 +102,13 @@ export default function TaskDetailPage({
   const toggleChecklistItem = (itemId: string) => {
     if (!task?.checklist) return;
 
-    const updatedChecklist = task.checklist.map((item) =>
+    // Filter out invalid items (empty arrays or objects without proper structure)
+    const validChecklist = task.checklist.filter(
+      (item): item is ChecklistItem =>
+        item && typeof item === 'object' && !Array.isArray(item) && 'id' in item
+    );
+
+    const updatedChecklist = validChecklist.map((item) =>
       item.id === itemId ? { ...item, checked: !item.checked } : item
     );
 
@@ -127,7 +133,13 @@ export default function TaskDetailPage({
   const deleteChecklistItem = (itemId: string) => {
     if (!task?.checklist) return;
 
-    const updatedChecklist = task.checklist.filter((item) => item.id !== itemId);
+    // Filter out invalid items and then remove the target item
+    const validChecklist = task.checklist.filter(
+      (item): item is ChecklistItem =>
+        item && typeof item === 'object' && !Array.isArray(item) && 'id' in item
+    );
+
+    const updatedChecklist = validChecklist.filter((item) => item.id !== itemId);
     updateChecklistMutation.mutate(updatedChecklist);
   };
 
@@ -139,8 +151,13 @@ export default function TaskDetailPage({
     return <div className="text-center py-12">Tâche non trouvée</div>;
   }
 
-  const completedItems = task.checklist?.filter((item) => item.checked).length || 0;
-  const totalItems = task.checklist?.length || 0;
+  // Filter out invalid checklist items for display and calculations
+  const validChecklist = task.checklist?.filter(
+    (item): item is ChecklistItem =>
+      item && typeof item === 'object' && !Array.isArray(item) && 'id' in item
+  ) || [];
+  const completedItems = validChecklist.filter((item) => item.checked).length;
+  const totalItems = validChecklist.length;
   const progress = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
 
   return (
@@ -219,7 +236,7 @@ export default function TaskDetailPage({
               )}
             </CardHeader>
             <CardContent className="space-y-3">
-              {task.checklist?.map((item) => (
+              {validChecklist.map((item) => (
                 <div
                   key={item.id}
                   className="flex items-center gap-3 group"
@@ -239,7 +256,7 @@ export default function TaskDetailPage({
                       item.checked ? 'line-through text-muted-foreground' : ''
                     }`}
                   >
-                    {item.text || (item as any).title || 'Sans titre'}
+                    {item.text || 'Sans titre'}
                   </span>
                   <Button
                     variant="ghost"
