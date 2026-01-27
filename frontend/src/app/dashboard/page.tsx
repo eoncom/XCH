@@ -10,6 +10,7 @@ import { MapPin, Package, Server, CheckSquare, MapIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 // Dynamically import map component (client-side only)
 const SitesMap = dynamic(() => import('@/components/maps/SitesMap'), {
@@ -130,57 +131,65 @@ export default function DashboardPage() {
 
       {/* Stats Cards */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Chantiers</CardTitle>
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.sites.total}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats.sites.active} actifs • {stats.sites.critical} alertes
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/sites">
+          <Card className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Chantiers</CardTitle>
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.sites.total}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.sites.active} actifs • {stats.sites.critical} alertes
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Équipements</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.assets.total}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats.assets.inService} en service • {stats.assets.inStock} en stock
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/assets">
+          <Card className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Équipements</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.assets.total}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.assets.inService} en service • {stats.assets.inStock} en stock
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Baies</CardTitle>
-            <Server className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.racks.total}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats.racks.activeU}U / {stats.racks.totalU}U utilisés
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/racks">
+          <Card className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Baies</CardTitle>
+              <Server className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.racks.total}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.racks.activeU}U / {stats.racks.totalU}U utilisés
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tâches</CardTitle>
-            <CheckSquare className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.tasks.total}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats.tasks.inProgress} en cours • {stats.tasks.todo} à faire
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/tasks">
+          <Card className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Tâches</CardTitle>
+              <CheckSquare className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.tasks.total}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.tasks.inProgress} en cours • {stats.tasks.todo} à faire
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Sites Map */}
