@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'react-hot-toast';
@@ -34,6 +34,11 @@ export default function SettingsPage() {
   const [domain, setDomain] = useState('');
   const [timezone, setTimezone] = useState('Europe/Paris');
   const [language, setLanguage] = useState('Français');
+
+  // Demo data management
+  const [isLoadingDemo, setIsLoadingDemo] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Load tenant data on mount
   useEffect(() => {
@@ -85,6 +90,37 @@ export default function SettingsPage() {
       toast.error('Erreur lors de la mise à jour');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleLoadDemo = async () => {
+    if (user?.role !== 'ADMIN') return;
+
+    setIsLoadingDemo(true);
+    try {
+      const result = await apiClient.post<{ message: string; stats: any }>('/api/seed/demo');
+      toast.success(`${result.message}\n${result.stats.sites} sites, ${result.stats.assets} assets, ${result.stats.tasks} tasks`);
+    } catch (error) {
+      console.error('Failed to load demo data:', error);
+      toast.error('Erreur lors du chargement des données démo');
+    } finally {
+      setIsLoadingDemo(false);
+    }
+  };
+
+  const handleResetData = async () => {
+    if (user?.role !== 'ADMIN' || !showResetConfirm) return;
+
+    setIsResetting(true);
+    try {
+      await apiClient.post('/api/seed/reset');
+      toast.success('Toutes les données ont été supprimées (admin préservé)');
+      setShowResetConfirm(false);
+    } catch (error) {
+      console.error('Failed to reset data:', error);
+      toast.error('Erreur lors de la réinitialisation');
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -347,22 +383,112 @@ export default function SettingsPage() {
           </Card>
 
           {user?.role === 'ADMIN' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Gestion des utilisateurs</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Gérez les utilisateurs de votre organisation
-                </p>
-                <Button asChild>
-                  <a href="/dashboard/users">
-                    <User className="mr-2 h-4 w-4" />
-                    Gérer les utilisateurs
-                  </a>
-                </Button>
-              </CardContent>
-            </Card>
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Gestion des utilisateurs</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Gérez les utilisateurs de votre organisation
+                  </p>
+                  <Button asChild>
+                    <a href="/dashboard/users">
+                      <User className="mr-2 h-4 w-4" />
+                      Gérer les utilisateurs
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Database className="h-5 w-5" />
+                    Données de démonstration
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-medium mb-2">Charger données démo</h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Charge un jeu de données complet (sites, assets, racks, tasks) pour tester l'application.
+                        Opération idempotente (peut être relancée sans risque).
+                      </p>
+                      <Button
+                        onClick={handleLoadDemo}
+                        disabled={isLoadingDemo}
+                        variant="default"
+                      >
+                        {isLoadingDemo ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            Chargement...
+                          </>
+                        ) : (
+                          <>
+                            <Database className="mr-2 h-4 w-4" />
+                            Charger données démo
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <h4 className="font-medium mb-2 flex items-center gap-2 text-destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        Zone dangereuse
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Supprime TOUTES les données (sites, assets, racks, tasks, etc.).
+                        Votre compte admin et tenant seront préservés.
+                      </p>
+
+                      {!showResetConfirm ? (
+                        <Button
+                          onClick={() => setShowResetConfirm(true)}
+                          variant="destructive"
+                          disabled={isResetting}
+                        >
+                          <AlertTriangle className="mr-2 h-4 w-4" />
+                          Réinitialiser toutes les données
+                        </Button>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-destructive">
+                            Êtes-vous sûr ? Cette action est irréversible.
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={handleResetData}
+                              variant="destructive"
+                              disabled={isResetting}
+                            >
+                              {isResetting ? (
+                                <>
+                                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                  Suppression...
+                                </>
+                              ) : (
+                                'Confirmer la suppression'
+                              )}
+                            </Button>
+                            <Button
+                              onClick={() => setShowResetConfirm(false)}
+                              variant="outline"
+                              disabled={isResetting}
+                            >
+                              Annuler
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
           )}
         </TabsContent>
 

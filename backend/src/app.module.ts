@@ -13,6 +13,7 @@ import { RacksModule } from './modules/racks/racks.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { FloorPlansModule } from './modules/floor-plans/floor-plans.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { SeedModule } from './modules/seed/seed.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     TasksModule,
     FloorPlansModule,
     IntegrationsModule,
+    SeedModule,
   ],
 })
 export class AppModule {}

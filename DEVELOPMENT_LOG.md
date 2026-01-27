@@ -2401,3 +2401,24 @@ feat(frontend): Fix Settings page - Add navigation to Users and real Tenant API 
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-01-27
+
+**Date:** 2026-01-27 11:48:21
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 1
+
+**Commit message:**
+```
+feat(deploy): Fix domain configuration and improve Docker Compose setup
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
