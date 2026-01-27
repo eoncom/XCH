@@ -95,13 +95,14 @@ create-test-users.sql
 # CRITICAL: Never commit files containing credentials, tokens, or secrets
 # These patterns prevent accidental exposure of sensitive information
 
-# Credentials and tokens
-CREDENTIALS*.md
-!CREDENTIALS*.template.md
-TOKEN*.md
-!TOKEN*.template.md
-SECRET*.md
-!SECRET*.template.md
+# Credentials and tokens (actual files with secrets)
+CREDENTIALS_ET_TOKEN.md
+CREDENTIALS_*.md
+!CREDENTIALS_*.template.md
+TOKEN_REAL*.md
+TOKENS_*.md
+SECRET_*.md
+!SECRET_*.template.md
 
 # API keys and certificates
 *.key
@@ -113,3 +114,8 @@ SECRET*.md
 # Local credentials files
 *.local.md
 *_LOCAL.md
+
+# Allowed: Setup guides and documentation (no actual secrets)
+# GITHUB_TOKEN_SETUP.md - Instructions only
+# scripts/setup-git-credentials.sh - Script with placeholders
+# backend/src/**/*token*.ts - Code files (DTOs, services)

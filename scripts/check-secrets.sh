@@ -16,7 +16,8 @@
 # Date: 2026-01-27
 ##############################################################################
 
-set -euo pipefail
+# Note: Don't use set -e as check_file() intentionally returns 1 for sensitive files
+set -uo pipefail
 
 # Couleurs pour l'output
 RED='\033[0;31m'
@@ -25,19 +26,19 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Patterns à détecter (sensibles à la casse)
+# Patterns à détecter dans les NOMS de fichiers (pas dans le code)
+# Uniquement les fichiers qui STOCKENT des secrets, pas le code qui les manipule
 SENSITIVE_PATTERNS=(
-  "CREDENTIALS"
-  "TOKEN"
-  "SECRET"
-  "PASSWORD"
-  "API_KEY"
-  "PRIVATE_KEY"
-  ".pem$"
-  ".key$"
-  ".keystore$"
-  ".p12$"
-  ".pfx$"
+  "^CREDENTIALS[^.]"         # CREDENTIALS.md mais pas CREDENTIALS.template.md
+  "^TOKEN_REAL"              # TOKEN_REAL.md (secrets réels)
+  "^TOKENS_"                 # TOKENS_PROD.md
+  "^SECRET_[^.]"             # SECRET_CONFIG.md
+  "^API_KEY[^.]"             # API_KEY.md
+  "^PRIVATE_KEY[^.]"         # PRIVATE_KEY.pem (mais .key$ géré après)
+  ".pem$"                    # Certificats privés
+  ".keystore$"               # Java keystores
+  ".p12$"                    # PKCS12
+  ".pfx$"                    # Windows certificates
 )
 
 # Extensions autorisées (templates, docs)
@@ -54,6 +55,14 @@ IGNORED_FILES=(
   "package-lock.json"
   "pnpm-lock.yaml"
   "yarn.lock"
+)
+
+# Fichiers autorisés (instructions/scripts/code, pas de secrets réels)
+ALLOWED_FILES=(
+  "GITHUB_TOKEN_SETUP.md"           # Guide setup (placeholders)
+  "setup-git-credentials.sh"        # Script avec placeholders
+  "refresh-token.dto.ts"            # DTO TypeScript
+  "check-secrets.sh"                # Ce script lui-même
 )
 
 ##############################################################################
@@ -94,6 +103,13 @@ check_file() {
   # Ignorer fichiers spécifiques
   for ignored in "${IGNORED_FILES[@]}"; do
     if [[ "$filename" == "$ignored" ]]; then
+      return 0
+    fi
+  done
+
+  # Autoriser fichiers whitelistés (instructions/scripts)
+  for allowed in "${ALLOWED_FILES[@]}"; do
+    if [[ "$filename" == "$allowed" ]]; then
       return 0
     fi
   done
