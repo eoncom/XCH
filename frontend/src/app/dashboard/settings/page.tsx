@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,18 +9,83 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { apiClient } from '@/lib/api-client';
+import { toast } from 'react-hot-toast';
+
+interface TenantConfig {
+  name: string;
+  subdomain: string;
+  config: {
+    domain?: string;
+    timezone?: string;
+    language?: string;
+  };
+}
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
   const { theme, setTheme } = useTheme();
   const [isSaving, setIsSaving] = useState(false);
+  const [tenantData, setTenantData] = useState<TenantConfig | null>(null);
+  const [isLoadingTenant, setIsLoadingTenant] = useState(true);
+
+  // Form state for tenant config
+  const [orgName, setOrgName] = useState('');
+  const [domain, setDomain] = useState('');
+  const [timezone, setTimezone] = useState('Europe/Paris');
+  const [language, setLanguage] = useState('Français');
+
+  // Load tenant data on mount
+  useEffect(() => {
+    const loadTenant = async () => {
+      try {
+        const tenant = await apiClient.get<TenantConfig>('/api/tenants/current');
+        setTenantData(tenant);
+        setOrgName(tenant.name || 'XCH Organisation');
+        setDomain(tenant.config?.domain || tenant.subdomain || 'xch.local');
+        setTimezone(tenant.config?.timezone || 'Europe/Paris');
+        setLanguage(tenant.config?.language || 'Français');
+      } catch (error) {
+        console.error('Failed to load tenant:', error);
+        toast.error('Erreur lors du chargement des paramètres');
+      } finally {
+        setIsLoadingTenant(false);
+      }
+    };
+
+    loadTenant();
+  }, []);
 
   const handleSaveProfile = () => {
     setIsSaving(true);
     // Simulate save
     setTimeout(() => {
       setIsSaving(false);
+      toast.success('Profil enregistré avec succès');
     }, 1000);
+  };
+
+  const handleSaveTenant = async () => {
+    if (user?.role !== 'ADMIN') return;
+
+    setIsSaving(true);
+    try {
+      await apiClient.patch('/api/tenants/current', {
+        name: orgName,
+        config: {
+          ...tenantData?.config,
+          domain,
+          timezone,
+          language,
+        },
+      });
+      toast.success('Organisation mise à jour avec succès');
+    } catch (error) {
+      console.error('Failed to update tenant:', error);
+      toast.error('Erreur lors de la mise à jour');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -222,51 +287,61 @@ export default function SettingsPage() {
               <CardTitle>Informations de l'organisation</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="orgName">Nom de l'organisation</Label>
-                  <Input
-                    id="orgName"
-                    defaultValue="XCH Organisation"
-                    disabled={user?.role !== 'ADMIN'}
-                  />
-                </div>
+              {isLoadingTenant ? (
+                <p className="text-sm text-muted-foreground">Chargement...</p>
+              ) : (
+                <>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="orgName">Nom de l'organisation</Label>
+                      <Input
+                        id="orgName"
+                        value={orgName}
+                        onChange={(e) => setOrgName(e.target.value)}
+                        disabled={user?.role !== 'ADMIN'}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="domain">Domaine</Label>
-                  <Input
-                    id="domain"
-                    defaultValue="xch.local"
-                    disabled={user?.role !== 'ADMIN'}
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="domain">Domaine</Label>
+                      <Input
+                        id="domain"
+                        value={domain}
+                        onChange={(e) => setDomain(e.target.value)}
+                        disabled={user?.role !== 'ADMIN'}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="timezone">Fuseau horaire</Label>
-                  <Input
-                    id="timezone"
-                    defaultValue="Europe/Paris"
-                    disabled={user?.role !== 'ADMIN'}
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="timezone">Fuseau horaire</Label>
+                      <Input
+                        id="timezone"
+                        value={timezone}
+                        onChange={(e) => setTimezone(e.target.value)}
+                        disabled={user?.role !== 'ADMIN'}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="language">Langue</Label>
-                  <Input
-                    id="language"
-                    defaultValue="Français"
-                    disabled={user?.role !== 'ADMIN'}
-                  />
-                </div>
-              </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="language">Langue</Label>
+                      <Input
+                        id="language"
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value)}
+                        disabled={user?.role !== 'ADMIN'}
+                      />
+                    </div>
+                  </div>
 
-              {user?.role === 'ADMIN' && (
-                <div className="flex justify-end">
-                  <Button>
-                    <Save className="mr-2 h-4 w-4" />
-                    Enregistrer
-                  </Button>
-                </div>
+                  {user?.role === 'ADMIN' && (
+                    <div className="flex justify-end">
+                      <Button onClick={handleSaveTenant} disabled={isSaving}>
+                        <Save className="mr-2 h-4 w-4" />
+                        {isSaving ? 'Enregistrement...' : 'Enregistrer'}
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -280,9 +355,11 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   Gérez les utilisateurs de votre organisation
                 </p>
-                <Button>
-                  <User className="mr-2 h-4 w-4" />
-                  Gérer les utilisateurs
+                <Button asChild>
+                  <a href="/dashboard/users">
+                    <User className="mr-2 h-4 w-4" />
+                    Gérer les utilisateurs
+                  </a>
                 </Button>
               </CardContent>
             </Card>
