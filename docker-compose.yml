@@ -107,7 +107,13 @@ services:
     restart: unless-stopped
     command: >
       sh -c "
+      echo 'Generating Prisma client...' &&
       npx prisma generate &&
+      echo 'Running database migrations...' &&
+      npx prisma migrate deploy &&
+      echo 'Seeding database (if empty)...' &&
+      npm run prisma:seed || echo 'Seed failed or already populated' &&
+      echo 'Starting backend server...' &&
       npm run start:prod
       "
 
@@ -118,7 +124,8 @@ services:
       dockerfile: Dockerfile
     container_name: xch-frontend
     environment:
-      NEXT_PUBLIC_API_URL: https://xchapi.eoncom.io
+      NEXT_PUBLIC_API_URL: ${FRONTEND_API_URL:-http://localhost:3002}
+      NEXT_PUBLIC_APP_URL: ${FRONTEND_APP_URL:-http://localhost:3001}
     ports:
       - "3001:3001"
     depends_on:
