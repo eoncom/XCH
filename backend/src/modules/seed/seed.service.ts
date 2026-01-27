@@ -47,8 +47,9 @@ export class SeedService {
       await this.prisma.task.deleteMany({ where: { tenantId } });
       await this.prisma.site.deleteMany({ where: { tenantId } });
       await this.prisma.provider.deleteMany({ where: { tenantId } });
-      await this.prisma.photo.deleteMany({ where: { user: { tenantId } } });
-      await this.prisma.auditLog.deleteMany({ where: { user: { tenantId } } });
+      // Photo is polymorphic - delete by entity relations
+      // AuditLog has userId, not direct tenantId relation
+      await this.prisma.auditLog.deleteMany({ where: { tenantId } });
 
       // Delete non-admin users
       await this.prisma.user.deleteMany({
