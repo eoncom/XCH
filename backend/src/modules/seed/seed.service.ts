@@ -212,8 +212,8 @@ export class SeedService {
         description: 'Installer les 3 switches Cisco dans le rack A1',
         status: TaskStatus.IN_PROGRESS,
         priority: TaskPriority.HIGH,
-        assignedTo: tech ? { connect: { id: tech.id } } : undefined,
-        createdBy: manager ? { connect: { id: manager.id } } : undefined,
+        assignedTo: tech?.id,
+        createdBy: manager?.id || tech?.id,
         dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // +7 days
         checklist: [
           { id: 1, label: 'Vérifier câblage électrique', completed: true },
@@ -232,8 +232,8 @@ export class SeedService {
         description: 'Configurer et tester l\'imprimante réseau',
         status: TaskStatus.TODO,
         priority: TaskPriority.MEDIUM,
-        assignedTo: tech ? { connect: { id: tech.id } } : undefined,
-        createdBy: manager ? { connect: { id: manager.id } } : undefined,
+        assignedTo: tech?.id,
+        createdBy: manager?.id || tech?.id,
         checklist: [
           { id: 1, label: 'Installer drivers', completed: false },
         ],
