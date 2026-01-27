@@ -523,6 +523,60 @@ MVP TOTAL    ████████████████████ 100% (
 - ✅ JWT access + refresh tokens (auto-refresh transparent + cookie sync)
 - ✅ Validation inputs complète (class-validator + Zod)
 
+### 🔐 Gestion des Secrets ✅
+
+**Statut :** Sécurisé (2026-01-27)
+
+**Règles strictes appliquées :**
+- ✅ `.gitignore` : Patterns sécurité (CREDENTIALS*, TOKEN*, SECRET*)
+- ✅ Templates : `CREDENTIALS_ET_TOKEN.template.md` (committé safe)
+- ✅ Fichiers locaux : `CREDENTIALS_ET_TOKEN.md` (ignoré par Git)
+- ✅ Script de vérification : `scripts/check-secrets.sh` (scan pre-commit)
+- ✅ Documentation : Section sécurité dans `PROJECT_STATUS.md`
+
+**Fichiers sensibles (locaux uniquement, jamais commités) :**
+```
+CREDENTIALS_ET_TOKEN.md        # Credentials dev/prod (ignoré)
+backend/.env                   # Variables environnement backend
+frontend/.env.local            # Variables environnement frontend
+*.key, *.pem, *.p12            # Certificats privés
+```
+
+**Templates sécurisés (commitables) :**
+```
+CREDENTIALS_ET_TOKEN.template.md   # Template à copier/remplir
+backend/.env.example               # Exemple config backend
+frontend/.env.example              # Exemple config frontend
+```
+
+**Scripts de vérification :**
+```bash
+# Vérifier fichiers stagés avant commit
+bash scripts/check-secrets.sh
+
+# Scanner tout le repo
+bash scripts/check-secrets.sh --all
+
+# Installer hook Git pre-commit automatique
+bash scripts/check-secrets.sh --install
+```
+
+**Principe de sécurité :**
+> **AUCUN secret ne doit être committé dans Git, même dans un repo privé.**
+> Les secrets restent dans l'historique et créent des habitudes dangereuses.
+
+**Actions en cas de leak :**
+1. ⚠️ Révoquer immédiatement tokens/credentials exposés
+2. 🔄 Générer nouveaux secrets
+3. 🔧 Mettre à jour configurations
+4. 📋 Auditer commits récents
+5. 🧹 (Optionnel) Nettoyer historique Git avec `git-filter-repo`
+
+**Références :**
+- `CREDENTIALS_ET_TOKEN.template.md` - Template sécurisé
+- `scripts/check-secrets.sh` - Scanner automatique
+- `.gitignore` lignes 92-115 - Patterns sécurité
+
 ### Mobile (PWA) ✅
 - ✅ Progressive Web App (manifest + icons)
 - ✅ Scanner QR codes (caméra native)

@@ -88,3 +88,28 @@ create-test-users.sql
 
 # Claude settings (local only)
 .claude/settings.local.json
+
+# ========================================
+# 🔐 SECURITY - SENSITIVE FILES
+# ========================================
+# CRITICAL: Never commit files containing credentials, tokens, or secrets
+# These patterns prevent accidental exposure of sensitive information
+
+# Credentials and tokens
+CREDENTIALS*.md
+!CREDENTIALS*.template.md
+TOKEN*.md
+!TOKEN*.template.md
+SECRET*.md
+!SECRET*.template.md
+
+# API keys and certificates
+*.key
+!public.key
+*.keystore
+*.p12
+*.pfx
+
+# Local credentials files
+*.local.md
+*_LOCAL.md
