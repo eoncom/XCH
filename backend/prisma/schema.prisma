@@ -175,6 +175,12 @@ model Site {
   // Connectivity (JSON)
   connectivity Json? @db.JsonB // {primary: {type, provider, ref}, backup, cutProcedure}
 
+  // Document Emplacements (JSON array)
+  emplacements Json? @db.JsonB // [{type: 'smb'|'sharepoint', url, description}]
+
+  // Governance Documents Reference
+  governanceDocsRef String? // URL to "Référentiel droits documents"
+
   // Health
   healthStatus    HealthStatus @default(UNKNOWN)
   lastHealthCheck DateTime?

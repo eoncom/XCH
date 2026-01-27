@@ -59,6 +59,16 @@ export class CreateSiteDto {
   @IsOptional()
   connectivity?: any;
 
+  @ApiProperty({ required: false, description: 'Array of document emplacements (SMB/SharePoint links)' })
+  @IsObject()
+  @IsOptional()
+  emplacements?: any;
+
+  @ApiProperty({ required: false, description: 'URL to governance documents reference' })
+  @IsString()
+  @IsOptional()
+  governanceDocsRef?: string;
+
   @ApiProperty({ enum: HealthStatus, default: HealthStatus.UNKNOWN })
   @IsEnum(HealthStatus)
   @IsOptional()
