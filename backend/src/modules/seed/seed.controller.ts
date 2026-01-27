@@ -21,7 +21,7 @@ export class SeedController {
     description: 'Loads comprehensive demo data (sites, assets, racks, tasks). Idempotent - can be run multiple times safely.',
   })
   async loadDemo(@Request() req: AuthRequest) {
-    return this.seedService.loadDemoData(req.user.tenantId);
+    return this.seedService.loadDemo(req.user.tenantId);
   }
 
   @Post('reset')
