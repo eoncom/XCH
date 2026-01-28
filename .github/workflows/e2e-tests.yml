@@ -1,0 +1,195 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  e2e-tests:
+    name: Playwright E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgis/postgis:15-3.4
+        env:
+          POSTGRES_DB: xch_dev
+          POSTGRES_USER: xch_user
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'xch_dev_password' }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+          - 9001:9001
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 3
+        # Note: MinIO needs command to start server
+        # Will be handled in steps
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      #
+      # Backend Setup
+      #
+      - name: Install Backend Dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Run Database Migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://xch_user:xch_dev_password@localhost:5432/xch_dev
+        run: npx prisma migrate deploy
+
+      - name: Seed Database
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://xch_user:xch_dev_password@localhost:5432/xch_dev
+        run: npm run prisma:seed || echo "Seed may have failed, continuing..."
+
+      - name: Start Backend
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://xch_user:xch_dev_password@localhost:5432/xch_dev
+          REDIS_URL: redis://localhost:6379
+          MINIO_ENDPOINT: localhost
+          MINIO_PORT: 9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_USE_SSL: false
+          JWT_SECRET: e2e-test-jwt-secret-key
+          NODE_ENV: test
+        run: |
+          npm run build
+          npm run start:prod &
+          echo $! > backend.pid
+
+      #
+      # Frontend Setup
+      #
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Build Frontend
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3002
+          NEXT_PUBLIC_APP_URL: http://localhost:3001
+        run: npm run build
+
+      - name: Start Frontend
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3002
+          NEXT_PUBLIC_APP_URL: http://localhost:3001
+        run: |
+          npm run start &
+          echo $! > frontend.pid
+
+      #
+      # Wait for Services
+      #
+      - name: Wait for Backend Health Check
+        run: |
+          echo "Waiting for backend to be ready..."
+          npx wait-on http://localhost:3002/health -t 60000 || (echo "Backend failed to start" && cat backend/logs/*.log && exit 1)
+
+      - name: Wait for Frontend
+        run: |
+          echo "Waiting for frontend to be ready..."
+          npx wait-on http://localhost:3001 -t 60000 || (echo "Frontend failed to start" && exit 1)
+
+      #
+      # Run E2E Tests
+      #
+      - name: Run Playwright E2E Tests
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3001
+          PLAYWRIGHT_API_URL: http://localhost:3002
+          CI: true
+        run: npm run test:e2e
+
+      #
+      # Upload Artifacts
+      #
+      - name: Upload Playwright Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 30
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: frontend/test-results/
+          retention-days: 30
+
+      - name: Upload Screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-screenshots
+          path: frontend/playwright-report/screenshots/
+          retention-days: 7
+
+      #
+      # Cleanup
+      #
+      - name: Stop Services
+        if: always()
+        run: |
+          [ -f backend/backend.pid ] && kill $(cat backend/backend.pid) || true
+          [ -f frontend/frontend.pid ] && kill $(cat frontend/frontend.pid) || true

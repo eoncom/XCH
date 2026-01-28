@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
+
+// Charger .env.e2e si existe
+dotenv.config({ path: '.env.e2e' });
 
 /**
  * XCH - Configuration Playwright E2E Tests
