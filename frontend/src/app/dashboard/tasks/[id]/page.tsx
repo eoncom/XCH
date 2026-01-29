@@ -189,13 +189,13 @@ export default function TaskDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild data-testid="edit-task-btn">
             <Link href={`/dashboard/tasks/${id}/edit`}>
               <Edit className="mr-2 h-4 w-4" />
               Modifier
             </Link>
           </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-task-btn">
             <Trash2 className="mr-2 h-4 w-4" />
             Supprimer
           </Button>
@@ -278,6 +278,7 @@ export default function TaskDetailPage({
               {/* Add new item */}
               <div className="flex gap-2 mt-4">
                 <Input
+                  data-testid="checklist-input"
                   placeholder="Ajouter un élément..."
                   value={newChecklistItem}
                   onChange={(e) => setNewChecklistItem(e.target.value)}
@@ -287,7 +288,7 @@ export default function TaskDetailPage({
                     }
                   }}
                 />
-                <Button onClick={addChecklistItem} size="icon">
+                <Button onClick={addChecklistItem} size="icon" data-testid="add-checklist-btn">
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>

@@ -187,17 +187,17 @@ export default function FloorPlanDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleDownload}>
+          <Button variant="outline" onClick={handleDownload} data-testid="download-plan-btn">
             <Download className="mr-2 h-4 w-4" />
             Télécharger
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild data-testid="edit-floor-plan-btn">
             <Link href={`/dashboard/floor-plans/${id}/edit`}>
               <Edit className="mr-2 h-4 w-4" />
               Modifier
             </Link>
           </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-floor-plan-btn">
             <Trash2 className="mr-2 h-4 w-4" />
             Supprimer
           </Button>
@@ -214,6 +214,7 @@ export default function FloorPlanDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
+                  data-testid="add-pin-btn"
                   onClick={() => setShowAddPinDialog(true)}
                 >
                   <Plus className="mr-2 h-4 w-4" />

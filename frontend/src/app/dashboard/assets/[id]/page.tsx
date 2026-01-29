@@ -151,19 +151,20 @@ export default function AssetDetailPage({
         <div className="flex gap-2">
           <Button
             variant="outline"
+            data-testid="generate-qr-btn"
             onClick={() => generateQRMutation.mutate()}
             disabled={generateQRMutation.isPending}
           >
             <QrCode className="mr-2 h-4 w-4" />
             {generateQRMutation.isPending ? 'Génération...' : 'Générer QR Code'}
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild data-testid="edit-asset-btn">
             <Link href={`/dashboard/assets/${id}/edit`}>
               <Edit className="mr-2 h-4 w-4" />
               Modifier
             </Link>
           </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-asset-btn">
             <Trash2 className="mr-2 h-4 w-4" />
             Supprimer
           </Button>

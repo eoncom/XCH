@@ -123,13 +123,13 @@ export default function AssetsPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <ExportMenu onExport={handleExport} disabled={!filteredAssets?.length} />
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild data-testid="scan-qr-btn">
             <Link href="/dashboard/assets/scanner">
               <QrCode className="mr-2 h-4 w-4" />
               Scanner QR
             </Link>
           </Button>
-          <Button asChild className="press-effect">
+          <Button asChild className="press-effect" data-testid="create-asset-btn">
             <Link href="/dashboard/assets/new">
               <Plus className="mr-2 h-4 w-4" />
               Nouvel équipement
@@ -180,10 +180,11 @@ export default function AssetsPage() {
       </div>
 
       {/* Assets Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div data-testid="assets-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredAssets?.map((asset) => (
           <Card
             key={asset.id}
+            data-testid="asset-card"
             className="hover-lift cursor-pointer border-border"
           >
             <Link href={`/dashboard/assets/${asset.id}`}>

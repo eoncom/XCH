@@ -81,7 +81,7 @@ export default function SitesPage() {
             disabled={!filteredSites?.length}
             label="Exporter"
           />
-          <Button asChild>
+          <Button asChild data-testid="create-site-btn">
             <Link href="/dashboard/sites/new">
               <Plus className="mr-2 h-4 w-4" />
               Nouveau chantier
@@ -116,10 +116,11 @@ export default function SitesPage() {
 
         {/* List View */}
         <TabsContent value="list" className="mt-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div data-testid="sites-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredSites?.map((site) => (
               <Card
                 key={site.id}
+                data-testid="site-card"
                 className="hover:shadow-lg transition-shadow cursor-pointer"
               >
                 <Link href={`/dashboard/sites/${site.id}`}>

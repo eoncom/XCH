@@ -132,7 +132,7 @@ export default function DashboardPage() {
       {/* Stats Cards */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Link href="/dashboard/sites">
-          <Card className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
+          <Card data-testid="stats-card-sites" className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Chantiers</CardTitle>
               <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -147,7 +147,7 @@ export default function DashboardPage() {
         </Link>
 
         <Link href="/dashboard/assets">
-          <Card className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
+          <Card data-testid="stats-card-assets" className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Équipements</CardTitle>
               <Package className="h-4 w-4 text-muted-foreground" />
@@ -162,7 +162,7 @@ export default function DashboardPage() {
         </Link>
 
         <Link href="/dashboard/racks">
-          <Card className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
+          <Card data-testid="stats-card-racks" className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Baies</CardTitle>
               <Server className="h-4 w-4 text-muted-foreground" />
@@ -177,7 +177,7 @@ export default function DashboardPage() {
         </Link>
 
         <Link href="/dashboard/tasks">
-          <Card className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
+          <Card data-testid="stats-card-tasks" className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Tâches</CardTitle>
               <CheckSquare className="h-4 w-4 text-muted-foreground" />

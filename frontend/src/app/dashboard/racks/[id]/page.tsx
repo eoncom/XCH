@@ -182,13 +182,13 @@ export default function RackDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild data-testid="edit-rack-btn">
             <Link href={`/dashboard/racks/${id}/edit`}>
               <Edit className="mr-2 h-4 w-4" />
               Modifier
             </Link>
           </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-rack-btn">
             <Trash2 className="mr-2 h-4 w-4" />
             Supprimer
           </Button>

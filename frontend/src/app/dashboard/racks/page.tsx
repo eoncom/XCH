@@ -130,7 +130,7 @@ export default function RacksPage() {
             disabled={!filteredRacks?.length}
             label="Exporter"
           />
-          <Button asChild>
+          <Button asChild data-testid="create-rack-btn">
             <Link href="/dashboard/racks/new">
               <Plus className="mr-2 h-4 w-4" />
               Nouvelle baie
@@ -167,7 +167,7 @@ export default function RacksPage() {
       </div>
 
       {/* Racks Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div data-testid="racks-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredRacks?.map((rack) => {
           const occupiedUnits = rack.assets?.reduce(
             (sum, asset) => sum + (asset.rackHeightU || 0),
@@ -179,6 +179,7 @@ export default function RacksPage() {
           return (
             <Card
               key={rack.id}
+              data-testid="rack-card"
               className="hover:shadow-lg transition-shadow cursor-pointer"
             >
               <Link href={`/dashboard/racks/${rack.id}`}>

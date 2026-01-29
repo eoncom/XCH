@@ -74,6 +74,7 @@ function KanbanColumn({ status, tasks, onTaskClick, onDrop }: KanbanColumnProps)
       </div>
 
       <div
+        data-testid={`kanban-column-${status}`}
         className={`space-y-3 min-h-[500px] p-3 rounded-lg transition-colors ${
           isDragOver ? 'bg-muted' : 'bg-muted/20'
         }`}
@@ -104,6 +105,7 @@ function TaskCard({ task, onClick }: TaskCardProps) {
 
   return (
     <Card
+      data-testid="task-card"
       className="cursor-move hover:shadow-md transition-shadow"
       draggable
       onDragStart={handleDragStart}
@@ -202,7 +204,7 @@ export default function TasksPage() {
           <h1 className="text-3xl font-bold">Tâches</h1>
           <p className="text-muted-foreground">Gérez vos tâches et interventions</p>
         </div>
-        <Button asChild>
+        <Button asChild data-testid="create-task-btn">
           <Link href="/dashboard/tasks/new">
             <Plus className="mr-2 h-4 w-4" />
             Nouvelle tâche
@@ -211,7 +213,7 @@ export default function TasksPage() {
       </div>
 
       {/* Kanban Board */}
-      <div className="flex gap-6 overflow-x-auto pb-4">
+      <div data-testid="kanban-board" className="flex gap-6 overflow-x-auto pb-4">
         {kanbanColumns.map((status) => (
           <KanbanColumn
             key={status}

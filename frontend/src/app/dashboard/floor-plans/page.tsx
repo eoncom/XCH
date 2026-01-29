@@ -57,7 +57,7 @@ export default function FloorPlansPage() {
             Gérez vos plans avec annotations et repères
           </p>
         </div>
-        <Button asChild>
+        <Button asChild data-testid="create-floor-plan-btn">
           <Link href="/dashboard/floor-plans/new">
             <Plus className="mr-2 h-4 w-4" />
             Nouveau plan
@@ -93,10 +93,11 @@ export default function FloorPlansPage() {
       </div>
 
       {/* Floor Plans Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div data-testid="floor-plans-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredFloorPlans?.map((plan) => (
           <Card
             key={plan.id}
+            data-testid="floor-plan-card"
             className="hover:shadow-lg transition-shadow cursor-pointer"
           >
             <Link href={`/dashboard/floor-plans/${plan.id}`}>

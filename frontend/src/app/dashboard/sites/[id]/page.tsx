@@ -104,13 +104,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           </Badge>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild data-testid="edit-site-btn">
             <Link href={`/dashboard/sites/${id}/edit`}>
               <Edit className="mr-2 h-4 w-4" />
               Modifier
             </Link>
           </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-site-btn">
             <Trash2 className="mr-2 h-4 w-4" />
             Supprimer
           </Button>

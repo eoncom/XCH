@@ -72,7 +72,7 @@ export default function UsersPage() {
           </h1>
           <p className="text-muted-foreground">Gestion des utilisateurs de la plateforme</p>
         </div>
-        <Button asChild>
+        <Button asChild data-testid="create-user-btn">
           <Link href="/dashboard/users/new">
             <UserPlus className="h-4 w-4 mr-2" />
             Ajouter un utilisateur
@@ -135,10 +135,11 @@ export default function UsersPage() {
           <CardTitle>Liste des utilisateurs</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          <div data-testid="users-list" className="space-y-4">
             {users.map((user) => (
               <div
                 key={user.id}
+                data-testid="user-card"
                 className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-4">
@@ -167,7 +168,7 @@ export default function UsersPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" asChild>
+                  <Button variant="outline" size="sm" asChild data-testid="edit-user-btn">
                     <Link href={`/dashboard/users/${user.id}/edit`}>
                       Modifier
                     </Link>

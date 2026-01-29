@@ -193,7 +193,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex justify-end">
-                <Button onClick={handleSaveProfile} disabled={isSaving}>
+                <Button onClick={handleSaveProfile} disabled={isSaving} data-testid="save-profile-btn">
                   <Save className="mr-2 h-4 w-4" />
                   {isSaving ? 'Enregistrement...' : 'Enregistrer'}
                 </Button>
@@ -225,7 +225,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex justify-end">
-                <Button>
+                <Button data-testid="update-password-btn">
                   <Save className="mr-2 h-4 w-4" />
                   Mettre à jour le mot de passe
                 </Button>
@@ -420,6 +420,7 @@ export default function SettingsPage() {
                         onClick={handleLoadDemo}
                         disabled={isLoadingDemo}
                         variant="default"
+                        data-testid="load-demo-data-btn"
                       >
                         {isLoadingDemo ? (
                           <>
@@ -450,6 +451,7 @@ export default function SettingsPage() {
                           onClick={() => setShowResetConfirm(true)}
                           variant="destructive"
                           disabled={isResetting}
+                          data-testid="reset-data-btn"
                         >
                           <AlertTriangle className="mr-2 h-4 w-4" />
                           Réinitialiser toutes les données
@@ -464,6 +466,7 @@ export default function SettingsPage() {
                               onClick={handleResetData}
                               variant="destructive"
                               disabled={isResetting}
+                              data-testid="confirm-reset-btn"
                             >
                               {isResetting ? (
                                 <>
