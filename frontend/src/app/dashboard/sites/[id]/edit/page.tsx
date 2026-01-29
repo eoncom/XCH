@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -18,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { sitesApi } from '@/lib/api/sites';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import type { Site } from '@/types';
 
@@ -79,6 +81,15 @@ export default function EditSitePage({
       : undefined,
   });
 
+  const [contacts, setContacts] = useState(site?.contacts || []);
+  const [connectivity, setConnectivity] = useState(site?.connectivity || {
+    primary: { type: '', provider: '', reference: '', bandwidth: '', notes: '' },
+    backup: { type: '', provider: '', reference: '', bandwidth: '', notes: '' }
+  });
+  const [accessNotes, setAccessNotes] = useState(site?.accessNotes || {
+    schedules: '', badges: '', procedures: '', safety: ''
+  });
+
   const updateMutation = useMutation({
     mutationFn: (data: SiteFormData) => sitesApi.update(id, data),
     onSuccess: () => {
@@ -89,7 +100,13 @@ export default function EditSitePage({
   });
 
   const onSubmit = (data: SiteFormData) => {
-    updateMutation.mutate(data);
+    const payload = {
+      ...data,
+      contacts: contacts.filter(c => c.name && c.email),
+      connectivity,
+      accessNotes
+    };
+    updateMutation.mutate(payload);
   };
 
   const status = watch('status');
@@ -209,6 +226,231 @@ export default function EditSitePage({
                     step="any"
                     {...register('longitude', { valueAsNumber: true })}
                     placeholder="2.3522219"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Contacts */}
+            <div className="mt-8 border-t pt-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Contacts</h3>
+                <Button
+                  data-testid="add-contact-btn"
+                  type="button"
+                  onClick={() => setContacts([...contacts, { name: '', role: '', phone: '', email: '', isPrimary: false }])}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Ajouter
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {contacts.map((contact, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-2 items-start p-3 border rounded">
+                    <Input
+                      placeholder="Nom"
+                      className="col-span-3"
+                      value={contact.name}
+                      onChange={(e) => {
+                        const updated = [...contacts];
+                        updated[index].name = e.target.value;
+                        setContacts(updated);
+                      }}
+                    />
+                    <Input
+                      placeholder="Rôle"
+                      className="col-span-2"
+                      value={contact.role}
+                      onChange={(e) => {
+                        const updated = [...contacts];
+                        updated[index].role = e.target.value;
+                        setContacts(updated);
+                      }}
+                    />
+                    <Input
+                      placeholder="Téléphone"
+                      className="col-span-2"
+                      value={contact.phone}
+                      onChange={(e) => {
+                        const updated = [...contacts];
+                        updated[index].phone = e.target.value;
+                        setContacts(updated);
+                      }}
+                    />
+                    <Input
+                      placeholder="Email"
+                      type="email"
+                      className="col-span-3"
+                      value={contact.email}
+                      onChange={(e) => {
+                        const updated = [...contacts];
+                        updated[index].email = e.target.value;
+                        setContacts(updated);
+                      }}
+                    />
+                    <div className="col-span-1 flex items-center justify-center">
+                      <Checkbox
+                        checked={contact.isPrimary}
+                        onCheckedChange={(checked) => {
+                          const updated = [...contacts];
+                          updated[index].isPrimary = checked as boolean;
+                          setContacts(updated);
+                        }}
+                      />
+                    </div>
+                    <Button
+                      data-testid="delete-contact-btn"
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="col-span-1"
+                      onClick={() => setContacts(contacts.filter((_, i) => i !== index))}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                {contacts.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Aucun contact. Cliquez sur "Ajouter" pour en créer un.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Connectivity */}
+            <div className="mt-8 border-t pt-6">
+              <h3 className="text-lg font-semibold mb-4">Connectivité</h3>
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Primary */}
+                <div className="border p-4 rounded">
+                  <h4 className="font-medium mb-3">Connexion Principale</h4>
+                  <div className="space-y-3">
+                    <Select
+                      value={connectivity.primary.type}
+                      onValueChange={(val) => setConnectivity({...connectivity, primary: {...connectivity.primary, type: val}})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Type de connexion" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FIBER">Fibre</SelectItem>
+                        <SelectItem value="ADSL">ADSL</SelectItem>
+                        <SelectItem value="4G">4G</SelectItem>
+                        <SelectItem value="5G">5G</SelectItem>
+                        <SelectItem value="SATELLITE">Satellite</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="Provider"
+                      value={connectivity.primary.provider}
+                      onChange={(e) => setConnectivity({...connectivity, primary: {...connectivity.primary, provider: e.target.value}})}
+                    />
+                    <Input
+                      placeholder="Référence"
+                      value={connectivity.primary.reference}
+                      onChange={(e) => setConnectivity({...connectivity, primary: {...connectivity.primary, reference: e.target.value}})}
+                    />
+                    <Input
+                      placeholder="Bande passante"
+                      value={connectivity.primary.bandwidth}
+                      onChange={(e) => setConnectivity({...connectivity, primary: {...connectivity.primary, bandwidth: e.target.value}})}
+                    />
+                    <Textarea
+                      placeholder="Notes"
+                      rows={2}
+                      value={connectivity.primary.notes}
+                      onChange={(e) => setConnectivity({...connectivity, primary: {...connectivity.primary, notes: e.target.value}})}
+                    />
+                  </div>
+                </div>
+
+                {/* Backup */}
+                <div className="border p-4 rounded">
+                  <h4 className="font-medium mb-3">Connexion Backup</h4>
+                  <div className="space-y-3">
+                    <Select
+                      value={connectivity.backup.type}
+                      onValueChange={(val) => setConnectivity({...connectivity, backup: {...connectivity.backup, type: val}})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Type de connexion" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FIBER">Fibre</SelectItem>
+                        <SelectItem value="ADSL">ADSL</SelectItem>
+                        <SelectItem value="4G">4G</SelectItem>
+                        <SelectItem value="5G">5G</SelectItem>
+                        <SelectItem value="SATELLITE">Satellite</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="Provider"
+                      value={connectivity.backup.provider}
+                      onChange={(e) => setConnectivity({...connectivity, backup: {...connectivity.backup, provider: e.target.value}})}
+                    />
+                    <Input
+                      placeholder="Référence"
+                      value={connectivity.backup.reference}
+                      onChange={(e) => setConnectivity({...connectivity, backup: {...connectivity.backup, reference: e.target.value}})}
+                    />
+                    <Input
+                      placeholder="Bande passante"
+                      value={connectivity.backup.bandwidth}
+                      onChange={(e) => setConnectivity({...connectivity, backup: {...connectivity.backup, bandwidth: e.target.value}})}
+                    />
+                    <Textarea
+                      placeholder="Notes"
+                      rows={2}
+                      value={connectivity.backup.notes}
+                      onChange={(e) => setConnectivity({...connectivity, backup: {...connectivity.backup, notes: e.target.value}})}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Access Notes */}
+            <div className="mt-8 border-t pt-6">
+              <h3 className="text-lg font-semibold mb-4">Notes d'Accès</h3>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Horaires d'accès</Label>
+                  <Textarea
+                    placeholder="Lun-Ven 8h-18h, Sam 9h-12h..."
+                    rows={2}
+                    value={accessNotes.schedules}
+                    onChange={(e) => setAccessNotes({...accessNotes, schedules: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Badges requis</Label>
+                  <Textarea
+                    placeholder="Badge site + badge bâtiment A..."
+                    rows={2}
+                    value={accessNotes.badges}
+                    onChange={(e) => setAccessNotes({...accessNotes, badges: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Procédures d'entrée</Label>
+                  <Textarea
+                    placeholder="1. S'enregistrer à l'accueil&#10;2. Récupérer badge..."
+                    rows={3}
+                    value={accessNotes.procedures}
+                    onChange={(e) => setAccessNotes({...accessNotes, procedures: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Consignes de sécurité</Label>
+                  <Textarea
+                    placeholder="Port du casque obligatoire, EPI requis..."
+                    rows={3}
+                    value={accessNotes.safety}
+                    onChange={(e) => setAccessNotes({...accessNotes, safety: e.target.value})}
                   />
                 </div>
               </div>
