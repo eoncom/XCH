@@ -38,7 +38,7 @@ test.describe('Authentification - Login', () => {
     await expect(page).toHaveURL('/dashboard');
 
     // Vérifier présence éléments dashboard
-    await expect(page.locator('h1, h2').first()).toBeVisible();
+    await expect(page.locator('h1, h2').last().first()).toBeVisible();
     await expect(page.locator('nav')).toBeVisible();
   });
 

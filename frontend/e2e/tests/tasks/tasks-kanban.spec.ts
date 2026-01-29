@@ -23,7 +23,7 @@ test.describe('Tasks - Kanban', () => {
   });
 
   test('devrait afficher le Kanban avec 3 colonnes', async ({ page }) => {
-    await expect(page.locator('h1, h2')).toContainText(/Tasks|Tâches/i);
+    await expect(page.locator('h1, h2').last()).toContainText(/Tasks|Tâches/i);
 
     // Vérifier colonnes Kanban
     const todoColumn = page.locator('[data-testid="column-TODO"], [data-status="TODO"]');

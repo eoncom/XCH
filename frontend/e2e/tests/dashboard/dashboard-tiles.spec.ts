@@ -35,7 +35,7 @@ test.describe('Dashboard - Tiles Navigation', () => {
 
     // Vérifier navigation
     await expect(page).toHaveURL('/dashboard/sites');
-    await expect(page.locator('h1')).toContainText('Sites');
+    await expect(page.locator('h1').last()).toContainText('Chantiers');
   });
 
   test('should navigate to Assets when clicking Assets tile', async ({ page }) => {
@@ -44,7 +44,7 @@ test.describe('Dashboard - Tiles Navigation', () => {
 
     await assetsTile.click();
     await expect(page).toHaveURL('/dashboard/assets');
-    await expect(page.locator('h1')).toContainText('Assets');
+    await expect(page.locator('h1').last()).toContainText('Équipements');
   });
 
   test('should navigate to Tasks when clicking Tasks tile', async ({ page }) => {
@@ -53,7 +53,7 @@ test.describe('Dashboard - Tiles Navigation', () => {
 
     await tasksTile.click();
     await expect(page).toHaveURL('/dashboard/tasks');
-    await expect(page.locator('h1')).toContainText('Tâches');
+    await expect(page.locator('h1').last()).toContainText('Tâches');
   });
 
   test('should navigate to Racks when clicking Racks tile', async ({ page }) => {
@@ -62,7 +62,7 @@ test.describe('Dashboard - Tiles Navigation', () => {
 
     await racksTile.click();
     await expect(page).toHaveURL('/dashboard/racks');
-    await expect(page.locator('h1')).toContainText('Baies');
+    await expect(page.locator('h1').last()).toContainText('Baies');
   });
 
   test('tiles should have cursor pointer on hover', async ({ page }) => {
@@ -75,9 +75,9 @@ test.describe('Dashboard - Tiles Navigation', () => {
   test('tiles should have hover effect', async ({ page }) => {
     const sitesTile = page.locator('a[href="/dashboard/sites"]').first();
 
-    // Vérifier présence classes hover
+    // Vérifier présence classes hover (hover:bg-accent est la classe utilisée)
     const classAttr = await sitesTile.getAttribute('class');
-    expect(classAttr).toContain('hover:shadow-md');
+    expect(classAttr).toContain('hover:bg-accent');
   });
 
   test('should allow navigation back to dashboard from other pages', async ({ page }) => {

@@ -70,7 +70,7 @@ test.describe('Authentification - Logout', () => {
 
     // Vérifier succès
     await expect(page).toHaveURL('/dashboard');
-    const token = await page.evaluate(() => localStorage.getItem('xch_token'));
+    const token = await page.evaluate(() => localStorage.getItem('accessToken'));
     expect(token).toBeTruthy();
   });
 });

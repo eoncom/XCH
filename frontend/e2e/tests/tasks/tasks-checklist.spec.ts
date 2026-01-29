@@ -60,7 +60,7 @@ test.describe('Tasks - Checklist Functionality', () => {
 
     // Chercher section checklist
     const checklistSection = page.locator('text=/Checklist|Liste de contrôle/i').first();
-    const hasSec tion = await checklistSection.isVisible().catch(() => false);
+    const hasSection = await checklistSection.isVisible().catch(() => false);
 
     if (hasSection) {
       await expect(checklistSection).toBeVisible();

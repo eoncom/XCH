@@ -24,10 +24,10 @@ test.describe('Assets - CRUD', () => {
   });
 
   test('devrait afficher la liste des assets', async ({ page }) => {
-    await expect(page.locator('h1, h2')).toContainText(/Assets|Équipements/i);
+    await expect(page.locator('h1, h2').last()).toContainText(/Assets|Équipements/i);
 
     // Bouton nouveau
-    await expect(page.locator('button:has-text("Nouveau"), a:has-text("Nouveau")')).toBeVisible();
+    await expect(page.locator('a[href="/dashboard/assets/new"]')).toBeVisible();
 
     // Liste
     const assetsList = page.locator('[data-testid="assets-list"], table, .grid');

@@ -26,12 +26,12 @@ export const TEST_USERS = {
   },
   technicien: {
     email: 'tech@xch.demo',
-    password: 'tech123',
+    password: 'tech1234',
     role: 'TECHNICIEN' as const,
   },
   viewer: {
-    email: 'viewer@xch.demo',
-    password: 'viewer123',
+    email: 'inviter@xch.demo',
+    password: 'invit123',
     role: 'VIEWER' as const,
   },
 };

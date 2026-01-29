@@ -67,7 +67,14 @@
       "Bash(dir:*)",
       "Bash(findstr:*)",
       "Bash(\"C:\\\\xampp\\\\htdocs\\\\XCH\\\\frontend\\\\e2e\\\\README.md\" <<'ENDOFFILE'\n# XCH - Tests E2E Playwright\n\nTests End-to-End automatisés pour valider les fonctionnalités de l'application XCH.\n\n## Vue d'ensemble\n\nCette suite de tests E2E couvre:\n- 7 modules fonctionnels \\(Dashboard, Sites, Settings, Tasks, Assets, Racks, RBAC\\)\n- ~40 scénarios de test\n- 4 rôles utilisateurs \\(ADMIN, SUPERUSER, USER, VIEWER\\)\n- 3 navigateurs \\(Chrome, Firefox, Safari\\)\n\n## Installation\n\n```bash\ncd frontend\nnpm install\nnpx playwright install --with-deps\n```\n\n## Configuration\n\n1. Copier le fichier d'environnement:\n```bash\ncp .env.e2e.example .env.e2e\n```\n\n2. Éditer .env.e2e avec vos URLs:\n```bash\nPLAYWRIGHT_BASE_URL=http://192.168.0.13:3001\nPLAYWRIGHT_API_URL=http://192.168.0.13:3002\n```\n\n## Exécution\n\n```bash\n# Tous les tests\nnpm run test:e2e\n\n# Mode UI interactif\nnpm run test:e2e:ui\n\n# Mode debug\nnpm run test:e2e:debug\n\n# Rapport HTML\nnpm run test:e2e:report\n```\n\n## Tests disponibles\n\n1. Dashboard Tiles Navigation \\(8 tests\\)\n2. Sites Sections CRUD \\(12 tests\\)\n3. Settings Page \\(11 tests\\)\n4. Demo Data Management \\(8 tests\\)\n5. Tasks Checklist \\(8 tests\\)\n6. Status Badges Colors \\(12 tests\\)\n7. RBAC Enforcement \\(20 tests\\)\n\nTOTAL: ~80 tests E2E\n\n## Utilisateurs de test\n\n```\nadmin@xch.demo / admin123         # ADMIN\nmanager@xch.demo / manager123     # SUPERUSER\ntech@xch.demo / tech123           # USER\nviewer@xch.demo / viewer123       # VIEWER\n```\n\n## Dépannage\n\n### Tests échouent avec \"Navigation timeout\"\n```bash\n# Vérifier backend/frontend démarrés\ncurl http://localhost:3002/health\ncurl http://localhost:3001\n```\n\n### \"No accessToken cookie found\"\n```bash\n# Vérifier seed a créé users\npsql -U xch_user -d xch_dev -c \"SELECT email, role FROM \\\\\"User\\\\\";\"\n```\n\n## CI/CD\n\nWorkflow GitHub Actions: `.github/workflows/e2e-tests.yml`\n\nDéclenché sur:\n- Push main/develop\n- Pull Request vers main\n- Manuel \\(workflow_dispatch\\)\n\nArtifacts uploadés \\(30 jours\\):\n- playwright-report \\(HTML\\)\n- test-results \\(JUnit XML\\)\n- test-screenshots \\(failures only, 7 jours\\)\nENDOFFILE)",
-      "Bash(npx playwright test:*)"
+      "Bash(npx playwright test:*)",
+      "Bash(npx playwright --version)",
+      "Bash(npx playwright show-report:*)",
+      "Bash(start playwright-report/index.html)",
+      "Bash(start C:xampphtdocsXCHfrontendplaywright-reportindex.html)",
+      "Bash(explorer.exe playwright-report)",
+      "Bash(for file in e2e/tests/auth/login.spec.ts e2e/tests/floorplans/floorplans-crud.spec.ts e2e/tests/racks/racks-crud.spec.ts e2e/tests/sites/sites-crud.spec.ts e2e/tests/tasks/tasks-kanban.spec.ts)",
+      "Bash(do sed -i \"s/page\\\\.locator\\(''h1, h2''\\)/page.locator\\(''h1, h2''\\).last\\(\\)/g\" \"$file\")"
     ]
   }
 }

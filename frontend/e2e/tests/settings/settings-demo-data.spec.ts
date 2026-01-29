@@ -1,4 +1,4 @@
-import { test, expect } from '../../fixtures/auth.fixture';
+import { test, expect, TEST_USERS } from '../../fixtures/auth.fixture';
 
 /**
  * Tests E2E - Settings Demo Data Management
@@ -239,8 +239,8 @@ test.describe('Settings - Demo Data RBAC', () => {
     }
   });
 
-  test('should hide demo data section for USER', async ({ page, loginAs, TEST_USERS }) => {
-    await loginAs(TEST_USERS.technicien); // USER role
+  test('should hide demo data section for USER', async ({ page, loginAsTechnicien }) => {
+    await loginAsTechnicien(); // USER role
     await page.goto('/dashboard/settings');
     await page.waitForTimeout(2000);
 

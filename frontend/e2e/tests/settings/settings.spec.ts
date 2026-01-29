@@ -1,4 +1,4 @@
-import { test, expect } from '../../fixtures/auth.fixture';
+import { test, expect, TEST_USERS } from '../../fixtures/auth.fixture';
 
 /**
  * Tests E2E - Settings Page
@@ -216,8 +216,8 @@ test.describe('Settings Page - RBAC Enforcement', () => {
     }
   });
 
-  test('should deny access to USER role', async ({ page, loginAs, TEST_USERS }) => {
-    await loginAs(TEST_USERS.technicien); // USER role
+  test('should deny access to USER role', async ({ page, loginAsTechnicien }) => {
+    await loginAsTechnicien(); // USER role
 
     await page.goto('/dashboard/settings');
     await page.waitForTimeout(2000);

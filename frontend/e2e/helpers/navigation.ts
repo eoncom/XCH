@@ -58,7 +58,8 @@ export class NavigationHelper {
 
   // Actions communes
   async clickNewButton() {
-    await this.page.click('button:has-text("Nouveau"), button:has-text("New"), a:has-text("Nouveau"), a:has-text("New")');
+    // Chercher le bouton avec icône Plus ou texte contenant "Nouv"
+    await this.page.click('a:has-text("Nouv"), button:has-text("Nouv"), a:has-text("Créer"), button:has-text("Créer")');
   }
 
   async clickBackButton() {

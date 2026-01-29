@@ -23,7 +23,7 @@ test.describe('Racks - CRUD', () => {
   });
 
   test('devrait afficher la liste des racks', async ({ page }) => {
-    await expect(page.locator('h1, h2')).toContainText(/Racks|Baies/i);
+    await expect(page.locator('h1, h2').last()).toContainText(/Racks|Baies/i);
 
     // Bouton nouveau
     await expect(page.locator('button:has-text("Nouveau"), a:has-text("Nouveau")')).toBeVisible();
