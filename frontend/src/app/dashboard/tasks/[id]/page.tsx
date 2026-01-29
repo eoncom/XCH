@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { tasksApi } from '@/lib/api/tasks';
+import { Attachments } from '@/components/Attachments';
 import {
   ArrowLeft,
   Edit,
@@ -374,6 +375,20 @@ export default function TaskDetailPage({
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Documents */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Documents</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Attachments
+                entityId={id}
+                entityType="tasks"
+                apiModule={tasksApi}
+              />
             </CardContent>
           </Card>
         </div>

@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { FilterTaskDto } from './dto/filter-task.dto';
 import { UpdateChecklistDto } from './dto/update-checklist.dto';
+import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
@@ -89,5 +91,65 @@ export class TasksController {
   @ApiOperation({ summary: 'Delete task' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.tasksService.remove(id, req.user.tenantId);
+  }
+
+  // ============================================================================
+  // ATTACHMENTS
+  // ============================================================================
+
+  @Post(':id/attachments')
+  @Resource('tasks') @Action('update')
+  @ApiOperation({ summary: 'Upload attachment to task' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+        description: {
+          type: 'string',
+        },
+        category: {
+          type: 'string',
+          enum: ['spec', 'invoice', 'photo', 'report', 'manual', 'other'],
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  uploadAttachment(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() uploadAttachmentDto: UploadAttachmentDto,
+    @Request() req: AuthRequest,
+  ) {
+    return this.tasksService.uploadAttachment(
+      id,
+      req.user.tenantId,
+      req.user.userId,
+      file,
+      uploadAttachmentDto,
+    );
+  }
+
+  @Get(':id/attachments')
+  @Resource('tasks') @Action('read')
+  @ApiOperation({ summary: 'List attachments for task' })
+  listAttachments(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.tasksService.listAttachments(id, req.user.tenantId);
+  }
+
+  @Delete(':id/attachments/:attachmentId')
+  @Resource('tasks') @Action('update')
+  @ApiOperation({ summary: 'Delete attachment from task' })
+  deleteAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+    @Request() req: AuthRequest,
+  ) {
+    return this.tasksService.deleteAttachment(attachmentId, req.user.tenantId, id);
   }
 }

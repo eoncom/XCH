@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { assetsApi } from '@/lib/api/assets';
+import { Attachments } from '@/components/Attachments';
 import {
   ArrowLeft,
   Edit,
@@ -175,6 +176,7 @@ export default function AssetDetailPage({
       <Tabs defaultValue="info" className="w-full">
         <TabsList>
           <TabsTrigger value="info">Informations</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="qr">QR Code</TabsTrigger>
           <TabsTrigger value="history">Historique</TabsTrigger>
         </TabsList>
@@ -300,6 +302,14 @@ export default function AssetDetailPage({
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="documents">
+          <Attachments
+            entityId={id}
+            entityType="assets"
+            apiModule={assetsApi}
+          />
         </TabsContent>
 
         <TabsContent value="qr">

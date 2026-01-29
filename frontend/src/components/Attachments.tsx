@@ -1,0 +1,267 @@
+'use client';
+
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Upload, Download, Trash2, FileIcon, Loader2 } from 'lucide-react';
+import { showToast } from '@/lib/toast';
+
+interface Attachment {
+  id: string;
+  filename: string;
+  originalFilename: string;
+  size: number;
+  mimetype: string;
+  description?: string;
+  category?: string;
+  uploadedAt: string;
+  url: string;
+}
+
+interface AttachmentsProps {
+  entityId: string;
+  entityType: 'assets' | 'tasks';
+  apiModule: {
+    uploadAttachment: (id: string, formData: FormData) => Promise<Attachment>;
+    listAttachments: (id: string) => Promise<Attachment[]>;
+    deleteAttachment: (id: string, attachmentId: string) => Promise<void>;
+  };
+}
+
+export function Attachments({ entityId, entityType, apiModule }: AttachmentsProps) {
+  const queryClient = useQueryClient();
+  const [file, setFile] = useState<File | null>(null);
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState<string>('other');
+
+  // Fetch attachments
+  const { data: attachments = [], isLoading } = useQuery<Attachment[]>({
+    queryKey: [entityType, entityId, 'attachments'],
+    queryFn: () => apiModule.listAttachments(entityId),
+  });
+
+  // Upload mutation
+  const uploadMutation = useMutation({
+    mutationFn: (formData: FormData) => apiModule.uploadAttachment(entityId, formData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [entityType, entityId, 'attachments'] });
+      showToast.success('Fichier uploadé avec succès');
+      setFile(null);
+      setDescription('');
+      setCategory('other');
+      // Reset file input
+      const fileInput = document.getElementById('attachment-file') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+    },
+    onError: () => {
+      showToast.error('Erreur lors de l\'upload du fichier');
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: (attachmentId: string) => apiModule.deleteAttachment(entityId, attachmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [entityType, entityId, 'attachments'] });
+      showToast.success('Fichier supprimé avec succès');
+    },
+    onError: () => {
+      showToast.error('Erreur lors de la suppression du fichier');
+    },
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      // Validate file size (max 10MB)
+      const maxSize = 10 * 1024 * 1024;
+      if (selectedFile.size > maxSize) {
+        showToast.error('Fichier trop volumineux. Taille maximale: 10MB');
+        return;
+      }
+      setFile(selectedFile);
+    }
+  };
+
+  const handleUpload = () => {
+    if (!file) {
+      showToast.error('Veuillez sélectionner un fichier');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (description) formData.append('description', description);
+    if (category) formData.append('category', category);
+
+    uploadMutation.mutate(formData);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Upload section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Ajouter un document</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="attachment-file">Fichier (max 10MB)</Label>
+            <Input
+              id="attachment-file"
+              type="file"
+              onChange={handleFileChange}
+              className="cursor-pointer"
+            />
+            {file && (
+              <p className="text-sm text-muted-foreground">
+                Fichier sélectionné: {file.name} ({formatFileSize(file.size)})
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="category">Catégorie</Label>
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="spec">Spécifications</SelectItem>
+                <SelectItem value="invoice">Facture</SelectItem>
+                <SelectItem value="photo">Photo</SelectItem>
+                <SelectItem value="report">Rapport</SelectItem>
+                <SelectItem value="manual">Manuel</SelectItem>
+                <SelectItem value="other">Autre</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Description (optionnel)</Label>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Ajouter une description..."
+              rows={3}
+            />
+          </div>
+
+          <Button
+            data-testid="upload-attachment-btn"
+            onClick={handleUpload}
+            disabled={!file || uploadMutation.isPending}
+            className="w-full"
+          >
+            {uploadMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Upload className="mr-2 h-4 w-4" />
+            Uploader le fichier
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Attachments list */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Documents ({attachments.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : attachments.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">
+              Aucun document. Uploadez votre premier fichier ci-dessus.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {attachments.map((attachment) => (
+                <div
+                  key={attachment.id}
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <FileIcon className="h-8 w-8 text-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{attachment.originalFilename}</p>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>{formatFileSize(attachment.size)}</span>
+                        <span>•</span>
+                        <span>{formatDate(attachment.uploadedAt)}</span>
+                        {attachment.category && (
+                          <>
+                            <span>•</span>
+                            <span className="capitalize">{attachment.category}</span>
+                          </>
+                        )}
+                      </div>
+                      {attachment.description && (
+                        <p className="text-sm text-muted-foreground mt-1 truncate">
+                          {attachment.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button
+                      data-testid="download-attachment-btn"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(attachment.url, '_blank')}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      data-testid="delete-attachment-btn"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm('Êtes-vous sûr de vouloir supprimer ce fichier ?')) {
+                          deleteMutation.mutate(attachment.id);
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

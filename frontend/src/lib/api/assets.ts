@@ -39,4 +39,18 @@ export const assetsApi = {
     apiClient.get<{ valid: boolean; asset?: Asset }>(
       `/api/assets/${assetId}/verify-qr?token=${token}`
     ),
+
+  // Attachments
+  uploadAttachment: (id: string, formData: FormData) =>
+    apiClient.post(`/api/assets/${id}/attachments`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }),
+
+  listAttachments: (id: string) =>
+    apiClient.get(`/api/assets/${id}/attachments`),
+
+  deleteAttachment: (id: string, attachmentId: string) =>
+    apiClient.delete(`/api/assets/${id}/attachments/${attachmentId}`),
 };

@@ -29,4 +29,18 @@ export const tasksApi = {
 
   updateChecklist: (id: string, checklist: any[]) =>
     apiClient.patch<Task>(`/api/tasks/${id}/checklist`, { checklist }),
+
+  // Attachments
+  uploadAttachment: (id: string, formData: FormData) =>
+    apiClient.post(`/api/tasks/${id}/attachments`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }),
+
+  listAttachments: (id: string) =>
+    apiClient.get(`/api/tasks/${id}/attachments`),
+
+  deleteAttachment: (id: string, attachmentId: string) =>
+    apiClient.delete(`/api/tasks/${id}/attachments/${attachmentId}`),
 };

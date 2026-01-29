@@ -565,6 +565,39 @@ model ExternalRef {
 }
 
 // ============================================================================
+// ATTACHMENTS
+// ============================================================================
+
+model Attachment {
+  id       String @id @default(cuid())
+  tenantId String
+
+  // Polymorphic relation (assetId OR taskId)
+  assetId String?
+  taskId  String?
+
+  // File metadata
+  filename         String
+  originalFilename String
+  size             Int
+  mimetype         String
+  path             String // MinIO path: attachments/{tenantId}/{entityType}/{entityId}/{timestamp}_{filename}
+
+  // Optional metadata
+  description String?
+  category    String? // spec, invoice, photo, report, manual, other
+
+  // Audit
+  uploadedBy String
+  uploadedAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, assetId])
+  @@index([tenantId, taskId])
+  @@map("attachments")
+}
+
+// ============================================================================
 // AUDIT LOGS
 // ============================================================================
 
