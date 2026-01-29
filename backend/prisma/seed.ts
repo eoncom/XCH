@@ -1570,6 +1570,94 @@ async function main() {
 
   console.log('✅ Providers created: 3 total');
 
+  // 9. Create demo attachments (simulated file uploads)
+  console.log('\n📎 Creating demo attachments...');
+
+  // Note: In production, files would be uploaded to MinIO
+  // For demo, we create DB entries with simulated paths
+
+  const attachment1 = await prisma.attachment.create({
+    data: {
+      id: 'attach_asset_server1_spec',
+      tenantId: tenant.id,
+      assetId: server1.id,
+      filename: '1738158600000_dell_poweredge_r740_specs.pdf',
+      originalFilename: 'dell_poweredge_r740_specs.pdf',
+      size: 2456789,
+      mimetype: 'application/pdf',
+      path: `attachments/${tenant.id}/assets/${server1.id}/1738158600000_dell_poweredge_r740_specs.pdf`,
+      description: 'Spécifications techniques détaillées du serveur',
+      category: 'spec',
+      uploadedBy: admin.id,
+    },
+  });
+
+  const attachment2 = await prisma.attachment.create({
+    data: {
+      id: 'attach_asset_server1_invoice',
+      tenantId: tenant.id,
+      assetId: server1.id,
+      filename: '1738158700000_facture_dell_2024_001.pdf',
+      originalFilename: 'facture_dell_2024_001.pdf',
+      size: 856234,
+      mimetype: 'application/pdf',
+      path: `attachments/${tenant.id}/assets/${server1.id}/1738158700000_facture_dell_2024_001.pdf`,
+      description: 'Facture d\'achat du serveur Dell',
+      category: 'invoice',
+      uploadedBy: manager.id,
+    },
+  });
+
+  const attachment3 = await prisma.attachment.create({
+    data: {
+      id: 'attach_task1_report',
+      tenantId: tenant.id,
+      taskId: task1.id,
+      filename: '1738158800000_rapport_installation_firewall.pdf',
+      originalFilename: 'rapport_installation_firewall.pdf',
+      size: 1234567,
+      mimetype: 'application/pdf',
+      path: `attachments/${tenant.id}/tasks/${task1.id}/1738158800000_rapport_installation_firewall.pdf`,
+      description: 'Rapport d\'installation du firewall avec tests de sécurité',
+      category: 'report',
+      uploadedBy: tech1.id,
+    },
+  });
+
+  const attachment4 = await prisma.attachment.create({
+    data: {
+      id: 'attach_task1_photo',
+      tenantId: tenant.id,
+      taskId: task1.id,
+      filename: '1738158900000_photo_installation.jpg',
+      originalFilename: 'photo_installation.jpg',
+      size: 3456789,
+      mimetype: 'image/jpeg',
+      path: `attachments/${tenant.id}/tasks/${task1.id}/1738158900000_photo_installation.jpg`,
+      description: 'Photo du firewall installé dans le rack',
+      category: 'photo',
+      uploadedBy: tech1.id,
+    },
+  });
+
+  const attachment5 = await prisma.attachment.create({
+    data: {
+      id: 'attach_asset_switch1_manual',
+      tenantId: tenant.id,
+      assetId: switch1.id,
+      filename: '1738159000000_cisco_catalyst_manual.pdf',
+      originalFilename: 'cisco_catalyst_manual.pdf',
+      size: 5678901,
+      mimetype: 'application/pdf',
+      path: `attachments/${tenant.id}/assets/${switch1.id}/1738159000000_cisco_catalyst_manual.pdf`,
+      description: 'Manuel d\'utilisation Cisco Catalyst',
+      category: 'manual',
+      uploadedBy: tech2.id,
+    },
+  });
+
+  console.log('✅ Attachments created: 5 total (3 assets, 2 tasks)');
+
   // Summary
   console.log('\n🎉 COMPREHENSIVE DEMO SEED COMPLETED SUCCESSFULLY!\n');
 
@@ -1600,7 +1688,8 @@ async function main() {
   console.log('      • UPS: 1');
   console.log('      • PDU: 1');
   console.log('  📋 Tasks: 15 (3 TODO, 5 IN_PROGRESS, 4 DONE, 3 URGENT)');
-  console.log('  🏢 Providers: 3 (Integrator, Security, Datacenter)\n');
+  console.log('  🏢 Providers: 3 (Integrator, Security, Datacenter)');
+  console.log('  📎 Attachments: 5 (3 on assets, 2 on tasks)\n');
 
   console.log('📍 SITES DETAILS:');
   console.log('  1. Paris La Défense (PAR-001) - ACTIVE');
