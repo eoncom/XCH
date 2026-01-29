@@ -6,8 +6,8 @@ import { FilterAssetDto } from './dto/filter-asset.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 import { QRCodeService } from '../../common/services/qrcode.service';
 import { ConfigService } from '@nestjs/config';
-import { MinioService } from '../../common/services/minio.service';
-import { cuid } from '@paralleldrive/cuid2';
+import { StorageService } from '../../common/services/storage.service';
+import { createId } from '@paralleldrive/cuid2';
 
 @Injectable()
 export class AssetsService {
@@ -17,7 +17,7 @@ export class AssetsService {
     private prisma: PrismaClient,
     private qrCodeService: QRCodeService,
     private configService: ConfigService,
-    private minioService: MinioService,
+    private storageService: StorageService,
   ) {}
 
   async create(tenantId: string, createAssetDto: CreateAssetDto) {
@@ -301,39 +301,31 @@ export class AssetsService {
     await this.findOne(assetId, tenantId);
 
     // Generate unique filename
-    const timestamp = Date.now();
-    const sanitizedFilename = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const filename = `${timestamp}_${sanitizedFilename}`;
-    const path = `attachments/${tenantId}/assets/${assetId}/${filename}`;
+    const filename = this.storageService.generateFilename(file.originalname, 'attachment');
+    const folder = `attachments/${tenantId}/assets/${assetId}`;
 
-    // Upload to MinIO
-    await this.minioService.uploadFile(
-      'attachments',
-      path,
-      file.buffer,
-      file.size,
-      file.mimetype,
-    );
+    // Upload to storage
+    const filePath = await this.storageService.uploadFile(file, folder, filename);
 
     // Create database entry
     const attachment = await this.prisma.attachment.create({
       data: {
-        id: cuid(),
+        id: createId(),
         tenantId,
         assetId,
         filename,
         originalFilename: file.originalname,
         size: file.size,
         mimetype: file.mimetype,
-        path,
+        path: filePath,
         description: dto.description,
         category: dto.category,
         uploadedBy: userId,
       },
     });
 
-    // Generate presigned URL (7 days)
-    const url = await this.minioService.getPresignedUrl('attachments', path, 7 * 24 * 60 * 60);
+    // Get file URL
+    const url = this.storageService.getFileUrl(filePath);
 
     return {
       ...attachment,
@@ -355,20 +347,11 @@ export class AssetsService {
       },
     });
 
-    // Generate presigned URLs for all attachments
-    const attachmentsWithUrls = await Promise.all(
-      attachments.map(async (attachment) => {
-        const url = await this.minioService.getPresignedUrl(
-          'attachments',
-          attachment.path,
-          7 * 24 * 60 * 60,
-        );
-        return {
-          ...attachment,
-          url,
-        };
-      }),
-    );
+    // Add URLs to all attachments
+    const attachmentsWithUrls = attachments.map((attachment) => ({
+      ...attachment,
+      url: this.storageService.getFileUrl(attachment.path),
+    }));
 
     return attachmentsWithUrls;
   }
@@ -387,8 +370,8 @@ export class AssetsService {
       throw new NotFoundException('Attachment not found');
     }
 
-    // Delete from MinIO
-    await this.minioService.deleteFile('attachments', attachment.path);
+    // Delete from storage
+    await this.storageService.deleteFile(attachment.path);
 
     // Delete from database
     await this.prisma.attachment.delete({
