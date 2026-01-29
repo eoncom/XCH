@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
@@ -51,5 +53,24 @@ export class UsersController {
   @ApiOperation({ summary: 'Delete user' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.usersService.remove(id, req.user.tenantId);
+  }
+
+  // Settings endpoints - accessible to all authenticated users
+  @Get('me/profile')
+  @ApiOperation({ summary: 'Get current user profile' })
+  getProfile(@Request() req: AuthRequest) {
+    return this.usersService.getProfile(req.user.userId, req.user.tenantId);
+  }
+
+  @Put('me/profile')
+  @ApiOperation({ summary: 'Update current user profile' })
+  updateProfile(@Body() updateProfileDto: UpdateProfileDto, @Request() req: AuthRequest) {
+    return this.usersService.updateProfile(req.user.userId, req.user.tenantId, updateProfileDto);
+  }
+
+  @Post('me/change-password')
+  @ApiOperation({ summary: 'Change current user password' })
+  changePassword(@Body() changePasswordDto: ChangePasswordDto, @Request() req: AuthRequest) {
+    return this.usersService.changePassword(req.user.userId, req.user.tenantId, changePasswordDto);
   }
 }
