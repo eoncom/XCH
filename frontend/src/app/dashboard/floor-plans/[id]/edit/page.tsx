@@ -56,7 +56,7 @@ export default function EditFloorPlanPage() {
   // Récupérer plan existant
   const { data: floorPlan, isLoading: loadingPlan } = useQuery<FloorPlan>({
     queryKey: ['floor-plan', params.id],
-    queryFn: () => floorPlansApi.getOne(params.id as string),
+    queryFn: () => floorPlansApi.getById(params.id as string),
   });
 
   const { data: sites } = useQuery<Site[]>({
