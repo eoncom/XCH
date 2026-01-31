@@ -49,7 +49,7 @@ const taskSchema = z.object({
   assetId: z.string().optional(),
   assignedTo: z.string().optional(),
   dueDate: z.string().optional(),
-  ticketLink: z.string().optional(),
+  ticketUrl: z.string().optional(),
 });
 
 type TaskFormData = z.infer<typeof taskSchema>;
@@ -255,11 +255,11 @@ export default function NewTaskPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="ticketLink">Lien ticket externe</Label>
+              <Label htmlFor="ticketUrl">Lien ticket externe</Label>
               <Input
-                id="ticketLink"
+                id="ticketUrl"
                 type="url"
-                {...register('ticketLink')}
+                {...register('ticketUrl')}
                 placeholder="https://ticketing.example.com/ticket/123"
               />
             </div>

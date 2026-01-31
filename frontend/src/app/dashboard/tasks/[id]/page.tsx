@@ -359,13 +359,13 @@ export default function TaskDetailPage({
                 </div>
               )}
 
-              {task.ticketLink && (
+              {task.ticketUrl && (
                 <div className="flex items-start gap-3">
                   <ExternalLink className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div>
                     <p className="text-sm font-medium">Ticket lié</p>
                     <a
-                      href={task.ticketLink}
+                      href={task.ticketUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-blue-600 hover:underline"

@@ -45,9 +45,8 @@ export class CreateSiteDto {
   longitude?: number;
 
   @ApiProperty({ required: false })
-  @IsObject()
   @IsOptional()
-  contacts?: any;
+  contacts?: any; // Can be array or object (JSONB)
 
   @ApiProperty({ required: false })
   @IsObject()

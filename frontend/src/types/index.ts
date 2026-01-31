@@ -167,7 +167,7 @@ export interface Task {
   dueDate?: string;
   completedAt?: string;
   checklist?: ChecklistItem[];
-  ticketLink?: string;
+  ticketUrl?: string;
   metadata?: any;
   createdAt: string;
   updatedAt: string;
@@ -260,7 +260,7 @@ export interface CreateTaskDto {
   assignedTo?: string;
   dueDate?: string;
   checklist?: Omit<ChecklistItem, 'id'>[];
-  ticketLink?: string;
+  ticketUrl?: string;
   metadata?: any;
 }
 
