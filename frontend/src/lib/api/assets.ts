@@ -41,12 +41,16 @@ export const assetsApi = {
     ),
 
   // Attachments
-  uploadAttachment: (id: string, formData: FormData) =>
-    apiClient.post(`/api/assets/${id}/attachments`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    }),
+  uploadAttachment: async (id: string, formData: FormData) => {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/assets/${id}/attachments`, {
+      method: 'POST',
+      credentials: 'include', // Send cookies for authentication
+      body: formData,
+      // No Content-Type header - browser sets it automatically with boundary
+    });
+    if (!response.ok) throw new Error('Upload failed');
+    return response.json();
+  },
 
   listAttachments: (id: string) =>
     apiClient.get(`/api/assets/${id}/attachments`),

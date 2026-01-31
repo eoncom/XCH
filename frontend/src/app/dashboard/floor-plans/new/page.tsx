@@ -112,7 +112,7 @@ export default function NewFloorPlanPage() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('siteId', data.siteId);
-    formData.append('title', data.title);
+    formData.append('name', data.title); // Backend expects 'name' not 'title'
     if (data.floor) formData.append('floor', data.floor);
     if (data.building) formData.append('building', data.building);
     if (data.notes) formData.append('notes', data.notes);
