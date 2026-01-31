@@ -10,12 +10,9 @@ export const floorPlansApi = {
   getById: (id: string) => apiClient.get<FloorPlan>(`/api/floor-plans/${id}`),
 
   create: async (data: FormData) => {
-    const token = localStorage.getItem('accessToken');
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/floor-plans`, {
       method: 'POST',
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
+      credentials: 'include', // Send cookies for authentication
       body: data,
     });
     if (!response.ok) throw new Error('Upload failed');
