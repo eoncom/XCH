@@ -16,8 +16,25 @@ async function bootstrap() {
 
   // Security
   app.use(helmet());
+
+  // CORS - Allow both frontend URLs (xch.eoncom.io and xchapi.eoncom.io routing)
+  const frontendUrl = configService.get('FRONTEND_URL', 'http://localhost:3000');
+  const allowedOrigins = [
+    frontendUrl,
+    'http://localhost:3001', // Local development
+  ];
+
   app.enableCors({
-    origin: configService.get('FRONTEND_URL', 'http://localhost:3000'),
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, Postman, or same-origin)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true, // ✅ CRITICAL pour cookies cross-origin
   });
 
