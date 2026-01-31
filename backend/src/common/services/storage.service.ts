@@ -86,8 +86,13 @@ export class StorageService {
    */
   getFileUrl(filePath: string): string {
     if (this.storageType === 'minio') {
-      const minioUrl = this.configService.get('MINIO_URL', 'http://localhost:9000');
-      const bucket = this.configService.get('MINIO_BUCKET', 'xch-uploads');
+      // Use MINIO_PUBLIC_URL for browser-accessible URL (e.g., https://xch.eoncom.io:9000)
+      // Falls back to internal URL if not set (for development)
+      const minioPublicUrl = this.configService.get('MINIO_PUBLIC_URL');
+      const minioEndpoint = this.configService.get('MINIO_ENDPOINT', 'localhost');
+      const minioPort = this.configService.get('MINIO_PORT', '9000');
+      const minioUrl = minioPublicUrl || `http://${minioEndpoint}:${minioPort}`;
+      const bucket = this.configService.get('MINIO_BUCKET', 'xch-storage');
       return `${minioUrl}/${bucket}${filePath}`;
     } else {
       const baseUrl = this.configService.get('APP_URL', 'http://localhost:3000');
