@@ -1,10 +1,20 @@
 import { Module } from '@nestjs/common';
+import { MulterModule } from '@nestjs/platform-express';
 import { AssetsService } from './assets.service';
 import { AssetsController } from './assets.controller';
 import { QRCodeService } from '../../common/services/qrcode.service';
 import { StorageService } from '../../common/services/storage.service';
+import { memoryStorage } from 'multer';
 
 @Module({
+  imports: [
+    MulterModule.register({
+      storage: memoryStorage(), // Store files in memory for processing
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB max file size
+      },
+    }),
+  ],
   controllers: [AssetsController],
   providers: [AssetsService, QRCodeService, StorageService],
   exports: [AssetsService],
