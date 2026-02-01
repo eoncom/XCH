@@ -87,9 +87,6 @@ export interface Site {
   connectivity?: SiteConnectivity;
   accessNotes?: SiteAccessNotes;
   notes?: string;
-  internet?: string;
-  backup?: string;
-  procedure?: string;
   metadata?: any;
   createdAt: string;
   updatedAt: string;

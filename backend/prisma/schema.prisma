@@ -468,10 +468,10 @@ model Task {
 // ============================================================================
 
 enum ProviderType {
-  CABLING
-  OPERATOR
-  INTEGRATOR
-  MAINTENANCE
+  TELECOM
+  INTERNET
+  CLOUD
+  HOSTING
   OTHER
 }
 
@@ -479,14 +479,11 @@ model Provider {
   id       String       @id @default(cuid())
   tenantId String
   tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name     String
+  name     String       @db.VarChar(100)
   type     ProviderType
 
-  // Contacts (JSON)
-  contacts Json? @db.JsonB // [{name, phone, email, role}]
-
-  // Availability (JSON)
-  availability Json? @db.JsonB // {schedules, sla, interventionDelay}
+  // Contact simple (email, phone, etc.)
+  contact String? @db.VarChar(200)
 
   notes     String?  @db.Text
   createdAt DateTime @default(now())

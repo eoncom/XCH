@@ -41,9 +41,19 @@ const siteSchema = z.object({
     if (typeof val === 'number' && !isNaN(val)) return val;
     return undefined;
   }),
-  internet: z.string().max(200, 'Max 200 caractères').optional().or(z.literal('')),
-  backup: z.string().max(200, 'Max 200 caractères').optional().or(z.literal('')),
-  procedure: z.string().max(2000, 'Max 2000 caractères').optional().or(z.literal('')),
+  connectivity: z.object({
+    primary: z.object({
+      type: z.string().max(50, 'Max 50 caractères').optional().or(z.literal('')),
+      provider: z.string().max(100, 'Max 100 caractères').optional().or(z.literal('')),
+      ref: z.string().max(100, 'Max 100 caractères').optional().or(z.literal('')),
+    }).optional(),
+    backup: z.object({
+      type: z.string().max(50, 'Max 50 caractères').optional().or(z.literal('')),
+      provider: z.string().max(100, 'Max 100 caractères').optional().or(z.literal('')),
+      ref: z.string().max(100, 'Max 100 caractères').optional().or(z.literal('')),
+    }).optional(),
+    cutProcedure: z.string().max(2000, 'Max 2000 caractères').optional().or(z.literal('')),
+  }).optional(),
 });
 
 type SiteFormData = z.infer<typeof siteSchema>;
@@ -80,18 +90,16 @@ export default function EditSitePage({
           postalCode: site.postalCode || '',
           latitude: site.latitude,
           longitude: site.longitude,
-          internet: site.internet || '',
-          backup: site.backup || '',
-          procedure: site.procedure || '',
+          connectivity: site.connectivity || {
+            primary: { type: '', provider: '', ref: '' },
+            backup: { type: '', provider: '', ref: '' },
+            cutProcedure: '',
+          },
         }
       : undefined,
   });
 
   const [contacts, setContacts] = useState(site?.contacts || []);
-  const [connectivity, setConnectivity] = useState(site?.connectivity || {
-    primary: { type: '', provider: '', reference: '', bandwidth: '', notes: '' },
-    backup: { type: '', provider: '', reference: '', bandwidth: '', notes: '' }
-  });
   const [accessNotes, setAccessNotes] = useState(site?.accessNotes || {
     schedules: '', badges: '', procedures: '', safety: ''
   });
@@ -106,10 +114,46 @@ export default function EditSitePage({
   });
 
   const onSubmit = (data: SiteFormData) => {
+    // Nettoyer connectivity : supprimer objets vides
+    const cleanedData = { ...data };
+
+    if (cleanedData.connectivity) {
+      // Si primary est vide, le supprimer
+      if (
+        !cleanedData.connectivity.primary?.type &&
+        !cleanedData.connectivity.primary?.provider &&
+        !cleanedData.connectivity.primary?.ref
+      ) {
+        delete cleanedData.connectivity.primary;
+      }
+
+      // Si backup est vide, le supprimer
+      if (
+        !cleanedData.connectivity.backup?.type &&
+        !cleanedData.connectivity.backup?.provider &&
+        !cleanedData.connectivity.backup?.ref
+      ) {
+        delete cleanedData.connectivity.backup;
+      }
+
+      // Si cutProcedure vide, le supprimer
+      if (!cleanedData.connectivity.cutProcedure) {
+        delete cleanedData.connectivity.cutProcedure;
+      }
+
+      // Si tout connectivity est vide, le supprimer
+      if (
+        !cleanedData.connectivity.primary &&
+        !cleanedData.connectivity.backup &&
+        !cleanedData.connectivity.cutProcedure
+      ) {
+        delete cleanedData.connectivity;
+      }
+    }
+
     const payload = {
-      ...data,
+      ...cleanedData,
       contacts: contacts.filter(c => c.name && c.email),
-      connectivity,
       accessNotes
     };
     updateMutation.mutate(payload);
@@ -327,145 +371,132 @@ export default function EditSitePage({
               </div>
             </div>
 
-            {/* Connectivité simple */}
-            <div className="mt-8 border-t pt-6 space-y-4">
-              <h3 className="text-lg font-semibold">Connectivité</h3>
-              <p className="text-sm text-muted-foreground">
-                Informations sur les connexions internet du chantier
-              </p>
+            {/* Connectivity */}
+            <div className="mt-8 border-t pt-6 space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold">Connectivité</h3>
+                <p className="text-sm text-muted-foreground">
+                  Configuration des liaisons réseau primaire et backup
+                </p>
+              </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="internet">Provider internet</Label>
-                  <Input
-                    id="internet"
-                    {...register('internet')}
-                    placeholder="Orange Fibre 1Gb/s"
-                    maxLength={200}
-                  />
-                  {errors.internet && (
-                    <p className="text-sm text-red-600">{errors.internet.message}</p>
-                  )}
-                </div>
+              {/* Primary Connectivity */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-gray-700">Connexion Primaire</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="connectivity.primary.type">Type</Label>
+                    <Input
+                      id="connectivity.primary.type"
+                      {...register('connectivity.primary.type')}
+                      placeholder="Ex: Fiber, 4G, Satellite"
+                      maxLength={50}
+                    />
+                    {errors.connectivity?.primary?.type && (
+                      <p className="text-sm text-red-600">
+                        {errors.connectivity.primary.type.message}
+                      </p>
+                    )}
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="backup">Solution backup</Label>
-                  <Input
-                    id="backup"
-                    {...register('backup')}
-                    placeholder="4G Bouygues"
-                    maxLength={200}
-                  />
-                  {errors.backup && (
-                    <p className="text-sm text-red-600">{errors.backup.message}</p>
-                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="connectivity.primary.provider">Opérateur</Label>
+                    <Input
+                      id="connectivity.primary.provider"
+                      {...register('connectivity.primary.provider')}
+                      placeholder="Ex: Orange Business"
+                      maxLength={100}
+                    />
+                    {errors.connectivity?.primary?.provider && (
+                      <p className="text-sm text-red-600">
+                        {errors.connectivity.primary.provider.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="connectivity.primary.ref">Référence Contrat</Label>
+                    <Input
+                      id="connectivity.primary.ref"
+                      {...register('connectivity.primary.ref')}
+                      placeholder="Ex: CTR-2024-0001"
+                      maxLength={100}
+                    />
+                    {errors.connectivity?.primary?.ref && (
+                      <p className="text-sm text-red-600">
+                        {errors.connectivity.primary.ref.message}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
+              {/* Backup Connectivity */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-gray-700">Connexion Backup</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="connectivity.backup.type">Type</Label>
+                    <Input
+                      id="connectivity.backup.type"
+                      {...register('connectivity.backup.type')}
+                      placeholder="Ex: 4G, ADSL"
+                      maxLength={50}
+                    />
+                    {errors.connectivity?.backup?.type && (
+                      <p className="text-sm text-red-600">
+                        {errors.connectivity.backup.type.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="connectivity.backup.provider">Opérateur</Label>
+                    <Input
+                      id="connectivity.backup.provider"
+                      {...register('connectivity.backup.provider')}
+                      placeholder="Ex: SFR Business"
+                      maxLength={100}
+                    />
+                    {errors.connectivity?.backup?.provider && (
+                      <p className="text-sm text-red-600">
+                        {errors.connectivity.backup.provider.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="connectivity.backup.ref">Référence Contrat</Label>
+                    <Input
+                      id="connectivity.backup.ref"
+                      {...register('connectivity.backup.ref')}
+                      placeholder="Ex: CTR-2024-0002"
+                      maxLength={100}
+                    />
+                    {errors.connectivity?.backup?.ref && (
+                      <p className="text-sm text-red-600">
+                        {errors.connectivity.backup.ref.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Cut Procedure */}
               <div className="space-y-2">
-                <Label htmlFor="procedure">Procédure d&apos;activation</Label>
+                <Label htmlFor="connectivity.cutProcedure">Procédure Coupure</Label>
                 <Textarea
-                  id="procedure"
-                  {...register('procedure')}
-                  placeholder="Étapes d'activation de la connexion internet..."
+                  id="connectivity.cutProcedure"
+                  {...register('connectivity.cutProcedure')}
+                  placeholder="Procédure à suivre en cas de coupure réseau (contacts, escalade, basculement backup...)"
                   rows={4}
                   maxLength={2000}
                 />
-                {errors.procedure && (
-                  <p className="text-sm text-red-600">{errors.procedure.message}</p>
+                {errors.connectivity?.cutProcedure && (
+                  <p className="text-sm text-red-600">
+                    {errors.connectivity.cutProcedure.message}
+                  </p>
                 )}
-              </div>
-            </div>
-
-            {/* Connectivity */}
-            <div className="mt-8 border-t pt-6">
-              <h3 className="text-lg font-semibold mb-4">Connectivité</h3>
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Primary */}
-                <div className="border p-4 rounded">
-                  <h4 className="font-medium mb-3">Connexion Principale</h4>
-                  <div className="space-y-3">
-                    <Select
-                      value={connectivity.primary.type}
-                      onValueChange={(val) => setConnectivity({...connectivity, primary: {...connectivity.primary, type: val}})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Type de connexion" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="FIBER">Fibre</SelectItem>
-                        <SelectItem value="ADSL">ADSL</SelectItem>
-                        <SelectItem value="4G">4G</SelectItem>
-                        <SelectItem value="5G">5G</SelectItem>
-                        <SelectItem value="SATELLITE">Satellite</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      placeholder="Provider"
-                      value={connectivity.primary.provider}
-                      onChange={(e) => setConnectivity({...connectivity, primary: {...connectivity.primary, provider: e.target.value}})}
-                    />
-                    <Input
-                      placeholder="Référence"
-                      value={connectivity.primary.reference}
-                      onChange={(e) => setConnectivity({...connectivity, primary: {...connectivity.primary, reference: e.target.value}})}
-                    />
-                    <Input
-                      placeholder="Bande passante"
-                      value={connectivity.primary.bandwidth}
-                      onChange={(e) => setConnectivity({...connectivity, primary: {...connectivity.primary, bandwidth: e.target.value}})}
-                    />
-                    <Textarea
-                      placeholder="Notes"
-                      rows={2}
-                      value={connectivity.primary.notes}
-                      onChange={(e) => setConnectivity({...connectivity, primary: {...connectivity.primary, notes: e.target.value}})}
-                    />
-                  </div>
-                </div>
-
-                {/* Backup */}
-                <div className="border p-4 rounded">
-                  <h4 className="font-medium mb-3">Connexion Backup</h4>
-                  <div className="space-y-3">
-                    <Select
-                      value={connectivity.backup.type}
-                      onValueChange={(val) => setConnectivity({...connectivity, backup: {...connectivity.backup, type: val}})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Type de connexion" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="FIBER">Fibre</SelectItem>
-                        <SelectItem value="ADSL">ADSL</SelectItem>
-                        <SelectItem value="4G">4G</SelectItem>
-                        <SelectItem value="5G">5G</SelectItem>
-                        <SelectItem value="SATELLITE">Satellite</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      placeholder="Provider"
-                      value={connectivity.backup.provider}
-                      onChange={(e) => setConnectivity({...connectivity, backup: {...connectivity.backup, provider: e.target.value}})}
-                    />
-                    <Input
-                      placeholder="Référence"
-                      value={connectivity.backup.reference}
-                      onChange={(e) => setConnectivity({...connectivity, backup: {...connectivity.backup, reference: e.target.value}})}
-                    />
-                    <Input
-                      placeholder="Bande passante"
-                      value={connectivity.backup.bandwidth}
-                      onChange={(e) => setConnectivity({...connectivity, backup: {...connectivity.backup, bandwidth: e.target.value}})}
-                    />
-                    <Textarea
-                      placeholder="Notes"
-                      rows={2}
-                      value={connectivity.backup.notes}
-                      onChange={(e) => setConnectivity({...connectivity, backup: {...connectivity.backup, notes: e.target.value}})}
-                    />
-                  </div>
-                </div>
               </div>
             </div>
 

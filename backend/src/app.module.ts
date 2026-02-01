@@ -13,6 +13,7 @@ import { RacksModule } from './modules/racks/racks.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { FloorPlansModule } from './modules/floor-plans/floor-plans.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { ProvidersModule } from './modules/providers/providers.module';
 import { SeedModule } from './modules/seed/seed.module';
 
 @Module({
@@ -55,6 +56,7 @@ import { SeedModule } from './modules/seed/seed.module';
     RacksModule,
     TasksModule,
     FloorPlansModule,
+    ProvidersModule,
     IntegrationsModule,
     SeedModule,
   ],
