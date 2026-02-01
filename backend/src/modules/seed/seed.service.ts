@@ -254,12 +254,10 @@ export class SeedService {
       create: {
         id: `demo-provider-1-${tenantId}`,
         tenantId,
-        name: 'Tech Integration Solutions',
-        type: ProviderType.INTEGRATOR,
-        contacts: [
-          { name: 'Contact Principal', phone: '+33 1 23 45 67 89', email: 'contact@tech-integration.fr' },
-        ],
-        notes: 'Intégrateur principal pour les projets réseau',
+        name: 'Orange Business Services',
+        type: ProviderType.TELECOM,
+        contact: 'Service Client: 3900 | contact@orange-business.com',
+        notes: 'Opérateur principal pour les liaisons FTTH et 4G backup',
       },
     });
     providers.push(provider1);
