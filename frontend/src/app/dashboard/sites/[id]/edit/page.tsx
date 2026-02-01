@@ -41,6 +41,9 @@ const siteSchema = z.object({
     if (typeof val === 'number' && !isNaN(val)) return val;
     return undefined;
   }),
+  internet: z.string().max(200, 'Max 200 caractères').optional().or(z.literal('')),
+  backup: z.string().max(200, 'Max 200 caractères').optional().or(z.literal('')),
+  procedure: z.string().max(2000, 'Max 2000 caractères').optional().or(z.literal('')),
 });
 
 type SiteFormData = z.infer<typeof siteSchema>;
@@ -77,6 +80,9 @@ export default function EditSitePage({
           postalCode: site.postalCode || '',
           latitude: site.latitude,
           longitude: site.longitude,
+          internet: site.internet || '',
+          backup: site.backup || '',
+          procedure: site.procedure || '',
         }
       : undefined,
   });
@@ -317,6 +323,56 @@ export default function EditSitePage({
                   <p className="text-sm text-muted-foreground text-center py-4">
                     Aucun contact. Cliquez sur "Ajouter" pour en créer un.
                   </p>
+                )}
+              </div>
+            </div>
+
+            {/* Connectivité simple */}
+            <div className="mt-8 border-t pt-6 space-y-4">
+              <h3 className="text-lg font-semibold">Connectivité</h3>
+              <p className="text-sm text-muted-foreground">
+                Informations sur les connexions internet du chantier
+              </p>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="internet">Provider internet</Label>
+                  <Input
+                    id="internet"
+                    {...register('internet')}
+                    placeholder="Orange Fibre 1Gb/s"
+                    maxLength={200}
+                  />
+                  {errors.internet && (
+                    <p className="text-sm text-red-600">{errors.internet.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="backup">Solution backup</Label>
+                  <Input
+                    id="backup"
+                    {...register('backup')}
+                    placeholder="4G Bouygues"
+                    maxLength={200}
+                  />
+                  {errors.backup && (
+                    <p className="text-sm text-red-600">{errors.backup.message}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="procedure">Procédure d&apos;activation</Label>
+                <Textarea
+                  id="procedure"
+                  {...register('procedure')}
+                  placeholder="Étapes d'activation de la connexion internet..."
+                  rows={4}
+                  maxLength={2000}
+                />
+                {errors.procedure && (
+                  <p className="text-sm text-red-600">{errors.procedure.message}</p>
                 )}
               </div>
             </div>

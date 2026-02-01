@@ -75,7 +75,10 @@
       "Bash(explorer.exe playwright-report)",
       "Bash(for file in e2e/tests/auth/login.spec.ts e2e/tests/floorplans/floorplans-crud.spec.ts e2e/tests/racks/racks-crud.spec.ts e2e/tests/sites/sites-crud.spec.ts e2e/tests/tasks/tasks-kanban.spec.ts)",
       "Bash(do sed -i \"s/page\\\\.locator\\(''h1, h2''\\)/page.locator\\(''h1, h2''\\).last\\(\\)/g\" \"$file\")",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "WebFetch(domain:www.aitmpl.com)",
+      "Bash(npx shadcn@latest add alert-dialog:*)",
+      "Bash(npx eslint:*)"
     ]
   }
 }

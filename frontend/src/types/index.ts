@@ -24,6 +24,19 @@ export interface AuthResponse {
   user: User;
 }
 
+// Provider types
+export type ProviderType = 'TELECOM' | 'INTERNET' | 'CLOUD' | 'HOSTING' | 'OTHER';
+
+export interface Provider {
+  id: number;
+  name: string;
+  type: ProviderType;
+  contact?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Site types
 export type SiteStatus = 'PREPARATION' | 'ACTIVE' | 'CLOSED';
 export type HealthStatus = 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
@@ -74,6 +87,9 @@ export interface Site {
   connectivity?: SiteConnectivity;
   accessNotes?: SiteAccessNotes;
   notes?: string;
+  internet?: string;
+  backup?: string;
+  procedure?: string;
   metadata?: any;
   createdAt: string;
   updatedAt: string;

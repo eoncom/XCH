@@ -3,6 +3,7 @@
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { tasksApi } from '@/lib/api/tasks';
 import { Attachments } from '@/components/Attachments';
+import { showToast } from '@/lib/toast';
 import {
   ArrowLeft,
   Edit,
@@ -32,6 +34,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import type { Task, TaskStatus, TaskPriority, ChecklistItem } from '@/types';
+
+// Validation schema pour nouveaux items checklist
+const checklistItemSchema = z.object({
+  text: z.string().min(1, 'Le texte est requis').max(200, 'Maximum 200 caractères'),
+});
 
 const taskStatusLabels: Record<TaskStatus, string> = {
   TODO: 'À faire',
@@ -72,7 +79,10 @@ export default function TaskDetailPage({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showDeleteItemDialog, setShowDeleteItemDialog] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [newChecklistItem, setNewChecklistItem] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const { data: task, isLoading } = useQuery<Task>({
     queryKey: ['task', id],
@@ -83,7 +93,11 @@ export default function TaskDetailPage({
     mutationFn: () => tasksApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      showToast.success('Tâche supprimée avec succès');
       router.push('/dashboard/tasks');
+    },
+    onError: () => {
+      showToast.error('Erreur lors de la suppression de la tâche');
     },
   });
 
@@ -91,7 +105,13 @@ export default function TaskDetailPage({
     mutationFn: (checklist: ChecklistItem[]) =>
       tasksApi.updateChecklist(id, checklist),
     onSuccess: () => {
+      // CRITIQUE: Invalider queries pour refresh données
       queryClient.invalidateQueries({ queryKey: ['task', id] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      showToast.success('Checklist mise à jour');
+    },
+    onError: () => {
+      showToast.error('Erreur lors de la mise à jour');
     },
   });
 
@@ -117,7 +137,20 @@ export default function TaskDetailPage({
   };
 
   const addChecklistItem = () => {
-    if (!task || !newChecklistItem.trim()) return;
+    if (!task) return;
+
+    // Valider avec Zod
+    const validation = checklistItemSchema.safeParse({ text: newChecklistItem.trim() });
+
+    if (!validation.success) {
+      const errorMessage = validation.error.errors[0]?.message || 'Erreur de validation';
+      setValidationError(errorMessage);
+      showToast.error(errorMessage);
+      return;
+    }
+
+    // Clear validation error
+    setValidationError(null);
 
     // Filter out invalid items before adding new one
     const validChecklist = (task.checklist || []).filter(
@@ -127,7 +160,7 @@ export default function TaskDetailPage({
 
     const newItem: ChecklistItem = {
       id: `temp-${Date.now()}`,
-      text: newChecklistItem,
+      text: validation.data.text,
       checked: false,
       order: validChecklist.length + 1,
     };
@@ -137,8 +170,13 @@ export default function TaskDetailPage({
     setNewChecklistItem('');
   };
 
-  const deleteChecklistItem = (itemId: string) => {
-    if (!task?.checklist) return;
+  const handleDeleteItemClick = (itemId: string) => {
+    setItemToDelete(itemId);
+    setShowDeleteItemDialog(true);
+  };
+
+  const confirmDeleteItem = () => {
+    if (!task?.checklist || !itemToDelete) return;
 
     // Filter out invalid items and then remove the target item
     const validChecklist = task.checklist.filter(
@@ -146,8 +184,12 @@ export default function TaskDetailPage({
         item && typeof item === 'object' && !Array.isArray(item) && 'id' in item
     );
 
-    const updatedChecklist = validChecklist.filter((item) => item.id !== itemId);
+    const updatedChecklist = validChecklist.filter((item) => item.id !== itemToDelete);
     updateChecklistMutation.mutate(updatedChecklist);
+
+    // Reset state
+    setShowDeleteItemDialog(false);
+    setItemToDelete(null);
   };
 
   if (isLoading) {
@@ -251,6 +293,7 @@ export default function TaskDetailPage({
                   <button
                     onClick={() => toggleChecklistItem(item.id)}
                     className="flex-shrink-0"
+                    disabled={updateChecklistMutation.isPending}
                   >
                     {item.checked ? (
                       <CheckCircle2 className="h-5 w-5 text-primary" />
@@ -268,8 +311,10 @@ export default function TaskDetailPage({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => deleteChecklistItem(item.id)}
+                    onClick={() => handleDeleteItemClick(item.id)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    disabled={updateChecklistMutation.isPending}
+                    data-testid="delete-checklist-item-btn"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -277,21 +322,36 @@ export default function TaskDetailPage({
               ))}
 
               {/* Add new item */}
-              <div className="flex gap-2 mt-4">
-                <Input
-                  data-testid="checklist-input"
-                  placeholder="Ajouter un élément..."
-                  value={newChecklistItem}
-                  onChange={(e) => setNewChecklistItem(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      addChecklistItem();
-                    }
-                  }}
-                />
-                <Button onClick={addChecklistItem} size="icon" data-testid="add-checklist-btn">
-                  <Plus className="h-4 w-4" />
-                </Button>
+              <div className="space-y-2 mt-4">
+                <div className="flex gap-2">
+                  <Input
+                    data-testid="checklist-input"
+                    placeholder="Ajouter un élément..."
+                    value={newChecklistItem}
+                    onChange={(e) => {
+                      setNewChecklistItem(e.target.value);
+                      setValidationError(null);
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        addChecklistItem();
+                      }
+                    }}
+                    disabled={updateChecklistMutation.isPending}
+                    className={validationError ? 'border-red-500' : ''}
+                  />
+                  <Button
+                    onClick={addChecklistItem}
+                    size="icon"
+                    data-testid="add-checklist-btn"
+                    disabled={updateChecklistMutation.isPending}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {validationError && (
+                  <p className="text-sm text-red-600">{validationError}</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -394,7 +454,7 @@ export default function TaskDetailPage({
         </div>
       </div>
 
-      {/* Delete confirmation dialog */}
+      {/* Delete task confirmation dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
           <DialogHeader>
@@ -414,6 +474,38 @@ export default function TaskDetailPage({
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? 'Suppression...' : 'Supprimer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete checklist item confirmation dialog */}
+      <Dialog open={showDeleteItemDialog} onOpenChange={setShowDeleteItemDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmer la suppression</DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir supprimer cet élément de la checklist ?
+              Cette action est irréversible.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteItemDialog(false);
+                setItemToDelete(null);
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteItem}
+              disabled={updateChecklistMutation.isPending}
+              data-testid="confirm-delete-item-btn"
+            >
+              {updateChecklistMutation.isPending ? 'Suppression...' : 'Supprimer'}
             </Button>
           </DialogFooter>
         </DialogContent>

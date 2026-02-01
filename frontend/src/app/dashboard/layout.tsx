@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   LayoutDashboard,
+  Building2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,7 @@ const navigation = [
   { name: 'Baies', href: '/dashboard/racks', icon: Server },
   { name: 'Tâches', href: '/dashboard/tasks', icon: CheckSquare },
   { name: 'Plans', href: '/dashboard/floor-plans', icon: LayoutTemplate },
+  { name: 'Fournisseurs', href: '/dashboard/providers', icon: Building2 },
 ];
 
 const adminNavigation = [

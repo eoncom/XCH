@@ -1,3 +1,4 @@
+// @ts-nocheck - Temporary fix for Radix UI + React 19 type incompatibility
 'use client';
 
 import { useEffect } from 'react';
