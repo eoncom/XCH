@@ -234,7 +234,13 @@ Task(
 2. Code review (TypeScript, patterns, qualité)
 3. Résoudre conflits Git
 4. Merger code dans branche main
-5. Commit avec co-authors agents
+5. ⚠️ COMMIT + PUSH AUTOMATIQUE (OBLIGATOIRE)
+   - Validation build TypeScript
+   - git add <fichiers>
+   - git commit avec message conventionnel + co-authors
+   - git push origin main
+   - Notification serveur pour git pull
+   (Voir GIT_AUTO_COMMIT_PROTOCOL.md pour détails)
 ```
 
 ### Étape 5 : Déploiement Production
@@ -381,6 +387,7 @@ Test 2 : [Feature 2]
 4. **PATTERNS FRONTEND :** TanStack Query + invalidateQueries() obligatoire
 5. **PROBLÈMES SSR :** Konva/canvas, @zxing → dynamic import
 6. **COMMITS :** Format conventionnel (feat/fix/docs/refactor)
+7. **GIT AUTO-COMMIT :** OBLIGATOIRE après chaque livrable agent (voir GIT_AUTO_COMMIT_PROTOCOL.md)
 
 ## ✅ FORMAT RÉPONSE ATTENDU
 
