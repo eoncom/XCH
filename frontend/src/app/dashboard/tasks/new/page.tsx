@@ -99,7 +99,12 @@ export default function NewTaskPage() {
   });
 
   const onSubmit = (data: TaskFormData) => {
-    createMutation.mutate(data);
+    // Convert date to ISO-8601 DateTime if provided
+    const taskData = {
+      ...data,
+      dueDate: data.dueDate ? new Date(data.dueDate).toISOString() : undefined,
+    };
+    createMutation.mutate(taskData);
   };
 
   const status = watch('status');
