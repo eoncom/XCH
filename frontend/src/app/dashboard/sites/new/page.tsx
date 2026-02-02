@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select';
 import { sitesApi } from '@/lib/api/sites';
 import { providersApi } from '@/lib/api/providers';
-import { ArrowLeft, Plus, Trash2, ChevronRight, ChevronLeft, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, ChevronRight, ChevronLeft, Check, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import type { Provider } from '@/types';
 import { toast } from 'sonner';
@@ -111,6 +111,7 @@ export default function NewSitePage() {
     procedures: '',
     safety: '',
   });
+  const [isGeocoding, setIsGeocoding] = useState(false);
 
   // Charger les fournisseurs TELECOM et INTERNET pour les listes déroulantes
   const { data: providers } = useQuery<Provider[]>({
@@ -204,6 +205,48 @@ export default function NewSitePage() {
     setIsChangingStep(true);
     setCurrentStep(currentStep - 1);
     setTimeout(() => setIsChangingStep(false), 500);
+  };
+
+  const handleGeocode = async () => {
+    const address = watch('address');
+    const city = watch('city');
+    const postalCode = watch('postalCode');
+
+    if (!address && !city) {
+      alert('Veuillez renseigner une adresse ou une ville');
+      return;
+    }
+
+    setIsGeocoding(true);
+    try {
+      // Construire la requête de géocodage
+      const query = [address, postalCode, city, 'France'].filter(Boolean).join(', ');
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+        {
+          headers: {
+            'User-Agent': 'XCH-App/1.0' // Nominatim requiert un User-Agent
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (data && data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        setValue('latitude', lat);
+        setValue('longitude', lon);
+        alert(`Coordonnées trouvées : ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+      } else {
+        alert('Adresse introuvable. Veuillez saisir les coordonnées manuellement.');
+      }
+    } catch (error) {
+      console.error('Erreur géocodage:', error);
+      alert('Erreur lors de la géolocalisation. Veuillez saisir les coordonnées manuellement.');
+    } finally {
+      setIsGeocoding(false);
+    }
   };
 
   const status = watch('status');
@@ -334,7 +377,19 @@ export default function NewSitePage() {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Coordonnées GPS</h3>
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold">Coordonnées GPS</h3>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGeocode}
+                      disabled={isGeocoding}
+                    >
+                      <MapPin className="h-4 w-4 mr-2" />
+                      {isGeocoding ? 'Géolocalisation...' : 'Géolocaliser'}
+                    </Button>
+                  </div>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="latitude">Latitude</Label>
@@ -345,6 +400,9 @@ export default function NewSitePage() {
                         {...register('latitude', { valueAsNumber: true })}
                         placeholder="48.856614"
                       />
+                      {errors.latitude && (
+                        <p className="text-sm text-red-600">{errors.latitude.message}</p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -356,8 +414,15 @@ export default function NewSitePage() {
                         {...register('longitude', { valueAsNumber: true })}
                         placeholder="2.3522219"
                       />
+                      {errors.longitude && (
+                        <p className="text-sm text-red-600">{errors.longitude.message}</p>
+                      )}
                     </div>
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    💡 Cliquez sur "Géolocaliser" pour récupérer automatiquement les coordonnées depuis l'adresse,
+                    ou saisissez-les manuellement pour plus de précision.
+                  </p>
                 </div>
               </div>
             )}
