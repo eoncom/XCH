@@ -28,6 +28,10 @@ p, ADMIN, users, update, *
 p, ADMIN, users, delete, *
 p, ADMIN, tenants, read, *
 p, ADMIN, tenants, update, *
+p, ADMIN, providers, create, *
+p, ADMIN, providers, read, *
+p, ADMIN, providers, update, *
+p, ADMIN, providers, delete, *
 
 # MANAGER
 p, MANAGER, sites, read, *
@@ -40,6 +44,7 @@ p, MANAGER, floor-plans, read, *
 p, MANAGER, floor-plans, update, *
 p, MANAGER, integrations, read, *
 p, MANAGER, users, read, *
+p, MANAGER, providers, read, *
 
 # TECHNICIEN
 p, TECHNICIEN, sites, create, *
@@ -58,6 +63,7 @@ p, TECHNICIEN, tasks, update, *
 p, TECHNICIEN, floor-plans, read, *
 p, TECHNICIEN, floor-plans, create, *
 p, TECHNICIEN, floor-plans, update, *
+p, TECHNICIEN, providers, read, *
 
 # VIEWER
 p, VIEWER, sites, read, *
@@ -65,3 +71,4 @@ p, VIEWER, assets, read, *
 p, VIEWER, racks, read, *
 p, VIEWER, tasks, read, *
 p, VIEWER, floor-plans, read, *
+p, VIEWER, providers, read, *
