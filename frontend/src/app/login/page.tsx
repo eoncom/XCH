@@ -35,7 +35,8 @@ export default function LoginPage() {
     try {
       await login({ email, password });
       showToast.success('Connexion réussie !');
-      router.push('/dashboard');
+      // Use replace instead of push to prevent back button issues
+      router.replace('/dashboard');
     } catch (err: any) {
       const errorMessage = err.message || 'Identifiants invalides';
       setError(errorMessage);

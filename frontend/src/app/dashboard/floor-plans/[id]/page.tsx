@@ -76,7 +76,9 @@ export default function FloorPlanDetailPage({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showAddPinDialog, setShowAddPinDialog] = useState(false);
   const [showPinInfoDialog, setShowPinInfoDialog] = useState(false);
+  const [showEditPinDialog, setShowEditPinDialog] = useState(false);
   const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
+  const [editPinData, setEditPinData] = useState<Partial<Pin>>({});
   const [newPinPosition, setNewPinPosition] = useState<{ x: number; y: number } | null>(
     null
   );
@@ -136,6 +138,19 @@ export default function FloorPlanDetailPage({
     },
   });
 
+  const updatePinMutation = useMutation({
+    mutationFn: ({ pinId, data }: { pinId: string; data: Partial<Pin> }) =>
+      floorPlansApi.updatePin(id, pinId, data),
+    onSuccess: () => {
+      showToast.success('Repère mis à jour avec succès');
+      queryClient.invalidateQueries({ queryKey: ['floor-plan', id] });
+      setShowEditPinDialog(false);
+    },
+    onError: () => {
+      showToast.error('Erreur lors de la mise à jour du repère');
+    },
+  });
+
   const handleDelete = () => {
     deleteMutation.mutate();
     setShowDeleteDialog(false);
@@ -162,6 +177,33 @@ export default function FloorPlanDetailPage({
   const handlePinClick = (pin: Pin) => {
     setSelectedPin(pin);
     setShowPinInfoDialog(true);
+  };
+
+  const handleEditPin = (pin: Pin) => {
+    setSelectedPin(pin);
+    setEditPinData({
+      pinType: pin.pinType,
+      label: pin.label,
+      description: pin.description,
+      assetId: pin.assetId,
+    });
+    setShowPinInfoDialog(false);
+    setShowEditPinDialog(true);
+  };
+
+  const handleUpdatePin = () => {
+    if (!selectedPin) return;
+    updatePinMutation.mutate({
+      pinId: selectedPin.id,
+      data: editPinData,
+    });
+  };
+
+  const handlePinDragEnd = (pinId: string, x: number, y: number) => {
+    updatePinMutation.mutate({
+      pinId,
+      data: { x, y },
+    });
   };
 
   const handleDownload = () => {
@@ -250,6 +292,7 @@ export default function FloorPlanDetailPage({
                 pins={floorPlan.pins || []}
                 onPinClick={handlePinClick}
                 onStageClick={handleStageClick}
+                onPinDragEnd={handlePinDragEnd}
                 editable={true}
               />
             </CardContent>
@@ -447,7 +490,7 @@ export default function FloorPlanDetailPage({
             <div className="space-y-4">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Type</p>
-                <Badge variant="secondary">{pinTypeLabels[selectedPin.type]}</Badge>
+                <Badge variant="secondary">{pinTypeLabels[selectedPin.pinType]}</Badge>
               </div>
 
               {selectedPin.label && (
@@ -482,8 +525,95 @@ export default function FloorPlanDetailPage({
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setShowPinInfoDialog(false)}>
+            <Button variant="outline" onClick={() => setShowPinInfoDialog(false)}>
               Fermer
+            </Button>
+            {selectedPin && (
+              <Button onClick={() => handleEditPin(selectedPin)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Éditer
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Pin Dialog */}
+      <Dialog open={showEditPinDialog} onOpenChange={setShowEditPinDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Éditer le repère</DialogTitle>
+            <DialogDescription>
+              Modifier les informations du repère
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select
+                value={editPinData.pinType || 'OTHER'}
+                onValueChange={(value) => setEditPinData({ ...editPinData, pinType: value as PinType })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(pinTypeLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Libellé</Label>
+              <Input
+                value={editPinData.label || ''}
+                onChange={(e) => setEditPinData({ ...editPinData, label: e.target.value })}
+                placeholder="Nom du repère"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input
+                value={editPinData.description || ''}
+                onChange={(e) => setEditPinData({ ...editPinData, description: e.target.value })}
+                placeholder="Description optionnelle"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Équipement associé</Label>
+              <Select
+                value={editPinData.assetId || 'none'}
+                onValueChange={(value) => setEditPinData({ ...editPinData, assetId: value === 'none' ? undefined : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Aucun équipement" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucun équipement</SelectItem>
+                  {assets?.map((asset) => (
+                    <SelectItem key={asset.id} value={asset.id}>
+                      {asset.name} - {asset.serialNumber}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditPinDialog(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleUpdatePin}
+              disabled={!editPinData.label || updatePinMutation.isPending}
+            >
+              {updatePinMutation.isPending ? 'Mise à jour...' : 'Mettre à jour'}
             </Button>
           </DialogFooter>
         </DialogContent>

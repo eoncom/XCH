@@ -41,6 +41,7 @@ interface FloorPlanViewerProps {
   pins: Pin[];
   onPinClick?: (pin: Pin) => void;
   onStageClick?: (x: number, y: number) => void;
+  onPinDragEnd?: (pinId: string, x: number, y: number) => void;
   editable?: boolean;
 }
 
@@ -60,6 +61,8 @@ const PIN_COLORS: Record<PinType, string> = {
 interface PinMarkerProps {
   pin: Pin;
   onClick?: () => void;
+  onDragEnd?: (x: number, y: number) => void;
+  draggable?: boolean;
 }
 
 interface PinMarkerInternalProps extends PinMarkerProps {
@@ -67,13 +70,31 @@ interface PinMarkerInternalProps extends PinMarkerProps {
   imageHeight: number;
 }
 
-function PinMarker({ pin, onClick, imageWidth, imageHeight }: PinMarkerInternalProps) {
+function PinMarker({ pin, onClick, onDragEnd, draggable = false, imageWidth, imageHeight }: PinMarkerInternalProps) {
   // Denormalize coordinates (0-1 range to actual pixels)
   const pixelX = pin.x * imageWidth;
   const pixelY = pin.y * imageHeight;
 
+  const handleDragEnd = (e: any) => {
+    if (onDragEnd) {
+      const newX = e.target.x();
+      const newY = e.target.y();
+      // Normalize coordinates back to 0-1 range
+      const normalizedX = newX / imageWidth;
+      const normalizedY = newY / imageHeight;
+      onDragEnd(normalizedX, normalizedY);
+    }
+  };
+
   return (
-    <Group x={pixelX} y={pixelY} onClick={onClick} onTap={onClick}>
+    <Group
+      x={pixelX}
+      y={pixelY}
+      onClick={onClick}
+      onTap={onClick}
+      draggable={draggable}
+      onDragEnd={handleDragEnd}
+    >
       {/* Outer circle (dark border for visibility on white backgrounds) */}
       <Circle
         radius={14}
@@ -83,7 +104,7 @@ function PinMarker({ pin, onClick, imageWidth, imageHeight }: PinMarkerInternalP
       {/* Inner colored circle */}
       <Circle
         radius={12}
-        fill={PIN_COLORS[pin.type]}
+        fill={PIN_COLORS[pin.pinType] || PIN_COLORS.OTHER}
         stroke="#000000"
         strokeWidth={2}
         shadowBlur={6}
@@ -114,6 +135,7 @@ export default function FloorPlanViewer({
   pins,
   onPinClick,
   onStageClick,
+  onPinDragEnd,
   editable = false,
 }: FloorPlanViewerProps) {
   const [image, imageStatus] = useImage(floorPlan.fileUrl || '');
@@ -207,41 +229,43 @@ export default function FloorPlanViewer({
               imageWidth={image.width}
               imageHeight={image.height}
               onClick={() => onPinClick?.(pin)}
+              onDragEnd={(x, y) => onPinDragEnd?.(pin.id, x, y)}
+              draggable={editable}
             />
           ))}
         </Layer>
       </Stage>
 
       {/* Controls */}
-      <div className="p-3 bg-white border-t flex items-center justify-between">
+      <div className="p-3 bg-white dark:bg-gray-900 border-t flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs flex-wrap">
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.SWITCH }} />
-            <span>Switch</span>
+            <span className="text-gray-900 dark:text-gray-100">Switch</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.FIREWALL }} />
-            <span>Firewall</span>
+            <span className="text-gray-900 dark:text-gray-100">Firewall</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.ACCESS_POINT }} />
-            <span>AP</span>
+            <span className="text-gray-900 dark:text-gray-100">AP</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.RACK }} />
-            <span>Rack</span>
+            <span className="text-gray-900 dark:text-gray-100">Rack</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.CAMERA }} />
-            <span>Camera</span>
+            <span className="text-gray-900 dark:text-gray-100">Camera</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.RJ45 }} />
-            <span>RJ45</span>
+            <span className="text-gray-900 dark:text-gray-100">RJ45</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.NRO }} />
-            <span>NRO</span>
+            <span className="text-gray-900 dark:text-gray-100">NRO</span>
           </div>
         </div>
         <div className="text-sm text-muted-foreground">
