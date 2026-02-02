@@ -133,6 +133,11 @@ export default function NewSitePage() {
   });
 
   const onSubmit = (data: SiteFormData) => {
+    // Ne soumettre que si on est à la dernière étape
+    if (currentStep !== STEPS.length) {
+      return;
+    }
+
     // Nettoyer connectivity : supprimer objets vides
     const cleanedData = { ...data };
 
@@ -241,7 +246,16 @@ export default function NewSitePage() {
           <CardTitle>{STEPS[currentStep - 1].name}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            onKeyDown={(e) => {
+              // Empêcher Enter de soumettre si pas à la dernière étape
+              if (e.key === 'Enter' && currentStep !== STEPS.length) {
+                e.preventDefault();
+              }
+            }}
+            className="space-y-6"
+          >
             {/* STEP 1: Informations de base */}
             {currentStep === 1 && (
               <div className="space-y-6">
