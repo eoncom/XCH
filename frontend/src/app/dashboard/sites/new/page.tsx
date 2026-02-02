@@ -82,6 +82,7 @@ export default function NewSitePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState(1);
+  const [isChangingStep, setIsChangingStep] = useState(false);
 
   const {
     register,
@@ -133,8 +134,8 @@ export default function NewSitePage() {
   });
 
   const onSubmit = (data: SiteFormData) => {
-    // Ne soumettre que si on est à la dernière étape
-    if (currentStep !== STEPS.length) {
+    // Ne soumettre que si on est à la dernière étape ET qu'on n'est pas en train de changer d'étape
+    if (currentStep !== STEPS.length || isChangingStep) {
       return;
     }
 
@@ -192,12 +193,17 @@ export default function NewSitePage() {
     const isValid = await trigger(fieldsToValidate);
 
     if (isValid) {
+      setIsChangingStep(true);
       setCurrentStep(currentStep + 1);
+      // Débloquer après 500ms pour permettre le rendu
+      setTimeout(() => setIsChangingStep(false), 500);
     }
   };
 
   const handlePrevious = () => {
+    setIsChangingStep(true);
     setCurrentStep(currentStep - 1);
+    setTimeout(() => setIsChangingStep(false), 500);
   };
 
   const status = watch('status');
