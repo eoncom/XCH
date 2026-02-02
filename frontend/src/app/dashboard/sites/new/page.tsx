@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,8 +20,23 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { sitesApi } from '@/lib/api/sites';
+import { providersApi } from '@/lib/api/providers';
 import { ArrowLeft, Plus, Trash2, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import Link from 'next/link';
+import type { Provider } from '@/types';
+import { toast } from 'sonner';
+
+// Types de connexion disponibles
+const CONNECTIVITY_TYPES = [
+  'Fibre optique',
+  '4G',
+  '5G',
+  'ADSL',
+  'VDSL',
+  'Satellite',
+  'Radio',
+  'Autre',
+];
 
 const siteSchema = z.object({
   code: z.string().min(1, 'Le code est requis'),
@@ -95,6 +110,14 @@ export default function NewSitePage() {
     procedures: '',
     safety: '',
   });
+
+  // Charger les fournisseurs TELECOM et INTERNET pour les listes déroulantes
+  const { data: providers } = useQuery<Provider[]>({
+    queryKey: ['providers'],
+    queryFn: () => providersApi.getAll(),
+  });
+
+  const telecomProviders = providers?.filter(p => p.type === 'TELECOM' || p.type === 'INTERNET') || [];
 
   const createMutation = useMutation({
     mutationFn: (data: SiteFormData) => sitesApi.create(data),
@@ -335,22 +358,36 @@ export default function NewSitePage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="connectivity.primary.type">Type</Label>
-                      <Input
-                        id="connectivity.primary.type"
-                        {...register('connectivity.primary.type')}
-                        placeholder="Ex: Fiber, 4G, Satellite"
-                        maxLength={50}
-                      />
+                      <Select
+                        value={watch('connectivity.primary.type') || ''}
+                        onValueChange={(value) => setValue('connectivity.primary.type', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CONNECTIVITY_TYPES.map((type) => (
+                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="connectivity.primary.provider">Opérateur</Label>
-                      <Input
-                        id="connectivity.primary.provider"
-                        {...register('connectivity.primary.provider')}
-                        placeholder="Ex: Orange Business"
-                        maxLength={100}
-                      />
+                      <Select
+                        value={watch('connectivity.primary.provider') || ''}
+                        onValueChange={(value) => setValue('connectivity.primary.provider', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un opérateur" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {telecomProviders.map((provider) => (
+                            <SelectItem key={provider.id} value={provider.name}>{provider.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">
@@ -371,22 +408,36 @@ export default function NewSitePage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="connectivity.backup.type">Type</Label>
-                      <Input
-                        id="connectivity.backup.type"
-                        {...register('connectivity.backup.type')}
-                        placeholder="Ex: 4G, ADSL"
-                        maxLength={50}
-                      />
+                      <Select
+                        value={watch('connectivity.backup.type') || ''}
+                        onValueChange={(value) => setValue('connectivity.backup.type', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CONNECTIVITY_TYPES.map((type) => (
+                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="connectivity.backup.provider">Opérateur</Label>
-                      <Input
-                        id="connectivity.backup.provider"
-                        {...register('connectivity.backup.provider')}
-                        placeholder="Ex: SFR Business"
-                        maxLength={100}
-                      />
+                      <Select
+                        value={watch('connectivity.backup.provider') || ''}
+                        onValueChange={(value) => setValue('connectivity.backup.provider', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un opérateur" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {telecomProviders.map((provider) => (
+                            <SelectItem key={provider.id} value={provider.name}>{provider.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">

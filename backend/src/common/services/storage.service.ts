@@ -4,19 +4,68 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createWriteStream } from 'fs';
 import { Readable } from 'stream';
+import * as Minio from 'minio';
 
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
   private readonly storageType: 'filesystem' | 'minio';
   private readonly uploadDir: string;
+  private minioClient: Minio.Client | null = null;
+  private minioBucket: string;
 
   constructor(private configService: ConfigService) {
-    this.storageType = this.configService.get('STORAGE_TYPE', 'filesystem') as 'filesystem' | 'minio';
+    this.storageType = this.configService.get('STORAGE_TYPE', 'minio') as 'filesystem' | 'minio';
     this.uploadDir = this.configService.get('UPLOAD_DIR', './uploads');
+    this.minioBucket = this.configService.get('MINIO_BUCKET', 'xch-storage');
 
     if (this.storageType === 'filesystem') {
       this.ensureUploadDir();
+    } else if (this.storageType === 'minio') {
+      this.initMinioClient();
+    }
+  }
+
+  private initMinioClient() {
+    try {
+      const endpoint = this.configService.get('MINIO_ENDPOINT', 'minio');
+      const port = parseInt(this.configService.get('MINIO_PORT', '9000'), 10);
+      const accessKey = this.configService.get('MINIO_ACCESS_KEY', 'minioadmin');
+      const secretKey = this.configService.get('MINIO_SECRET_KEY', 'minioadmin');
+      const useSSL = this.configService.get('MINIO_USE_SSL', 'false') === 'true';
+
+      this.minioClient = new Minio.Client({
+        endPoint: endpoint,
+        port: port,
+        useSSL: useSSL,
+        accessKey: accessKey,
+        secretKey: secretKey,
+      });
+
+      this.logger.log(`MinIO client initialized: ${endpoint}:${port} (SSL: ${useSSL})`);
+      this.ensureBucket();
+    } catch (error) {
+      this.logger.error('Failed to initialize MinIO client', error);
+      throw error;
+    }
+  }
+
+  private async ensureBucket() {
+    if (!this.minioClient) {
+      this.logger.error('MinIO client not initialized, cannot ensure bucket');
+      return;
+    }
+
+    try {
+      const exists = await this.minioClient.bucketExists(this.minioBucket);
+      if (!exists) {
+        await this.minioClient.makeBucket(this.minioBucket, 'us-east-1');
+        this.logger.log(`MinIO bucket created: ${this.minioBucket}`);
+      } else {
+        this.logger.log(`MinIO bucket exists: ${this.minioBucket}`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to ensure bucket: ${this.minioBucket}`, error);
     }
   }
 
@@ -64,21 +113,38 @@ export class StorageService {
 
   /**
    * Upload to MinIO (S3-compatible)
-   * TODO: Implement MinIO SDK integration when STORAGE_TYPE=minio
    */
   private async uploadToMinio(
     file: Express.Multer.File,
     folder: string,
     filename: string,
   ): Promise<string> {
-    // For now, fallback to filesystem
-    this.logger.warn('MinIO not implemented, using filesystem fallback');
-    return this.uploadToFilesystem(file, folder, filename);
+    if (!this.minioClient) {
+      this.logger.error('MinIO client not initialized');
+      throw new Error('MinIO client not initialized');
+    }
 
-    // TODO: Implement with minio SDK
-    // const minioClient = new Client({ ... });
-    // await minioClient.putObject(bucket, `${folder}/${filename}`, file.buffer);
-    // return `https://minio.xch.app/${bucket}/${folder}/${filename}`;
+    try {
+      const objectName = `${folder}/${filename}`;
+      const metadata = {
+        'Content-Type': file.mimetype,
+        'Content-Length': file.size.toString(),
+      };
+
+      await this.minioClient.putObject(
+        this.minioBucket,
+        objectName,
+        file.buffer,
+        file.size,
+        metadata,
+      );
+
+      this.logger.log(`File uploaded to MinIO: ${objectName} (${file.size} bytes)`);
+      return `/${folder}/${filename}`;
+    } catch (error) {
+      this.logger.error(`Failed to upload to MinIO: ${folder}/${filename}`, error);
+      throw error;
+    }
   }
 
   /**
@@ -122,8 +188,19 @@ export class StorageService {
   }
 
   private async deleteFromMinio(filePath: string): Promise<void> {
-    // TODO: Implement MinIO deletion
-    this.logger.warn('MinIO deletion not implemented');
+    if (!this.minioClient) {
+      this.logger.error('MinIO client not initialized');
+      return;
+    }
+
+    try {
+      // Remove leading slash if present
+      const objectName = filePath.startsWith('/') ? filePath.substring(1) : filePath;
+      await this.minioClient.removeObject(this.minioBucket, objectName);
+      this.logger.log(`File deleted from MinIO: ${objectName}`);
+    } catch (error) {
+      this.logger.error(`Failed to delete from MinIO: ${filePath}`, error);
+    }
   }
 
   /**

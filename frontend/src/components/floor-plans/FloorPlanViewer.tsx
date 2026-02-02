@@ -45,10 +45,16 @@ interface FloorPlanViewerProps {
 }
 
 const PIN_COLORS: Record<PinType, string> = {
-  ASSET: '#3b82f6',    // blue
-  POI: '#10b981',      // green
-  ISSUE: '#ef4444',    // red
-  NETWORK: '#8b5cf6',  // purple
+  SWITCH: '#3b82f6',       // blue
+  FIREWALL: '#ef4444',     // red
+  ACCESS_POINT: '#10b981', // green
+  PRINTER: '#6366f1',      // indigo
+  RACK: '#8b5cf6',         // purple
+  CAMERA: '#f59e0b',       // amber (orange)
+  PATCH_PANEL: '#06b6d4',  // cyan
+  RJ45: '#14b8a6',         // teal
+  NRO: '#a855f7',          // purple-light
+  OTHER: '#6b7280',        // gray
 };
 
 interface PinMarkerProps {
@@ -56,17 +62,34 @@ interface PinMarkerProps {
   onClick?: () => void;
 }
 
-function PinMarker({ pin, onClick }: PinMarkerProps) {
+interface PinMarkerInternalProps extends PinMarkerProps {
+  imageWidth: number;
+  imageHeight: number;
+}
+
+function PinMarker({ pin, onClick, imageWidth, imageHeight }: PinMarkerInternalProps) {
+  // Denormalize coordinates (0-1 range to actual pixels)
+  const pixelX = pin.x * imageWidth;
+  const pixelY = pin.y * imageHeight;
+
   return (
-    <Group x={pin.x} y={pin.y} onClick={onClick} onTap={onClick}>
+    <Group x={pixelX} y={pixelY} onClick={onClick} onTap={onClick}>
+      {/* Outer circle (dark border for visibility on white backgrounds) */}
+      <Circle
+        radius={14}
+        fill="#000000"
+        opacity={0.3}
+      />
+      {/* Inner colored circle */}
       <Circle
         radius={12}
         fill={PIN_COLORS[pin.type]}
-        stroke="#ffffff"
+        stroke="#000000"
         strokeWidth={2}
-        shadowBlur={4}
-        shadowOpacity={0.3}
+        shadowBlur={6}
+        shadowOpacity={0.4}
       />
+      {/* Label */}
       {pin.label && (
         <Text
           text={pin.label}
@@ -77,6 +100,9 @@ function PinMarker({ pin, onClick }: PinMarkerProps) {
           fontSize={12}
           fill="#000000"
           fontStyle="bold"
+          shadowColor="#ffffff"
+          shadowBlur={3}
+          shadowOpacity={0.8}
         />
       )}
     </Group>
@@ -95,16 +121,23 @@ export default function FloorPlanViewer({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const stageRef = useRef<any>(null);
 
-  const maxWidth = 800;
-  const maxHeight = 600;
-
-  let stageWidth = maxWidth;
-  let stageHeight = maxHeight;
+  // Use full container width - let CSS handle the sizing
+  let stageWidth = 1200;
+  let stageHeight = 800;
 
   if (image) {
-    const ratio = Math.min(maxWidth / image.width, maxHeight / image.height);
-    stageWidth = image.width * ratio;
-    stageHeight = image.height * ratio;
+    // Calculate dimensions to fit image while maintaining aspect ratio
+    const imageRatio = image.width / image.height;
+
+    if (imageRatio > 1.5) {
+      // Wide image - use full width
+      stageWidth = 1200;
+      stageHeight = 1200 / imageRatio;
+    } else {
+      // Tall or square image - use full height
+      stageHeight = 800;
+      stageWidth = 800 * imageRatio;
+    }
   }
 
   const handleWheel = (e: any) => {
@@ -135,18 +168,23 @@ export default function FloorPlanViewer({
   const handleStageClick = (e: any) => {
     // Check if click was on the background, not on a pin
     if (e.target === e.target.getStage() || e.target.getClassName() === 'Image') {
-      if (onStageClick && editable) {
+      if (onStageClick && editable && image) {
         const stage = e.target.getStage();
         const pointerPosition = stage.getPointerPosition();
         const x = (pointerPosition.x - position.x) / scale;
         const y = (pointerPosition.y - position.y) / scale;
-        onStageClick(x, y);
+
+        // Normalize coordinates (0.0 to 1.0) based on image dimensions
+        const normalizedX = x / image.width;
+        const normalizedY = y / image.height;
+
+        onStageClick(normalizedX, normalizedY);
       }
     }
   };
 
   return (
-    <div className="border rounded-lg overflow-hidden bg-gray-100">
+    <div className="border rounded-lg overflow-hidden bg-white">
       <Stage
         ref={stageRef}
         width={stageWidth}
@@ -155,17 +193,19 @@ export default function FloorPlanViewer({
         scaleY={scale}
         x={position.x}
         y={position.y}
-        draggable={!editable}
+        draggable={true}
         onWheel={handleWheel}
         onClick={handleStageClick}
       >
         <Layer>
           {image && <KonvaImage image={image} />}
 
-          {pins.map((pin) => (
+          {image && pins.map((pin) => (
             <PinMarker
               key={pin.id}
               pin={pin}
+              imageWidth={image.width}
+              imageHeight={image.height}
               onClick={() => onPinClick?.(pin)}
             />
           ))}
@@ -174,22 +214,34 @@ export default function FloorPlanViewer({
 
       {/* Controls */}
       <div className="p-3 bg-white border-t flex items-center justify-between">
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.ASSET }} />
-            <span>Asset</span>
+        <div className="flex items-center gap-2 text-xs flex-wrap">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.SWITCH }} />
+            <span>Switch</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.POI }} />
-            <span>POI</span>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.FIREWALL }} />
+            <span>Firewall</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.ISSUE }} />
-            <span>Issue</span>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.ACCESS_POINT }} />
+            <span>AP</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.NETWORK }} />
-            <span>Network</span>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.RACK }} />
+            <span>Rack</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.CAMERA }} />
+            <span>Camera</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.RJ45 }} />
+            <span>RJ45</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIN_COLORS.NRO }} />
+            <span>NRO</span>
           </div>
         </div>
         <div className="text-sm text-muted-foreground">

@@ -369,6 +369,8 @@ enum PinType {
   RACK
   CAMERA
   PATCH_PANEL
+  RJ45
+  NRO
   OTHER
 }
 
@@ -388,7 +390,10 @@ model Pin {
   rackId  String?
   rack    Rack?   @relation(fields: [rackId], references: [id], onDelete: Cascade)
 
-  label String?
+  label       String?
+  description String? @db.Text
+  icon        String?
+  color       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -472,6 +477,11 @@ enum ProviderType {
   INTERNET
   CLOUD
   HOSTING
+  SECURITY      // Nouveau: Sécurité, vidéosurveillance
+  NETWORK       // Nouveau: Équipements réseau
+  MAINTENANCE   // Nouveau: Maintenance, support
+  ENERGY        // Nouveau: Électricité, énergie
+  CUSTOM        // Pour types personnalisés
   OTHER
 }
 
@@ -481,6 +491,9 @@ model Provider {
   tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name     String       @db.VarChar(100)
   type     ProviderType
+
+  // Type personnalisé si type=CUSTOM
+  customType String? @db.VarChar(50)
 
   // Contact simple (email, phone, etc.)
   contact String? @db.VarChar(200)

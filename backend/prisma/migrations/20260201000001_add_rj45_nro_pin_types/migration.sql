@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "PinType" ADD VALUE 'RJ45';
+ALTER TYPE "PinType" ADD VALUE 'NRO';

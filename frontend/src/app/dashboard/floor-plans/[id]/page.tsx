@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { floorPlansApi } from '@/lib/api/floor-plans';
+import { assetsApi } from '@/lib/api/assets';
 import { showToast } from '@/lib/toast';
 import {
   ArrowLeft,
@@ -32,10 +33,11 @@ import {
   Plus,
   MapPin as MapPinIcon,
   Download,
+  Info,
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import type { FloorPlan, Pin, PinType } from '@/types';
+import type { FloorPlan, Pin, PinType, Asset } from '@/types';
 
 // Dynamically import FloorPlanViewer (client-side only for Konva)
 const FloorPlanViewer = dynamic(
@@ -51,10 +53,16 @@ const FloorPlanViewer = dynamic(
 );
 
 const pinTypeLabels: Record<PinType, string> = {
-  ASSET: 'Équipement',
-  POI: 'Point d\'intérêt',
-  ISSUE: 'Problème',
-  NETWORK: 'Réseau',
+  SWITCH: 'Switch',
+  FIREWALL: 'Firewall',
+  ACCESS_POINT: 'Point d\'accès',
+  PRINTER: 'Imprimante',
+  RACK: 'Baie',
+  CAMERA: 'Caméra',
+  PATCH_PANEL: 'Panneau de brassage',
+  RJ45: 'Prise RJ45',
+  NRO: 'NRO (Arrivée fibre)',
+  OTHER: 'Autre',
 };
 
 export default function FloorPlanDetailPage({
@@ -67,16 +75,26 @@ export default function FloorPlanDetailPage({
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showAddPinDialog, setShowAddPinDialog] = useState(false);
+  const [showPinInfoDialog, setShowPinInfoDialog] = useState(false);
+  const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
   const [newPinPosition, setNewPinPosition] = useState<{ x: number; y: number } | null>(
     null
   );
   const [newPinLabel, setNewPinLabel] = useState('');
-  const [newPinType, setNewPinType] = useState<PinType>('POI');
+  const [newPinType, setNewPinType] = useState<PinType>('OTHER');
   const [newPinDescription, setNewPinDescription] = useState('');
+  const [newPinAssetId, setNewPinAssetId] = useState<string>('');
 
   const { data: floorPlan, isLoading } = useQuery<FloorPlan>({
     queryKey: ['floor-plan', id],
     queryFn: () => floorPlansApi.getById(id),
+  });
+
+  // Load assets from the site for pin association
+  const { data: assets } = useQuery<Asset[]>({
+    queryKey: ['assets', floorPlan?.site?.id],
+    queryFn: () => assetsApi.getAll(floorPlan?.site?.id),
+    enabled: !!floorPlan?.site?.id,
   });
 
   const deleteMutation = useMutation({
@@ -132,17 +150,18 @@ export default function FloorPlanDetailPage({
     if (!newPinPosition) return;
 
     createPinMutation.mutate({
-      type: newPinType,
+      pinType: newPinType,
       x: newPinPosition.x,
       y: newPinPosition.y,
       label: newPinLabel,
       description: newPinDescription,
+      assetId: newPinAssetId || undefined,
     });
   };
 
   const handlePinClick = (pin: Pin) => {
-    // Show pin details or allow editing
-    console.log('Pin clicked:', pin);
+    setSelectedPin(pin);
+    setShowPinInfoDialog(true);
   };
 
   const handleDownload = () => {
@@ -380,6 +399,23 @@ export default function FloorPlanDetailPage({
                 placeholder="Description optionnelle"
               />
             </div>
+
+            <div className="space-y-2">
+              <Label>Équipement associé (optionnel)</Label>
+              <Select value={newPinAssetId || 'none'} onValueChange={(value) => setNewPinAssetId(value === 'none' ? '' : value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Aucun équipement" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucun équipement</SelectItem>
+                  {assets?.map((asset) => (
+                    <SelectItem key={asset.id} value={asset.id}>
+                      {asset.name} - {asset.serialNumber}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddPinDialog(false)}>
@@ -390,6 +426,64 @@ export default function FloorPlanDetailPage({
               disabled={!newPinPosition || !newPinLabel || createPinMutation.isPending}
             >
               {createPinMutation.isPending ? 'Ajout...' : 'Ajouter'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pin Info Dialog */}
+      <Dialog open={showPinInfoDialog} onOpenChange={setShowPinInfoDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="h-5 w-5" />
+              Informations du repère
+            </DialogTitle>
+            <DialogDescription>
+              Détails du repère sélectionné sur le plan
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPin && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Type</p>
+                <Badge variant="secondary">{pinTypeLabels[selectedPin.type]}</Badge>
+              </div>
+
+              {selectedPin.label && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Libellé</p>
+                  <p className="text-sm">{selectedPin.label}</p>
+                </div>
+              )}
+
+              {selectedPin.description && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Description</p>
+                  <p className="text-sm">{selectedPin.description}</p>
+                </div>
+              )}
+
+              {selectedPin.assetId && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Équipement associé</p>
+                  <Link
+                    href={`/dashboard/assets/${selectedPin.assetId}`}
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Voir l'équipement
+                  </Link>
+                </div>
+              )}
+
+              <div className="text-xs text-muted-foreground">
+                Position: ({selectedPin.x.toFixed(3)}, {selectedPin.y.toFixed(3)})
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setShowPinInfoDialog(false)}>
+              Fermer
             </Button>
           </DialogFooter>
         </DialogContent>

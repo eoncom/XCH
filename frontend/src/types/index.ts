@@ -25,12 +25,13 @@ export interface AuthResponse {
 }
 
 // Provider types
-export type ProviderType = 'TELECOM' | 'INTERNET' | 'CLOUD' | 'HOSTING' | 'OTHER';
+export type ProviderType = 'TELECOM' | 'INTERNET' | 'CLOUD' | 'HOSTING' | 'SECURITY' | 'NETWORK' | 'MAINTENANCE' | 'ENERGY' | 'CUSTOM' | 'OTHER';
 
 export interface Provider {
   id: number;
   name: string;
   type: ProviderType;
+  customType?: string; // For CUSTOM type
   contact?: string;
   notes?: string;
   createdAt: string;
@@ -191,7 +192,7 @@ export interface Task {
 }
 
 // FloorPlan types
-export type PinType = 'ASSET' | 'POI' | 'ISSUE' | 'NETWORK';
+export type PinType = 'SWITCH' | 'FIREWALL' | 'ACCESS_POINT' | 'PRINTER' | 'RACK' | 'CAMERA' | 'PATCH_PANEL' | 'RJ45' | 'NRO' | 'OTHER';
 
 export interface Pin {
   id: string;

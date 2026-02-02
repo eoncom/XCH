@@ -6,6 +6,11 @@ export enum ProviderType {
   INTERNET = 'INTERNET',
   CLOUD = 'CLOUD',
   HOSTING = 'HOSTING',
+  SECURITY = 'SECURITY',
+  NETWORK = 'NETWORK',
+  MAINTENANCE = 'MAINTENANCE',
+  ENERGY = 'ENERGY',
+  CUSTOM = 'CUSTOM',
   OTHER = 'OTHER',
 }
 
@@ -24,6 +29,16 @@ export class CreateProviderDto {
   })
   @IsEnum(ProviderType)
   type: ProviderType;
+
+  @ApiProperty({
+    required: false,
+    description: 'Custom type name when type=CUSTOM',
+    example: 'Climatisation'
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  customType?: string;
 
   @ApiProperty({
     required: false,

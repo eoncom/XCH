@@ -262,6 +262,77 @@ export class SeedService {
     });
     providers.push(provider1);
 
+    const provider2 = await this.prisma.provider.upsert({
+      where: { id: `demo-provider-2-${tenantId}` },
+      update: {},
+      create: {
+        id: `demo-provider-2-${tenantId}`,
+        tenantId,
+        name: 'OVHcloud',
+        type: ProviderType.CLOUD,
+        contact: 'Support: +33 9 72 10 10 07 | support@ovhcloud.com',
+        notes: 'Hébergement cloud et serveurs dédiés',
+      },
+    });
+    providers.push(provider2);
+
+    const provider3 = await this.prisma.provider.upsert({
+      where: { id: `demo-provider-3-${tenantId}` },
+      update: {},
+      create: {
+        id: `demo-provider-3-${tenantId}`,
+        tenantId,
+        name: 'Prosegur',
+        type: ProviderType.SECURITY,
+        contact: 'Centrale: 0 800 20 22 23 | contact@prosegur.fr',
+        notes: 'Sécurité physique et vidéosurveillance chantiers',
+      },
+    });
+    providers.push(provider3);
+
+    const provider4 = await this.prisma.provider.upsert({
+      where: { id: `demo-provider-4-${tenantId}` },
+      update: {},
+      create: {
+        id: `demo-provider-4-${tenantId}`,
+        tenantId,
+        name: 'Cisco France',
+        type: ProviderType.NETWORK,
+        contact: 'TAC: +33 1 58 04 60 00 | tac@cisco.com',
+        notes: 'Équipements réseau (switches, routeurs, access points)',
+      },
+    });
+    providers.push(provider4);
+
+    const provider5 = await this.prisma.provider.upsert({
+      where: { id: `demo-provider-5-${tenantId}` },
+      update: {},
+      create: {
+        id: `demo-provider-5-${tenantId}`,
+        tenantId,
+        name: 'Engie Solutions',
+        type: ProviderType.ENERGY,
+        contact: 'Hotline: 09 69 39 99 93 | contact@engie.com',
+        notes: 'Fourniture électrique et groupes électrogènes',
+      },
+    });
+    providers.push(provider5);
+
+    const provider6 = await this.prisma.provider.upsert({
+      where: { id: `demo-provider-6-${tenantId}` },
+      update: {},
+      create: {
+        id: `demo-provider-6-${tenantId}`,
+        tenantId,
+        name: 'Dalkia',
+        type: ProviderType.CUSTOM,
+        customType: 'Climatisation',
+        contact: 'Service: 01 55 60 29 29 | support@dalkia.fr',
+        notes: 'Maintenance CVC (chauffage, ventilation, climatisation)',
+      },
+    });
+    providers.push(provider6);
+
     return providers;
   }
 }

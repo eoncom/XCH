@@ -43,6 +43,11 @@ const providerTypeLabels: Record<ProviderType, string> = {
   INTERNET: 'Internet',
   CLOUD: 'Cloud',
   HOSTING: 'Hébergement',
+  SECURITY: 'Sécurité',
+  NETWORK: 'Réseau',
+  MAINTENANCE: 'Maintenance',
+  ENERGY: 'Énergie',
+  CUSTOM: 'Personnalisé',
   OTHER: 'Autre',
 };
 
@@ -51,6 +56,11 @@ const providerTypeColors: Record<ProviderType, string> = {
   INTERNET: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   CLOUD: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   HOSTING: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  SECURITY: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+  NETWORK: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
+  MAINTENANCE: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+  ENERGY: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
+  CUSTOM: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
   OTHER: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
 };
 

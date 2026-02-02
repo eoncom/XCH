@@ -32,10 +32,13 @@ async function bootstrap() {
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error('Not allowed by CORS'));
+        console.log(`❌ CORS blocked origin: ${origin}`);
+        callback(null, false); // Reject without error
       }
     },
     credentials: true, // ✅ CRITICAL pour cookies cross-origin
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
   // Cookie parser (required for HTTP-only cookies auth)

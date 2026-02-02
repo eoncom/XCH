@@ -25,9 +25,19 @@ import { toast } from 'sonner';
 
 const providerSchema = z.object({
   name: z.string().min(1, 'Le nom est requis').max(100, 'Le nom ne peut pas dépasser 100 caractères'),
-  type: z.enum(['TELECOM', 'INTERNET', 'CLOUD', 'HOSTING', 'OTHER']),
+  type: z.enum(['TELECOM', 'INTERNET', 'CLOUD', 'HOSTING', 'SECURITY', 'NETWORK', 'MAINTENANCE', 'ENERGY', 'CUSTOM', 'OTHER']),
+  customType: z.string().max(50, 'Le type personnalisé ne peut pas dépasser 50 caractères').optional(),
   contact: z.string().max(200, 'Le contact ne peut pas dépasser 200 caractères').optional(),
   notes: z.string().max(1000, 'Les notes ne peuvent pas dépasser 1000 caractères').optional(),
+}).refine((data) => {
+  // Si type est CUSTOM, customType est requis
+  if (data.type === 'CUSTOM' && (!data.customType || data.customType.trim() === '')) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Le type personnalisé est requis quand le type est "Personnalisé"',
+  path: ['customType'],
 });
 
 type ProviderFormData = z.infer<typeof providerSchema>;
@@ -111,6 +121,11 @@ export default function NewProviderPage() {
                     <SelectItem value="INTERNET">Internet</SelectItem>
                     <SelectItem value="CLOUD">Cloud</SelectItem>
                     <SelectItem value="HOSTING">Hébergement</SelectItem>
+                    <SelectItem value="SECURITY">Sécurité</SelectItem>
+                    <SelectItem value="NETWORK">Réseau</SelectItem>
+                    <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                    <SelectItem value="ENERGY">Énergie</SelectItem>
+                    <SelectItem value="CUSTOM">Personnalisé</SelectItem>
                     <SelectItem value="OTHER">Autre</SelectItem>
                   </SelectContent>
                 </Select>
@@ -119,6 +134,21 @@ export default function NewProviderPage() {
                 )}
               </div>
             </div>
+
+            {/* Champ Type Personnalisé (affiché seulement si type=CUSTOM) */}
+            {type === 'CUSTOM' && (
+              <div className="space-y-2">
+                <Label htmlFor="customType">Type personnalisé *</Label>
+                <Input
+                  id="customType"
+                  {...register('customType')}
+                  placeholder="Ex: Climatisation, Ascenseurs, Plomberie..."
+                />
+                {errors.customType && (
+                  <p className="text-sm text-red-600">{errors.customType.message}</p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="contact">Contact</Label>

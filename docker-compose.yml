@@ -49,6 +49,8 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-xch_minio_admin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-XchMinIO2024SecureKey!}
+      MINIO_SERVER_URL: https://xchstr.eoncom.io
+      MINIO_BROWSER_REDIRECT_URL: https://xchstr.eoncom.io
     ports:
       - "${MINIO_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -94,7 +96,7 @@ services:
     env_file:
       - ./backend/.env
     ports:
-      - "3002:3002"
+      - "3002:3000"
     depends_on:
       postgres:
         condition: service_healthy
