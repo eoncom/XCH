@@ -369,7 +369,7 @@ export default function FloorPlanDetailPage({
                     <div className="flex-1">
                       <p className="text-sm font-medium">{pin.label || 'Sans nom'}</p>
                       <p className="text-xs text-muted-foreground">
-                        {pinTypeLabels[pin.type]}
+                        {pinTypeLabels[pin.pinType]}
                       </p>
                       {pin.description && (
                         <p className="text-xs text-muted-foreground mt-1">
@@ -491,7 +491,7 @@ export default function FloorPlanDetailPage({
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Type</p>
                 <Badge variant="secondary">
-                  {pinTypeLabels[selectedPin.pinType || (selectedPin as any).type] || 'Inconnu'}
+                  {pinTypeLabels[selectedPin.pinType] || 'Inconnu'}
                 </Badge>
               </div>
 

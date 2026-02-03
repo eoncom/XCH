@@ -198,7 +198,7 @@ export interface Pin {
   id: string;
   tenantId: string;
   floorPlanId: string;
-  type: PinType;
+  pinType: PinType;  // ✅ Corrigé: pinType (backend) au lieu de type
   x: number;
   y: number;
   assetId?: string;
