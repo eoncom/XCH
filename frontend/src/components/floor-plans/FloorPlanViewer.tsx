@@ -93,6 +93,7 @@ function PinMarker({ pin, onClick, onDragEnd, draggable = false, imageWidth, ima
       onClick={onClick}
       onTap={onClick}
       draggable={draggable}
+      onDragMove={() => {}} // Suppress Konva warning
       onDragEnd={handleDragEnd}
     >
       {/* Outer circle (dark border for visibility on white backgrounds) */}

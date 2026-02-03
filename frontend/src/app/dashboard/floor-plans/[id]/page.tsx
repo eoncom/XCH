@@ -95,7 +95,7 @@ export default function FloorPlanDetailPage({
   // Load assets from the site for pin association
   const { data: assets } = useQuery<Asset[]>({
     queryKey: ['assets', floorPlan?.site?.id],
-    queryFn: () => assetsApi.getAll(floorPlan?.site?.id),
+    queryFn: () => assetsApi.getAll({ siteId: floorPlan?.site?.id }),
     enabled: !!floorPlan?.site?.id,
   });
 
