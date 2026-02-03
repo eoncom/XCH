@@ -7,6 +7,20 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **RBAC Casbin 403 Forbidden sur toutes les API** (Session 15 - 2026-02-03)
+  - Problème: Erreur 403 sur `/api/providers` et autres endpoints malgré authentification OK
+  - Cause: Policies Casbin manquaient le paramètre `tenant` (colonne `v3` vide/NULL)
+  - Matcher Casbin exige 4 params: `(role, resource, action, tenant)`
+  - Modèle: `casbin/model.conf` définit `r = sub, obj, act, tenant`
+  - Solution: `UPDATE casbin_rule SET v3 = '*' WHERE ptype = 'p'` (wildcard tous tenants)
+  - Impact: Toutes les ressources RBAC accessibles à nouveau (providers, sites, assets, etc.)
+  - Restart backend requis pour recharger policies
+
+---
+
 ## [1.0.3] - 2026-01-18
 
 ### Added
