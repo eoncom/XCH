@@ -490,7 +490,9 @@ export default function FloorPlanDetailPage({
             <div className="space-y-4">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Type</p>
-                <Badge variant="secondary">{pinTypeLabels[selectedPin.pinType]}</Badge>
+                <Badge variant="secondary">
+                  {pinTypeLabels[selectedPin.pinType || (selectedPin as any).type] || 'Inconnu'}
+                </Badge>
               </div>
 
               {selectedPin.label && (

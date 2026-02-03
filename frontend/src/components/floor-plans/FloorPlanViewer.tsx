@@ -105,7 +105,7 @@ function PinMarker({ pin, onClick, onDragEnd, draggable = false, imageWidth, ima
       {/* Inner colored circle */}
       <Circle
         radius={12}
-        fill={PIN_COLORS[pin.pinType] || PIN_COLORS.OTHER}
+        fill={PIN_COLORS[pin.pinType || (pin as any).type] || PIN_COLORS.OTHER}
         stroke="#000000"
         strokeWidth={2}
         shadowBlur={6}
