@@ -71,9 +71,10 @@ export default function ProvidersPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const { data: providers, isLoading } = useQuery<Provider[]>({
+  const { data: providers, isLoading, error } = useQuery<Provider[]>({
     queryKey: ['providers'],
     queryFn: providersApi.getAll,
+    retry: false, // Don't retry on auth errors
   });
 
   const deleteMutation = useMutation({
@@ -103,7 +104,26 @@ export default function ProvidersPage() {
   };
 
   if (isLoading) {
-    return <div className="text-center">Chargement des fournisseurs...</div>;
+    return <div className="text-center py-12">Chargement des fournisseurs...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-600 mb-4">
+          Erreur lors du chargement des fournisseurs
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {error instanceof Error ? error.message : 'Erreur inconnue'}
+        </p>
+        <Button
+          onClick={() => router.push('/login')}
+          className="mt-4"
+        >
+          Se reconnecter
+        </Button>
+      </div>
+    );
   }
 
   return (
