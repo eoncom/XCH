@@ -53,8 +53,8 @@ export default function EditProviderPage({
   const queryClient = useQueryClient();
 
   const { data: provider, isLoading } = useQuery<Provider>({
-    queryKey: ['provider', parseInt(id)],
-    queryFn: () => providersApi.getById(parseInt(id)),
+    queryKey: ['provider', id],
+    queryFn: () => providersApi.getById(id),
   });
 
   const {
@@ -77,9 +77,9 @@ export default function EditProviderPage({
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: ProviderFormData) => providersApi.update(parseInt(id), data),
+    mutationFn: (data: ProviderFormData) => providersApi.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['provider', parseInt(id)] });
+      queryClient.invalidateQueries({ queryKey: ['provider', id] });
       queryClient.invalidateQueries({ queryKey: ['providers'] });
       toast.success('Fournisseur mis à jour avec succès');
       router.push(`/dashboard/providers/${id}`);

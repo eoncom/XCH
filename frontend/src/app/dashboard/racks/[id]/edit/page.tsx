@@ -50,6 +50,16 @@ export default function EditRackPage() {
   const queryClient = useQueryClient();
   const rackId = params.id as string;
 
+  const { data: rack, isLoading } = useQuery<Rack>({
+    queryKey: ['rack', rackId],
+    queryFn: () => racksApi.getById(rackId),
+  });
+
+  const { data: sites } = useQuery<Site[]>({
+    queryKey: ['sites'],
+    queryFn: sitesApi.getAll,
+  });
+
   const {
     register,
     handleSubmit,
@@ -70,16 +80,6 @@ export default function EditRackPage() {
           notes: rack.notes || '',
         }
       : undefined,
-  });
-
-  const { data: rack, isLoading } = useQuery<Rack>({
-    queryKey: ['rack', rackId],
-    queryFn: () => racksApi.getById(rackId),
-  });
-
-  const { data: sites } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
   });
 
 

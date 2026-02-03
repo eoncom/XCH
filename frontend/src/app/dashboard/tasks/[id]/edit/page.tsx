@@ -60,6 +60,26 @@ export default function EditTaskPage() {
   const queryClient = useQueryClient();
   const taskId = params.id as string;
 
+  const { data: task, isLoading } = useQuery<Task>({
+    queryKey: ['task', taskId],
+    queryFn: () => tasksApi.getById(taskId),
+  });
+
+  const { data: sites } = useQuery<Site[]>({
+    queryKey: ['sites'],
+    queryFn: sitesApi.getAll,
+  });
+
+  const { data: assets } = useQuery<Asset[]>({
+    queryKey: ['assets'],
+    queryFn: () => assetsApi.getAll(),
+  });
+
+  const { data: users } = useQuery<User[]>({
+    queryKey: ['users'],
+    queryFn: usersApi.getAll,
+  });
+
   const {
     register,
     handleSubmit,
@@ -81,26 +101,6 @@ export default function EditTaskPage() {
           ticketUrl: task.ticketUrl || '',
         }
       : undefined,
-  });
-
-  const { data: task, isLoading } = useQuery<Task>({
-    queryKey: ['task', taskId],
-    queryFn: () => tasksApi.getById(taskId),
-  });
-
-  const { data: sites } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
-  });
-
-  const { data: assets } = useQuery<Asset[]>({
-    queryKey: ['assets'],
-    queryFn: () => assetsApi.getAll(),
-  });
-
-  const { data: users } = useQuery<User[]>({
-    queryKey: ['users'],
-    queryFn: usersApi.getAll,
   });
 
 

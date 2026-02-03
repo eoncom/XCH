@@ -226,8 +226,11 @@ export default function EditSitePage({
   const onSubmit = (data: SiteFormData) => {
     // Ne soumettre que si on est à la dernière étape ET qu'on a explicitement demandé la soumission
     if (currentStep !== STEPS.length || isChangingStep || !isSubmitting) {
+      setIsSubmitting(false); // Reset flag pour prochaine tentative
       return;
     }
+
+    setIsSubmitting(false); // Reset immédiatement après validation
 
     // Nettoyer connectivity : supprimer objets vides
     const cleanedData = { ...data };

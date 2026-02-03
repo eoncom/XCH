@@ -44,6 +44,11 @@ export default function EditUserPage() {
   const queryClient = useQueryClient();
   const userId = params.id as string;
 
+  const { data: user, isLoading } = useQuery<User>({
+    queryKey: ['user', userId],
+    queryFn: () => usersApi.getById(userId),
+  });
+
   const {
     register,
     handleSubmit,
@@ -61,11 +66,6 @@ export default function EditUserPage() {
           password: '',
         }
       : undefined,
-  });
-
-  const { data: user, isLoading } = useQuery<User>({
-    queryKey: ['user', userId],
-    queryFn: () => usersApi.getById(userId),
   });
 
 

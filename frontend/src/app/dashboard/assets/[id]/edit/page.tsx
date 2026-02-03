@@ -76,6 +76,16 @@ export default function EditAssetPage() {
   const queryClient = useQueryClient();
   const assetId = params.id as string;
 
+  const { data: asset, isLoading } = useQuery<Asset>({
+    queryKey: ['asset', assetId],
+    queryFn: () => assetsApi.getById(assetId),
+  });
+
+  const { data: sites } = useQuery<Site[]>({
+    queryKey: ['sites'],
+    queryFn: sitesApi.getAll,
+  });
+
   const {
     register,
     handleSubmit,
@@ -96,16 +106,6 @@ export default function EditAssetPage() {
           warrantyEnd: asset.warrantyEnd ? asset.warrantyEnd.split('T')[0] : '',
         }
       : undefined,
-  });
-
-  const { data: asset, isLoading } = useQuery<Asset>({
-    queryKey: ['asset', assetId],
-    queryFn: () => assetsApi.getById(assetId),
-  });
-
-  const { data: sites } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
   });
 
 

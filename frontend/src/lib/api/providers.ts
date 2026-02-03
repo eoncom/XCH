@@ -6,7 +6,7 @@ export const providersApi = {
     return apiClient.get<Provider[]>('/api/providers');
   },
 
-  getById: async (id: number): Promise<Provider> => {
+  getById: async (id: string): Promise<Provider> => {
     return apiClient.get<Provider>(`/api/providers/${id}`);
   },
 
@@ -14,11 +14,11 @@ export const providersApi = {
     return apiClient.post<Provider>('/api/providers', data);
   },
 
-  update: async (id: number, data: Partial<Provider>): Promise<Provider> => {
+  update: async (id: string, data: Partial<Provider>): Promise<Provider> => {
     return apiClient.patch<Provider>(`/api/providers/${id}`, data);
   },
 
-  delete: async (id: number): Promise<void> => {
+  delete: async (id: string): Promise<void> => {
     return apiClient.delete(`/api/providers/${id}`);
   },
 };

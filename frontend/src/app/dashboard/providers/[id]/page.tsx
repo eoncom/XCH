@@ -51,12 +51,12 @@ export default function ProviderDetailPage({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const { data: provider, isLoading } = useQuery<Provider>({
-    queryKey: ['provider', parseInt(id)],
-    queryFn: () => providersApi.getById(parseInt(id)),
+    queryKey: ['provider', id],
+    queryFn: () => providersApi.getById(id),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => providersApi.delete(parseInt(id)),
+    mutationFn: () => providersApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['providers'] });
       toast.success('Fournisseur supprimé avec succès');
