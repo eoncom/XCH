@@ -453,7 +453,7 @@ export default function FloorPlanDetailPage({
                   <SelectItem value="none">Aucun équipement</SelectItem>
                   {assets?.map((asset) => (
                     <SelectItem key={asset.id} value={asset.id}>
-                      {asset.name} - {asset.serialNumber}
+                      {asset.manufacturer || ''} {asset.model || ''} {asset.serialNumber ? `- ${asset.serialNumber}` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -600,7 +600,7 @@ export default function FloorPlanDetailPage({
                   <SelectItem value="none">Aucun équipement</SelectItem>
                   {assets?.map((asset) => (
                     <SelectItem key={asset.id} value={asset.id}>
-                      {asset.name} - {asset.serialNumber}
+                      {asset.manufacturer || ''} {asset.model || ''} {asset.serialNumber ? `- ${asset.serialNumber}` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
