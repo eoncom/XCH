@@ -87,6 +87,8 @@ export default function EditSitePage({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState(1);
+  const [isChangingStep, setIsChangingStep] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: site, isLoading } = useQuery<Site>({
     queryKey: ['site', id],
@@ -149,6 +151,8 @@ export default function EditSitePage({
   });
 
   const nextStep = async () => {
+    setIsChangingStep(true);
+
     let fieldsToValidate: (keyof SiteFormData)[] = [];
 
     if (currentStep === 1) {
@@ -159,6 +163,8 @@ export default function EditSitePage({
     if (isValid) {
       setCurrentStep(currentStep + 1);
     }
+
+    setIsChangingStep(false);
   };
 
   const prevStep = () => {
@@ -218,6 +224,11 @@ export default function EditSitePage({
   }, [watch('address'), watch('city'), watch('postalCode')]);
 
   const onSubmit = (data: SiteFormData) => {
+    // Ne soumettre que si on est à la dernière étape ET qu'on a explicitement demandé la soumission
+    if (currentStep !== STEPS.length || isChangingStep || !isSubmitting) {
+      return;
+    }
+
     // Nettoyer connectivity : supprimer objets vides
     const cleanedData = { ...data };
 
@@ -752,7 +763,14 @@ export default function EditSitePage({
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 ) : (
-                  <Button type="submit" disabled={updateMutation.isPending}>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setIsSubmitting(true);
+                      handleSubmit(onSubmit)();
+                    }}
+                    disabled={updateMutation.isPending}
+                  >
                     {updateMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
                   </Button>
                 )}
