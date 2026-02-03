@@ -1,7 +1,6 @@
 // @ts-nocheck - Temporary fix for Radix UI + React 19 type incompatibility
 'use client';
 
-import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -85,6 +84,18 @@ export default function EditAssetPage() {
     watch,
   } = useForm<AssetFormData>({
     resolver: zodResolver(assetSchema),
+    values: asset
+      ? {
+          type: asset.type,
+          status: asset.status,
+          siteId: asset.siteId || '',
+          brand: asset.manufacturer || '',
+          model: asset.model || '',
+          serialNumber: asset.serialNumber || '',
+          purchaseDate: asset.purchaseDate ? asset.purchaseDate.split('T')[0] : '',
+          warrantyEnd: asset.warrantyEnd ? asset.warrantyEnd.split('T')[0] : '',
+        }
+      : undefined,
   });
 
   const { data: asset, isLoading } = useQuery<Asset>({
@@ -97,18 +108,6 @@ export default function EditAssetPage() {
     queryFn: sitesApi.getAll,
   });
 
-  useEffect(() => {
-    if (asset) {
-      setValue('type', asset.type);
-      setValue('status', asset.status);
-      setValue('siteId', asset.siteId || '');
-      setValue('brand', asset.manufacturer || '');
-      setValue('model', asset.model || '');
-      setValue('serialNumber', asset.serialNumber || '');
-      setValue('purchaseDate', asset.purchaseDate ? asset.purchaseDate.split('T')[0] : '');
-      setValue('warrantyEnd', asset.warrantyEnd ? asset.warrantyEnd.split('T')[0] : '');
-    }
-  }, [asset, setValue]);
 
   const updateMutation = useMutation({
     mutationFn: (data: UpdateAssetDto) => assetsApi.update(assetId, data),

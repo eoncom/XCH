@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -69,6 +68,19 @@ export default function EditTaskPage() {
     watch,
   } = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
+    values: task
+      ? {
+          title: task.title,
+          description: task.description || '',
+          status: task.status,
+          priority: task.priority,
+          siteId: task.siteId || '',
+          assetId: task.assetId || '',
+          assignedTo: task.assignedTo || '',
+          dueDate: task.dueDate ? task.dueDate.split('T')[0] : '',
+          ticketUrl: task.ticketUrl || '',
+        }
+      : undefined,
   });
 
   const { data: task, isLoading } = useQuery<Task>({
@@ -91,19 +103,6 @@ export default function EditTaskPage() {
     queryFn: usersApi.getAll,
   });
 
-  useEffect(() => {
-    if (task) {
-      setValue('title', task.title);
-      setValue('description', task.description || '');
-      setValue('status', task.status);
-      setValue('priority', task.priority);
-      setValue('siteId', task.siteId || '');
-      setValue('assetId', task.assetId || '');
-      setValue('assignedTo', task.assignedTo || '');
-      setValue('dueDate', task.dueDate ? task.dueDate.split('T')[0] : '');
-      setValue('ticketUrl', task.ticketUrl || '');
-    }
-  }, [task, setValue]);
 
   const updateMutation = useMutation({
     mutationFn: (data: UpdateTaskDto) => tasksApi.update(taskId, data),

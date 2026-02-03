@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -59,6 +58,18 @@ export default function EditRackPage() {
     watch,
   } = useForm<RackFormData>({
     resolver: zodResolver(rackSchema),
+    values: rack
+      ? {
+          name: rack.name,
+          siteId: rack.siteId,
+          heightU: rack.heightU,
+          status: rack.status,
+          manufacturer: rack.manufacturer || '',
+          model: rack.model || '',
+          location: rack.location || '',
+          notes: rack.notes || '',
+        }
+      : undefined,
   });
 
   const { data: rack, isLoading } = useQuery<Rack>({
@@ -71,18 +82,6 @@ export default function EditRackPage() {
     queryFn: sitesApi.getAll,
   });
 
-  useEffect(() => {
-    if (rack) {
-      setValue('name', rack.name);
-      setValue('siteId', rack.siteId);
-      setValue('heightU', rack.heightU);
-      setValue('status', rack.status);
-      setValue('manufacturer', rack.manufacturer || '');
-      setValue('model', rack.model || '');
-      setValue('location', rack.location || '');
-      setValue('notes', rack.notes || '');
-    }
-  }, [rack, setValue]);
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<RackFormData>) => racksApi.update(rackId, data),

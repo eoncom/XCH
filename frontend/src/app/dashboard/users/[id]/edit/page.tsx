@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -53,6 +52,15 @@ export default function EditUserPage() {
     watch,
   } = useForm<UserFormData>({
     resolver: zodResolver(userSchema),
+    values: user
+      ? {
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          phone: user.phone || '',
+          password: '',
+        }
+      : undefined,
   });
 
   const { data: user, isLoading } = useQuery<User>({
@@ -60,14 +68,6 @@ export default function EditUserPage() {
     queryFn: () => usersApi.getById(userId),
   });
 
-  useEffect(() => {
-    if (user) {
-      setValue('name', user.name);
-      setValue('email', user.email);
-      setValue('role', user.role);
-      setValue('phone', user.phone || '');
-    }
-  }, [user, setValue]);
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<UserFormData>) => usersApi.update(userId, data),
