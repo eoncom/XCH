@@ -83,6 +83,7 @@ export default function NewSitePage() {
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState(1);
   const [isChangingStep, setIsChangingStep] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
@@ -135,8 +136,8 @@ export default function NewSitePage() {
   });
 
   const onSubmit = (data: SiteFormData) => {
-    // Ne soumettre que si on est à la dernière étape ET qu'on n'est pas en train de changer d'étape
-    if (currentStep !== STEPS.length || isChangingStep) {
+    // Ne soumettre que si on est à la dernière étape ET qu'on a explicitement demandé la soumission
+    if (currentStep !== STEPS.length || isChangingStep || !isSubmitting) {
       return;
     }
 
@@ -720,7 +721,14 @@ export default function NewSitePage() {
                     <ChevronRight className="h-4 w-4 ml-2" />
                   </Button>
                 ) : (
-                  <Button type="submit" disabled={createMutation.isPending}>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setIsSubmitting(true);
+                      handleSubmit(onSubmit)();
+                    }}
+                    disabled={createMutation.isPending}
+                  >
                     {createMutation.isPending ? 'Création...' : 'Créer le chantier'}
                   </Button>
                 )}
