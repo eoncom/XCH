@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select';
 import { sitesApi } from '@/lib/api/sites';
 import { providersApi } from '@/lib/api/providers';
-import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Plus, Trash2, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import type { Site, SiteContact, Provider } from '@/types';
 import { toast } from 'sonner';
@@ -125,6 +125,7 @@ export default function EditSitePage({
   const [accessNotes, setAccessNotes] = useState(site?.accessNotes || {
     schedules: '', badges: '', procedures: '', safety: ''
   });
+  const [isGeocoding, setIsGeocoding] = useState(false);
 
   // Charger les fournisseurs TELECOM et INTERNET pour les listes déroulantes
   const { data: providers } = useQuery<Provider[]>({
@@ -163,6 +164,58 @@ export default function EditSitePage({
   const prevStep = () => {
     setCurrentStep(currentStep - 1);
   };
+
+  const handleGeocode = async () => {
+    const address = watch('address');
+    const city = watch('city');
+    const postalCode = watch('postalCode');
+
+    if (!address && !city) {
+      return;
+    }
+
+    setIsGeocoding(true);
+    try {
+      const query = [address, postalCode, city, 'France'].filter(Boolean).join(', ');
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+        {
+          headers: {
+            'User-Agent': 'XCH-App/1.0'
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (data && data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        setValue('latitude', lat);
+        setValue('longitude', lon);
+        toast.success(`📍 GPS : ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+      }
+    } catch (error) {
+      console.error('Erreur géocodage:', error);
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
+  // Auto-géocodage quand l'adresse change (debounce 1.5s)
+  useEffect(() => {
+    const address = watch('address');
+    const city = watch('city');
+    const postalCode = watch('postalCode');
+
+    if (!address && !city) return;
+
+    const timeoutId = setTimeout(() => {
+      handleGeocode();
+    }, 1500);
+
+    return () => clearTimeout(timeoutId);
+  }, [watch('address'), watch('city'), watch('postalCode')]);
 
   const onSubmit = (data: SiteFormData) => {
     // Nettoyer connectivity : supprimer objets vides
@@ -349,7 +402,19 @@ export default function EditSitePage({
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Coordonnées GPS</h3>
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold">Coordonnées GPS</h3>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGeocode}
+                      disabled={isGeocoding}
+                    >
+                      <MapPin className="h-4 w-4 mr-2" />
+                      {isGeocoding ? 'Recherche...' : '🔄 Actualiser GPS'}
+                    </Button>
+                  </div>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="latitude">Latitude</Label>
@@ -373,6 +438,10 @@ export default function EditSitePage({
                       />
                     </div>
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    💡 Les coordonnées GPS se mettent à jour automatiquement quand vous modifiez l'adresse.
+                    Vous pouvez les corriger manuellement ou cliquer sur "Actualiser GPS".
+                  </p>
                 </div>
               </div>
             )}

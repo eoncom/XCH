@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -214,8 +214,7 @@ export default function NewSitePage() {
     const postalCode = watch('postalCode');
 
     if (!address && !city) {
-      alert('Veuillez renseigner une adresse ou une ville');
-      return;
+      return; // Ne rien faire si pas d'adresse
     }
 
     setIsGeocoding(true);
@@ -238,17 +237,30 @@ export default function NewSitePage() {
         const lon = parseFloat(data[0].lon);
         setValue('latitude', lat);
         setValue('longitude', lon);
-        alert(`Coordonnées trouvées : ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
-      } else {
-        alert('Adresse introuvable. Veuillez saisir les coordonnées manuellement.');
+        toast.success(`📍 GPS : ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
       }
     } catch (error) {
       console.error('Erreur géocodage:', error);
-      alert('Erreur lors de la géolocalisation. Veuillez saisir les coordonnées manuellement.');
+      // Pas d'alerte, juste un log silencieux
     } finally {
       setIsGeocoding(false);
     }
   };
+
+  // Auto-géocodage quand l'adresse change (debounce 1.5s)
+  useEffect(() => {
+    const address = watch('address');
+    const city = watch('city');
+    const postalCode = watch('postalCode');
+
+    if (!address && !city) return;
+
+    const timeoutId = setTimeout(() => {
+      handleGeocode();
+    }, 1500); // Attendre 1.5s après la dernière frappe
+
+    return () => clearTimeout(timeoutId);
+  }, [watch('address'), watch('city'), watch('postalCode')]);
 
   const status = watch('status');
 
@@ -388,7 +400,7 @@ export default function NewSitePage() {
                       disabled={isGeocoding}
                     >
                       <MapPin className="h-4 w-4 mr-2" />
-                      {isGeocoding ? 'Géolocalisation...' : 'Géolocaliser'}
+                      {isGeocoding ? 'Recherche...' : '🔄 Actualiser GPS'}
                     </Button>
                   </div>
                   <div className="grid md:grid-cols-2 gap-4">
@@ -421,8 +433,8 @@ export default function NewSitePage() {
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    💡 Cliquez sur "Géolocaliser" pour récupérer automatiquement les coordonnées depuis l'adresse,
-                    ou saisissez-les manuellement pour plus de précision.
+                    💡 Les coordonnées GPS se remplissent automatiquement depuis l'adresse.
+                    Vous pouvez les modifier manuellement ou cliquer sur "Actualiser GPS" pour forcer une nouvelle recherche.
                   </p>
                 </div>
               </div>
