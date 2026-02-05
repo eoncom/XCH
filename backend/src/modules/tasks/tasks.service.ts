@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -9,6 +9,8 @@ import { createId } from '@paralleldrive/cuid2';
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     private prisma: PrismaClient,
     private storageService: StorageService,
@@ -224,10 +226,10 @@ export class TasksService {
     await this.findOne(id, tenantId);
 
     // DEBUG: Log pour diagnostiquer transformation
-    console.log('📋 updateChecklist - Received checklist:', JSON.stringify(checklist, null, 2));
-    console.log('📋 Type:', typeof checklist, 'IsArray:', Array.isArray(checklist));
+    this.logger.log(`updateChecklist - Received checklist: ${JSON.stringify(checklist)}`);
+    this.logger.log(`Type: ${typeof checklist}, IsArray: ${Array.isArray(checklist)}, Length: ${checklist?.length}`);
     if (Array.isArray(checklist) && checklist.length > 0) {
-      console.log('📋 First item:', JSON.stringify(checklist[0]), 'Type:', typeof checklist[0]);
+      this.logger.log(`First item: ${JSON.stringify(checklist[0])}, Type: ${typeof checklist[0]}`);
     }
 
     await this.prisma.task.update({
