@@ -216,11 +216,6 @@ export class SeedService {
         assignedTo: tech?.id,
         createdBy: manager?.id || tech?.id,
         dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // +7 days
-        checklist: [
-          { id: 1, label: 'Vérifier câblage électrique', completed: true },
-          { id: 2, label: 'Monter switches en rack', completed: false },
-          { id: 3, label: 'Configurer VLANs', completed: false },
-        ],
       },
     });
     tasks.push(task1);
@@ -235,9 +230,6 @@ export class SeedService {
         priority: TaskPriority.MEDIUM,
         assignedTo: tech?.id,
         createdBy: manager?.id || tech?.id,
-        checklist: [
-          { id: 1, label: 'Installer drivers', completed: false },
-        ],
       },
     });
     tasks.push(task2);
