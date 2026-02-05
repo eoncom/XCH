@@ -74,6 +74,45 @@ export class IntegrationsController {
     return this.integrationsService.mapAssetToNetBox(req.user.tenantId, mapDto);
   }
 
+  // ==================== NETBOX CONTACTS ====================
+
+  @Get('netbox/contacts')
+  @Resource('integrations')
+  @Action('read')
+  @ApiOperation({ summary: 'List contacts from NetBox' })
+  getNetBoxContacts(
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+    @Query('name') name?: string,
+    @Query('group_id') groupId?: number,
+  ) {
+    return this.integrationsService.getNetBoxContacts({
+      limit,
+      offset,
+      name,
+      group_id: groupId,
+    });
+  }
+
+  @Get('netbox/contact-groups')
+  @Resource('integrations')
+  @Action('read')
+  @ApiOperation({ summary: 'List contact groups from NetBox' })
+  getNetBoxContactGroups(
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+  ) {
+    return this.integrationsService.getNetBoxContactGroups({ limit, offset });
+  }
+
+  @Post('netbox/sync/contacts')
+  @Resource('integrations')
+  @Action('create')
+  @ApiOperation({ summary: 'Sync contacts from NetBox to XCH (READ-ONLY)' })
+  syncNetBoxContacts(@Request() req: AuthRequest) {
+    return this.integrationsService.syncNetBoxContacts(req.user.tenantId);
+  }
+
   // ==================== UPTIME KUMA ====================
 
   @Post('uptime-kuma/sync/health/:siteId')

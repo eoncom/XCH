@@ -160,6 +160,88 @@ export class NetBoxProviderService implements NetBoxProvider {
   }
 
   /**
+   * Fetch contacts from NetBox
+   */
+  async fetchContacts(params?: {
+    limit?: number;
+    offset?: number;
+    name?: string;
+    group_id?: number;
+  }): Promise<any> {
+    if (!this.enabled) {
+      throw new Error('NetBox provider is disabled');
+    }
+
+    try {
+      const queryParams: Record<string, any> = { limit: params?.limit || 1000 };
+      if (params?.offset) queryParams.offset = params.offset;
+      if (params?.name) queryParams.name__ic = params.name;
+      if (params?.group_id) queryParams.group_id = params.group_id;
+
+      const response = await this.client.get('/api/tenancy/contacts/', {
+        params: queryParams,
+      });
+
+      this.logger.log(`Fetched ${response.data.results?.length || 0} contacts from NetBox`);
+      return response.data;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Failed to fetch contacts from NetBox', errorMessage);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch contact groups from NetBox
+   */
+  async fetchContactGroups(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    if (!this.enabled) {
+      throw new Error('NetBox provider is disabled');
+    }
+
+    try {
+      const queryParams: Record<string, any> = { limit: params?.limit || 1000 };
+      if (params?.offset) queryParams.offset = params.offset;
+
+      const response = await this.client.get('/api/tenancy/contact-groups/', {
+        params: queryParams,
+      });
+
+      this.logger.log(`Fetched ${response.data.results?.length || 0} contact groups from NetBox`);
+      return response.data;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Failed to fetch contact groups from NetBox', errorMessage);
+      throw error;
+    }
+  }
+
+  /**
+   * Map NetBox contact to XCH contact format
+   */
+  async mapContactToXCH(netboxContact: any): Promise<any> {
+    return {
+      externalId: netboxContact.id.toString(),
+      externalSystem: 'netbox',
+      name: netboxContact.name,
+      email: netboxContact.email || null,
+      phone: netboxContact.phone || null,
+      address: netboxContact.address || null,
+      role: netboxContact.title || null,
+      notes: netboxContact.comments || null,
+      metadata: {
+        netbox_id: netboxContact.id,
+        netbox_url: netboxContact.url,
+        group: netboxContact.group?.name || null,
+        group_id: netboxContact.group?.id || null,
+      },
+    };
+  }
+
+  /**
    * Map NetBox site to XCH site format
    */
   async mapSiteToXCH(netboxSite: any): Promise<any> {

@@ -120,6 +120,43 @@ export interface NetboxRack {
   last_updated?: string;
 }
 
+export interface NetboxContact {
+  id: number;
+  url: string;
+  name: string;
+  title?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  comments?: string;
+  group?: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+  tags?: { id: number; name: string; slug: string }[];
+  custom_fields?: Record<string, any>;
+  created?: string;
+  last_updated?: string;
+}
+
+export interface NetboxContactGroup {
+  id: number;
+  url: string;
+  name: string;
+  slug: string;
+  parent?: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+  description?: string;
+  contact_count?: number;
+  tags?: { id: number; name: string; slug: string }[];
+  created?: string;
+  last_updated?: string;
+}
+
 export interface NetboxPaginatedResponse<T> {
   count: number;
   next: string | null;
@@ -321,6 +358,52 @@ export class NetboxService implements OnModuleInit {
 
   async deleteRack(id: number): Promise<void> {
     return this.request<void>('delete', `/dcim/racks/${id}/`);
+  }
+
+  // ============================================================
+  // CONTACTS
+  // ============================================================
+
+  async getContacts(params?: {
+    limit?: number;
+    offset?: number;
+    name?: string;
+    group_id?: number;
+  }): Promise<NetboxPaginatedResponse<NetboxContact>> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+    if (params?.name) queryParams.append('name__ic', params.name);
+    if (params?.group_id) queryParams.append('group_id', params.group_id.toString());
+
+    const query = queryParams.toString();
+    return this.request<NetboxPaginatedResponse<NetboxContact>>(
+      'get',
+      `/tenancy/contacts/${query ? `?${query}` : ''}`,
+    );
+  }
+
+  async getContactById(id: number): Promise<NetboxContact> {
+    return this.request<NetboxContact>('get', `/tenancy/contacts/${id}/`);
+  }
+
+  async getContactGroups(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<NetboxPaginatedResponse<NetboxContactGroup>> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+
+    const query = queryParams.toString();
+    return this.request<NetboxPaginatedResponse<NetboxContactGroup>>(
+      'get',
+      `/tenancy/contact-groups/${query ? `?${query}` : ''}`,
+    );
+  }
+
+  async getContactGroupById(id: number): Promise<NetboxContactGroup> {
+    return this.request<NetboxContactGroup>('get', `/tenancy/contact-groups/${id}/`);
   }
 
   // ============================================================

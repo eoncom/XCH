@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { NetBoxProviderService } from './providers/netbox.provider';
 import { HealthStatus } from '@prisma/client';
 import { UptimeKumaProviderService } from './providers/uptime-kuma.provider';
+import { IntegrationMappingService } from './mapping/integration-mapping.service';
 import { SyncNetBoxSitesDto, SyncNetBoxDevicesDto, MapAssetToNetBoxDto } from './dto/sync-netbox.dto';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class IntegrationsService {
     private prisma: PrismaClient,
     private netboxProvider: NetBoxProviderService,
     private uptimeKumaProvider: UptimeKumaProviderService,
+    private integrationMappingService: IntegrationMappingService,
   ) {}
 
   /**
@@ -404,6 +406,140 @@ export class IntegrationsService {
     }
 
     this.logger.log(`Sites health sync completed: ${JSON.stringify(results)}`);
+    return results;
+  }
+
+  // ==================== NETBOX CONTACTS ====================
+
+  /**
+   * Get contacts from NetBox (proxy)
+   */
+  async getNetBoxContacts(params?: {
+    limit?: number;
+    offset?: number;
+    name?: string;
+    group_id?: number;
+  }) {
+    return this.netboxProvider.fetchContacts(params);
+  }
+
+  /**
+   * Get contact groups from NetBox (proxy)
+   */
+  async getNetBoxContactGroups(params?: { limit?: number; offset?: number }) {
+    return this.netboxProvider.fetchContactGroups(params);
+  }
+
+  /**
+   * Sync contacts from NetBox to XCH
+   * Uses IntegrationMapping to resolve contact_group -> ContactType mapping
+   */
+  async syncNetBoxContacts(tenantId: string) {
+    const contactsResponse = await this.netboxProvider.fetchContacts({ limit: 1000 });
+    const netboxContacts = contactsResponse.results || [];
+
+    const results = {
+      fetched: netboxContacts.length,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    for (const netboxContact of netboxContacts) {
+      try {
+        const mappedData = await this.netboxProvider.mapContactToXCH(netboxContact);
+
+        // Check if contact already exists (by externalId)
+        const existingContact = await this.prisma.contact.findFirst({
+          where: {
+            tenantId,
+            externalRefs: {
+              some: {
+                externalId: mappedData.externalId,
+                provider: 'netbox',
+              },
+            },
+          },
+        });
+
+        if (existingContact) {
+          // Update existing contact
+          await this.prisma.contact.update({
+            where: { id: existingContact.id },
+            data: {
+              name: mappedData.name,
+              email: mappedData.email,
+              phone: mappedData.phone,
+              address: mappedData.address,
+              role: mappedData.role,
+              notes: mappedData.notes,
+            },
+          });
+          results.updated++;
+        } else {
+          // Resolve ContactType via IntegrationMapping
+          let typeId: string | null = null;
+
+          if (netboxContact.group?.id) {
+            const mapping = await this.integrationMappingService.getMappingByExternalId(
+              tenantId,
+              'netbox',
+              'contact_group',
+              netboxContact.group.id.toString(),
+            );
+            if (mapping) {
+              typeId = mapping.targetId;
+            }
+          }
+
+          // Fallback: find default contact type
+          if (!typeId) {
+            const defaultType = await this.prisma.contactType.findFirst({
+              where: { tenantId, isSystem: true },
+              orderBy: { createdAt: 'asc' },
+            });
+            if (defaultType) {
+              typeId = defaultType.id;
+            }
+          }
+
+          if (!typeId) {
+            results.errors.push(`${netboxContact.name}: No ContactType found (create one or map contact groups)`);
+            continue;
+          }
+
+          const { externalId, externalSystem, metadata, ...contactData } = mappedData;
+
+          const newContact = await this.prisma.contact.create({
+            data: {
+              ...contactData,
+              tenantId,
+              typeId,
+            },
+          });
+
+          // Create external reference
+          await this.prisma.externalRef.create({
+            data: {
+              entityType: 'CONTACT',
+              entityId: newContact.id,
+              provider: 'netbox',
+              externalId: String(externalId),
+              metadata,
+            },
+          });
+
+          results.created++;
+        }
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Failed to sync NetBox contact ${netboxContact.name}`, errorMessage);
+        results.errors.push(`${netboxContact.name}: ${errorMessage}`);
+      }
+    }
+
+    this.logger.log(`NetBox contacts sync completed: ${JSON.stringify(results)}`);
     return results;
   }
 }
