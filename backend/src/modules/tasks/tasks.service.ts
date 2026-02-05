@@ -223,6 +223,13 @@ export class TasksService {
   async updateChecklist(id: string, tenantId: string, checklist: any[]) {
     await this.findOne(id, tenantId);
 
+    // DEBUG: Log pour diagnostiquer transformation
+    console.log('📋 updateChecklist - Received checklist:', JSON.stringify(checklist, null, 2));
+    console.log('📋 Type:', typeof checklist, 'IsArray:', Array.isArray(checklist));
+    if (Array.isArray(checklist) && checklist.length > 0) {
+      console.log('📋 First item:', JSON.stringify(checklist[0]), 'Type:', typeof checklist[0]);
+    }
+
     await this.prisma.task.update({
       where: { id },
       data: { checklist },
