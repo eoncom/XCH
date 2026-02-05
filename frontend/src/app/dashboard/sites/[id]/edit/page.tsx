@@ -88,7 +88,6 @@ export default function EditSitePage({
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState(1);
   const [isChangingStep, setIsChangingStep] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: site, isLoading } = useQuery<Site>({
     queryKey: ['site', id],
@@ -224,13 +223,10 @@ export default function EditSitePage({
   }, [watch('address'), watch('city'), watch('postalCode')]);
 
   const onSubmit = (data: SiteFormData) => {
-    // Ne soumettre que si on est à la dernière étape ET qu'on a explicitement demandé la soumission
-    if (currentStep !== STEPS.length || isChangingStep || !isSubmitting) {
-      setIsSubmitting(false); // Reset flag pour prochaine tentative
+    // Ne soumettre que si on est à la dernière étape ET qu'on n'est pas en train de changer d'étape
+    if (currentStep !== STEPS.length || isChangingStep) {
       return;
     }
-
-    setIsSubmitting(false); // Reset immédiatement après validation
 
     // Nettoyer connectivity : supprimer objets vides
     const cleanedData = { ...data };
@@ -768,10 +764,7 @@ export default function EditSitePage({
                 ) : (
                   <Button
                     type="button"
-                    onClick={() => {
-                      setIsSubmitting(true);
-                      handleSubmit(onSubmit)();
-                    }}
+                    onClick={handleSubmit(onSubmit)}
                     disabled={updateMutation.isPending}
                   >
                     {updateMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}

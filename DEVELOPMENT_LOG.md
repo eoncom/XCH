@@ -2879,3 +2879,24 @@ docs: Proposition refactoring Providers → Contacts + UI mapping NetBox
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-05
+
+**Date:** 2026-02-05 21:10:45
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix: Corrections critiques hooks order + providers NaN + double-clic
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

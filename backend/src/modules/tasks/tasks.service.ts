@@ -223,12 +223,13 @@ export class TasksService {
   async updateChecklist(id: string, tenantId: string, checklist: any[]) {
     await this.findOne(id, tenantId);
 
-    const task = await this.prisma.task.update({
+    await this.prisma.task.update({
       where: { id },
       data: { checklist },
     });
 
-    return task;
+    // Retourner via findOne pour avoir le bon formatage
+    return this.findOne(id, tenantId);
   }
 
   async getStatsByStatus(tenantId: string) {
