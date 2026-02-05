@@ -1217,14 +1217,6 @@ async function main() {
       assignedTo: tech1.id,
       createdBy: manager.id,
       dueDate: new Date('2026-01-15'),
-      checklist: [
-        { id: '1', text: 'Créer VLAN 10 (Bureaux)', checked: true, order: 1 },
-        { id: '2', text: 'Créer VLAN 20 (Serveurs)', checked: true, order: 2 },
-        { id: '3', text: 'Créer VLAN 30 (Invités)', checked: false, order: 3 },
-        { id: '4', text: 'Créer VLAN 100 (Management)', checked: false, order: 4 },
-        { id: '5', text: 'Configurer routing inter-VLAN', checked: false, order: 5 },
-        { id: '6', text: 'Tester connectivité', checked: false, order: 6 }
-      ],
     },
   });
 
@@ -1241,13 +1233,6 @@ async function main() {
       createdBy: admin.id,
       dueDate: new Date('2026-01-12'),
       ticketRef: 'JIRA-1234',
-      checklist: [
-        { id: '1', text: 'Backup complet VM', checked: false, order: 1 },
-        { id: '2', text: 'Snapshot vSphere', checked: false, order: 2 },
-        { id: '3', text: 'Appliquer patches OS', checked: false, order: 3 },
-        { id: '4', text: 'Redémarrer serveur', checked: false, order: 4 },
-        { id: '5', text: 'Valider services applicatifs', checked: false, order: 5 }
-      ],
     },
   });
 
@@ -1310,13 +1295,6 @@ async function main() {
       assignedTo: tech1.id,
       createdBy: manager.id,
       dueDate: new Date('2026-01-18'),
-      checklist: [
-        { id: '1', text: 'Backup données Redis', checked: true, order: 1 },
-        { id: '2', text: 'Arrêter services dépendants', checked: true, order: 2 },
-        { id: '3', text: 'Upgrade Redis 6 → 7', checked: false, order: 3 },
-        { id: '4', text: 'Restaurer données', checked: false, order: 4 },
-        { id: '5', text: 'Tests applicatifs', checked: false, order: 5 }
-      ],
     },
   });
 
@@ -1348,14 +1326,6 @@ async function main() {
       createdBy: admin.id,
       dueDate: new Date('2026-01-12'),
       ticketRef: 'PROJ-MRS-001',
-      checklist: [
-        { id: '1', text: 'Commander 2 racks 42U', checked: false, order: 1 },
-        { id: '2', text: 'Commander switches core (3x)', checked: false, order: 2 },
-        { id: '3', text: 'Commander serveurs (2x Dell R740)', checked: false, order: 3 },
-        { id: '4', text: 'Commander équipements WiFi (5x AP)', checked: false, order: 4 },
-        { id: '5', text: 'Planifier installation câblage', checked: false, order: 5 },
-        { id: '6', text: 'Réserver intervention prestataire', checked: false, order: 6 }
-      ],
     },
   });
 
@@ -1372,13 +1342,6 @@ async function main() {
       createdBy: admin.id,
       dueDate: new Date('2026-01-22'),
       ticketRef: 'INFRA-456',
-      checklist: [
-        { id: '1', text: 'Commander 8x SSD 3.84TB', checked: false, order: 1 },
-        { id: '2', text: 'Planifier fenêtre maintenance', checked: false, order: 2 },
-        { id: '3', text: 'Installer disques à chaud', checked: false, order: 3 },
-        { id: '4', text: 'Étendre volume RAID6', checked: false, order: 4 },
-        { id: '5', text: 'Vérifier intégrité données', checked: false, order: 5 }
-      ],
     },
   });
 
@@ -1394,14 +1357,6 @@ async function main() {
       assignedTo: tech1.id,
       createdBy: manager.id,
       dueDate: new Date('2026-01-16'),
-      checklist: [
-        { id: '1', text: 'Inventorier VMs à migrer (12 total)', checked: true, order: 1 },
-        { id: '2', text: 'Configurer DRS et HA', checked: true, order: 2 },
-        { id: '3', text: 'Migrer VMs batch 1 (4 VMs)', checked: true, order: 3 },
-        { id: '4', text: 'Migrer VMs batch 2 (4 VMs)', checked: false, order: 4 },
-        { id: '5', text: 'Migrer VMs batch 3 (4 VMs)', checked: false, order: 5 },
-        { id: '6', text: 'Tests failover HA', checked: false, order: 6 }
-      ],
     },
   });
 
@@ -1479,13 +1434,6 @@ async function main() {
       createdBy: admin.id,
       dueDate: new Date('2026-01-31'),
       ticketRef: 'AUDIT-2026-PAR',
-      checklist: [
-        { id: '1', text: 'Scanner tous assets étage 1-5', checked: false, order: 1 },
-        { id: '2', text: 'Vérifier localisation', checked: false, order: 2 },
-        { id: '3', text: 'Mettre à jour statuts', checked: false, order: 3 },
-        { id: '4', text: 'Identifier assets manquants', checked: false, order: 4 },
-        { id: '5', text: 'Générer rapport final', checked: false, order: 5 }
-      ],
     },
   });
 
