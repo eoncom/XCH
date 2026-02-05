@@ -2942,3 +2942,24 @@ feat: Export plan interactif avec pins superposés
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-06
+
+**Date:** 2026-02-06 00:07:58
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 12
+
+**Commit message:**
+```
+fix: ContactCategory.SUPPLIER → PROVIDER in query DTO
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

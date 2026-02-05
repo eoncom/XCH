@@ -1,0 +1,354 @@
+'use client';
+
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
+import { Plus, Search, Eye, Pencil, Trash2, Users, Settings } from 'lucide-react';
+import Link from 'next/link';
+import type { Contact, ContactType, ContactCategory } from '@/types';
+import { toast } from 'sonner';
+
+const categoryLabels: Record<ContactCategory, string> = {
+  PROVIDER: 'Fournisseurs',
+  INTERNAL: 'Internes',
+  PARTNER: 'Partenaires',
+  TECHNICAL: 'Technique',
+  EMERGENCY: 'Urgence',
+};
+
+const categoryColors: Record<ContactCategory, string> = {
+  PROVIDER: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  INTERNAL: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  PARTNER: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  TECHNICAL: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  EMERGENCY: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+};
+
+export default function ContactsPage() {
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const { data: contacts, isLoading, error } = useQuery<Contact[]>({
+    queryKey: ['contacts'],
+    queryFn: () => contactsApi.getAll(),
+    retry: false,
+  });
+
+  const { data: contactTypes } = useQuery<ContactType[]>({
+    queryKey: ['contact-types'],
+    queryFn: () => contactTypesApi.getAll(),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: contactsApi.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      toast.success('Contact supprime avec succes');
+      setDeleteId(null);
+    },
+    onError: (error: Error) => {
+      toast.error(`Erreur lors de la suppression: ${error.message}`);
+    },
+  });
+
+  const filteredContacts = contacts?.filter((contact) => {
+    const searchLower = search.toLowerCase();
+    const matchesSearch =
+      contact.name.toLowerCase().includes(searchLower) ||
+      contact.email?.toLowerCase().includes(searchLower) ||
+      contact.company?.toLowerCase().includes(searchLower);
+    const matchesCategory =
+      categoryFilter === 'ALL' || contact.type?.category === categoryFilter;
+    const matchesType =
+      typeFilter === 'ALL' || contact.typeId === typeFilter;
+    return matchesSearch && matchesCategory && matchesType;
+  });
+
+  // Filter available types by current category filter
+  const filteredTypes = contactTypes?.filter(
+    (t) => categoryFilter === 'ALL' || t.category === categoryFilter
+  );
+
+  const handleDelete = () => {
+    if (deleteId) {
+      deleteMutation.mutate(deleteId);
+    }
+  };
+
+  if (isLoading) {
+    return <div className="text-center py-12">Chargement des contacts...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-600 mb-4">
+          Erreur lors du chargement des contacts
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {error instanceof Error ? error.message : 'Erreur inconnue'}
+        </p>
+        <Button
+          onClick={() => router.push('/login')}
+          className="mt-4"
+        >
+          Se reconnecter
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Contacts</h1>
+          <p className="text-muted-foreground">
+            Gerez vos contacts : fournisseurs, internes, partenaires, technique et urgence
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/contacts/types">
+              <Settings className="mr-2 h-4 w-4" />
+              Types
+            </Link>
+          </Button>
+          <Button asChild data-testid="create-contact-btn">
+            <Link href="/dashboard/contacts/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Nouveau contact
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Category tabs */}
+      <Tabs value={categoryFilter} onValueChange={(value) => {
+        setCategoryFilter(value);
+        setTypeFilter('ALL');
+      }}>
+        <TabsList>
+          <TabsTrigger value="ALL">
+            <Users className="mr-2 h-4 w-4" />
+            Tous
+          </TabsTrigger>
+          <TabsTrigger value="PROVIDER">Fournisseurs</TabsTrigger>
+          <TabsTrigger value="INTERNAL">Internes</TabsTrigger>
+          <TabsTrigger value="PARTNER">Partenaires</TabsTrigger>
+          <TabsTrigger value="TECHNICAL">Technique</TabsTrigger>
+          <TabsTrigger value="EMERGENCY">Urgence</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher par nom, email ou entreprise..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-full sm:w-[250px]">
+                <SelectValue placeholder="Type de contact" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Tous les types</SelectItem>
+                {filteredTypes?.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>
+                    <div className="flex items-center gap-2">
+                      {type.color && (
+                        <span
+                          className="inline-block w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: type.color }}
+                        />
+                      )}
+                      {type.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredContacts && filteredContacts.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nom</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Entreprise</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Telephone</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredContacts.map((contact) => (
+                  <TableRow key={contact.id} data-testid="contact-row">
+                    <TableCell className="font-medium">{contact.name}</TableCell>
+                    <TableCell>
+                      <Badge
+                        className="whitespace-nowrap"
+                        style={
+                          contact.type?.color
+                            ? {
+                                backgroundColor: `${contact.type.color}20`,
+                                color: contact.type.color,
+                                borderColor: `${contact.type.color}40`,
+                              }
+                            : undefined
+                        }
+                        variant={contact.type?.color ? 'outline' : 'secondary'}
+                      >
+                        {contact.type?.name || 'Non defini'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {contact.company || '-'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {contact.email ? (
+                        <a
+                          href={`mailto:${contact.email}`}
+                          className="hover:underline text-primary"
+                        >
+                          {contact.email}
+                        </a>
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {contact.phone || contact.mobile || '-'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={contact.isActive ? 'success' : 'secondary'}>
+                        {contact.isActive ? 'Actif' : 'Inactif'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          asChild
+                          data-testid="view-contact-btn"
+                        >
+                          <Link href={`/dashboard/contacts/${contact.id}`}>
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          asChild
+                          data-testid="edit-contact-btn"
+                        >
+                          <Link href={`/dashboard/contacts/${contact.id}/edit`}>
+                            <Pencil className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteId(contact.id)}
+                          data-testid="delete-contact-btn"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-12">
+              <Users className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
+              <p className="text-muted-foreground">Aucun contact trouve</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {search || categoryFilter !== 'ALL' || typeFilter !== 'ALL'
+                  ? 'Essayez de modifier vos filtres de recherche'
+                  : 'Commencez par ajouter un nouveau contact'}
+              </p>
+              {!search && categoryFilter === 'ALL' && typeFilter === 'ALL' && (
+                <Button asChild className="mt-4">
+                  <Link href="/dashboard/contacts/new">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nouveau contact
+                  </Link>
+                </Button>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              Etes-vous sur de vouloir supprimer ce contact ? Cette action est
+              irreversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? 'Suppression...' : 'Supprimer'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

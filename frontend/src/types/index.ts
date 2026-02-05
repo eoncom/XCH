@@ -232,6 +232,64 @@ export interface FloorPlan {
   pins?: Pin[];
 }
 
+// Contact types
+export type ContactCategory = 'PROVIDER' | 'INTERNAL' | 'PARTNER' | 'TECHNICAL' | 'EMERGENCY';
+
+export interface ContactType {
+  id: string;
+  name: string;
+  slug: string;
+  category: ContactCategory;
+  color?: string;
+  icon?: string;
+  isSystem: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Contact {
+  id: string;
+  name: string;
+  typeId: string;
+  type: ContactType;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  company?: string;
+  role?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateContactDto {
+  name: string;
+  typeId: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  company?: string;
+  role?: string;
+  notes?: string;
+}
+
+export interface UpdateContactDto extends Partial<CreateContactDto> {
+  isActive?: boolean;
+}
+
+export interface CreateContactTypeDto {
+  name: string;
+  category: ContactCategory;
+  color?: string;
+  icon?: string;
+}
+
+export interface UpdateContactTypeDto extends Partial<CreateContactTypeDto> {
+  isActive?: boolean;
+}
+
 // Pagination
 export interface PaginatedResponse<T> {
   data: T[];
