@@ -1,11 +1,18 @@
-import { IsArray, ValidateNested } from 'class-validator';
+import { IsArray, ValidateNested, IsString, IsBoolean, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 class ChecklistItem {
+  @IsString()
   id: string;
+
+  @IsString()
   text: string;
+
+  @IsBoolean()
   checked: boolean;
+
+  @IsNumber()
   order: number;
 }
 
