@@ -80,10 +80,10 @@ export class TasksController {
   @ApiOperation({ summary: 'Update task checklist' })
   updateChecklist(
     @Param('id') id: string,
-    @Body() updateChecklistDto: UpdateChecklistDto,
+    @Body() body: any,  // Raw body sans transformation
     @Request() req: AuthRequest,
   ) {
-    return this.tasksService.updateChecklist(id, req.user.tenantId, updateChecklistDto.checklist);
+    return this.tasksService.updateChecklist(id, req.user.tenantId, body.checklist);
   }
 
   @Delete(':id')
