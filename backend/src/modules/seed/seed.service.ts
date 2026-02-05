@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaClient, UserRole, SiteStatus, HealthStatus, AssetType, AssetStatus, RackType, RackStatus, TaskStatus, TaskPriority, ProviderType } from '@prisma/client';
+import { PrismaClient, UserRole, SiteStatus, HealthStatus, AssetType, AssetStatus, RackType, RackStatus, TaskStatus, TaskPriority, ContactCategory } from '@prisma/client';
 
 @Injectable()
 export class SeedService {
@@ -18,7 +18,8 @@ export class SeedService {
     const assets = await this.createAssets(tenantId, sites);
     const racks = await this.createRacks(tenantId, sites);
     const tasks = await this.createTasks(tenantId, sites, users);
-    const providers = await this.createProviders(tenantId);
+    const contactTypes = await this.createContactTypes(tenantId);
+    const contacts = await this.createContacts(tenantId, contactTypes);
 
     this.logger.log(`Demo data loaded successfully`);
 
@@ -30,7 +31,8 @@ export class SeedService {
         assets: assets.length,
         racks: racks.length,
         tasks: tasks.length,
-        providers: providers.length,
+        contactTypes: contactTypes.length,
+        contacts: contacts.length,
       },
     };
   }
@@ -46,7 +48,9 @@ export class SeedService {
       await this.prisma.rack.deleteMany({ where: { tenantId } });
       await this.prisma.task.deleteMany({ where: { tenantId } });
       await this.prisma.site.deleteMany({ where: { tenantId } });
-      await this.prisma.provider.deleteMany({ where: { tenantId } });
+      await this.prisma.contact.deleteMany({ where: { tenantId } });
+      await this.prisma.contactType.deleteMany({ where: { tenantId } });
+      await this.prisma.integrationMapping.deleteMany({ where: { tenantId } });
       // Photo is polymorphic - delete by entity relations
       // AuditLog has userId, not direct tenantId relation
       await this.prisma.auditLog.deleteMany({ where: { tenantId } });
@@ -237,99 +241,148 @@ export class SeedService {
     return tasks;
   }
 
-  private async createProviders(tenantId: string) {
-    const providers = [];
+  private async createContactTypes(tenantId: string) {
+    const types = [];
 
-    const provider1 = await this.prisma.provider.upsert({
-      where: { id: `demo-provider-1-${tenantId}` },
-      update: {},
-      create: {
-        id: `demo-provider-1-${tenantId}`,
-        tenantId,
+    // 8 system types
+    const systemTypes = [
+      { name: 'Télécommunications', slug: 'telecommunications', category: ContactCategory.PROVIDER, color: '#3B82F6', icon: 'Phone' },
+      { name: 'Internet & Réseau', slug: 'internet-reseau', category: ContactCategory.PROVIDER, color: '#8B5CF6', icon: 'Wifi' },
+      { name: 'Cloud & Hosting', slug: 'cloud-hosting', category: ContactCategory.PROVIDER, color: '#06B6D4', icon: 'Cloud' },
+      { name: 'Hébergement', slug: 'hebergement', category: ContactCategory.PROVIDER, color: '#14B8A6', icon: 'Server' },
+      { name: 'Sécurité', slug: 'securite', category: ContactCategory.PROVIDER, color: '#EF4444', icon: 'Shield' },
+      { name: 'Réseau & Infra', slug: 'reseau-infra', category: ContactCategory.TECHNICAL, color: '#F59E0B', icon: 'Network' },
+      { name: 'Maintenance', slug: 'maintenance', category: ContactCategory.TECHNICAL, color: '#10B981', icon: 'Wrench' },
+      { name: 'Énergie', slug: 'energie', category: ContactCategory.PROVIDER, color: '#F97316', icon: 'Zap' },
+    ];
+
+    for (const t of systemTypes) {
+      const ct = await this.prisma.contactType.upsert({
+        where: {
+          tenantId_slug: { tenantId, slug: t.slug },
+        },
+        update: {},
+        create: {
+          tenantId,
+          name: t.name,
+          slug: t.slug,
+          category: t.category,
+          color: t.color,
+          icon: t.icon,
+          isSystem: true,
+          isActive: true,
+        },
+      });
+      types.push(ct);
+    }
+
+    // 2 custom types
+    const customTypes = [
+      { name: 'Climatisation', slug: 'climatisation', category: ContactCategory.TECHNICAL, color: '#0EA5E9', icon: 'Wind' },
+      { name: 'Plomberie', slug: 'plomberie', category: ContactCategory.TECHNICAL, color: '#6366F1', icon: 'Droplets' },
+    ];
+
+    for (const t of customTypes) {
+      const ct = await this.prisma.contactType.upsert({
+        where: {
+          tenantId_slug: { tenantId, slug: t.slug },
+        },
+        update: {},
+        create: {
+          tenantId,
+          name: t.name,
+          slug: t.slug,
+          category: t.category,
+          color: t.color,
+          icon: t.icon,
+          isSystem: false,
+          isActive: true,
+        },
+      });
+      types.push(ct);
+    }
+
+    return types;
+  }
+
+  private async createContacts(tenantId: string, contactTypes: any[]) {
+    const contacts = [];
+
+    const telecom = contactTypes.find((t) => t.slug === 'telecommunications');
+    const cloud = contactTypes.find((t) => t.slug === 'cloud-hosting');
+    const securite = contactTypes.find((t) => t.slug === 'securite');
+    const reseau = contactTypes.find((t) => t.slug === 'reseau-infra');
+    const energie = contactTypes.find((t) => t.slug === 'energie');
+    const climatisation = contactTypes.find((t) => t.slug === 'climatisation');
+
+    const contactData = [
+      {
         name: 'Orange Business Services',
-        type: ProviderType.TELECOM,
-        customType: null,
-        contact: 'Service Client: 3900 | contact@orange-business.com',
+        typeId: telecom.id,
+        email: 'contact@orange-business.com',
+        phone: '3900',
+        company: 'Orange',
+        role: 'Opérateur principal',
         notes: 'Opérateur principal pour les liaisons FTTH et 4G backup',
       },
-    });
-    providers.push(provider1);
-
-    const provider2 = await this.prisma.provider.upsert({
-      where: { id: `demo-provider-2-${tenantId}` },
-      update: {},
-      create: {
-        id: `demo-provider-2-${tenantId}`,
-        tenantId,
+      {
         name: 'OVHcloud',
-        type: ProviderType.CLOUD,
-        customType: null,
-        contact: 'Support: +33 9 72 10 10 07 | support@ovhcloud.com',
+        typeId: cloud.id,
+        email: 'support@ovhcloud.com',
+        phone: '+33 9 72 10 10 07',
+        company: 'OVH',
+        role: 'Hébergement cloud',
         notes: 'Hébergement cloud et serveurs dédiés',
       },
-    });
-    providers.push(provider2);
-
-    const provider3 = await this.prisma.provider.upsert({
-      where: { id: `demo-provider-3-${tenantId}` },
-      update: {},
-      create: {
-        id: `demo-provider-3-${tenantId}`,
-        tenantId,
+      {
         name: 'Prosegur',
-        type: ProviderType.SECURITY,
-        customType: null,
-        contact: 'Centrale: 0 800 20 22 23 | contact@prosegur.fr',
+        typeId: securite.id,
+        email: 'contact@prosegur.fr',
+        phone: '0 800 20 22 23',
+        company: 'Prosegur',
+        role: 'Sécurité physique',
         notes: 'Sécurité physique et vidéosurveillance chantiers',
       },
-    });
-    providers.push(provider3);
-
-    const provider4 = await this.prisma.provider.upsert({
-      where: { id: `demo-provider-4-${tenantId}` },
-      update: {},
-      create: {
-        id: `demo-provider-4-${tenantId}`,
-        tenantId,
-        name: 'Cisco France',
-        type: ProviderType.NETWORK,
-        customType: null,
-        contact: 'TAC: +33 1 58 04 60 00 | tac@cisco.com',
+      {
+        name: 'Cisco TAC France',
+        typeId: reseau.id,
+        email: 'tac@cisco.com',
+        phone: '+33 1 58 04 60 00',
+        company: 'Cisco',
+        role: 'Support technique',
         notes: 'Équipements réseau (switches, routeurs, access points)',
       },
-    });
-    providers.push(provider4);
-
-    const provider5 = await this.prisma.provider.upsert({
-      where: { id: `demo-provider-5-${tenantId}` },
-      update: {},
-      create: {
-        id: `demo-provider-5-${tenantId}`,
-        tenantId,
+      {
         name: 'Engie Solutions',
-        type: ProviderType.ENERGY,
-        customType: null,
-        contact: 'Hotline: 09 69 39 99 93 | contact@engie.com',
+        typeId: energie.id,
+        email: 'contact@engie.com',
+        phone: '09 69 39 99 93',
+        company: 'Engie',
+        role: 'Fournisseur énergie',
         notes: 'Fourniture électrique et groupes électrogènes',
       },
-    });
-    providers.push(provider5);
-
-    const provider6 = await this.prisma.provider.upsert({
-      where: { id: `demo-provider-6-${tenantId}` },
-      update: {},
-      create: {
-        id: `demo-provider-6-${tenantId}`,
-        tenantId,
-        name: 'Dalkia',
-        type: ProviderType.CUSTOM,
-        customType: 'Climatisation',
-        contact: 'Service: 01 55 60 29 29 | support@dalkia.fr',
+      {
+        name: 'Dalkia CVC',
+        typeId: climatisation.id,
+        email: 'support@dalkia.fr',
+        phone: '01 55 60 29 29',
+        company: 'Dalkia',
+        role: 'Maintenance CVC',
         notes: 'Maintenance CVC (chauffage, ventilation, climatisation)',
       },
-    });
-    providers.push(provider6);
+    ];
 
-    return providers;
+    for (const c of contactData) {
+      const contact = await this.prisma.contact.create({
+        data: {
+          tenantId,
+          ...c,
+          isActive: true,
+        },
+      });
+      contacts.push(contact);
+    }
+
+    return contacts;
   }
 }

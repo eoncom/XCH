@@ -28,10 +28,14 @@ p, ADMIN, users, update, *
 p, ADMIN, users, delete, *
 p, ADMIN, tenants, read, *
 p, ADMIN, tenants, update, *
-p, ADMIN, providers, create, *
-p, ADMIN, providers, read, *
-p, ADMIN, providers, update, *
-p, ADMIN, providers, delete, *
+p, ADMIN, contacts, create, *
+p, ADMIN, contacts, read, *
+p, ADMIN, contacts, update, *
+p, ADMIN, contacts, delete, *
+p, ADMIN, contact-types, create, *
+p, ADMIN, contact-types, read, *
+p, ADMIN, contact-types, update, *
+p, ADMIN, contact-types, delete, *
 
 # MANAGER
 p, MANAGER, sites, read, *
@@ -44,7 +48,10 @@ p, MANAGER, floor-plans, read, *
 p, MANAGER, floor-plans, update, *
 p, MANAGER, integrations, read, *
 p, MANAGER, users, read, *
-p, MANAGER, providers, read, *
+p, MANAGER, contacts, create, *
+p, MANAGER, contacts, read, *
+p, MANAGER, contacts, update, *
+p, MANAGER, contact-types, read, *
 
 # TECHNICIEN
 p, TECHNICIEN, sites, create, *
@@ -63,7 +70,10 @@ p, TECHNICIEN, tasks, update, *
 p, TECHNICIEN, floor-plans, read, *
 p, TECHNICIEN, floor-plans, create, *
 p, TECHNICIEN, floor-plans, update, *
-p, TECHNICIEN, providers, read, *
+p, TECHNICIEN, contacts, create, *
+p, TECHNICIEN, contacts, read, *
+p, TECHNICIEN, contacts, update, *
+p, TECHNICIEN, contact-types, read, *
 
 # VIEWER
 p, VIEWER, sites, read, *
@@ -71,4 +81,5 @@ p, VIEWER, assets, read, *
 p, VIEWER, racks, read, *
 p, VIEWER, tasks, read, *
 p, VIEWER, floor-plans, read, *
-p, VIEWER, providers, read, *
+p, VIEWER, contacts, read, *
+p, VIEWER, contact-types, read, *

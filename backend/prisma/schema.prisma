@@ -39,14 +39,16 @@ model Tenant {
   updatedAt DateTime @updatedAt
 
   // Relations
-  users         User[]
-  authProviders AuthProvider[]
-  sites         Site[]
-  assets        Asset[]
-  racks         Rack[]
-  tasks         Task[]
-  providers     Provider[]
-  auditLogs     AuditLog[]
+  users               User[]
+  authProviders        AuthProvider[]
+  sites                Site[]
+  assets               Asset[]
+  racks                Rack[]
+  tasks                Task[]
+  contacts             Contact[]
+  contactTypes         ContactType[]
+  integrationMappings  IntegrationMapping[]
+  auditLogs            AuditLog[]
 
   @@index([status])
   @@map("tenants")
@@ -482,42 +484,102 @@ model TaskChecklistItem {
 }
 
 // ============================================================================
-// PROVIDERS (PRESTATAIRES)
+// CONTACTS & CONTACT TYPES (remplace PROVIDERS)
 // ============================================================================
 
-enum ProviderType {
-  TELECOM
-  INTERNET
-  CLOUD
-  HOSTING
-  SECURITY      // Nouveau: Sécurité, vidéosurveillance
-  NETWORK       // Nouveau: Équipements réseau
-  MAINTENANCE   // Nouveau: Maintenance, support
-  ENERGY        // Nouveau: Électricité, énergie
-  CUSTOM        // Pour types personnalisés
-  OTHER
+enum ContactCategory {
+  PROVIDER       // Fournisseurs externes (télécom, cloud, énergie...)
+  INTERNAL       // Équipes internes (responsable chantier, gardien...)
+  PARTNER        // Partenaires IT externes (intégrateurs, sous-traitants)
+  TECHNICAL      // Support technique (NetBox, monitoring)
+  EMERGENCY      // Contacts urgence
 }
 
-model Provider {
-  id       String       @id @default(cuid())
+model ContactType {
+  id       String          @id @default(cuid())
   tenantId String
-  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name     String       @db.VarChar(100)
-  type     ProviderType
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  // Type personnalisé si type=CUSTOM
-  customType String? @db.VarChar(50)
+  name     String          @db.VarChar(50)    // "Télécommunications", "Plomberie"
+  slug     String          @db.VarChar(50)    // "telecom", "plomberie"
+  category ContactCategory                    // Catégorisation fonctionnelle
+  color    String?         @db.VarChar(7)     // Hex color "#3b82f6"
+  icon     String?         @db.VarChar(50)    // Lucide icon name
 
-  // Contact simple (email, phone, etc.)
-  contact String? @db.VarChar(200)
+  isSystem Boolean         @default(false)    // true = prédéfini, non supprimable
+  isActive Boolean         @default(true)
 
-  notes     String?  @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  // Relations
+  contacts Contact[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, isActive])
+  @@map("contact_types")
+}
+
+model Contact {
+  id       String      @id @default(cuid())
+  tenantId String
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name     String      @db.VarChar(100)
+
+  // FK vers ContactType (remplace l'ancien enum ProviderType)
+  typeId   String
+  type     ContactType @relation(fields: [typeId], references: [id])
+
+  // Coordonnées enrichies
+  email    String?     @db.VarChar(100)
+  phone    String?     @db.VarChar(50)
+  mobile   String?     @db.VarChar(50)
+  address  String?     @db.Text
+
+  // Contexte professionnel
+  company  String?     @db.VarChar(100)   // Entreprise
+  role     String?     @db.VarChar(100)   // Fonction/rôle
+
+  notes    String?     @db.Text
+
+  isActive Boolean     @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  externalRefs ExternalRef[]
 
   @@index([tenantId])
-  @@index([tenantId, type])
-  @@map("providers")
+  @@index([tenantId, typeId])
+  @@map("contacts")
+}
+
+// ============================================================================
+// INTEGRATION MAPPINGS (générique pour toutes intégrations)
+// ============================================================================
+
+model IntegrationMapping {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Source externe
+  provider      String   // "netbox", "uptime_kuma", "checkmk"
+  entityType    String   // "contact_group", "site_status", "device_role"
+  externalId    String   // ID ou slug dans le système externe
+  externalLabel String   // Nom affiché (cache)
+
+  // Cible XCH
+  targetType    String   // "contact_type", "site_status", "asset_type"
+  targetId      String   // ID de l'entité XCH cible
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tenantId, provider, entityType, externalId])
+  @@index([tenantId, provider, entityType])
+  @@map("integration_mappings")
 }
 
 // ============================================================================
@@ -529,6 +591,7 @@ enum EntityType {
   ASSET
   TASK
   RACK
+  CONTACT
 }
 
 model Photo {
@@ -568,10 +631,11 @@ model ExternalRef {
   entityId   String
 
   // Polymorphic relations
-  site  Site?  @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_refs_siteId_fkey")
-  asset Asset? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_refs_assetId_fkey")
+  site    Site?    @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_refs_siteId_fkey")
+  asset   Asset?   @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_refs_assetId_fkey")
+  contact Contact? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_refs_contactId_fkey")
 
-  // Provider
+  // Integration provider
   provider    String // netbox, uptime_kuma, fortimanager
   externalId  String
   externalUrl String?

@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, SiteStatus, AssetType, AssetStatus, TaskStatus, TaskPriority, RackType, RackStatus } from '@prisma/client';
+import { PrismaClient, UserRole, SiteStatus, AssetType, AssetStatus, TaskStatus, TaskPriority, RackType, RackStatus, ContactCategory } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -1439,84 +1439,86 @@ async function main() {
 
   console.log('✅ Tasks created: 15 total');
 
-  // 7. Create providers (3 total)
-  const provider1 = await prisma.provider.create({
-    data: {
-      tenantId: tenant.id,
-      name: 'TechNet Solutions',
-      type: 'INTEGRATOR',
-      contacts: [
-        {
-          name: 'Sophie Leroy',
-          phone: '+33 1 23 45 67 89',
-          email: 'sophie.leroy@technet.fr',
-          role: 'Account Manager',
-          isPrimary: true
-        },
-        {
-          name: 'Julien Roux',
-          phone: '+33 1 23 45 67 90',
-          email: 'julien.roux@technet.fr',
-          role: 'Technical Lead',
-          isPrimary: false
-        }
-      ],
-      availability: {
-        schedules: 'Lun-Ven 8h-18h',
-        sla: '4h intervention critique',
-        interventionDelay: '24h standard'
-      },
-      notes: 'Prestataire principal pour intégration matériel réseau et serveurs',
-    },
-  });
+  // 7. Create contact types (10 total: 8 system + 2 custom)
+  const systemTypes = [
+    { name: 'Télécommunications', slug: 'telecommunications', category: ContactCategory.PROVIDER, color: '#3B82F6', icon: 'Phone' },
+    { name: 'Internet & Réseau', slug: 'internet-reseau', category: ContactCategory.PROVIDER, color: '#8B5CF6', icon: 'Wifi' },
+    { name: 'Cloud & Hosting', slug: 'cloud-hosting', category: ContactCategory.PROVIDER, color: '#06B6D4', icon: 'Cloud' },
+    { name: 'Hébergement', slug: 'hebergement', category: ContactCategory.PROVIDER, color: '#14B8A6', icon: 'Server' },
+    { name: 'Sécurité', slug: 'securite', category: ContactCategory.PROVIDER, color: '#EF4444', icon: 'Shield' },
+    { name: 'Réseau & Infra', slug: 'reseau-infra', category: ContactCategory.TECHNICAL, color: '#F59E0B', icon: 'Network' },
+    { name: 'Maintenance', slug: 'maintenance', category: ContactCategory.TECHNICAL, color: '#10B981', icon: 'Wrench' },
+    { name: 'Énergie', slug: 'energie', category: ContactCategory.PROVIDER, color: '#F97316', icon: 'Zap' },
+  ];
 
-  const provider2 = await prisma.provider.create({
-    data: {
-      tenantId: tenant.id,
-      name: 'SecureIT France',
-      type: 'OTHER',
-      contacts: [
-        {
-          name: 'Nathalie Dubois',
-          phone: '+33 4 56 78 90 12',
-          email: 'nathalie.dubois@secureit.fr',
-          role: 'Security Consultant',
-          isPrimary: true
-        }
-      ],
-      availability: {
-        schedules: '24/7/365',
-        sla: '1h intervention critique sécurité',
-        interventionDelay: '4h standard'
+  const contactTypes: any[] = [];
+  for (const t of systemTypes) {
+    const ct = await prisma.contactType.create({
+      data: {
+        tenantId: tenant.id,
+        name: t.name,
+        slug: t.slug,
+        category: t.category,
+        color: t.color,
+        icon: t.icon,
+        isSystem: true,
+        isActive: true,
       },
-      notes: 'Prestataire sécurité - Audits, pentests, SOC',
-    },
-  });
+    });
+    contactTypes.push(ct);
+  }
 
-  const provider3 = await prisma.provider.create({
-    data: {
-      tenantId: tenant.id,
-      name: 'DataCenter Services',
-      type: 'OTHER',
-      contacts: [
-        {
-          name: 'François Martin',
-          phone: '+33 5 67 89 01 23',
-          email: 'francois.martin@dc-services.fr',
-          role: 'Datacenter Manager',
-          isPrimary: true
-        }
-      ],
-      availability: {
-        schedules: '24/7/365',
-        sla: '30min intervention critique',
-        interventionDelay: '2h standard'
+  const customTypes = [
+    { name: 'Climatisation', slug: 'climatisation', category: ContactCategory.TECHNICAL, color: '#0EA5E9', icon: 'Wind' },
+    { name: 'Plomberie', slug: 'plomberie', category: ContactCategory.TECHNICAL, color: '#6366F1', icon: 'Droplets' },
+  ];
+
+  for (const t of customTypes) {
+    const ct = await prisma.contactType.create({
+      data: {
+        tenantId: tenant.id,
+        name: t.name,
+        slug: t.slug,
+        category: t.category,
+        color: t.color,
+        icon: t.icon,
+        isSystem: false,
+        isActive: true,
       },
-      notes: 'Hébergement datacenter Bordeaux - Tier 3 - Infogérance',
-    },
-  });
+    });
+    contactTypes.push(ct);
+  }
 
-  console.log('✅ Providers created: 3 total');
+  console.log('✅ Contact types created: 10 total (8 system + 2 custom)');
+
+  // 8. Create contacts (8 total)
+  const telecomType = contactTypes.find((t) => t.slug === 'telecommunications');
+  const cloudType = contactTypes.find((t) => t.slug === 'cloud-hosting');
+  const securiteType = contactTypes.find((t) => t.slug === 'securite');
+  const reseauType = contactTypes.find((t) => t.slug === 'reseau-infra');
+  const energieType = contactTypes.find((t) => t.slug === 'energie');
+  const maintenanceType = contactTypes.find((t) => t.slug === 'maintenance');
+  const climatisationType = contactTypes.find((t) => t.slug === 'climatisation');
+  const internetType = contactTypes.find((t) => t.slug === 'internet-reseau');
+
+  const contactsData = [
+    { name: 'Orange Business Services', typeId: telecomType.id, email: 'contact@orange-business.com', phone: '3900', company: 'Orange', role: 'Opérateur principal', notes: 'Opérateur principal pour les liaisons FTTH et 4G backup' },
+    { name: 'OVHcloud', typeId: cloudType.id, email: 'support@ovhcloud.com', phone: '+33 9 72 10 10 07', company: 'OVH', role: 'Hébergement cloud', notes: 'Hébergement cloud et serveurs dédiés' },
+    { name: 'Prosegur', typeId: securiteType.id, email: 'contact@prosegur.fr', phone: '0 800 20 22 23', company: 'Prosegur', role: 'Sécurité physique', notes: 'Sécurité physique et vidéosurveillance chantiers' },
+    { name: 'Cisco TAC France', typeId: reseauType.id, email: 'tac@cisco.com', phone: '+33 1 58 04 60 00', company: 'Cisco', role: 'Support technique', notes: 'Équipements réseau (switches, routeurs, access points)' },
+    { name: 'Engie Solutions', typeId: energieType.id, email: 'contact@engie.com', phone: '09 69 39 99 93', company: 'Engie', role: 'Fournisseur énergie', notes: 'Fourniture électrique et groupes électrogènes' },
+    { name: 'Dalkia CVC', typeId: climatisationType.id, email: 'support@dalkia.fr', phone: '01 55 60 29 29', company: 'Dalkia', role: 'Maintenance CVC', notes: 'Maintenance CVC (chauffage, ventilation, climatisation)' },
+    { name: 'TechNet Solutions', typeId: maintenanceType.id, email: 'sophie.leroy@technet.fr', phone: '+33 1 23 45 67 89', company: 'TechNet', role: 'Intégrateur réseau', notes: 'Prestataire principal pour intégration matériel réseau et serveurs' },
+    { name: 'Bouygues Telecom Entreprises', typeId: internetType.id, email: 'btpro@bouyguestelecom.fr', phone: '1064', company: 'Bouygues Telecom', role: 'FAI backup', notes: 'Opérateur secondaire pour liaisons 4G/5G et SDWAN' },
+  ];
+
+  for (const c of contactsData) {
+    await prisma.contact.create({
+      data: { tenantId: tenant.id, ...c, isActive: true },
+    });
+  }
+
+  console.log('✅ Contacts created: 8 total');
 
   // 9. Create demo attachments (simulated file uploads)
   console.log('\n📎 Creating demo attachments...');
@@ -1636,7 +1638,8 @@ async function main() {
   console.log('      • UPS: 1');
   console.log('      • PDU: 1');
   console.log('  📋 Tasks: 15 (3 TODO, 5 IN_PROGRESS, 4 DONE, 3 URGENT)');
-  console.log('  🏢 Providers: 3 (Integrator, Security, Datacenter)');
+  console.log('  📇 Contact Types: 10 (8 system, 2 custom)');
+  console.log('  🏢 Contacts: 8 (telecom, cloud, security, network, energy, CVC, integrator, FAI)');
   console.log('  📎 Attachments: 5 (3 on assets, 2 on tasks)\n');
 
   console.log('📍 SITES DETAILS:');
