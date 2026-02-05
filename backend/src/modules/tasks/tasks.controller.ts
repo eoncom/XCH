@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TasksService } from './tasks.service';
@@ -78,13 +78,12 @@ export class TasksController {
   @Patch(':id/checklist')
   @Resource('tasks') @Action('update')
   @ApiOperation({ summary: 'Update task checklist' })
-  @UsePipes(new ValidationPipe({ whitelist: false, transform: false }))
   updateChecklist(
     @Param('id') id: string,
-    @Body() body: any,
+    @Body() updateChecklistDto: UpdateChecklistDto,
     @Request() req: AuthRequest,
   ) {
-    return this.tasksService.updateChecklist(id, req.user.tenantId, body.checklist);
+    return this.tasksService.updateChecklist(id, req.user.tenantId, updateChecklistDto.checklist);
   }
 
   @Delete(':id')

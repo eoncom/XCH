@@ -19,5 +19,5 @@ export class UpdateChecklistDto {
     ],
   })
   @IsArray()
-  checklist: Record<string, any>[];
+  checklist: any[];
 }

@@ -125,13 +125,27 @@ export class TasksService {
             email: true,
           },
         },
+        checklistItems: {
+          orderBy: {
+            order: 'asc',
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
       },
     });
 
-    return tasks;
+    // Format checklist pour compatibilité frontend
+    return tasks.map(task => ({
+      ...task,
+      checklist: task.checklistItems.map(item => ({
+        id: item.id,
+        text: item.text,
+        checked: item.checked,
+        order: item.order,
+      })),
+    }));
   }
 
   async findOne(id: string, tenantId: string) {
@@ -159,6 +173,11 @@ export class TasksService {
           },
         },
         photos: true,
+        checklistItems: {
+          orderBy: {
+            order: 'asc',
+          },
+        },
       },
     });
 
@@ -168,9 +187,9 @@ export class TasksService {
 
     // Calculate checklist completion
     let checklistCompletion = null;
-    if (task.checklist && Array.isArray(task.checklist)) {
-      const total = task.checklist.length;
-      const completed = task.checklist.filter((item: any) => item.checked).length;
+    if (task.checklistItems && task.checklistItems.length > 0) {
+      const total = task.checklistItems.length;
+      const completed = task.checklistItems.filter(item => item.checked).length;
       checklistCompletion = {
         total,
         completed,
@@ -178,8 +197,17 @@ export class TasksService {
       };
     }
 
+    // Format checklist pour compatibilité frontend (garde le même format que avant)
+    const checklist = task.checklistItems.map(item => ({
+      id: item.id,
+      text: item.text,
+      checked: item.checked,
+      order: item.order,
+    }));
+
     return {
       ...task,
+      checklist, // Expose les items au format attendu par le frontend
       checklistCompletion,
     };
   }
@@ -223,23 +251,26 @@ export class TasksService {
   }
 
   async updateChecklist(id: string, tenantId: string, checklist: any[]) {
-    await this.findOne(id, tenantId);
+    const task = await this.findOne(id, tenantId);
 
-    // DEBUG: Log pour diagnostiquer transformation
-    this.logger.log(`[BEFORE PRISMA] Checklist: ${JSON.stringify(checklist)}`);
-    this.logger.log(`[BEFORE PRISMA] Type: ${typeof checklist}, IsArray: ${Array.isArray(checklist)}, Length: ${checklist?.length}`);
-    if (Array.isArray(checklist) && checklist.length > 0) {
-      this.logger.log(`[BEFORE PRISMA] First item: ${JSON.stringify(checklist[0])}`);
-    }
-
-    const result = await this.prisma.task.update({
-      where: { id },
-      data: { checklist },
+    // Supprimer tous les items existants
+    await this.prisma.taskChecklistItem.deleteMany({
+      where: { taskId: id },
     });
 
-    this.logger.log(`[AFTER PRISMA] Checklist from DB: ${JSON.stringify(result.checklist)}`);
+    // Créer les nouveaux items
+    if (checklist && checklist.length > 0) {
+      await this.prisma.taskChecklistItem.createMany({
+        data: checklist.map((item, index) => ({
+          taskId: id,
+          text: item.text,
+          checked: item.checked || false,
+          order: item.order !== undefined ? item.order : index + 1,
+        })),
+      });
+    }
 
-    // Retourner via findOne pour avoir le bon formatage
+    // Retourner la tâche avec les items mis à jour
     return this.findOne(id, tenantId);
   }
 

@@ -445,9 +445,6 @@ model Task {
   // Scheduling
   dueDate DateTime?
 
-  // Checklist (JSON array)
-  checklist Json? @db.JsonB // [{id, text, checked, order}]
-
   // TicketLink
   ticketRef    String?
   ticketUrl    String?
@@ -458,7 +455,8 @@ model Task {
   updatedAt   DateTime  @updatedAt
 
   // Relations
-  photos Photo[]
+  photos         Photo[]
+  checklistItems TaskChecklistItem[]
 
   @@index([tenantId])
   @@index([tenantId, siteId])
@@ -466,6 +464,21 @@ model Task {
   @@index([tenantId, assignedTo])
   @@index([tenantId, dueDate])
   @@map("tasks")
+}
+
+model TaskChecklistItem {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  text      String
+  checked   Boolean  @default(false)
+  order     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([taskId, order])
+  @@map("task_checklist_items")
 }
 
 // ============================================================================

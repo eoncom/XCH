@@ -80,7 +80,8 @@
       "Bash(npx shadcn@latest add alert-dialog:*)",
       "Bash(npx eslint:*)",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbi11c2VyIiwiZW1haWwiOiJhZG1pbkB4Y2guZGVtbyIsInJvbGUiOiJBRE1JTiIsInRlbmFudElkIjoiZGVmYXVsdC10ZW5hbnQiLCJpYXQiOjE3Njk5NTM5MDcsImV4cCI6MTc2OTk1NDgwN30.mvi_w9xHqZ0xPqnQIM_MdPndd21Ui55MJJPFG-Mol-o\")",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(python3:*)"
     ]
   }
 }
