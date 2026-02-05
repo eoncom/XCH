@@ -43,6 +43,7 @@ interface FloorPlanViewerProps {
   onStageClick?: (x: number, y: number) => void;
   onPinDragEnd?: (pinId: string, x: number, y: number) => void;
   editable?: boolean;
+  onExportReady?: (exportFn: () => void) => void;
 }
 
 const PIN_COLORS: Record<PinType, string> = {
@@ -138,11 +139,36 @@ export default function FloorPlanViewer({
   onStageClick,
   onPinDragEnd,
   editable = false,
+  onExportReady,
 }: FloorPlanViewerProps) {
   const [image, imageStatus] = useImage(floorPlan.fileUrl || '');
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const stageRef = useRef<any>(null);
+
+  // Expose export function to parent
+  useEffect(() => {
+    if (onExportReady && stageRef.current) {
+      const exportFn = () => {
+        const stage = stageRef.current;
+        if (stage) {
+          // Export as PNG with pins
+          const dataURL = stage.toDataURL({
+            pixelRatio: 2, // Higher quality
+          });
+
+          // Download the image
+          const link = document.createElement('a');
+          link.download = `${floorPlan.name || 'floor-plan'}-avec-pins.png`;
+          link.href = dataURL;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      };
+      onExportReady(exportFn);
+    }
+  }, [onExportReady, floorPlan.name]);
 
   // Use full container width - let CSS handle the sizing
   let stageWidth = 1200;

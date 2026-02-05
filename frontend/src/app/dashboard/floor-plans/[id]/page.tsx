@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -84,6 +84,7 @@ export default function FloorPlanDetailPage({
   );
   const [newPinLabel, setNewPinLabel] = useState('');
   const [newPinType, setNewPinType] = useState<PinType>('OTHER');
+  const [exportFunction, setExportFunction] = useState<(() => void) | null>(null);
   const [newPinDescription, setNewPinDescription] = useState('');
   const [newPinAssetId, setNewPinAssetId] = useState<string>('');
 
@@ -207,10 +208,18 @@ export default function FloorPlanDetailPage({
   };
 
   const handleDownload = () => {
-    if (floorPlan?.fileUrl) {
+    if (exportFunction) {
+      // Export canvas with pins
+      exportFunction();
+    } else if (floorPlan?.fileUrl) {
+      // Fallback: download original image
       window.open(floorPlan.fileUrl, '_blank');
     }
   };
+
+  const handleExportReady = useCallback((exportFn: () => void) => {
+    setExportFunction(() => exportFn);
+  }, []);
 
   if (isLoading) {
     return <div className="text-center py-12">Chargement...</div>;
@@ -294,6 +303,7 @@ export default function FloorPlanDetailPage({
                 onStageClick={handleStageClick}
                 onPinDragEnd={handlePinDragEnd}
                 editable={true}
+                onExportReady={handleExportReady}
               />
             </CardContent>
           </Card>
