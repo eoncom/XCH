@@ -15,6 +15,7 @@ import {
   Menu,
   LayoutDashboard,
   Contact2,
+  Plug,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ const navigation = [
   { name: 'Tâches', href: '/dashboard/tasks', icon: CheckSquare },
   { name: 'Plans', href: '/dashboard/floor-plans', icon: LayoutTemplate },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Contact2 },
+  { name: 'Intégrations', href: '/dashboard/integrations', icon: Plug },
 ];
 
 const adminNavigation = [
@@ -128,7 +130,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
           {navigation.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.name}
@@ -159,7 +161,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 Administration
               </p>
               {adminNavigation.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href);
                 return (
                   <Link
                     key={item.name}

@@ -290,6 +290,101 @@ export interface UpdateContactTypeDto extends Partial<CreateContactTypeDto> {
   isActive?: boolean;
 }
 
+// Integration types
+export interface IntegrationMapping {
+  id: string;
+  tenantId: string;
+  provider: string;
+  entityType: string;
+  externalId: string;
+  externalLabel: string;
+  targetType: string;
+  targetId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IntegrationStatus {
+  name: string;
+  status: 'connected' | 'disconnected' | 'error';
+}
+
+export interface IntegrationTestResult {
+  success: boolean;
+  message: string;
+  details?: {
+    version?: string;
+    djangoVersion?: string;
+    pythonVersion?: string;
+  };
+}
+
+export interface SyncResult {
+  fetched: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}
+
+export interface NetboxPaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+export interface NetboxContact {
+  id: number;
+  url: string;
+  name: string;
+  title?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  comments?: string;
+  group?: { id: number; name: string; slug: string };
+  tags?: { id: number; name: string; slug: string }[];
+}
+
+export interface NetboxContactGroup {
+  id: number;
+  url: string;
+  name: string;
+  slug: string;
+  parent?: { id: number; name: string; slug: string };
+  description?: string;
+  contact_count?: number;
+}
+
+export interface NetboxSiteRemote {
+  id: number;
+  name: string;
+  slug: string;
+  status: { value: string; label: string };
+  region?: { id: number; name: string };
+  physical_address?: string;
+}
+
+export interface NetboxDeviceRemote {
+  id: number;
+  name: string;
+  device_type: { model: string; manufacturer: { name: string } };
+  role: { id: number; name: string; slug: string };
+  site: { id: number; name: string };
+  serial?: string;
+  status: { value: string; label: string };
+}
+
+export interface NetboxRackRemote {
+  id: number;
+  name: string;
+  site: { id: number; name: string };
+  u_height: number;
+  status: { value: string; label: string };
+  role?: { id: number; name: string; slug: string };
+}
+
 // Pagination
 export interface PaginatedResponse<T> {
   data: T[];
