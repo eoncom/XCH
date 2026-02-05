@@ -1,18 +1,48 @@
--- Script d'insertion policies Casbin RBAC
--- Date: 2026-02-05
--- Context: Refactoring Providers → Contacts + ContactTypes
+-- Script COMPLET d'insertion policies Casbin RBAC
+-- Date: 2026-02-06
+-- Context: TOUTES les policies pour TOUS les rôles
+-- Usage: docker compose exec postgres psql -U xch_user -d xch_dev -f /path/to/insert-rbac-policies.sql
+-- Ou copier-coller dans psql
 
--- Supprimer anciennes policies providers
-DELETE FROM casbin_rule WHERE ptype = 'p' AND v1 = 'providers';
+-- Nettoyer TOUT
+DELETE FROM casbin_rule;
 
--- Supprimer anciennes policies non-ADMIN (au cas où)
-DELETE FROM casbin_rule WHERE ptype = 'p' AND v0 IN ('MANAGER', 'TECHNICIEN', 'VIEWER');
-
--- Supprimer anciennes policies ADMIN contacts/contact-types (éviter doublons)
-DELETE FROM casbin_rule WHERE ptype = 'p' AND v0 = 'ADMIN' AND v1 IN ('contacts', 'contact-types');
-
--- ADMIN policies contacts + contact-types (8 total)
+-- =====================================================
+-- ADMIN : accès CRUD complet sur TOUTES les ressources
+-- =====================================================
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3) VALUES
+('p', 'ADMIN', 'sites', 'create', '*'),
+('p', 'ADMIN', 'sites', 'read', '*'),
+('p', 'ADMIN', 'sites', 'update', '*'),
+('p', 'ADMIN', 'sites', 'delete', '*'),
+('p', 'ADMIN', 'assets', 'create', '*'),
+('p', 'ADMIN', 'assets', 'read', '*'),
+('p', 'ADMIN', 'assets', 'update', '*'),
+('p', 'ADMIN', 'assets', 'delete', '*'),
+('p', 'ADMIN', 'racks', 'create', '*'),
+('p', 'ADMIN', 'racks', 'read', '*'),
+('p', 'ADMIN', 'racks', 'update', '*'),
+('p', 'ADMIN', 'racks', 'delete', '*'),
+('p', 'ADMIN', 'tasks', 'create', '*'),
+('p', 'ADMIN', 'tasks', 'read', '*'),
+('p', 'ADMIN', 'tasks', 'update', '*'),
+('p', 'ADMIN', 'tasks', 'delete', '*'),
+('p', 'ADMIN', 'floor-plans', 'create', '*'),
+('p', 'ADMIN', 'floor-plans', 'read', '*'),
+('p', 'ADMIN', 'floor-plans', 'update', '*'),
+('p', 'ADMIN', 'floor-plans', 'delete', '*'),
+('p', 'ADMIN', 'integrations', 'create', '*'),
+('p', 'ADMIN', 'integrations', 'read', '*'),
+('p', 'ADMIN', 'integrations', 'update', '*'),
+('p', 'ADMIN', 'integrations', 'delete', '*'),
+('p', 'ADMIN', 'users', 'create', '*'),
+('p', 'ADMIN', 'users', 'read', '*'),
+('p', 'ADMIN', 'users', 'update', '*'),
+('p', 'ADMIN', 'users', 'delete', '*'),
+('p', 'ADMIN', 'tenants', 'create', '*'),
+('p', 'ADMIN', 'tenants', 'read', '*'),
+('p', 'ADMIN', 'tenants', 'update', '*'),
+('p', 'ADMIN', 'tenants', 'delete', '*'),
 ('p', 'ADMIN', 'contacts', 'create', '*'),
 ('p', 'ADMIN', 'contacts', 'read', '*'),
 ('p', 'ADMIN', 'contacts', 'update', '*'),
@@ -22,10 +52,14 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2, v3) VALUES
 ('p', 'ADMIN', 'contact-types', 'update', '*'),
 ('p', 'ADMIN', 'contact-types', 'delete', '*');
 
--- MANAGER policies (14 total)
+-- =====================================================
+-- MANAGER : lecture étendue + gestion tasks/contacts
+-- =====================================================
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3) VALUES
 ('p', 'MANAGER', 'sites', 'read', '*'),
+('p', 'MANAGER', 'sites', 'update', '*'),
 ('p', 'MANAGER', 'assets', 'read', '*'),
+('p', 'MANAGER', 'assets', 'update', '*'),
 ('p', 'MANAGER', 'racks', 'read', '*'),
 ('p', 'MANAGER', 'tasks', 'create', '*'),
 ('p', 'MANAGER', 'tasks', 'read', '*'),
@@ -39,7 +73,9 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2, v3) VALUES
 ('p', 'MANAGER', 'contacts', 'update', '*'),
 ('p', 'MANAGER', 'contact-types', 'read', '*');
 
--- TECHNICIEN policies (19 total)
+-- =====================================================
+-- TECHNICIEN : opérations terrain complètes
+-- =====================================================
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3) VALUES
 ('p', 'TECHNICIEN', 'sites', 'create', '*'),
 ('p', 'TECHNICIEN', 'sites', 'read', '*'),
@@ -62,7 +98,9 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2, v3) VALUES
 ('p', 'TECHNICIEN', 'contacts', 'update', '*'),
 ('p', 'TECHNICIEN', 'contact-types', 'read', '*');
 
--- VIEWER policies (7 total)
+-- =====================================================
+-- VIEWER : lecture seule
+-- =====================================================
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3) VALUES
 ('p', 'VIEWER', 'sites', 'read', '*'),
 ('p', 'VIEWER', 'assets', 'read', '*'),
@@ -72,18 +110,10 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2, v3) VALUES
 ('p', 'VIEWER', 'contacts', 'read', '*'),
 ('p', 'VIEWER', 'contact-types', 'read', '*');
 
--- Vérification finale
-SELECT
-  v0 as role,
-  COUNT(*) as policies_count
-FROM casbin_rule
-WHERE ptype = 'p'
-GROUP BY v0
-ORDER BY v0;
-
--- Afficher sample par rôle
-SELECT v0 as role, v1 as resource, v2 as action
-FROM casbin_rule
-WHERE ptype = 'p'
-ORDER BY v0, v1, v2
-LIMIT 80;
+-- =====================================================
+-- VERIFICATION
+-- =====================================================
+SELECT v0 AS role, COUNT(*) AS policies_count
+FROM casbin_rule WHERE ptype = 'p'
+GROUP BY v0 ORDER BY v0;
+-- Attendu: ADMIN=40, MANAGER=16, TECHNICIEN=20, VIEWER=7 → Total=83
