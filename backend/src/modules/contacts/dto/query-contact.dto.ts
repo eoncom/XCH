@@ -15,7 +15,7 @@ export class QueryContactDto {
   @ApiPropertyOptional({
     description: 'Filter by contact category',
     enum: ContactCategory,
-    example: ContactCategory.SUPPLIER,
+    example: ContactCategory.PROVIDER,
   })
   @IsOptional()
   @IsString()
