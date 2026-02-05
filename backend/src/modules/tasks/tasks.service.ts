@@ -226,16 +226,18 @@ export class TasksService {
     await this.findOne(id, tenantId);
 
     // DEBUG: Log pour diagnostiquer transformation
-    this.logger.log(`updateChecklist - Received checklist: ${JSON.stringify(checklist)}`);
-    this.logger.log(`Type: ${typeof checklist}, IsArray: ${Array.isArray(checklist)}, Length: ${checklist?.length}`);
+    this.logger.log(`[BEFORE PRISMA] Checklist: ${JSON.stringify(checklist)}`);
+    this.logger.log(`[BEFORE PRISMA] Type: ${typeof checklist}, IsArray: ${Array.isArray(checklist)}, Length: ${checklist?.length}`);
     if (Array.isArray(checklist) && checklist.length > 0) {
-      this.logger.log(`First item: ${JSON.stringify(checklist[0])}, Type: ${typeof checklist[0]}`);
+      this.logger.log(`[BEFORE PRISMA] First item: ${JSON.stringify(checklist[0])}`);
     }
 
-    await this.prisma.task.update({
+    const result = await this.prisma.task.update({
       where: { id },
       data: { checklist },
     });
+
+    this.logger.log(`[AFTER PRISMA] Checklist from DB: ${JSON.stringify(result.checklist)}`);
 
     // Retourner via findOne pour avoir le bon formatage
     return this.findOne(id, tenantId);
