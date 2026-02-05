@@ -1,5 +1,13 @@
-import { IsArray } from 'class-validator';
+import { IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+
+class ChecklistItem {
+  id: string;
+  text: string;
+  checked: boolean;
+  order: number;
+}
 
 export class UpdateChecklistDto {
   @ApiProperty({
@@ -19,5 +27,7 @@ export class UpdateChecklistDto {
     ],
   })
   @IsArray()
-  checklist: any[];
+  @ValidateNested({ each: true })
+  @Type(() => ChecklistItem)
+  checklist: ChecklistItem[];
 }
