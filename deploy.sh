@@ -84,9 +84,9 @@ health_check() {
   info "Vérification santé..."
   local MAX=15
 
-  # Backend
+  # Backend (404 sur /api = OK, le serveur répond)
   for i in $(seq 1 $MAX); do
-    if curl -sf http://localhost:3002/api 2>/dev/null | head -c1 | grep -q '{'; then
+    if curl -so /dev/null -w "%{http_code}" http://localhost:3002/api 2>/dev/null | grep -qE '(200|404|401)'; then
       ok "Backend OK (port 3002)"
       break
     fi
