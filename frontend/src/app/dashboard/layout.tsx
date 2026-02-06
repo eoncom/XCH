@@ -220,7 +220,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-6 bg-background">
-          <ErrorBoundary>{children}</ErrorBoundary>
+          <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
         </main>
       </div>
     </div>
