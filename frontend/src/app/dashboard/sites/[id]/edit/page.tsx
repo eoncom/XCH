@@ -20,10 +20,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { sitesApi } from '@/lib/api/sites';
-import { providersApi } from '@/lib/api/providers';
-import { ArrowLeft, ArrowRight, Check, Plus, Trash2, MapPin } from 'lucide-react';
+import { contactsApi } from '@/lib/api/contacts';
+import { ArrowLeft, ArrowRight, Check, Plus, Trash2, MapPin, UserPlus } from 'lucide-react';
 import Link from 'next/link';
-import type { Site, SiteContact, Provider } from '@/types';
+import type { Site, SiteContact, Contact } from '@/types';
 import { toast } from 'sonner';
 
 // Types de connexion disponibles
@@ -128,13 +128,17 @@ export default function EditSitePage({
   });
   const [isGeocoding, setIsGeocoding] = useState(false);
 
-  // Charger les fournisseurs TELECOM et INTERNET pour les listes déroulantes
-  const { data: providers } = useQuery<Provider[]>({
-    queryKey: ['providers'],
-    queryFn: () => providersApi.getAll(),
+  // Charger les contacts de catégorie PROVIDER pour les opérateurs
+  const { data: providerContacts } = useQuery<Contact[]>({
+    queryKey: ['contacts', { category: 'PROVIDER' }],
+    queryFn: () => contactsApi.getAll({ category: 'PROVIDER' }),
   });
 
-  const telecomProviders = providers?.filter(p => p.type === 'TELECOM' || p.type === 'INTERNET') || [];
+  // Charger tous les contacts pour l'étape 3
+  const { data: allContacts } = useQuery<Contact[]>({
+    queryKey: ['contacts'],
+    queryFn: () => contactsApi.getAll(),
+  });
 
   const updateMutation = useMutation({
     mutationFn: (data: SiteFormData) => sitesApi.update(id, data),
@@ -497,8 +501,10 @@ export default function EditSitePage({
                           <SelectValue placeholder="Sélectionner un opérateur" />
                         </SelectTrigger>
                         <SelectContent>
-                          {telecomProviders.map((provider) => (
-                            <SelectItem key={provider.id} value={provider.name}>{provider.name}</SelectItem>
+                          {(providerContacts || []).map((contact) => (
+                            <SelectItem key={contact.id} value={contact.name}>
+                              {contact.name}{contact.company ? ` (${contact.company})` : ''}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -557,8 +563,10 @@ export default function EditSitePage({
                           <SelectValue placeholder="Sélectionner un opérateur" />
                         </SelectTrigger>
                         <SelectContent>
-                          {telecomProviders.map((provider) => (
-                            <SelectItem key={provider.id} value={provider.name}>{provider.name}</SelectItem>
+                          {(providerContacts || []).map((contact) => (
+                            <SelectItem key={contact.id} value={contact.name}>
+                              {contact.name}{contact.company ? ` (${contact.company})` : ''}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -607,15 +615,47 @@ export default function EditSitePage({
                 <div>
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold">Contacts</h3>
-                    <Button
-                      type="button"
-                      onClick={() => setContacts([...contacts, { name: '', role: '', phone: '', email: '', isPrimary: false }])}
-                      variant="outline"
-                      size="sm"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Ajouter
-                    </Button>
+                    <div className="flex gap-2">
+                      <Select
+                        value=""
+                        onValueChange={(contactId) => {
+                          const existing = allContacts?.find(c => c.id === contactId);
+                          if (existing) {
+                            setContacts([...contacts, {
+                              name: existing.name,
+                              role: existing.role || existing.type?.name || '',
+                              phone: existing.phone || existing.mobile || '',
+                              email: existing.email || '',
+                              isPrimary: false,
+                            }]);
+                            toast.success(`Contact "${existing.name}" ajouté`);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-[220px]">
+                          <div className="flex items-center gap-2">
+                            <UserPlus className="h-4 w-4" />
+                            <span className="text-muted-foreground">Importer un contact...</span>
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(allContacts || []).map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}{c.company ? ` - ${c.company}` : ''}{c.role ? ` (${c.role})` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        onClick={() => setContacts([...contacts, { name: '', role: '', phone: '', email: '', isPrimary: false }])}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Manuel
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="space-y-3">

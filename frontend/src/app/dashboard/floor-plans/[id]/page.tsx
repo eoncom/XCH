@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import type { FloorPlan, Pin, PinType, Asset } from '@/types';
+import type { FloorPlan, Pin, PinType, Asset, AssetType } from '@/types';
 
 // Dynamically import FloorPlanViewer (client-side only for Konva)
 const FloorPlanViewer = dynamic(
@@ -64,6 +64,42 @@ const pinTypeLabels: Record<PinType, string> = {
   NRO: 'NRO (Arrivée fibre)',
   OTHER: 'Autre',
 };
+
+const assetTypeLabels: Record<AssetType, string> = {
+  PRINTER: 'Imprimante',
+  IPAD: 'iPad',
+  TABLET: 'Tablette',
+  SWITCH: 'Switch',
+  FIREWALL: 'Firewall',
+  ROUTER: 'Routeur',
+  WIFI_AP: 'Point d\'accès WiFi',
+  TEAMS_ROOM: 'Teams Room',
+  SERVER: 'Serveur',
+  CABLE: 'Cable',
+  OTHER: 'Autre',
+};
+
+/**
+ * Build a readable label for an asset.
+ * Priority: "Type - Manufacturer Model (SN)" with fallbacks
+ */
+function getAssetLabel(asset: Asset): string {
+  const typeName = assetTypeLabels[asset.type] || asset.type;
+  const parts: string[] = [];
+
+  if (asset.manufacturer) parts.push(asset.manufacturer);
+  if (asset.model) parts.push(asset.model);
+
+  let label = typeName;
+  if (parts.length > 0) {
+    label += ' - ' + parts.join(' ');
+  }
+  if (asset.serialNumber) {
+    label += ` (${asset.serialNumber})`;
+  }
+
+  return label;
+}
 
 export default function FloorPlanDetailPage({
   params,
@@ -371,32 +407,41 @@ export default function FloorPlanDetailPage({
             </CardHeader>
             <CardContent className="space-y-2">
               {floorPlan.pins && floorPlan.pins.length > 0 ? (
-                floorPlan.pins.map((pin) => (
-                  <div
-                    key={pin.id}
-                    className="flex items-start justify-between p-2 border rounded-lg hover:bg-muted/50"
-                  >
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{pin.label || 'Sans nom'}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {pinTypeLabels[pin.pinType]}
-                      </p>
-                      {pin.description && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {pin.description}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deletePinMutation.mutate(pin.id)}
-                      disabled={deletePinMutation.isPending}
+                floorPlan.pins.map((pin) => {
+                  const linkedAsset = pin.assetId ? assets?.find(a => a.id === pin.assetId) : null;
+                  return (
+                    <div
+                      key={pin.id}
+                      className="flex items-start justify-between p-2 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                      onClick={() => handlePinClick(pin)}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{pin.label || 'Sans nom'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {pinTypeLabels[pin.pinType]}
+                        </p>
+                        {linkedAsset && (
+                          <p className="text-xs text-blue-600 mt-0.5">
+                            {getAssetLabel(linkedAsset)}
+                          </p>
+                        )}
+                        {pin.description && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {pin.description}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); deletePinMutation.mutate(pin.id); }}
+                        disabled={deletePinMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Aucun repère
@@ -463,11 +508,16 @@ export default function FloorPlanDetailPage({
                   <SelectItem value="none">Aucun équipement</SelectItem>
                   {assets?.map((asset) => (
                     <SelectItem key={asset.id} value={asset.id}>
-                      {asset.manufacturer || ''} {asset.model || ''} {asset.serialNumber ? `- ${asset.serialNumber}` : ''}
+                      {getAssetLabel(asset)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {newPinAssetId && assets && (
+                <p className="text-xs text-muted-foreground">
+                  Lien vers la fiche équipement dans les détails du repère
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -522,12 +572,22 @@ export default function FloorPlanDetailPage({
               {selectedPin.assetId && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Équipement associé</p>
-                  <Link
-                    href={`/dashboard/assets/${selectedPin.assetId}`}
-                    className="text-sm text-blue-600 hover:underline"
-                  >
-                    Voir l'équipement
-                  </Link>
+                  {(() => {
+                    const linkedAsset = assets?.find(a => a.id === selectedPin.assetId);
+                    return (
+                      <div className="flex flex-col gap-1">
+                        {linkedAsset && (
+                          <p className="text-sm font-medium">{getAssetLabel(linkedAsset)}</p>
+                        )}
+                        <Link
+                          href={`/dashboard/assets/${selectedPin.assetId}`}
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          Voir la fiche équipement
+                        </Link>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -610,7 +670,7 @@ export default function FloorPlanDetailPage({
                   <SelectItem value="none">Aucun équipement</SelectItem>
                   {assets?.map((asset) => (
                     <SelectItem key={asset.id} value={asset.id}>
-                      {asset.manufacturer || ''} {asset.model || ''} {asset.serialNumber ? `- ${asset.serialNumber}` : ''}
+                      {getAssetLabel(asset)}
                     </SelectItem>
                   ))}
                 </SelectContent>
