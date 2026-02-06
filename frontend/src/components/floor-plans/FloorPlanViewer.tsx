@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Image as KonvaImage, Circle, Text, Group, Rect, Line, RegularPolygon } from 'react-konva';
 import type { FloorPlan, Pin, PinType } from '@/types';
 
@@ -453,147 +453,159 @@ export default function FloorPlanViewer({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const stageRef = useRef<any>(null);
 
-  // Get unique pin types used in this plan
-  const usedPinTypes = Array.from(new Set(pins.map(p => p.pinType))) as PinType[];
+  // Refs to hold latest data for export (avoids re-render loops)
+  const pinsRef = useRef(pins);
+  const imageRef = useRef(image);
+  const floorPlanRef = useRef(floorPlan);
+  pinsRef.current = pins;
+  imageRef.current = image;
+  floorPlanRef.current = floorPlan;
 
-  // Expose export function to parent (uses offscreen canvas to avoid UI freeze)
+  // Expose export function to parent ONCE (stable reference, reads data from refs)
   useEffect(() => {
-    if (onExportReady) {
-      const exportFn = () => {
-        if (!image) return;
+    if (!onExportReady) return;
 
-        // Calculate legend dimensions
-        const legendPinTypes = usedPinTypes.length > 0 ? usedPinTypes : Object.keys(PIN_COLORS) as PinType[];
-        const cols = Math.min(legendPinTypes.length, 5);
-        const rows = Math.ceil(legendPinTypes.length / cols);
-        const itemWidth = 140;
-        const itemHeight = 28;
-        const padding = 14;
-        const legendWidth = cols * itemWidth + padding * 2;
-        const legendHeight = rows * itemHeight + padding * 2 + 24;
+    const exportFn = () => {
+      const currentImage = imageRef.current;
+      const currentPins = pinsRef.current;
+      const currentFloorPlan = floorPlanRef.current;
+      if (!currentImage) return;
 
-        // Build offscreen canvas with image + pins + legend
-        const exportWidth = Math.max(image.width, legendWidth + 20);
-        const exportHeight = image.height + legendHeight + 20;
-        const canvas = document.createElement('canvas');
-        canvas.width = exportWidth * 2; // 2x for retina
-        canvas.height = exportHeight * 2;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+      // Get unique pin types
+      const usedPinTypes = Array.from(new Set(currentPins.map(p => p.pinType))) as PinType[];
+      const legendPinTypes = usedPinTypes.length > 0 ? usedPinTypes : Object.keys(PIN_COLORS) as PinType[];
 
-        ctx.scale(2, 2);
+      // Calculate legend dimensions
+      const cols = Math.min(legendPinTypes.length, 5);
+      const rows = Math.ceil(legendPinTypes.length / cols);
+      const itemWidth = 140;
+      const itemHeight = 28;
+      const padding = 14;
+      const legendWidth = cols * itemWidth + padding * 2;
+      const legendHeight = rows * itemHeight + padding * 2 + 24;
 
-        // White background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, exportWidth, exportHeight);
+      // Build offscreen canvas with image + pins + legend
+      const exportWidth = Math.max(currentImage.width, legendWidth + 20);
+      const exportHeight = currentImage.height + legendHeight + 20;
+      const canvas = document.createElement('canvas');
+      canvas.width = exportWidth * 2; // 2x for retina
+      canvas.height = exportHeight * 2;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-        // Draw image
-        ctx.drawImage(image, 0, 0);
+      ctx.scale(2, 2);
 
-        // Draw pins
-        pins.forEach(pin => {
-          const px = pin.x * image.width;
-          const py = pin.y * image.height;
-          const color = PIN_COLORS[pin.pinType] || PIN_COLORS.OTHER;
-          const sigle = PIN_LABELS[pin.pinType] || '?';
+      // White background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, exportWidth, exportHeight);
 
-          ctx.save();
-          ctx.translate(px, py);
+      // Draw image
+      ctx.drawImage(currentImage, 0, 0);
 
-          // Shadow
-          ctx.globalAlpha = 0.2;
-          ctx.fillStyle = '#000000';
-          ctx.beginPath();
-          ctx.arc(1, 1, 15, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.globalAlpha = 1;
+      // Draw pins
+      currentPins.forEach(pin => {
+        const px = pin.x * currentImage.width;
+        const py = pin.y * currentImage.height;
+        const color = PIN_COLORS[pin.pinType] || PIN_COLORS.OTHER;
+        const sigle = PIN_LABELS[pin.pinType] || '?';
 
-          // Draw shape
-          drawPinShapeCanvas(ctx, pin.pinType, color);
+        ctx.save();
+        ctx.translate(px, py);
 
-          // Sigle
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 10px monospace';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(sigle, 0, 0);
-
-          // Label below
-          if (pin.label) {
-            ctx.fillStyle = '#ffffff';
-            ctx.globalAlpha = 0.85;
-            const labelWidth = ctx.measureText(pin.label).width + 8;
-            ctx.fillRect(-labelWidth / 2, 16, labelWidth, 16);
-            ctx.globalAlpha = 1;
-            ctx.fillStyle = '#000000';
-            ctx.font = 'bold 11px sans-serif';
-            ctx.fillText(pin.label, 0, 25);
-          }
-
-          ctx.restore();
-        });
-
-        // Draw legend
-        const legendX = 10;
-        const legendY = image.height + 10;
-
-        // Legend background
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#d1d5db';
-        ctx.lineWidth = 1;
-        roundRect(ctx, legendX, legendY, legendWidth, legendHeight, 6);
+        // Shadow
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.arc(1, 1, 15, 0, Math.PI * 2);
         ctx.fill();
-        ctx.stroke();
+        ctx.globalAlpha = 1;
 
-        // Legend title
+        // Draw shape
+        drawPinShapeCanvas(ctx, pin.pinType, color);
+
+        // Sigle
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(sigle, 0, 0);
+
+        // Label below
+        if (pin.label) {
+          ctx.fillStyle = '#ffffff';
+          ctx.globalAlpha = 0.85;
+          const labelWidth = ctx.measureText(pin.label).width + 8;
+          ctx.fillRect(-labelWidth / 2, 16, labelWidth, 16);
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = '#000000';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillText(pin.label, 0, 25);
+        }
+
+        ctx.restore();
+      });
+
+      // Draw legend
+      const legendX = 10;
+      const legendY = currentImage.height + 10;
+
+      // Legend background
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#d1d5db';
+      ctx.lineWidth = 1;
+      roundRect(ctx, legendX, legendY, legendWidth, legendHeight, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      // Legend title
+      ctx.fillStyle = '#374151';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText('Légende', legendX + padding, legendY + padding);
+
+      // Legend items
+      legendPinTypes.forEach((pinType, index) => {
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        const ix = legendX + padding + col * itemWidth;
+        const iy = legendY + padding + 22 + row * itemHeight;
+
+        // Mini shape
+        ctx.save();
+        ctx.translate(ix + 10, iy + 10);
+        ctx.scale(0.65, 0.65);
+        drawPinShapeCanvas(ctx, pinType, PIN_COLORS[pinType]);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(PIN_LABELS[pinType], 0, 0);
+        ctx.restore();
+
+        // Type name
         ctx.fillStyle = '#374151';
-        ctx.font = 'bold 13px sans-serif';
+        ctx.font = '11px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText('Légende', legendX + padding, legendY + padding);
+        ctx.fillText(PIN_TYPE_NAMES[pinType], ix + 24, iy + 4);
+      });
 
-        // Legend items
-        legendPinTypes.forEach((pinType, index) => {
-          const col = index % cols;
-          const row = Math.floor(index / cols);
-          const ix = legendX + padding + col * itemWidth;
-          const iy = legendY + padding + 22 + row * itemHeight;
+      // Convert to blob and download (non-blocking)
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `${currentFloorPlan.name || currentFloorPlan.title || 'floor-plan'}-avec-pins.png`;
+        link.href = url;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      }, 'image/png');
+    };
 
-          // Mini shape
-          ctx.save();
-          ctx.translate(ix + 10, iy + 10);
-          ctx.scale(0.65, 0.65);
-          drawPinShapeCanvas(ctx, pinType, PIN_COLORS[pinType]);
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 8px monospace';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(PIN_LABELS[pinType], 0, 0);
-          ctx.restore();
-
-          // Type name
-          ctx.fillStyle = '#374151';
-          ctx.font = '11px sans-serif';
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'top';
-          ctx.fillText(PIN_TYPE_NAMES[pinType], ix + 24, iy + 4);
-        });
-
-        // Convert to blob and download (non-blocking)
-        canvas.toBlob((blob) => {
-          if (!blob) return;
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.download = `${floorPlan.name || floorPlan.title || 'floor-plan'}-avec-pins.png`;
-          link.href = url;
-          link.click();
-          // Cleanup after a delay
-          setTimeout(() => URL.revokeObjectURL(url), 5000);
-        }, 'image/png');
-      };
-      onExportReady(exportFn);
-    }
-  }, [onExportReady, floorPlan.name, floorPlan.title, image, pins, usedPinTypes]);
+    onExportReady(exportFn);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onExportReady]); // Only re-run when callback identity changes - data is read from refs
 
   // Use full container width
   let stageWidth = 1200;
