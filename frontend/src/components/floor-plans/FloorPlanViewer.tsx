@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Stage, Layer, Image as KonvaImage, Circle, Text, Group, Rect, Line, RegularPolygon, Shape } from 'react-konva';
-import type Konva from 'konva';
+import { Stage, Layer, Image as KonvaImage, Circle, Text, Group, Rect, Line, RegularPolygon } from 'react-konva';
 import type { FloorPlan, Pin, PinType } from '@/types';
 
 // Custom hook to load image
@@ -84,6 +83,95 @@ const PIN_TYPE_NAMES: Record<PinType, string> = {
   NRO: 'NRO',
   OTHER: 'Autre',
 };
+
+/**
+ * Draw a rounded rectangle on a Canvas 2D context
+ */
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+/**
+ * Draw pin shape on a native Canvas 2D context (for offscreen export)
+ */
+function drawPinShapeCanvas(ctx: CanvasRenderingContext2D, pinType: PinType, color: string) {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 2;
+
+  switch (pinType) {
+    case 'SWITCH': // rounded rectangle
+      roundRect(ctx, -13, -11, 26, 22, 4);
+      ctx.fill(); ctx.stroke();
+      break;
+    case 'FIREWALL': // hexagon
+      drawRegularPolygon(ctx, 6, 14);
+      ctx.fill(); ctx.stroke();
+      break;
+    case 'ACCESS_POINT': // diamond
+      drawRegularPolygon(ctx, 4, 14);
+      ctx.fill(); ctx.stroke();
+      break;
+    case 'PRINTER': // square
+      ctx.fillRect(-12, -12, 24, 24);
+      ctx.strokeRect(-12, -12, 24, 24);
+      break;
+    case 'RACK': // tall rectangle
+      roundRect(ctx, -10, -14, 20, 28, 3);
+      ctx.fill(); ctx.stroke();
+      break;
+    case 'CAMERA': // triangle
+      drawRegularPolygon(ctx, 3, 14);
+      ctx.fill(); ctx.stroke();
+      break;
+    case 'PATCH_PANEL': // wide rectangle with lines
+      roundRect(ctx, -15, -9, 30, 18, 2);
+      ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1;
+      [-8, 0, 8].forEach(x => {
+        ctx.beginPath(); ctx.moveTo(x, -3); ctx.lineTo(x, 3); ctx.stroke();
+      });
+      break;
+    case 'RJ45': // square with clip
+      roundRect(ctx, -11, -11, 22, 22, 3);
+      ctx.fill(); ctx.stroke();
+      ctx.fillRect(-5, -13, 10, 4);
+      break;
+    case 'NRO': // pentagon
+      drawRegularPolygon(ctx, 5, 14);
+      ctx.fill(); ctx.stroke();
+      break;
+    case 'OTHER':
+    default: // circle
+      ctx.beginPath();
+      ctx.arc(0, 0, 13, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      break;
+  }
+}
+
+function drawRegularPolygon(ctx: CanvasRenderingContext2D, sides: number, radius: number) {
+  ctx.beginPath();
+  for (let i = 0; i < sides; i++) {
+    const angle = (i * 2 * Math.PI / sides) - Math.PI / 2;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
 
 interface PinMarkerProps {
   pin: Pin;
@@ -351,83 +439,6 @@ function PinShape({ pinType, color }: { pinType: PinType; color: string }) {
   }
 }
 
-/**
- * Renders the legend inside Konva canvas (for export to PNG)
- */
-function KonvaLegend({ x, y, pinTypes }: { x: number; y: number; pinTypes: PinType[] }) {
-  const itemWidth = 120;
-  const itemHeight = 28;
-  const padding = 12;
-  const cols = Math.min(pinTypes.length, 5);
-  const rows = Math.ceil(pinTypes.length / cols);
-  const legendWidth = cols * itemWidth + padding * 2;
-  const legendHeight = rows * itemHeight + padding * 2 + 24; // +24 for title
-
-  return (
-    <Group x={x} y={y}>
-      {/* Background */}
-      <Rect
-        width={legendWidth}
-        height={legendHeight}
-        fill="#ffffff"
-        stroke="#e5e7eb"
-        strokeWidth={1}
-        cornerRadius={6}
-        shadowBlur={4}
-        shadowOpacity={0.1}
-        shadowColor="#000000"
-      />
-
-      {/* Title */}
-      <Text
-        text="Legende"
-        x={padding}
-        y={padding}
-        fontSize={13}
-        fill="#374151"
-        fontStyle="bold"
-      />
-
-      {/* Legend items */}
-      {pinTypes.map((pinType, index) => {
-        const col = index % cols;
-        const row = Math.floor(index / cols);
-        const ix = padding + col * itemWidth;
-        const iy = padding + 22 + row * itemHeight;
-
-        return (
-          <Group key={pinType} x={ix} y={iy}>
-            {/* Mini shape */}
-            <Group x={10} y={10} scaleX={0.7} scaleY={0.7}>
-              <PinShape pinType={pinType} color={PIN_COLORS[pinType]} />
-              <Text
-                text={PIN_LABELS[pinType]}
-                x={-10}
-                y={-6}
-                width={20}
-                align="center"
-                fontSize={8}
-                fill="#ffffff"
-                fontStyle="bold"
-                fontFamily="monospace"
-              />
-            </Group>
-
-            {/* Type name */}
-            <Text
-              text={PIN_TYPE_NAMES[pinType]}
-              x={24}
-              y={4}
-              fontSize={11}
-              fill="#374151"
-            />
-          </Group>
-        );
-      })}
-    </Group>
-  );
-}
-
 export default function FloorPlanViewer({
   floorPlan,
   pins,
@@ -441,74 +452,148 @@ export default function FloorPlanViewer({
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const stageRef = useRef<any>(null);
-  const [showLegendForExport, setShowLegendForExport] = useState(false);
 
   // Get unique pin types used in this plan
   const usedPinTypes = Array.from(new Set(pins.map(p => p.pinType))) as PinType[];
 
-  // Expose export function to parent
+  // Expose export function to parent (uses offscreen canvas to avoid UI freeze)
   useEffect(() => {
-    if (onExportReady && stageRef.current) {
+    if (onExportReady) {
       const exportFn = () => {
-        const stage = stageRef.current;
-        if (!stage || !image) return;
-
-        // Reset view for export (no zoom/pan)
-        const oldScale = stage.scaleX();
-        const oldX = stage.x();
-        const oldY = stage.y();
+        if (!image) return;
 
         // Calculate legend dimensions
         const legendPinTypes = usedPinTypes.length > 0 ? usedPinTypes : Object.keys(PIN_COLORS) as PinType[];
         const cols = Math.min(legendPinTypes.length, 5);
         const rows = Math.ceil(legendPinTypes.length / cols);
-        const legendHeight = rows * 28 + 12 * 2 + 24 + 20; // padding + title + margin
+        const itemWidth = 140;
+        const itemHeight = 28;
+        const padding = 14;
+        const legendWidth = cols * itemWidth + padding * 2;
+        const legendHeight = rows * itemHeight + padding * 2 + 24;
 
-        // Set stage to full image size + legend
-        const exportWidth = image.width;
-        const exportHeight = image.height + legendHeight;
+        // Build offscreen canvas with image + pins + legend
+        const exportWidth = Math.max(image.width, legendWidth + 20);
+        const exportHeight = image.height + legendHeight + 20;
+        const canvas = document.createElement('canvas');
+        canvas.width = exportWidth * 2; // 2x for retina
+        canvas.height = exportHeight * 2;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-        stage.scaleX(1);
-        stage.scaleY(1);
-        stage.x(0);
-        stage.y(0);
-        stage.width(exportWidth);
-        stage.height(exportHeight);
+        ctx.scale(2, 2);
 
-        // Show legend
-        setShowLegendForExport(true);
+        // White background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, exportWidth, exportHeight);
 
-        // Wait for render then export
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            const dataURL = stage.toDataURL({
-              pixelRatio: 2,
-              width: exportWidth,
-              height: exportHeight,
-            });
+        // Draw image
+        ctx.drawImage(image, 0, 0);
 
-            // Download
-            const link = document.createElement('a');
-            link.download = `${floorPlan.name || 'floor-plan'}-avec-pins.png`;
-            link.href = dataURL;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+        // Draw pins
+        pins.forEach(pin => {
+          const px = pin.x * image.width;
+          const py = pin.y * image.height;
+          const color = PIN_COLORS[pin.pinType] || PIN_COLORS.OTHER;
+          const sigle = PIN_LABELS[pin.pinType] || '?';
 
-            // Restore view
-            setShowLegendForExport(false);
-            stage.scaleX(oldScale);
-            stage.scaleY(oldScale);
-            stage.x(oldX);
-            stage.y(oldY);
-            stage.width(stageWidth);
-            stage.height(stageHeight);
-          });
+          ctx.save();
+          ctx.translate(px, py);
+
+          // Shadow
+          ctx.globalAlpha = 0.2;
+          ctx.fillStyle = '#000000';
+          ctx.beginPath();
+          ctx.arc(1, 1, 15, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+
+          // Draw shape
+          drawPinShapeCanvas(ctx, pin.pinType, color);
+
+          // Sigle
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(sigle, 0, 0);
+
+          // Label below
+          if (pin.label) {
+            ctx.fillStyle = '#ffffff';
+            ctx.globalAlpha = 0.85;
+            const labelWidth = ctx.measureText(pin.label).width + 8;
+            ctx.fillRect(-labelWidth / 2, 16, labelWidth, 16);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(pin.label, 0, 25);
+          }
+
+          ctx.restore();
         });
+
+        // Draw legend
+        const legendX = 10;
+        const legendY = image.height + 10;
+
+        // Legend background
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#d1d5db';
+        ctx.lineWidth = 1;
+        roundRect(ctx, legendX, legendY, legendWidth, legendHeight, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        // Legend title
+        ctx.fillStyle = '#374151';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText('Légende', legendX + padding, legendY + padding);
+
+        // Legend items
+        legendPinTypes.forEach((pinType, index) => {
+          const col = index % cols;
+          const row = Math.floor(index / cols);
+          const ix = legendX + padding + col * itemWidth;
+          const iy = legendY + padding + 22 + row * itemHeight;
+
+          // Mini shape
+          ctx.save();
+          ctx.translate(ix + 10, iy + 10);
+          ctx.scale(0.65, 0.65);
+          drawPinShapeCanvas(ctx, pinType, PIN_COLORS[pinType]);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 8px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(PIN_LABELS[pinType], 0, 0);
+          ctx.restore();
+
+          // Type name
+          ctx.fillStyle = '#374151';
+          ctx.font = '11px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(PIN_TYPE_NAMES[pinType], ix + 24, iy + 4);
+        });
+
+        // Convert to blob and download (non-blocking)
+        canvas.toBlob((blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = `${floorPlan.name || floorPlan.title || 'floor-plan'}-avec-pins.png`;
+          link.href = url;
+          link.click();
+          // Cleanup after a delay
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }, 'image/png');
       };
       onExportReady(exportFn);
     }
-  }, [onExportReady, floorPlan.name, image, usedPinTypes]);
+  }, [onExportReady, floorPlan.name, floorPlan.title, image, pins, usedPinTypes]);
 
   // Use full container width
   let stageWidth = 1200;
@@ -565,10 +650,6 @@ export default function FloorPlanViewer({
     }
   };
 
-  // Legend for export: calculate position
-  const legendY = image ? image.height + 10 : stageHeight + 10;
-  const legendPinTypes = usedPinTypes.length > 0 ? usedPinTypes : Object.keys(PIN_COLORS) as PinType[];
-
   return (
     <div className="border rounded-lg overflow-hidden bg-white">
       <Stage
@@ -597,15 +678,6 @@ export default function FloorPlanViewer({
               draggable={editable}
             />
           ))}
-
-          {/* Legend rendered inside Konva for export */}
-          {showLegendForExport && (
-            <KonvaLegend
-              x={10}
-              y={legendY}
-              pinTypes={legendPinTypes}
-            />
-          )}
         </Layer>
       </Stage>
 
