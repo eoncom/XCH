@@ -1,7 +1,7 @@
 # XCH - Statut du Projet
 
 **Dernière mise à jour :** 2026-02-06 01:42:44 (Auto-update)
-**Version actuelle :** 1.0.2-MVP
+**Version actuelle :** 1.1.0
 **Statut global :** ✅ MVP Production-Ready (100%)
 
 ---
@@ -53,16 +53,17 @@ MVP TOTAL    ████████████████████ 100% (
 **Sécurité :**
 - ✅ JWT (access + refresh tokens)
 - ✅ Passport.js (local + OIDC)
-- ✅ Casbin RBAC (34 policies, 4 rôles)
+- ✅ Casbin RBAC (83 policies, 4 rôles, 10 ressources)
 - ✅ Validation inputs (class-validator)
 - ✅ Multi-tenant isolation (tenantId)
 
 **Métriques :**
-- ~100 endpoints REST
-- ~8000+ lignes de code TypeScript
-- 15 modèles Prisma
-- 34 policies Casbin (17 MANAGER, 10 TECHNICIEN, 7 VIEWER)
+- ~110+ endpoints REST
+- ~9000+ lignes de code TypeScript
+- 18 modèles Prisma (dont ContactType, Contact, IntegrationMapping)
+- 83 policies Casbin (ADMIN=40, MANAGER=16, TECHNICIEN=20, VIEWER=7)
 - 4 rôles (Admin, Manager, Technicien, Viewer)
+- 10 ressources RBAC (sites, assets, racks, tasks, floor-plans, integrations, users, tenants, contacts, contact-types)
 
 **Documentation :**
 - ✅ Swagger API (http://localhost:3000/api)
@@ -79,15 +80,17 @@ MVP TOTAL    ████████████████████ 100% (
 | # | Module | Pages | Features Clés |
 |---|--------|-------|---------------|
 | 1 | **Dashboard** | 1 | Stats API réelles, carte Leaflet interactive, navigation |
-| 2 | **Sites** | 3 | Liste, carte Leaflet interactive, détail, CRUD |
+| 2 | **Sites** | 3 | Liste, carte Leaflet, CRUD, opérateur depuis Contacts, import contacts |
 | 3 | **Assets** | 3 | CRUD, génération QR codes, scanner caméra PWA |
 | 4 | **Tasks** | 2 | Kanban drag & drop, checklist interactive |
 | 5 | **Racks** | 3 | Visualisation 2D Konva, mount/unmount équipements |
-| 6 | **FloorPlans** | 3 | Upload, viewer Konva (zoom/pan), pins interactifs |
-| 7 | **Users** | 1 | Liste utilisateurs, statistiques par rôle |
-| 8 | **Settings** | 2 | Profil utilisateur, config tenant, intégrations |
+| 6 | **FloorPlans** | 3 | Viewer Konva, pins avec formes distinctives, légende export PNG, association équipement |
+| 7 | **Contacts** | 4 | CRUD contacts, types personnalisables, catégories, import depuis intégrations |
+| 8 | **Intégrations** | 3 | Dashboard providers, NetBox config (4 tabs), mapping drag-drop, monitoring placeholder |
+| 9 | **Users** | 1 | Liste utilisateurs, statistiques par rôle |
+| 10 | **Settings** | 2 | Profil utilisateur, config tenant |
 
-**Total pages :** 18 pages fonctionnelles
+**Total pages :** 25 pages fonctionnelles
 
 **Stack technique :**
 - Next.js 15.1.3 (App Router)
@@ -103,18 +106,19 @@ MVP TOTAL    ████████████████████ 100% (
 **Fonctionnalités transverses :**
 - ✅ Authentification complète (login + session + auto-refresh JWT)
 - ✅ Layout responsive (desktop + mobile)
-- ✅ Toast notifications (react-hot-toast)
+- ✅ Toast notifications (sonner)
 - ✅ Error boundaries (gestion crashes React)
 - ✅ API Client avec retry et refresh token automatique
 - ✅ Middleware protection routes
 - ✅ PWA manifest + icons (192x192, 512x512)
+- ✅ Drag-drop (@dnd-kit pour mapping intégrations)
 
 **Métriques :**
-- ~45+ composants React
-- ~4500+ lignes de code TypeScript
-- 18 pages fonctionnelles
-- 9 composants UI shadcn/ui
-- 8 modules métier complets
+- ~55+ composants React
+- ~6500+ lignes de code TypeScript
+- 25 pages fonctionnelles
+- 10+ composants UI shadcn/ui
+- 10 modules métier complets
 
 **Documentation :**
 - ✅ Frontend README (frontend/README.md)
@@ -243,6 +247,49 @@ MVP TOTAL    ████████████████████ 100% (
 ---
 
 ## 📅 HISTORIQUE DES VERSIONS
+
+### v1.1.0 (2026-02-06) - Refactoring Contacts + Intégrations + Plans améliorés
+
+**Refactoring Providers → Contacts :**
+- ✅ Nouveau modèle `Contact` avec `ContactType` personnalisables
+- ✅ Enum `ContactCategory` (PROVIDER, INTERNAL, PARTNER, TECHNICAL, EMERGENCY)
+- ✅ Table `IntegrationMapping` générique (mapping entités externes → XCH)
+- ✅ Backend CRUD complet ContactTypes + Contacts
+- ✅ Frontend : 4 pages contacts (liste, création, détail, édition)
+- ✅ Frontend : page gestion types de contacts
+
+**Module Intégrations :**
+- ✅ Dashboard intégrations (NetBox + Monitoring cards)
+- ✅ Page NetBox avec 4 tabs (Sites, Équipements, Baies, Contacts)
+- ✅ Mapping drag-drop avec @dnd-kit (source NetBox → cible XCH)
+- ✅ Panel sync avec résultats (créés/modifiés/ignorés/erreurs)
+- ✅ Page Monitoring placeholder (Uptime Kuma, CheckMK, Webhooks)
+- ✅ API NetBox contacts + contact groups
+
+**Plans d'étage améliorés :**
+- ✅ Formes distinctives par type d'équipement (rectangle=SW, hexagone=FW, losange=AP, triangle=CAM, pentagone=NRO, etc.)
+- ✅ Sigles lisibles à l'intérieur des formes (SW, FW, AP, RK, CAM, PP, RJ, NRO)
+- ✅ Légende HTML avec formes CSS dans le viewer interactif
+- ✅ Légende Konva dans le canvas pour export PNG
+- ✅ Export PNG inclut la légende avec tous les types utilisés
+
+**Association pin ↔ équipement :**
+- ✅ Labels améliorés : "Type - Fabricant Modèle (SN)" au lieu de champs vides
+- ✅ Info équipement dans dialog pin (nom + lien vers fiche)
+- ✅ Sidebar : affiche équipement associé sous chaque repère
+- ✅ Clic sur repère dans sidebar ouvre le dialog info
+
+**Sites : liaison module Contacts :**
+- ✅ Étape 2 opérateur : dropdown depuis contacts catégorie PROVIDER
+- ✅ Étape 3 contacts : import depuis contacts existants avec auto-fill
+- ✅ Bouton "Manuel" pour saisie libre conservé
+
+**RBAC mis à jour :**
+- ✅ 83 policies (était 34) : ADMIN=40, MANAGER=16, TECHNICIEN=20, VIEWER=7
+- ✅ 10 ressources (ajout: contacts, contact-types)
+- ✅ Script SQL complet et autonome (insert-rbac-policies.sql)
+
+---
 
 ### v1.0.2 (2026-01-17) - SESSION 12: CI/CD GitHub Actions ✅
 
@@ -498,8 +545,11 @@ MVP TOTAL    ████████████████████ 100% (
 ### Plans d'Étage (FloorPlans) ✅
 - ✅ Upload plans (PDF, PNG, JPG)
 - ✅ Visionneuse interactive Konva (zoom/pan)
-- ✅ Éditeur pins drag & drop (4 types : équipement, réseau, alerte, info)
-- ✅ Association pins ↔ équipements
+- ✅ Éditeur pins drag & drop (10 types : Switch, Firewall, AP, Imprimante, Baie, Caméra, Panneau brassage, RJ45, NRO, Autre)
+- ✅ Formes distinctives par type (rectangle, hexagone, losange, triangle, pentagone, cercle)
+- ✅ Sigles lisibles (SW, FW, AP, PRN, RK, CAM, PP, RJ, NRO)
+- ✅ Association pins ↔ équipements avec labels intelligents
+- ✅ Export PNG avec légende intégrée (formes + noms de types)
 - ✅ Download fichier original
 
 ### Tâches (Tasks) ✅
@@ -510,15 +560,26 @@ MVP TOTAL    ████████████████████ 100% (
 - ✅ TicketLink (référence ticket externe)
 
 ### Intégrations Externes ✅
-- ✅ NetBox (READ-ONLY) : Mapping sites/devices
+- ✅ NetBox (READ-ONLY) : Sync sites/devices/racks/contacts
+- ✅ Mapping drag-drop : configuration mapping entités NetBox → XCH
+- ✅ IntegrationMapping générique (réutilisable pour tous providers)
+- ✅ Dashboard intégrations avec status par provider
 - ✅ Uptime Kuma : Récupération santé services
+- ✅ Monitoring placeholder (Uptime Kuma, CheckMK, Webhooks)
 - ✅ Circuit breaker (gestion indisponibilité API externes)
 - ✅ Architecture extensible pour nouveaux connecteurs
+
+### Contacts (remplace Providers) ✅
+- ✅ CRUD contacts avec types personnalisables
+- ✅ 5 catégories (Provider, Interne, Partenaire, Technique, Urgence)
+- ✅ Types système (Télécommunications, Internet, Cloud, etc.) + types custom
+- ✅ Import contacts dans formulaire Sites (étapes 2 et 3)
+- ✅ Intégration NetBox contacts (sync + mapping groups → types)
 
 ### Sécurité & Permissions ✅
 - ✅ Auth hybride : Locale (email/password) + OIDC (Microsoft Entra ID, Keycloak)
 - ✅ RBAC : 4 rôles (Admin, Manager, Technicien, Viewer)
-- ✅ Casbin : Moteur permissions policy-based (34 policies actives)
+- ✅ Casbin : Moteur permissions policy-based (83 policies, 10 ressources)
 - ✅ Multi-tenant isolation (tenantId + RLS ready)
 - ✅ JWT access + refresh tokens (auto-refresh transparent + cookie sync)
 - ✅ Validation inputs complète (class-validator + Zod)
@@ -645,19 +706,20 @@ bash scripts/check-secrets.sh --install
 
 | Métrique | Valeur |
 |----------|--------|
-| **Lignes code backend** | ~8000+ |
-| **Lignes code frontend** | ~4000+ |
-| **Fichiers TypeScript** | ~140 |
-| **Endpoints API** | ~100 |
-| **Pages frontend** | 17 |
-| **Composants React** | ~40 |
-| **Modèles DB** | 15 |
-| **Policies RBAC** | 34 |
+| **Lignes code backend** | ~9000+ |
+| **Lignes code frontend** | ~6500+ |
+| **Fichiers TypeScript** | ~160 |
+| **Endpoints API** | ~110+ |
+| **Pages frontend** | 25 |
+| **Composants React** | ~55+ |
+| **Modèles DB** | 18 |
+| **Policies RBAC** | 83 |
+| **Ressources RBAC** | 10 |
 | **Rôles** | 4 |
-| **Lignes documentation** | ~25000+ |
-| **Fichiers Markdown** | 27 |
-| **Temps développement** | ~3-4 semaines |
-| **Commits Git** | 2+ |
+| **Lignes documentation** | ~27000+ |
+| **Fichiers Markdown** | 30+ |
+| **Temps développement** | ~5-6 semaines |
+| **Commits Git** | 20+ |
 
 ---
 
@@ -713,7 +775,8 @@ Sites: 5 (Paris, Lyon, Marseille, Bordeaux Datacenter, Toulouse)
   - Bureau Toulouse: 5 assets (R&D), 1 rack 24U, 2 tasks
 Assets: 36 (serveurs, switches, routeurs, firewalls, storage, printers, iPads, APs, visio, UPS, PDU)
 Tasks: 15 (3 TODO, 5 IN_PROGRESS, 4 DONE, 3 URGENT avec checklists)
-Providers: 3 (Integrator, Security, Datacenter)
+Contacts: 8+ (types variés : Télécom, Internet, Cloud, Maintenance, etc.)
+ContactTypes: 10 (8 système + 2 custom)
 ```
 
 **Tests API validés (2026-01-10) :**
@@ -750,6 +813,6 @@ GET /api/floor-plans
 - ✅ Site detail assets/racks/tasks affichés
 - ✅ Manager/Technicien/Viewer permissions fonctionnelles
 
-**📅 Dernière mise à jour :** 2026-01-17
+**📅 Dernière mise à jour :** 2026-02-06
 **📋 Source de vérité unique**
 **🔙 [Retour index](../00-INDEX.md)**
