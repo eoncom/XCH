@@ -295,7 +295,7 @@ export default function FloorPlanDetailPage({
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleDownload} data-testid="download-plan-btn">
             <Download className="mr-2 h-4 w-4" />
-            Télécharger
+            Télécharger PDF
           </Button>
           <Button variant="outline" asChild data-testid="edit-floor-plan-btn">
             <Link href={`/dashboard/floor-plans/${id}/edit`}>

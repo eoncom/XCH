@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Image as KonvaImage, Circle, Text, Group, Rect, Line, RegularPolygon } from 'react-konva';
+import { jsPDF } from 'jspdf';
 import type { FloorPlan, Pin, PinType } from '@/types';
 
 // Custom hook to load image
@@ -461,7 +462,7 @@ export default function FloorPlanViewer({
   imageRef.current = image;
   floorPlanRef.current = floorPlan;
 
-  // Expose export function to parent ONCE (stable reference, reads data from refs)
+  // Expose PDF export function to parent ONCE (stable reference, reads data from refs)
   useEffect(() => {
     if (!onExportReady) return;
 
@@ -471,38 +472,16 @@ export default function FloorPlanViewer({
       const currentFloorPlan = floorPlanRef.current;
       if (!currentImage) return;
 
-      // Get unique pin types
-      const usedPinTypes = Array.from(new Set(currentPins.map(p => p.pinType))) as PinType[];
-      const legendPinTypes = usedPinTypes.length > 0 ? usedPinTypes : Object.keys(PIN_COLORS) as PinType[];
-
-      // Calculate legend dimensions
-      const cols = Math.min(legendPinTypes.length, 5);
-      const rows = Math.ceil(legendPinTypes.length / cols);
-      const itemWidth = 140;
-      const itemHeight = 28;
-      const padding = 14;
-      const legendWidth = cols * itemWidth + padding * 2;
-      const legendHeight = rows * itemHeight + padding * 2 + 24;
-
-      // Build offscreen canvas with image + pins + legend
-      const exportWidth = Math.max(currentImage.width, legendWidth + 20);
-      const exportHeight = currentImage.height + legendHeight + 20;
+      // --- Step 1: Draw plan + pins on offscreen canvas ---
       const canvas = document.createElement('canvas');
-      canvas.width = exportWidth * 2; // 2x for retina
-      canvas.height = exportHeight * 2;
+      canvas.width = currentImage.width * 2;
+      canvas.height = currentImage.height * 2;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-
       ctx.scale(2, 2);
-
-      // White background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, exportWidth, exportHeight);
-
-      // Draw image
       ctx.drawImage(currentImage, 0, 0);
 
-      // Draw pins
+      // Draw pins on canvas
       currentPins.forEach(pin => {
         const px = pin.x * currentImage.width;
         const py = pin.y * currentImage.height;
@@ -512,7 +491,6 @@ export default function FloorPlanViewer({
         ctx.save();
         ctx.translate(px, py);
 
-        // Shadow
         ctx.globalAlpha = 0.2;
         ctx.fillStyle = '#000000';
         ctx.beginPath();
@@ -520,17 +498,14 @@ export default function FloorPlanViewer({
         ctx.fill();
         ctx.globalAlpha = 1;
 
-        // Draw shape
         drawPinShapeCanvas(ctx, pin.pinType, color);
 
-        // Sigle
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 10px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(sigle, 0, 0);
 
-        // Label below
         if (pin.label) {
           ctx.fillStyle = '#ffffff';
           ctx.globalAlpha = 0.85;
@@ -545,62 +520,162 @@ export default function FloorPlanViewer({
         ctx.restore();
       });
 
-      // Draw legend
-      const legendX = 10;
-      const legendY = currentImage.height + 10;
+      const planDataUrl = canvas.toDataURL('image/png');
 
-      // Legend background
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#d1d5db';
-      ctx.lineWidth = 1;
-      roundRect(ctx, legendX, legendY, legendWidth, legendHeight, 6);
-      ctx.fill();
-      ctx.stroke();
-
-      // Legend title
-      ctx.fillStyle = '#374151';
-      ctx.font = 'bold 13px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('Légende', legendX + padding, legendY + padding);
-
-      // Legend items
-      legendPinTypes.forEach((pinType, index) => {
-        const col = index % cols;
-        const row = Math.floor(index / cols);
-        const ix = legendX + padding + col * itemWidth;
-        const iy = legendY + padding + 22 + row * itemHeight;
-
-        // Mini shape
-        ctx.save();
-        ctx.translate(ix + 10, iy + 10);
-        ctx.scale(0.65, 0.65);
-        drawPinShapeCanvas(ctx, pinType, PIN_COLORS[pinType]);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 8px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(PIN_LABELS[pinType], 0, 0);
-        ctx.restore();
-
-        // Type name
-        ctx.fillStyle = '#374151';
-        ctx.font = '11px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillText(PIN_TYPE_NAMES[pinType], ix + 24, iy + 4);
+      // --- Step 2: Build PDF ---
+      const planName = currentFloorPlan.name || currentFloorPlan.title || 'Plan';
+      const isLandscape = currentImage.width > currentImage.height;
+      const pdf = new jsPDF({
+        orientation: isLandscape ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4',
       });
 
-      // Convert to blob and download (non-blocking)
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = `${currentFloorPlan.name || currentFloorPlan.title || 'floor-plan'}-avec-pins.png`;
-        link.href = url;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-      }, 'image/png');
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+
+      // Title
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(planName, margin, margin + 6);
+
+      // Subtitle: site + floor info
+      let subtitle = '';
+      if ((currentFloorPlan as any).site?.name) subtitle += (currentFloorPlan as any).site.name;
+      if (currentFloorPlan.building) subtitle += (subtitle ? ' — ' : '') + 'Bât. ' + currentFloorPlan.building;
+      if (currentFloorPlan.floor) subtitle += (subtitle ? ' — ' : '') + 'Étage ' + currentFloorPlan.floor;
+      if (subtitle) {
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(subtitle, margin, margin + 12);
+        pdf.setTextColor(0, 0, 0);
+      }
+
+      // Date
+      pdf.setFontSize(8);
+      pdf.setTextColor(150, 150, 150);
+      pdf.text('Exporté le ' + new Date().toLocaleDateString('fr-FR') + ' — XCH', pageW - margin, margin + 6, { align: 'right' });
+      pdf.setTextColor(0, 0, 0);
+
+      // Plan image — fit to page with margins
+      const imgTop = margin + 18;
+      const availW = pageW - margin * 2;
+      const availH = pageH - imgTop - margin - 30; // reserve 30mm for legend
+      const imgRatio = currentImage.width / currentImage.height;
+      let imgW = availW;
+      let imgH = imgW / imgRatio;
+      if (imgH > availH) {
+        imgH = availH;
+        imgW = imgH * imgRatio;
+      }
+      const imgX = margin + (availW - imgW) / 2;
+
+      pdf.addImage(planDataUrl, 'PNG', imgX, imgTop, imgW, imgH);
+
+      // Border around image
+      pdf.setDrawColor(200, 200, 200);
+      pdf.setLineWidth(0.3);
+      pdf.rect(imgX, imgTop, imgW, imgH);
+
+      // --- Step 3: Legend ---
+      const usedPinTypes = Array.from(new Set(currentPins.map(p => p.pinType))) as PinType[];
+      const legendPinTypes = usedPinTypes.length > 0 ? usedPinTypes : Object.keys(PIN_COLORS) as PinType[];
+
+      const legendTop = imgTop + imgH + 5;
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Légende', margin, legendTop + 4);
+
+      const legendColWidth = 38;
+      const legendRowHeight = 5;
+      const legendStartX = margin;
+      const legendStartY = legendTop + 7;
+      const maxCols = Math.floor(availW / legendColWidth);
+
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica', 'normal');
+
+      legendPinTypes.forEach((pinType, i) => {
+        const col = i % maxCols;
+        const row = Math.floor(i / maxCols);
+        const lx = legendStartX + col * legendColWidth;
+        const ly = legendStartY + row * legendRowHeight;
+
+        // Color dot
+        const colorHex = PIN_COLORS[pinType] || '#6b7280';
+        const r = parseInt(colorHex.slice(1, 3), 16);
+        const g = parseInt(colorHex.slice(3, 5), 16);
+        const b = parseInt(colorHex.slice(5, 7), 16);
+        pdf.setFillColor(r, g, b);
+        pdf.circle(lx + 2, ly + 1.5, 1.5, 'F');
+
+        // Sigle + name
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(4);
+        pdf.setFont('courier', 'bold');
+        pdf.text(PIN_LABELS[pinType], lx + 2, ly + 2, { align: 'center' });
+
+        pdf.setTextColor(50, 50, 50);
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(PIN_TYPE_NAMES[pinType], lx + 5, ly + 2.5);
+      });
+
+      // --- Step 4: Pin list table ---
+      if (currentPins.length > 0) {
+        const tableTop = legendStartY + Math.ceil(legendPinTypes.length / maxCols) * legendRowHeight + 4;
+
+        // Check if we need a new page
+        if (tableTop + 10 > pageH - margin) {
+          pdf.addPage();
+          var tY = margin + 6;
+        } else {
+          var tY = tableTop;
+        }
+
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`Liste des repères (${currentPins.length})`, margin, tY);
+        tY += 4;
+
+        // Table header
+        pdf.setFillColor(240, 240, 240);
+        pdf.rect(margin, tY, availW, 5, 'F');
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(60, 60, 60);
+        pdf.text('Type', margin + 2, tY + 3.5);
+        pdf.text('Libellé', margin + 30, tY + 3.5);
+        pdf.text('Description', margin + 80, tY + 3.5);
+        tY += 5;
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(30, 30, 30);
+
+        currentPins.forEach((pin, index) => {
+          if (tY + 5 > pageH - margin) {
+            pdf.addPage();
+            tY = margin + 6;
+          }
+
+          // Alternating row color
+          if (index % 2 === 0) {
+            pdf.setFillColor(248, 248, 248);
+            pdf.rect(margin, tY, availW, 5, 'F');
+          }
+
+          pdf.setFontSize(7);
+          pdf.text(PIN_TYPE_NAMES[pin.pinType] || pin.pinType, margin + 2, tY + 3.5);
+          pdf.text(pin.label || '—', margin + 30, tY + 3.5);
+          pdf.text((pin.description || '—').substring(0, 60), margin + 80, tY + 3.5);
+          tY += 5;
+        });
+      }
+
+      // Save PDF
+      pdf.save(`${planName}-plan.pdf`);
     };
 
     onExportReady(exportFn);
