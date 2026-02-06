@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Stage, Layer, Image as KonvaImage, Circle, Text, Group, Rect, Line, RegularPolygon } from 'react-konva';
 import type { FloorPlan, Pin, PinType } from '@/types';
 
@@ -634,7 +634,69 @@ export default function FloorPlanViewer({
     });
   };
 
+  // Manual panning state (avoids Konva draggable={true} which breaks Next.js navigation)
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0 });
+  const positionStartRef = useRef({ x: 0, y: 0 });
+  const hasPannedRef = useRef(false);
+
+  const handleMouseDown = useCallback((e: any) => {
+    // Only start pan if clicking on stage background or image (not on pins)
+    const target = e.target;
+    const isStage = target === target.getStage();
+    const isImage = target.getClassName() === 'Image';
+    if (!isStage && !isImage) return;
+
+    const stage = target.getStage();
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+
+    isPanningRef.current = true;
+    hasPannedRef.current = false;
+    panStartRef.current = { x: pointer.x, y: pointer.y };
+    positionStartRef.current = { x: position.x, y: position.y };
+
+    // Set cursor
+    const container = stage.container();
+    container.style.cursor = 'grabbing';
+  }, [position.x, position.y]);
+
+  const handleMouseMove = useCallback((e: any) => {
+    if (!isPanningRef.current) return;
+
+    const stage = e.target.getStage();
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+
+    const dx = pointer.x - panStartRef.current.x;
+    const dy = pointer.y - panStartRef.current.y;
+
+    // If moved more than 3px, consider it a pan (not a click)
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      hasPannedRef.current = true;
+    }
+
+    setPosition({
+      x: positionStartRef.current.x + dx,
+      y: positionStartRef.current.y + dy,
+    });
+  }, []);
+
+  const handleMouseUp = useCallback((e: any) => {
+    if (isPanningRef.current) {
+      const stage = e.target.getStage();
+      if (stage) {
+        const container = stage.container();
+        container.style.cursor = 'grab';
+      }
+    }
+    isPanningRef.current = false;
+  }, []);
+
   const handleStageClick = (e: any) => {
+    // Ignore click if we were panning
+    if (hasPannedRef.current) return;
+
     if (e.target === e.target.getStage() || e.target.getClassName() === 'Image') {
       if (onStageClick && editable && image) {
         const stage = e.target.getStage();
@@ -650,6 +712,15 @@ export default function FloorPlanViewer({
     }
   };
 
+  // Set initial cursor style on stage container
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (stage) {
+      const container = stage.container();
+      container.style.cursor = 'grab';
+    }
+  }, [image]);
+
   return (
     <div className="border rounded-lg overflow-hidden bg-white">
       <Stage
@@ -660,9 +731,14 @@ export default function FloorPlanViewer({
         scaleY={scale}
         x={position.x}
         y={position.y}
-        draggable={true}
         onWheel={handleWheel}
         onClick={handleStageClick}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onTouchStart={handleMouseDown}
+        onTouchMove={handleMouseMove}
+        onTouchEnd={handleMouseUp}
       >
         <Layer>
           {image && <KonvaImage image={image} />}
