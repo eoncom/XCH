@@ -3026,3 +3026,24 @@ fix: Script RBAC complet avec TOUTES les policies (ADMIN manquantes)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-07
+
+**Date:** 2026-02-07 11:33:54
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 1
+
+**Commit message:**
+```
+feat: Export plan en PDF au lieu de PNG
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

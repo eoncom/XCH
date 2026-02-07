@@ -46,7 +46,7 @@ export default function SettingsPage() {
       try {
         const tenant = await apiClient.get<TenantConfig>('/api/tenants/current');
         setTenantData(tenant);
-        setOrgName(tenant.name || 'XCH Organisation');
+        setOrgName(tenant.name || 'Mon Organisation');
         setDomain(tenant.config?.domain || tenant.subdomain || 'xch.local');
         setTimezone(tenant.config?.timezone || 'Europe/Paris');
         setLanguage(tenant.config?.language || 'Français');

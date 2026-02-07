@@ -9,13 +9,25 @@ async function main() {
   // 1. Create default tenant
   const tenant = await prisma.tenant.upsert({
     where: { subdomain: 'demo' },
-    update: {},
+    update: {
+      name: 'EONCOM - Délégation Île-de-France',
+      config: {
+        domain: 'eoncom.io',
+        timezone: 'Europe/Paris',
+        language: 'Français',
+      },
+    },
     create: {
       id: 'tenant_default',
-      name: 'XCH Demo Corporation',
+      name: 'EONCOM - Délégation Île-de-France',
       subdomain: 'demo',
       status: 'ACTIVE',
       primaryColor: '#0070f3',
+      config: {
+        domain: 'eoncom.io',
+        timezone: 'Europe/Paris',
+        language: 'Français',
+      },
     },
   });
   console.log('✅ Tenant created:', tenant.name);

@@ -13,6 +13,19 @@ export class SeedService {
   async loadDemo(tenantId: string) {
     this.logger.log(`Loading demo data for tenant ${tenantId}`);
 
+    // Update tenant with realistic org name and config
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        name: 'EONCOM - Délégation Île-de-France',
+        config: {
+          domain: 'eoncom.io',
+          timezone: 'Europe/Paris',
+          language: 'Français',
+        },
+      },
+    });
+
     const sites = await this.createSites(tenantId);
     const users = await this.createUsers(tenantId);
     const assets = await this.createAssets(tenantId, sites);
