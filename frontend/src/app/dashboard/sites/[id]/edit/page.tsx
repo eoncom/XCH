@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select';
 import { sitesApi } from '@/lib/api/sites';
 import { contactsApi } from '@/lib/api/contacts';
-import { ArrowLeft, ArrowRight, Check, Plus, Trash2, MapPin, UserPlus } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Plus, Trash2, MapPin, UserPlus, FolderOpen, Globe, FileText, Shield } from 'lucide-react';
 import Link from 'next/link';
 import type { Site, SiteContact, Contact } from '@/types';
 import { toast } from 'sonner';
@@ -126,7 +126,17 @@ export default function EditSitePage({
   const [accessNotes, setAccessNotes] = useState(site?.accessNotes || {
     schedules: '', badges: '', procedures: '', safety: ''
   });
+  const [serverInfo, setServerInfo] = useState(site?.metadata?.serverInfo || {
+    smbPath: '', sharepointUrl: '', gedUrl: '', accessRightsUrl: '', notes: ''
+  });
   const [isGeocoding, setIsGeocoding] = useState(false);
+
+  // Update serverInfo state when site data loads
+  useEffect(() => {
+    if (site?.metadata?.serverInfo) {
+      setServerInfo(site.metadata.serverInfo);
+    }
+  }, [site]);
 
   // Charger les contacts de catégorie PROVIDER pour les opérateurs
   const { data: providerContacts } = useQuery<Contact[]>({
@@ -269,10 +279,17 @@ export default function EditSitePage({
       }
     }
 
+    // Build metadata with serverInfo
+    const hasServerInfo = serverInfo.smbPath || serverInfo.sharepointUrl || serverInfo.gedUrl || serverInfo.accessRightsUrl || serverInfo.notes;
+    const metadata = hasServerInfo
+      ? { ...(site?.metadata || {}), serverInfo }
+      : site?.metadata || undefined;
+
     const payload = {
       ...cleanedData,
       contacts: contacts.filter(c => c.name && c.email),
-      accessNotes
+      accessNotes,
+      ...(metadata ? { metadata } : {}),
     };
     updateMutation.mutate(payload);
   };
@@ -769,6 +786,74 @@ export default function EditSitePage({
                         rows={3}
                         value={accessNotes.safety}
                         onChange={(e) => setAccessNotes({...accessNotes, safety: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Serveurs & Données de production */}
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-semibold mb-4">Serveurs & Données de production</h3>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="serverInfo.smbPath" className="flex items-center gap-2">
+                        <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                        Chemin SMB
+                      </Label>
+                      <Input
+                        id="serverInfo.smbPath"
+                        placeholder="\\\\server\\share"
+                        value={serverInfo.smbPath}
+                        onChange={(e) => setServerInfo({...serverInfo, smbPath: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="serverInfo.sharepointUrl" className="flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-muted-foreground" />
+                        URL SharePoint
+                      </Label>
+                      <Input
+                        id="serverInfo.sharepointUrl"
+                        placeholder="https://company.sharepoint.com/sites/..."
+                        value={serverInfo.sharepointUrl}
+                        onChange={(e) => setServerInfo({...serverInfo, sharepointUrl: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="serverInfo.gedUrl" className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        URL GED
+                      </Label>
+                      <Input
+                        id="serverInfo.gedUrl"
+                        placeholder="https://ged.example.com/..."
+                        value={serverInfo.gedUrl}
+                        onChange={(e) => setServerInfo({...serverInfo, gedUrl: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="serverInfo.accessRightsUrl" className="flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-muted-foreground" />
+                        URL droits d'accès serveur
+                      </Label>
+                      <Input
+                        id="serverInfo.accessRightsUrl"
+                        placeholder="https://..."
+                        value={serverInfo.accessRightsUrl}
+                        onChange={(e) => setServerInfo({...serverInfo, accessRightsUrl: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="serverInfo.notes" className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        Notes serveur
+                      </Label>
+                      <Textarea
+                        id="serverInfo.notes"
+                        placeholder="Informations complémentaires..."
+                        rows={3}
+                        value={serverInfo.notes}
+                        onChange={(e) => setServerInfo({...serverInfo, notes: e.target.value})}
                       />
                     </div>
                   </div>

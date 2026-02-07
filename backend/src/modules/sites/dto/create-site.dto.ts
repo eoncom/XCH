@@ -77,4 +77,9 @@ export class CreateSiteDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiProperty({ required: false, description: 'Metadata JSON (serverInfo, etc.)' })
+  @IsObject()
+  @IsOptional()
+  metadata?: any;
 }

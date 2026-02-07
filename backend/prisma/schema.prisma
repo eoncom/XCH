@@ -188,6 +188,7 @@ model Site {
   lastHealthCheck DateTime?
 
   // Metadata
+  metadata  Json?    @db.JsonB // {serverInfo: {smbPath, sharepointUrl, gedUrl, accessRightsUrl, notes}}
   notes     String?  @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

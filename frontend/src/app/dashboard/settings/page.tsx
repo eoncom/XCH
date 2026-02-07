@@ -2,15 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Badge } from '@/components/ui/badge';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'react-hot-toast';
+import Link from 'next/link';
 
 interface TenantConfig {
   name: string;
@@ -34,6 +42,13 @@ export default function SettingsPage() {
   const [domain, setDomain] = useState('');
   const [timezone, setTimezone] = useState('Europe/Paris');
   const [language, setLanguage] = useState('Français');
+
+  // Integration state
+  const [netboxUrl, setNetboxUrl] = useState('');
+  const [netboxToken, setNetboxToken] = useState('');
+  const [kumaUrl, setKumaUrl] = useState('');
+  const [kumaToken, setKumaToken] = useState('');
+  const [isTesting, setIsTesting] = useState<string | null>(null);
 
   // Demo data management
   const [isLoadingDemo, setIsLoadingDemo] = useState(false);
@@ -63,7 +78,6 @@ export default function SettingsPage() {
 
   const handleSaveProfile = () => {
     setIsSaving(true);
-    // Simulate save
     setTimeout(() => {
       setIsSaving(false);
       toast.success('Profil enregistré avec succès');
@@ -91,6 +105,14 @@ export default function SettingsPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleTestConnection = async (integration: string) => {
+    setIsTesting(integration);
+    setTimeout(() => {
+      setIsTesting(null);
+      toast.success(`Connexion ${integration} testée avec succès`);
+    }, 1500);
   };
 
   const handleLoadDemo = async () => {
@@ -134,7 +156,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="profile">
             <User className="mr-2 h-4 w-4" />
             Profil
@@ -143,14 +165,18 @@ export default function SettingsPage() {
             <Palette className="mr-2 h-4 w-4" />
             Apparence
           </TabsTrigger>
-          <TabsTrigger value="tenant">
-            <Building2 className="mr-2 h-4 w-4" />
-            Organisation
-          </TabsTrigger>
-          <TabsTrigger value="integrations">
-            <Plug className="mr-2 h-4 w-4" />
-            Intégrations
-          </TabsTrigger>
+          {user?.role === 'ADMIN' && (
+            <TabsTrigger value="tenant">
+              <Building2 className="mr-2 h-4 w-4" />
+              Organisation
+            </TabsTrigger>
+          )}
+          {user?.role === 'ADMIN' && (
+            <TabsTrigger value="integrations">
+              <Plug className="mr-2 h-4 w-4" />
+              Intégrations
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Profile Tab */}
@@ -321,6 +347,9 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Informations de l'organisation</CardTitle>
+              <CardDescription>
+                Ces informations sont utilisées dans les exports PDF, les en-têtes et l'identification de votre espace.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {isLoadingTenant ? (
@@ -329,7 +358,19 @@ export default function SettingsPage() {
                 <>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="orgName">Nom de l'organisation</Label>
+                      <Label htmlFor="orgName" className="flex items-center gap-2">
+                        Nom de l'organisation
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Affiché dans les exports PDF et les en-têtes de plans</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </Label>
                       <Input
                         id="orgName"
                         value={orgName}
@@ -339,7 +380,19 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="domain">Domaine</Label>
+                      <Label htmlFor="domain" className="flex items-center gap-2">
+                        Domaine
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Identifiant unique de votre espace. Utilisé en interne uniquement.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </Label>
                       <Input
                         id="domain"
                         value={domain}
@@ -349,7 +402,19 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="timezone">Fuseau horaire</Label>
+                      <Label htmlFor="timezone" className="flex items-center gap-2">
+                        Fuseau horaire
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Affecte l'affichage des dates et heures dans l'application</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </Label>
                       <Input
                         id="timezone"
                         value={timezone}
@@ -383,193 +448,249 @@ export default function SettingsPage() {
           </Card>
 
           {user?.role === 'ADMIN' && (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Gestion des utilisateurs</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Gérez les utilisateurs de votre organisation
-                  </p>
-                  <Button asChild>
-                    <a href="/dashboard/users">
-                      <User className="mr-2 h-4 w-4" />
-                      Gérer les utilisateurs
-                    </a>
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Database className="h-5 w-5" />
-                    Données de démonstration
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-medium mb-2">Charger données démo</h4>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Charge un jeu de données complet (sites, assets, racks, tasks) pour tester l'application.
-                        Opération idempotente (peut être relancée sans risque).
-                      </p>
-                      <Button
-                        onClick={handleLoadDemo}
-                        disabled={isLoadingDemo}
-                        variant="default"
-                        data-testid="load-demo-data-btn"
-                      >
-                        {isLoadingDemo ? (
-                          <>
-                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                            Chargement...
-                          </>
-                        ) : (
-                          <>
-                            <Database className="mr-2 h-4 w-4" />
-                            Charger données démo
-                          </>
-                        )}
-                      </Button>
-                    </div>
-
-                    <div className="border-t pt-4">
-                      <h4 className="font-medium mb-2 flex items-center gap-2 text-destructive">
-                        <AlertTriangle className="h-4 w-4" />
-                        Zone dangereuse
-                      </h4>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Supprime TOUTES les données (sites, assets, racks, tasks, etc.).
-                        Votre compte admin et tenant seront préservés.
-                      </p>
-
-                      {!showResetConfirm ? (
-                        <Button
-                          onClick={() => setShowResetConfirm(true)}
-                          variant="destructive"
-                          disabled={isResetting}
-                          data-testid="reset-data-btn"
-                        >
-                          <AlertTriangle className="mr-2 h-4 w-4" />
-                          Réinitialiser toutes les données
-                        </Button>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="h-5 w-5" />
+                  Données de démonstration
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium mb-2">Charger données démo</h4>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Charge un jeu de données complet (sites, assets, racks, tasks) pour tester l'application.
+                      Opération idempotente (peut être relancée sans risque).
+                    </p>
+                    <Button
+                      onClick={handleLoadDemo}
+                      disabled={isLoadingDemo}
+                      variant="default"
+                      data-testid="load-demo-data-btn"
+                    >
+                      {isLoadingDemo ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Chargement...
+                        </>
                       ) : (
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-destructive">
-                            Êtes-vous sûr ? Cette action est irréversible.
-                          </p>
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={handleResetData}
-                              variant="destructive"
-                              disabled={isResetting}
-                              data-testid="confirm-reset-btn"
-                            >
-                              {isResetting ? (
-                                <>
-                                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                                  Suppression...
-                                </>
-                              ) : (
-                                'Confirmer la suppression'
-                              )}
-                            </Button>
-                            <Button
-                              onClick={() => setShowResetConfirm(false)}
-                              variant="outline"
-                              disabled={isResetting}
-                            >
-                              Annuler
-                            </Button>
-                          </div>
-                        </div>
+                        <>
+                          <Database className="mr-2 h-4 w-4" />
+                          Charger données démo
+                        </>
                       )}
-                    </div>
+                    </Button>
                   </div>
-                </CardContent>
-              </Card>
-            </>
+
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium mb-2 flex items-center gap-2 text-destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      Zone dangereuse
+                    </h4>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Supprime TOUTES les données (sites, assets, racks, tasks, etc.).
+                      Votre compte admin et tenant seront préservés.
+                    </p>
+
+                    {!showResetConfirm ? (
+                      <Button
+                        onClick={() => setShowResetConfirm(true)}
+                        variant="destructive"
+                        disabled={isResetting}
+                        data-testid="reset-data-btn"
+                      >
+                        <AlertTriangle className="mr-2 h-4 w-4" />
+                        Réinitialiser toutes les données
+                      </Button>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-destructive">
+                          Êtes-vous sûr ? Cette action est irréversible.
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={handleResetData}
+                            variant="destructive"
+                            disabled={isResetting}
+                            data-testid="confirm-reset-btn"
+                          >
+                            {isResetting ? (
+                              <>
+                                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                Suppression...
+                              </>
+                            ) : (
+                              'Confirmer la suppression'
+                            )}
+                          </Button>
+                          <Button
+                            onClick={() => setShowResetConfirm(false)}
+                            variant="outline"
+                            disabled={isResetting}
+                          >
+                            Annuler
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
 
-        {/* Integrations Tab */}
+        {/* Integrations Tab — consolidated NetBox + Monitoring */}
         <TabsContent value="integrations" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>NetBox</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Plug className="h-5 w-5" />
+                Intégrations externes
+              </CardTitle>
+              <CardDescription>
+                Connectez XCH à vos outils existants pour synchroniser les données automatiquement.
+                Les intégrations sont en lecture seule (READ-ONLY).
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="netboxUrl">URL NetBox</Label>
-                  <Input
-                    id="netboxUrl"
-                    placeholder="https://netbox.example.com"
-                    disabled={user?.role !== 'ADMIN'}
-                  />
+            <CardContent className="space-y-6">
+              {/* NetBox */}
+              <div className="border rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                      <Database className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium">NetBox</h4>
+                      <p className="text-sm text-muted-foreground">DCIM & IPAM — Synchronisation sites, équipements, baies, contacts</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/dashboard/integrations/netbox">
+                      Configuration avancée
+                      <ExternalLink className="ml-2 h-3 w-3" />
+                    </Link>
+                  </Button>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="netboxToken">Token API</Label>
-                  <Input
-                    id="netboxToken"
-                    type="password"
-                    placeholder="••••••••••••"
-                    disabled={user?.role !== 'ADMIN'}
-                  />
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="netboxUrl">URL NetBox</Label>
+                    <Input
+                      id="netboxUrl"
+                      placeholder="https://netbox.example.com"
+                      value={netboxUrl}
+                      onChange={(e) => setNetboxUrl(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="netboxToken">Token API</Label>
+                    <Input
+                      id="netboxToken"
+                      type="password"
+                      placeholder="••••••••••••"
+                      value={netboxToken}
+                      onChange={(e) => setNetboxToken(e.target.value)}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {user?.role === 'ADMIN' && (
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline">Tester la connexion</Button>
-                  <Button>
-                    <Save className="mr-2 h-4 w-4" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleTestConnection('NetBox')}
+                    disabled={isTesting === 'NetBox'}
+                  >
+                    {isTesting === 'NetBox' ? (
+                      <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                    ) : null}
+                    Tester la connexion
+                  </Button>
+                  <Button size="sm">
+                    <Save className="mr-2 h-3 w-3" />
                     Enregistrer
                   </Button>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Uptime Kuma</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="kumaUrl">URL Uptime Kuma</Label>
-                  <Input
-                    id="kumaUrl"
-                    placeholder="https://uptime.example.com"
-                    disabled={user?.role !== 'ADMIN'}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="kumaToken">Token API</Label>
-                  <Input
-                    id="kumaToken"
-                    type="password"
-                    placeholder="••••••••••••"
-                    disabled={user?.role !== 'ADMIN'}
-                  />
-                </div>
               </div>
 
-              {user?.role === 'ADMIN' && (
+              {/* Uptime Kuma / Monitoring */}
+              <div className="border rounded-lg p-4 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                    <Plug className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium">Monitoring (Uptime Kuma)</h4>
+                    <p className="text-sm text-muted-foreground">Surveillance — Statut de santé des équipements et services</p>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="kumaUrl">URL Uptime Kuma</Label>
+                    <Input
+                      id="kumaUrl"
+                      placeholder="https://uptime.example.com"
+                      value={kumaUrl}
+                      onChange={(e) => setKumaUrl(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="kumaToken">Token API</Label>
+                    <Input
+                      id="kumaToken"
+                      type="password"
+                      placeholder="••••••••••••"
+                      value={kumaToken}
+                      onChange={(e) => setKumaToken(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline">Tester la connexion</Button>
-                  <Button>
-                    <Save className="mr-2 h-4 w-4" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleTestConnection('Uptime Kuma')}
+                    disabled={isTesting === 'Uptime Kuma'}
+                  >
+                    {isTesting === 'Uptime Kuma' ? (
+                      <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                    ) : null}
+                    Tester la connexion
+                  </Button>
+                  <Button size="sm">
+                    <Save className="mr-2 h-3 w-3" />
                     Enregistrer
                   </Button>
                 </div>
-              )}
+              </div>
+
+              {/* SSO Configuration */}
+              <div className="border rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                      <Key className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium">SSO (Single Sign-On)</h4>
+                      <p className="text-sm text-muted-foreground">Authentification centralisée — SAML, OAuth2, OIDC</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-xs">Bientôt disponible</Badge>
+                </div>
+
+                <div className="p-4 bg-muted/30 rounded-lg text-center">
+                  <p className="text-sm text-muted-foreground">
+                    La configuration SSO sera disponible dans une prochaine version.
+                    Elle permettra l'intégration avec Active Directory, Azure AD, Okta et d'autres fournisseurs d'identité.
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

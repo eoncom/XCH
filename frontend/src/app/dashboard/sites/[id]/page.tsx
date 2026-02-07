@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -15,14 +16,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
+import { floorPlansApi } from '@/lib/api/floor-plans';
 import { Attachments } from '@/components/Attachments';
-import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info } from 'lucide-react';
 import Link from 'next/link';
-import type { Site, Asset, Rack, Task } from '@/types';
+import type { Site, Asset, Rack, Task, FloorPlan } from '@/types';
 
 const healthStatusColors = {
   HEALTHY: 'success' as const,
@@ -178,6 +186,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
   const activeTasks = tasks.filter(t => t.status !== 'DONE');
 
+  // Load site floor plans
+  const { data: floorPlans = [] } = useQuery<FloorPlan[]>({
+    queryKey: ['floor-plans', { siteId: id }],
+    queryFn: () => floorPlansApi.getAll(id),
+    enabled: !!id,
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => sitesApi.delete(id),
     onSuccess: () => {
@@ -233,12 +248,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Tabs */}
       <Tabs defaultValue="info" className="w-full">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="info">Informations</TabsTrigger>
-          <TabsTrigger value="assets">Équipements</TabsTrigger>
-          <TabsTrigger value="tasks">Tâches</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="assets">Équipements ({assets.length})</TabsTrigger>
+          <TabsTrigger value="racks">Baies ({racks.length})</TabsTrigger>
+          <TabsTrigger value="tasks">Tâches ({tasks.length})</TabsTrigger>
           <TabsTrigger value="plans">Plans</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="space-y-6">
@@ -412,6 +428,22 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="h-5 w-5" />
                   Informations d'accès
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-amber-500 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p className="font-medium mb-1">Rappel sécurité chantier</p>
+                        <ul className="text-xs space-y-1">
+                          <li>• Badge d'accès obligatoire sur tous les chantiers</li>
+                          <li>• Carte BTP à jour requise</li>
+                          <li>• EPI obligatoires (casque, gilet, chaussures)</li>
+                          <li>• Respecter les consignes affichées sur site</li>
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -450,6 +482,87 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         <p className="text-sm font-medium">Sécurité</p>
                         <p className="text-sm text-muted-foreground">{site.accessNotes.safety}</p>
                       </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Server / Production Info */}
+          {site.metadata?.serverInfo && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <HardDrive className="h-5 w-5" />
+                  Serveurs &amp; Données de production
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {site.metadata.serverInfo.smbPath && (
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <FolderOpen className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">Partage SMB</p>
+                        <p className="text-sm text-muted-foreground font-mono truncate">{site.metadata.serverInfo.smbPath}</p>
+                      </div>
+                    </div>
+                  )}
+                  {site.metadata.serverInfo.sharepointUrl && (
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <Globe className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">SharePoint</p>
+                        <a
+                          href={site.metadata.serverInfo.sharepointUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline truncate block"
+                        >
+                          {site.metadata.serverInfo.sharepointUrl}
+                          <ExternalLink className="inline h-3 w-3 ml-1" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                  {site.metadata.serverInfo.gedUrl && (
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <FileText className="h-5 w-5 text-green-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">GED</p>
+                        <a
+                          href={site.metadata.serverInfo.gedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline truncate block"
+                        >
+                          {site.metadata.serverInfo.gedUrl}
+                          <ExternalLink className="inline h-3 w-3 ml-1" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                  {site.metadata.serverInfo.accessRightsUrl && (
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <Shield className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">Droits d'accès serveur</p>
+                        <a
+                          href={site.metadata.serverInfo.accessRightsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline truncate block"
+                        >
+                          {site.metadata.serverInfo.accessRightsUrl}
+                          <ExternalLink className="inline h-3 w-3 ml-1" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                  {site.metadata.serverInfo.notes && (
+                    <div className="p-3 bg-muted/30 rounded-lg">
+                      <p className="text-sm text-muted-foreground">{site.metadata.serverInfo.notes}</p>
                     </div>
                   )}
                 </div>
@@ -578,15 +691,134 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           <AggregatedDocuments siteId={id} />
         </TabsContent>
 
+        {/* Racks Tab */}
+        <TabsContent value="racks">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Server className="h-5 w-5" />
+                Baies ({racks.length})
+              </CardTitle>
+              <Button asChild size="sm">
+                <Link href={`/dashboard/racks/new?siteId=${id}`}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nouvelle baie
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {racks.length > 0 ? (
+                <div className="space-y-3">
+                  {racks.map((rack) => (
+                    <div
+                      key={rack.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Server className="h-5 w-5 text-purple-500" />
+                        <div>
+                          <Link
+                            href={`/dashboard/racks/${rack.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            {rack.name}
+                          </Link>
+                          <p className="text-sm text-muted-foreground">
+                            {rack.heightU}U • {rack.assets?.length || 0} équipement(s)
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {rack.location && (
+                          <Badge variant="outline" className="text-xs">{rack.location}</Badge>
+                        )}
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/dashboard/racks/${rack.id}`}>
+                            <ExternalLink className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Server className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <p className="text-muted-foreground mb-4">Aucune baie sur ce chantier</p>
+                  <Button asChild variant="outline">
+                    <Link href={`/dashboard/racks/new?siteId=${id}`}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Ajouter une baie
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Plans Tab */}
         <TabsContent value="plans">
           <Card>
-            <CardHeader>
-              <CardTitle>Plans d'étage</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Map className="h-5 w-5" />
+                Plans d'étage ({floorPlans.length})
+              </CardTitle>
+              <Button asChild size="sm">
+                <Link href={`/dashboard/floor-plans/new?siteId=${id}`}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nouveau plan
+                </Link>
+              </Button>
             </CardHeader>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">
-                Fonctionnalité à venir - Upload et visualisation de plans
-              </p>
+            <CardContent>
+              {floorPlans.length > 0 ? (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {floorPlans.map((plan) => (
+                    <Link
+                      key={plan.id}
+                      href={`/dashboard/floor-plans/${plan.id}`}
+                      className="block"
+                    >
+                      <div className="border rounded-lg p-4 hover:bg-muted/50 transition-colors hover:shadow-sm">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h4 className="font-medium">{plan.title}</h4>
+                            <p className="text-sm text-muted-foreground">
+                              {plan.building && `Bât. ${plan.building}`}
+                              {plan.building && plan.floor && ' — '}
+                              {plan.floor && `Étage ${plan.floor}`}
+                              {!plan.building && !plan.floor && 'Plan principal'}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="text-xs">v{plan.version}</Badge>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {plan.pins?.length || 0} repères
+                          </span>
+                          {plan.fileSize && (
+                            <span>{(plan.fileSize / 1024).toFixed(0)} KB</span>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Map className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <p className="text-muted-foreground mb-4">Aucun plan d'étage pour ce chantier</p>
+                  <Button asChild variant="outline">
+                    <Link href={`/dashboard/floor-plans/new?siteId=${id}`}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Ajouter un plan
+                    </Link>
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

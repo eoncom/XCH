@@ -150,7 +150,7 @@ export default function EditFloorPlanPage() {
 
   if (loadingPlan) {
     return (
-      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -158,88 +158,87 @@ export default function EditFloorPlanPage() {
 
   if (!floorPlan) {
     return (
-      <div className="container mx-auto p-6">
-        <p className="text-center text-muted-foreground">Plan non trouvé</p>
-      </div>
+      <div className="text-center py-12 text-muted-foreground">Plan non trouvé</div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
-      <div className="mb-6">
-        <Link href={`/dashboard/floor-plans/${params.id}`}>
-          <Button variant="ghost" className="mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Retour au plan
-          </Button>
-        </Link>
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" asChild>
+          <Link href={`/dashboard/floor-plans/${params.id}`}>
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+        </Button>
         <h1 className="text-3xl font-bold">Modifier le plan</h1>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Informations du plan</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Site */}
-            <div className="space-y-2">
-              <Label htmlFor="siteId">
-                Chantier <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={watch('siteId')}
-                onValueChange={(value) => setValue('siteId', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner un chantier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sites?.map((site) => (
-                    <SelectItem key={site.id} value={site.id}>
-                      {site.code} - {site.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.siteId && (
-                <p className="text-sm text-destructive">{errors.siteId.message}</p>
-              )}
-            </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Informations du plan</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Site */}
+              <div className="space-y-2">
+                <Label htmlFor="siteId">
+                  Chantier <span className="text-red-600">*</span>
+                </Label>
+                <Select
+                  value={watch('siteId')}
+                  onValueChange={(value) => setValue('siteId', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionner un chantier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sites?.map((site) => (
+                      <SelectItem key={site.id} value={site.id}>
+                        {site.code} - {site.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.siteId && (
+                  <p className="text-sm text-red-600">{errors.siteId.message}</p>
+                )}
+              </div>
 
-            {/* Titre */}
-            <div className="space-y-2">
-              <Label htmlFor="title">
-                Nom du plan <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="title"
-                {...register('title')}
-                placeholder="ex: Datacenter - Étage 3"
-              />
-              {errors.title && (
-                <p className="text-sm text-destructive">{errors.title.message}</p>
-              )}
-            </div>
+              {/* Titre */}
+              <div className="space-y-2">
+                <Label htmlFor="title">
+                  Nom du plan <span className="text-red-600">*</span>
+                </Label>
+                <Input
+                  id="title"
+                  {...register('title')}
+                  placeholder="ex: Datacenter - Étage 3"
+                />
+                {errors.title && (
+                  <p className="text-sm text-red-600">{errors.title.message}</p>
+                )}
+              </div>
 
-            {/* Building */}
-            <div className="space-y-2">
-              <Label htmlFor="building">Bâtiment</Label>
-              <Input
-                id="building"
-                {...register('building')}
-                placeholder="ex: Bâtiment A"
-              />
-            </div>
+              {/* Building */}
+              <div className="space-y-2">
+                <Label htmlFor="building">Bâtiment</Label>
+                <Input
+                  id="building"
+                  {...register('building')}
+                  placeholder="ex: Bâtiment A"
+                />
+              </div>
 
-            {/* Floor */}
-            <div className="space-y-2">
-              <Label htmlFor="floor">Étage</Label>
-              <Input
-                id="floor"
-                {...register('floor')}
-                placeholder="ex: RDC, Étage 1, Sous-sol"
-              />
+              {/* Floor */}
+              <div className="space-y-2">
+                <Label htmlFor="floor">Étage</Label>
+                <Input
+                  id="floor"
+                  {...register('floor')}
+                  placeholder="ex: RDC, Étage 1, Sous-sol"
+                />
+              </div>
             </div>
 
             {/* Notes */}
@@ -255,9 +254,7 @@ export default function EditFloorPlanPage() {
 
             {/* Upload fichier (optionnel pour créer nouvelle version) */}
             <div className="space-y-2">
-              <Label htmlFor="file">
-                Nouveau fichier (optionnel)
-              </Label>
+              <Label htmlFor="file">Nouveau fichier (optionnel)</Label>
               <p className="text-sm text-muted-foreground mb-2">
                 Uploader un nouveau fichier créera une nouvelle version du plan. Formats acceptés: PNG, JPG, PDF (max 10MB)
               </p>
@@ -305,30 +302,30 @@ export default function EditFloorPlanPage() {
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
 
-        {/* Actions */}
-        <div className="mt-6 flex gap-4">
-          <Button
-            type="submit"
-            data-testid="save-floor-plan-btn"
-            disabled={updateMutation.isPending}
-          >
-            {updateMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
-            Enregistrer les modifications
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push(`/dashboard/floor-plans/${params.id}`)}
-          >
-            Annuler
-          </Button>
-        </div>
-      </form>
+            {/* Actions */}
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push(`/dashboard/floor-plans/${params.id}`)}
+              >
+                Annuler
+              </Button>
+              <Button
+                type="submit"
+                data-testid="save-floor-plan-btn"
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Enregistrer les modifications
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
