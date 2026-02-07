@@ -27,4 +27,25 @@ export const sitesApi = {
       `/api/sites/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radiusKm}`
     );
   },
+
+  // Attachments
+  uploadAttachment: async (id: string, formData: FormData) => {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sites/${id}/attachments`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Upload failed');
+    return response.json();
+  },
+
+  listAttachments: (id: string) =>
+    apiClient.get(`/api/sites/${id}/attachments`),
+
+  deleteAttachment: (id: string, attachmentId: string) =>
+    apiClient.delete(`/api/sites/${id}/attachments/${attachmentId}`),
+
+  // Aggregated documents (site + assets + racks + tasks)
+  listAllDocuments: (id: string) =>
+    apiClient.get(`/api/sites/${id}/documents`),
 };

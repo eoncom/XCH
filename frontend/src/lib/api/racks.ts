@@ -33,4 +33,21 @@ export const racksApi = {
 
   unmountEquipment: (rackId: string, assetId: string) =>
     apiClient.delete(`/api/racks/${rackId}/unmount/${assetId}`),
+
+  // Attachments
+  uploadAttachment: async (id: string, formData: FormData) => {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/racks/${id}/attachments`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Upload failed');
+    return response.json();
+  },
+
+  listAttachments: (id: string) =>
+    apiClient.get(`/api/racks/${id}/attachments`),
+
+  deleteAttachment: (id: string, attachmentId: string) =>
+    apiClient.delete(`/api/racks/${id}/attachments/${attachmentId}`),
 };

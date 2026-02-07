@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { RacksService } from './racks.service';
 import { CreateRackDto } from './dto/create-rack.dto';
 import { UpdateRackDto } from './dto/update-rack.dto';
 import { MountEquipmentDto } from './dto/mount-equipment.dto';
+import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
@@ -82,5 +84,51 @@ export class RacksController {
   @ApiOperation({ summary: 'Delete rack' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.racksService.remove(id, req.user.tenantId);
+  }
+
+  // ============================================================================
+  // ATTACHMENTS
+  // ============================================================================
+
+  @Post(':id/attachments')
+  @Resource('racks') @Action('update')
+  @ApiOperation({ summary: 'Upload attachment to rack' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        description: { type: 'string' },
+        category: { type: 'string', enum: ['spec', 'invoice', 'photo', 'report', 'manual', 'other'] },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  uploadAttachment(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() uploadAttachmentDto: UploadAttachmentDto,
+    @Request() req: AuthRequest,
+  ) {
+    return this.racksService.uploadAttachment(id, req.user.tenantId, req.user.userId, file, uploadAttachmentDto);
+  }
+
+  @Get(':id/attachments')
+  @Resource('racks') @Action('read')
+  @ApiOperation({ summary: 'List attachments for rack' })
+  listAttachments(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.racksService.listAttachments(id, req.user.tenantId);
+  }
+
+  @Delete(':id/attachments/:attachmentId')
+  @Resource('racks') @Action('update')
+  @ApiOperation({ summary: 'Delete attachment from rack' })
+  deleteAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+    @Request() req: AuthRequest,
+  ) {
+    return this.racksService.deleteAttachment(attachmentId, req.user.tenantId, id);
   }
 }

@@ -3,10 +3,16 @@ import { PrismaClient } from '@prisma/client';
 import { CreateSiteDto } from './dto/create-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
 import { FilterSiteDto } from './dto/filter-site.dto';
+import { StorageService } from '../../common/services/storage.service';
+import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
+import { createId } from '@paralleldrive/cuid2';
 
 @Injectable()
 export class SitesService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(
+    private prisma: PrismaClient,
+    private storageService: StorageService,
+  ) {}
 
   async create(tenantId: string, createSiteDto: CreateSiteDto) {
     const existing = await this.prisma.site.findFirst({
@@ -199,5 +205,146 @@ export class SitesService {
     `, longitude, latitude, tenantId, radiusKm * 1000);
 
     return sites;
+  }
+
+  // ============================================================================
+  // ATTACHMENTS
+  // ============================================================================
+
+  async uploadAttachment(
+    siteId: string,
+    tenantId: string,
+    userId: string,
+    file: Express.Multer.File,
+    dto: UploadAttachmentDto,
+  ) {
+    await this.findOne(siteId, tenantId);
+
+    const filename = this.storageService.generateFilename(file.originalname, 'attachment');
+    const folder = `attachments/${tenantId}/sites/${siteId}`;
+    const filePath = await this.storageService.uploadFile(file, folder, filename);
+
+    const attachment = await this.prisma.attachment.create({
+      data: {
+        id: createId(),
+        tenantId,
+        siteId,
+        filename,
+        originalFilename: file.originalname,
+        size: file.size,
+        mimetype: file.mimetype,
+        path: filePath,
+        description: dto.description,
+        category: dto.category,
+        uploadedBy: userId,
+      },
+    });
+
+    return { ...attachment, url: this.storageService.getFileUrl(filePath) };
+  }
+
+  async listAttachments(siteId: string, tenantId: string) {
+    await this.findOne(siteId, tenantId);
+
+    const attachments = await this.prisma.attachment.findMany({
+      where: { tenantId, siteId },
+      orderBy: { uploadedAt: 'desc' },
+    });
+
+    return attachments.map((a) => ({
+      ...a,
+      url: this.storageService.getFileUrl(a.path),
+    }));
+  }
+
+  async deleteAttachment(attachmentId: string, tenantId: string, siteId: string) {
+    const attachment = await this.prisma.attachment.findFirst({
+      where: { id: attachmentId, tenantId, siteId },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    await this.storageService.deleteFile(attachment.path);
+    await this.prisma.attachment.delete({ where: { id: attachmentId } });
+
+    return { message: 'Attachment deleted successfully' };
+  }
+
+  /**
+   * List ALL documents related to a site (aggregated from 4 sources):
+   * 1. Site's own attachments
+   * 2. Attachments from all assets on the site
+   * 3. Attachments from all racks on the site
+   * 4. Attachments from all tasks linked to the site
+   */
+  async listAllDocuments(siteId: string, tenantId: string) {
+    await this.findOne(siteId, tenantId);
+
+    // Get all asset IDs on this site
+    const assets = await this.prisma.asset.findMany({
+      where: { siteId, tenantId },
+      select: { id: true, name: true, manufacturer: true, model: true },
+    });
+    const assetIds = assets.map((a) => a.id);
+
+    // Get all rack IDs on this site
+    const racks = await this.prisma.rack.findMany({
+      where: { siteId, tenantId },
+      select: { id: true, name: true },
+    });
+    const rackIds = racks.map((r) => r.id);
+
+    // Get all task IDs linked to this site
+    const tasks = await this.prisma.task.findMany({
+      where: { siteId, tenantId },
+      select: { id: true, title: true },
+    });
+    const taskIds = tasks.map((t) => t.id);
+
+    // Fetch all attachments from 4 sources
+    const attachments = await this.prisma.attachment.findMany({
+      where: {
+        tenantId,
+        OR: [
+          { siteId },
+          ...(assetIds.length > 0 ? [{ assetId: { in: assetIds } }] : []),
+          ...(rackIds.length > 0 ? [{ rackId: { in: rackIds } }] : []),
+          ...(taskIds.length > 0 ? [{ taskId: { in: taskIds } }] : []),
+        ],
+      },
+      orderBy: { uploadedAt: 'desc' },
+    });
+
+    // Build lookup maps
+    const assetMap = Object.fromEntries(assets.map((a) => [a.id, a]));
+    const rackMap = Object.fromEntries(racks.map((r) => [r.id, r]));
+    const taskMap = Object.fromEntries(tasks.map((t) => [t.id, t]));
+
+    // Enrich attachments with source info
+    return attachments.map((a) => {
+      let source = 'site';
+      let sourceName = 'Site';
+
+      if (a.assetId && assetMap[a.assetId]) {
+        source = 'asset';
+        const asset = assetMap[a.assetId];
+        sourceName = asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement';
+      } else if (a.rackId && rackMap[a.rackId]) {
+        source = 'rack';
+        sourceName = rackMap[a.rackId].name;
+      } else if (a.taskId && taskMap[a.taskId]) {
+        source = 'task';
+        sourceName = taskMap[a.taskId].title;
+      }
+
+      return {
+        ...a,
+        url: this.storageService.getFileUrl(a.path),
+        source,
+        sourceName,
+      };
+    });
   }
 }

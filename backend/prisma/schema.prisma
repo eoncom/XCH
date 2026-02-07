@@ -664,9 +664,11 @@ model Attachment {
   id       String @id @default(cuid())
   tenantId String
 
-  // Polymorphic relation (assetId OR taskId)
+  // Polymorphic relation (assetId, taskId, rackId, or siteId)
   assetId String?
   taskId  String?
+  rackId  String?
+  siteId  String?
 
   // File metadata
   filename         String
@@ -686,6 +688,8 @@ model Attachment {
   @@index([tenantId])
   @@index([tenantId, assetId])
   @@index([tenantId, taskId])
+  @@index([tenantId, rackId])
+  @@index([tenantId, siteId])
   @@map("attachments")
 }
 

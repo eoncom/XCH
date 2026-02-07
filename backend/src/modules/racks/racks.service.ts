@@ -3,10 +3,16 @@ import { PrismaClient } from '@prisma/client';
 import { CreateRackDto } from './dto/create-rack.dto';
 import { UpdateRackDto } from './dto/update-rack.dto';
 import { MountEquipmentDto } from './dto/mount-equipment.dto';
+import { StorageService } from '../../common/services/storage.service';
+import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
+import { createId } from '@paralleldrive/cuid2';
 
 @Injectable()
 export class RacksService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(
+    private prisma: PrismaClient,
+    private storageService: StorageService,
+  ) {}
 
   async create(tenantId: string, createRackDto: CreateRackDto) {
     const existing = await this.prisma.rack.findFirst({
@@ -352,5 +358,70 @@ export class RacksService {
       requiredU: requiredHeightU,
       availableSpaces,
     };
+  }
+
+  // ============================================================================
+  // ATTACHMENTS
+  // ============================================================================
+
+  async uploadAttachment(
+    rackId: string,
+    tenantId: string,
+    userId: string,
+    file: Express.Multer.File,
+    dto: UploadAttachmentDto,
+  ) {
+    await this.findOne(rackId, tenantId);
+
+    const filename = this.storageService.generateFilename(file.originalname, 'attachment');
+    const folder = `attachments/${tenantId}/racks/${rackId}`;
+    const filePath = await this.storageService.uploadFile(file, folder, filename);
+
+    const attachment = await this.prisma.attachment.create({
+      data: {
+        id: createId(),
+        tenantId,
+        rackId,
+        filename,
+        originalFilename: file.originalname,
+        size: file.size,
+        mimetype: file.mimetype,
+        path: filePath,
+        description: dto.description,
+        category: dto.category,
+        uploadedBy: userId,
+      },
+    });
+
+    return { ...attachment, url: this.storageService.getFileUrl(filePath) };
+  }
+
+  async listAttachments(rackId: string, tenantId: string) {
+    await this.findOne(rackId, tenantId);
+
+    const attachments = await this.prisma.attachment.findMany({
+      where: { tenantId, rackId },
+      orderBy: { uploadedAt: 'desc' },
+    });
+
+    return attachments.map((a) => ({
+      ...a,
+      url: this.storageService.getFileUrl(a.path),
+    }));
+  }
+
+  async deleteAttachment(attachmentId: string, tenantId: string, rackId: string) {
+    const attachment = await this.prisma.attachment.findFirst({
+      where: { id: attachmentId, tenantId, rackId },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    await this.storageService.deleteFile(attachment.path);
+    await this.prisma.attachment.delete({ where: { id: attachmentId } });
+
+    return { message: 'Attachment deleted successfully' };
   }
 }

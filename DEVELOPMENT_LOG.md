@@ -3131,3 +3131,24 @@ feat: rack equipment repositioning — move button without delete/recreate
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-07
+
+**Date:** 2026-02-07 19:36:10
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 8
+- Frontend files modified: 5
+
+**Commit message:**
+```
+feat: pin rack/NRO associations — RACK pins link to racks, NRO shows provider
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

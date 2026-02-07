@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { racksApi } from '@/lib/api/racks';
 import { assetsApi } from '@/lib/api/assets';
+import { Attachments } from '@/components/Attachments';
 import {
   ArrowLeft,
   Edit,
@@ -349,6 +350,20 @@ export default function RackDetailPage({
           </Card>
         </div>
       </div>
+
+      {/* Documents */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Documents</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Attachments
+            entityId={id}
+            entityType="racks"
+            apiModule={racksApi}
+          />
+        </CardContent>
+      </Card>
 
       {/* Mount Equipment Dialog */}
       <Dialog open={showMountDialog} onOpenChange={setShowMountDialog}>

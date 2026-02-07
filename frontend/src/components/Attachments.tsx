@@ -31,7 +31,7 @@ interface Attachment {
 
 interface AttachmentsProps {
   entityId: string;
-  entityType: 'assets' | 'tasks';
+  entityType: 'assets' | 'tasks' | 'racks' | 'sites';
   apiModule: {
     uploadAttachment: (id: string, formData: FormData) => Promise<Attachment>;
     listAttachments: (id: string) => Promise<Attachment[]>;

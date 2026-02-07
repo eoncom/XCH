@@ -19,7 +19,8 @@ import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
-import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Wifi, Globe, Shield, Clock, AlertTriangle } from 'lucide-react';
+import { Attachments } from '@/components/Attachments';
+import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import type { Site, Asset, Rack, Task } from '@/types';
 
@@ -29,6 +30,119 @@ const healthStatusColors = {
   CRITICAL: 'error' as const,
   UNKNOWN: 'secondary' as const,
 };
+
+const sourceLabels: Record<string, string> = {
+  site: 'Site',
+  asset: 'Équipement',
+  rack: 'Baie',
+  task: 'Tâche',
+};
+
+const sourceColors: Record<string, string> = {
+  site: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  asset: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  rack: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  task: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+};
+
+interface AggregatedDoc {
+  id: string;
+  originalFilename: string;
+  size: number;
+  category?: string;
+  description?: string;
+  uploadedAt: string;
+  url: string;
+  source: string;
+  sourceName: string;
+}
+
+function AggregatedDocuments({ siteId }: { siteId: string }) {
+  const { data: docs = [], isLoading } = useQuery<AggregatedDoc[]>({
+    queryKey: ['site-documents', siteId],
+    queryFn: () => sitesApi.listAllDocuments(siteId),
+  });
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (docs.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Tous les documents du chantier ({docs.length})
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Agrège les documents du site, des équipements, des baies et des tâches
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {docs.map((doc) => (
+            <div
+              key={doc.id}
+              className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <FileText className="h-6 w-6 text-primary flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate text-sm">{doc.originalFilename}</p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${sourceColors[doc.source] || ''}`}>
+                      {sourceLabels[doc.source] || doc.source}: {doc.sourceName}
+                    </span>
+                    <span>{formatFileSize(doc.size)}</span>
+                    <span>•</span>
+                    <span>{formatDate(doc.uploadedAt)}</span>
+                    {doc.category && (
+                      <>
+                        <span>•</span>
+                        <span className="capitalize">{doc.category}</span>
+                      </>
+                    )}
+                  </div>
+                  {doc.description && (
+                    <p className="text-xs text-muted-foreground mt-1 truncate">{doc.description}</p>
+                  )}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(doc.url, '_blank')}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SiteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -123,6 +237,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           <TabsTrigger value="info">Informations</TabsTrigger>
           <TabsTrigger value="assets">Équipements</TabsTrigger>
           <TabsTrigger value="tasks">Tâches</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="plans">Plans</TabsTrigger>
         </TabsList>
 
@@ -449,6 +564,18 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="documents" className="space-y-6">
+          {/* Upload documents directly to site */}
+          <Attachments
+            entityId={id}
+            entityType="sites"
+            apiModule={sitesApi}
+          />
+
+          {/* Aggregated documents from all sources */}
+          <AggregatedDocuments siteId={id} />
         </TabsContent>
 
         <TabsContent value="plans">
