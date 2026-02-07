@@ -211,7 +211,7 @@ export class AssetsService {
     const asset = await this.findOne(id, tenantId);
 
     const token = this.qrCodeService.generateSecureToken();
-    const frontendUrl = this.configService.get('FRONTEND_URL', this.configService.get('APP_URL', 'http://localhost:3001'));
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || this.configService.get<string>('APP_URL') || 'http://localhost:3001';
     const qrUrl = this.qrCodeService.generateAssetQRUrl(frontendUrl, asset.id, token);
 
     const qrCodeDataUrl = await this.qrCodeService.generateQRCode(qrUrl);
@@ -269,7 +269,7 @@ export class AssetsService {
     const sitesData = await this.prisma.site.findMany({
       where: {
         id: {
-          in: stats.map(s => s.siteId),
+          in: stats.map(s => s.siteId).filter((id): id is string => id !== null),
         },
       },
       select: {
