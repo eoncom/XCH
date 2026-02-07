@@ -17,12 +17,23 @@ export class TasksService {
   ) {}
 
   async create(tenantId: string, userId: string, createTaskDto: CreateTaskDto) {
+    const data: any = { ...createTaskDto, tenantId, createdBy: userId };
+
+    // Validate assetId FK if provided
+    if (data.assetId) {
+      const asset = await this.prisma.asset.findFirst({
+        where: { id: data.assetId, tenantId },
+      });
+      if (!asset) {
+        delete data.assetId;
+      }
+    }
+    if (data.assetId === '') {
+      data.assetId = null;
+    }
+
     const task = await this.prisma.task.create({
-      data: {
-        ...createTaskDto,
-        tenantId,
-        createdBy: userId,
-      },
+      data,
       include: {
         site: {
           select: {
@@ -219,6 +230,21 @@ export class TasksService {
     const data: any = { ...updateTaskDto };
     if (updateTaskDto.status === 'DONE' && !data.completedAt) {
       data.completedAt = new Date();
+    }
+
+    // Validate assetId FK if provided
+    if (data.assetId) {
+      const asset = await this.prisma.asset.findFirst({
+        where: { id: data.assetId, tenantId },
+      });
+      if (!asset) {
+        // If asset doesn't exist, remove assetId to avoid FK violation
+        delete data.assetId;
+      }
+    }
+    // Allow explicit null to unlink asset
+    if (data.assetId === '') {
+      data.assetId = null;
     }
 
     const task = await this.prisma.task.update({
