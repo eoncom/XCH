@@ -201,7 +201,7 @@ export default function AssetsPage() {
                     <Package className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <CardTitle className="text-lg text-foreground">
-                        {asset.manufacturer} {asset.model}
+                        {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground">
                         {assetTypeLabels[asset.type]}

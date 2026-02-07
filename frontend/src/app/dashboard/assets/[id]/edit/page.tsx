@@ -75,7 +75,8 @@ const assetSchema = z.object({
   ]),
   status: z.enum(['IN_SERVICE', 'OUT_OF_SERVICE', 'IN_TRANSIT', 'STOCK', 'RETIRED']),
   siteId: z.string().optional(),
-  brand: z.string().optional(),
+  name: z.string().optional(),
+  manufacturer: z.string().optional(),
   model: z.string().optional(),
   serialNumber: z.string().optional(),
   purchaseDate: z.string().optional(),
@@ -113,7 +114,8 @@ export default function EditAssetPage() {
           type: asset.type,
           status: asset.status,
           siteId: asset.siteId || '',
-          brand: asset.manufacturer || '',
+          name: asset.name || '',
+          manufacturer: asset.manufacturer || '',
           model: asset.model || '',
           serialNumber: asset.serialNumber || '',
           purchaseDate: asset.purchaseDate ? asset.purchaseDate.split('T')[0] : '',
@@ -204,10 +206,19 @@ export default function EditAssetPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="brand">Marque</Label>
+                <Label htmlFor="name">Nom</Label>
                 <Input
-                  id="brand"
-                  {...register('brand')}
+                  id="name"
+                  {...register('name')}
+                  placeholder="Switch Salle Serveur, etc."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="manufacturer">Fabricant</Label>
+                <Input
+                  id="manufacturer"
+                  {...register('manufacturer')}
                   placeholder="HP, Cisco, etc."
                 />
               </div>

@@ -146,7 +146,7 @@ export default function AssetDetailPage({
             <Package className="h-8 w-8 text-muted-foreground" />
             <div>
               <h1 className="text-3xl font-bold">
-                {asset.manufacturer} {asset.model}
+                {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}
               </h1>
               <p className="text-muted-foreground">
                 {assetTypeLabels[asset.type]}
@@ -211,10 +211,19 @@ export default function AssetDetailPage({
                   <p className="text-lg">{assetStatusLabels[asset.status]}</p>
                 </div>
 
+                {asset.name && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">
+                      Nom
+                    </label>
+                    <p className="text-lg">{asset.name}</p>
+                  </div>
+                )}
+
                 {asset.manufacturer && (
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">
-                      Marque
+                      Fabricant
                     </label>
                     <p className="text-lg">{asset.manufacturer}</p>
                   </div>

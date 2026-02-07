@@ -7,9 +7,15 @@ export class CreateAssetDto {
   @IsEnum(AssetType)
   type: AssetType;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
   @IsString()
-  siteId: string;
+  @IsOptional()
+  name?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  siteId?: string;
 
   @ApiProperty({ required: false })
   @IsString()

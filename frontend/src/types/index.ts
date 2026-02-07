@@ -121,6 +121,7 @@ export interface Asset {
   tenantId: string;
   siteId?: string;
   type: AssetType;
+  name?: string;
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
@@ -412,7 +413,8 @@ export interface ApiResponse<T = any> {
 export interface CreateAssetDto {
   siteId?: string;
   type: AssetType;
-  brand?: string;
+  name?: string;
+  manufacturer?: string;
   model?: string;
   serialNumber?: string;
   status: AssetStatus;

@@ -244,9 +244,10 @@ model Asset {
   id       String     @id @default(cuid())
   tenantId String
   tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  siteId   String
-  site     Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  siteId   String?
+  site     Site?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
   type     AssetType
+  name     String?
   model    String?
   manufacturer String?
   serialNumber String?
