@@ -32,6 +32,7 @@ import {
   Plus,
   MapPin,
   Package,
+  MoveVertical,
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -68,9 +69,12 @@ export default function RackDetailPage({
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showMountDialog, setShowMountDialog] = useState(false);
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState<number | undefined>();
   const [mountAssetId, setMountAssetId] = useState('');
   const [mountHeightU, setMountHeightU] = useState('1');
+  const [moveAsset, setMoveAsset] = useState<Asset | null>(null);
+  const [movePositionU, setMovePositionU] = useState('');
 
   const { data: rack, isLoading, error, isError } = useQuery<Rack>({
     queryKey: ['rack', id],
@@ -134,6 +138,25 @@ export default function RackDetailPage({
       positionU: selectedUnit,
       heightU: parseInt(mountHeightU),
     });
+  };
+
+  const handleMove = () => {
+    if (!moveAsset || !movePositionU) return;
+
+    mountMutation.mutate({
+      assetId: moveAsset.id,
+      positionU: parseInt(movePositionU),
+      heightU: moveAsset.rackHeightU || 1,
+    });
+    setShowMoveDialog(false);
+    setMoveAsset(null);
+    setMovePositionU('');
+  };
+
+  const openMoveDialog = (asset: Asset) => {
+    setMoveAsset(asset);
+    setMovePositionU(String(asset.rackPositionU || ''));
+    setShowMoveDialog(true);
   };
 
   if (isLoading) {
@@ -296,14 +319,25 @@ export default function RackDetailPage({
                         </p>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => unmountMutation.mutate(asset.id)}
-                      disabled={unmountMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Déplacer"
+                        onClick={() => openMoveDialog(asset)}
+                      >
+                        <MoveVertical className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Démonter"
+                        onClick={() => unmountMutation.mutate(asset.id)}
+                        disabled={unmountMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -362,6 +396,47 @@ export default function RackDetailPage({
               disabled={!mountAssetId || mountMutation.isPending}
             >
               {mountMutation.isPending ? 'Montage...' : 'Monter'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Move Equipment Dialog */}
+      <Dialog open={showMoveDialog} onOpenChange={setShowMoveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Déplacer l'équipement</DialogTitle>
+            <DialogDescription>
+              {moveAsset && (
+                <>Déplacer <strong>{moveAsset.name || `${moveAsset.manufacturer || ''} ${moveAsset.model || ''}`.trim()}</strong> ({moveAsset.rackHeightU}U) vers une nouvelle position</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nouvelle position (U)</Label>
+              <Input
+                type="number"
+                min="1"
+                max={rack.heightU}
+                value={movePositionU}
+                onChange={(e) => setMovePositionU(e.target.value)}
+                placeholder={`1 - ${rack.heightU}`}
+              />
+              <p className="text-xs text-muted-foreground">
+                Position actuelle : U{moveAsset?.rackPositionU}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMoveDialog(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleMove}
+              disabled={!movePositionU || mountMutation.isPending}
+            >
+              {mountMutation.isPending ? 'Déplacement...' : 'Déplacer'}
             </Button>
           </DialogFooter>
         </DialogContent>
