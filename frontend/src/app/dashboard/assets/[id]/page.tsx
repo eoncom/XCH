@@ -39,9 +39,16 @@ const assetTypeLabels: Record<AssetType, string> = {
   FIREWALL: 'Firewall',
   ROUTER: 'Routeur',
   WIFI_AP: 'Point d\'accès WiFi',
+  ACCESS_POINT: 'Point d\'accès',
   TEAMS_ROOM: 'Teams Room',
+  WEBCAM: 'Webcam',
+  DISPLAY: 'Écran',
+  CAMERA: 'Caméra',
   SERVER: 'Serveur',
   CABLE: 'Câble',
+  PATCH_PANEL: 'Panneau de brassage',
+  PDU: 'PDU',
+  BOX_5G: 'Box 5G',
   OTHER: 'Autre',
 };
 

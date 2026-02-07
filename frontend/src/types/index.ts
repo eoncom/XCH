@@ -102,9 +102,16 @@ export type AssetType =
   | 'FIREWALL'
   | 'ROUTER'
   | 'WIFI_AP'
+  | 'ACCESS_POINT'
   | 'TEAMS_ROOM'
+  | 'WEBCAM'
+  | 'DISPLAY'
+  | 'CAMERA'
   | 'SERVER'
   | 'CABLE'
+  | 'PATCH_PANEL'
+  | 'PDU'
+  | 'BOX_5G'
   | 'OTHER';
 
 export type AssetStatus = 'IN_SERVICE' | 'OUT_OF_SERVICE' | 'IN_TRANSIT' | 'STOCK' | 'RETIRED';

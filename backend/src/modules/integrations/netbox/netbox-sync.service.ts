@@ -69,13 +69,21 @@ export class NetboxSyncService {
     const roleLower = role.toLowerCase();
     if (roleLower.includes('switch')) return 'SWITCH';
     if (roleLower.includes('firewall')) return 'FIREWALL';
-    if (roleLower.includes('access') || roleLower.includes('wifi') || roleLower.includes('ap'))
-      return 'ACCESS_POINT';
+    if (roleLower.includes('router') || roleLower.includes('routeur')) return 'ROUTER';
+    if (roleLower.includes('5g') || roleLower.includes('lte') || roleLower.includes('cellular') || roleLower.includes('box'))
+      return 'BOX_5G';
+    if (roleLower.includes('wifi') || roleLower.includes('access') || roleLower.includes('ap'))
+      return 'WIFI_AP';
     if (roleLower.includes('server')) return 'SERVER';
     if (roleLower.includes('pdu') || roleLower.includes('power')) return 'PDU';
     if (roleLower.includes('patch') || roleLower.includes('panel')) return 'PATCH_PANEL';
     if (roleLower.includes('camera')) return 'CAMERA';
+    if (roleLower.includes('webcam')) return 'WEBCAM';
+    if (roleLower.includes('display') || roleLower.includes('screen') || roleLower.includes('monitor')) return 'DISPLAY';
     if (roleLower.includes('printer')) return 'PRINTER';
+    if (roleLower.includes('teams')) return 'TEAMS_ROOM';
+    if (roleLower.includes('tablet') || roleLower.includes('ipad')) return 'TABLET';
+    if (roleLower.includes('cable') || roleLower.includes('câble')) return 'CABLE';
     return 'OTHER';
   }
 

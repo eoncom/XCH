@@ -7,8 +7,8 @@ export class FilterAssetDto {
   @IsOptional()
   search?: string;
 
-  @ApiProperty({ enum: ['PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'ACCESS_POINT', 'TEAMS_ROOM', 'WEBCAM', 'DISPLAY', 'CAMERA', 'SERVER', 'PATCH_PANEL', 'PDU', 'OTHER'], required: false })
-  @IsEnum(['PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'ACCESS_POINT', 'TEAMS_ROOM', 'WEBCAM', 'DISPLAY', 'CAMERA', 'SERVER', 'PATCH_PANEL', 'PDU', 'OTHER'])
+  @ApiProperty({ enum: ['PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'ROUTER', 'WIFI_AP', 'ACCESS_POINT', 'TEAMS_ROOM', 'WEBCAM', 'DISPLAY', 'CAMERA', 'SERVER', 'CABLE', 'PATCH_PANEL', 'PDU', 'BOX_5G', 'OTHER'], required: false })
+  @IsEnum(['PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'ROUTER', 'WIFI_AP', 'ACCESS_POINT', 'TEAMS_ROOM', 'WEBCAM', 'DISPLAY', 'CAMERA', 'SERVER', 'CABLE', 'PATCH_PANEL', 'PDU', 'BOX_5G', 'OTHER'])
   @IsOptional()
   type?: string;
 
