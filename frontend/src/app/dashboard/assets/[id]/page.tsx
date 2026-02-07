@@ -301,7 +301,14 @@ export default function AssetDetailPage({
                     <label className="text-sm font-medium text-muted-foreground">
                       Baie
                     </label>
-                    <p className="text-lg">{asset.rack.name}</p>
+                    <p className="text-lg">
+                      <Link
+                        href={`/dashboard/racks/${asset.rack.id}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        {asset.rack.name}
+                      </Link>
+                    </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">

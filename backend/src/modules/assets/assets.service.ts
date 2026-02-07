@@ -211,8 +211,8 @@ export class AssetsService {
     const asset = await this.findOne(id, tenantId);
 
     const token = this.qrCodeService.generateSecureToken();
-    const baseUrl = this.configService.get('APP_URL', 'http://localhost:3000');
-    const qrUrl = this.qrCodeService.generateAssetQRUrl(baseUrl, asset.id, token);
+    const frontendUrl = this.configService.get('FRONTEND_URL', this.configService.get('APP_URL', 'http://localhost:3001'));
+    const qrUrl = this.qrCodeService.generateAssetQRUrl(frontendUrl, asset.id, token);
 
     const qrCodeDataUrl = await this.qrCodeService.generateQRCode(qrUrl);
 

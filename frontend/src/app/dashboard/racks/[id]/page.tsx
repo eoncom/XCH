@@ -287,9 +287,9 @@ export default function RackDetailPage({
                       <div>
                         <Link
                           href={`/dashboard/assets/${asset.id}`}
-                          className="text-sm font-medium hover:underline"
+                          className="text-sm font-medium hover:underline text-blue-600"
                         >
-                          {asset.manufacturer} {asset.model}
+                          {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}
                         </Link>
                         <p className="text-xs text-muted-foreground">
                           U{asset.rackPositionU} ({asset.rackHeightU}U)
@@ -335,7 +335,7 @@ export default function RackDetailPage({
                 <SelectContent>
                   {availableAssets?.map((asset) => (
                     <SelectItem key={asset.id} value={asset.id}>
-                      {asset.manufacturer} {asset.model} - {asset.serialNumber}
+                      {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}{asset.serialNumber ? ` - ${asset.serialNumber}` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>

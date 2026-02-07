@@ -33,7 +33,7 @@ export class QRCodeService {
   }
 
   generateAssetQRUrl(baseUrl: string, assetId: string, token: string): string {
-    return `${baseUrl}/assets/${assetId}?qr=${token}`;
+    return `${baseUrl}/dashboard/assets/${assetId}?qr=${token}`;
   }
 
   generateSecureToken(): string {

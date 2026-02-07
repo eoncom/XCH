@@ -3089,3 +3089,24 @@ feat: unify AssetType enum (18 types) — fix 400 errors on ROUTER/WIFI_AP
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-07
+
+**Date:** 2026-02-07 18:51:42
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix: equipment form — add name field, brand→manufacturer, siteId optional
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
