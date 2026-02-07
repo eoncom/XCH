@@ -142,6 +142,7 @@ export class FloorPlansService {
         pins: {
           include: {
             asset: true,
+            rack: true,
           },
         },
       },
@@ -161,6 +162,7 @@ export class FloorPlansService {
         pins: {
           include: {
             asset: true,
+            rack: true,
           },
         },
       },
@@ -184,6 +186,7 @@ export class FloorPlansService {
         pins: {
           include: {
             asset: true,
+            rack: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -254,6 +257,17 @@ export class FloorPlansService {
       }
     }
 
+    // Validate rack if provided (for RACK type pins)
+    if (createPinDto.rackId) {
+      const rack = await this.prisma.rack.findFirst({
+        where: { id: createPinDto.rackId, tenantId },
+      });
+
+      if (!rack) {
+        throw new NotFoundException('Rack not found');
+      }
+    }
+
     return await this.prisma.pin.create({
       data: {
         ...createPinDto,
@@ -261,6 +275,7 @@ export class FloorPlansService {
       },
       include: {
         asset: true,
+        rack: true,
       },
     });
   }
@@ -280,6 +295,7 @@ export class FloorPlansService {
       where,
       include: {
         asset: true,
+        rack: true,
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -324,6 +340,7 @@ export class FloorPlansService {
       data: updatePinDto,
       include: {
         asset: true,
+        rack: true,
       },
     });
   }

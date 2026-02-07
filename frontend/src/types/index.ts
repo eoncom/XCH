@@ -210,6 +210,7 @@ export interface Pin {
   x: number;
   y: number;
   assetId?: string;
+  rackId?: string;
   label?: string;
   description?: string;
   icon?: string;
@@ -217,6 +218,7 @@ export interface Pin {
   createdAt: string;
   updatedAt: string;
   asset?: Asset;
+  rack?: Rack;
 }
 
 export interface FloorPlan {

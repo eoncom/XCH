@@ -3110,3 +3110,24 @@ fix: equipment form — add name field, brand→manufacturer, siteId optional
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-07
+
+**Date:** 2026-02-07 19:04:45
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 2
+
+**Commit message:**
+```
+feat: rack equipment repositioning — move button without delete/recreate
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

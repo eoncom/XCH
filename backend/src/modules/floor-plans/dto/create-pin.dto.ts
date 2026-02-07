@@ -24,6 +24,11 @@ export class CreatePinDto {
   @IsOptional()
   assetId?: string;
 
+  @ApiProperty({ required: false, description: 'Rack ID (for RACK type pins)' })
+  @IsString()
+  @IsOptional()
+  rackId?: string;
+
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()

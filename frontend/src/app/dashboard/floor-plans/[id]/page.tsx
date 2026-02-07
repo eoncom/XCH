@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { floorPlansApi } from '@/lib/api/floor-plans';
 import { assetsApi } from '@/lib/api/assets';
+import { racksApi } from '@/lib/api/racks';
 import { showToast } from '@/lib/toast';
 import {
   ArrowLeft,
@@ -34,10 +35,12 @@ import {
   MapPin as MapPinIcon,
   Download,
   Info,
+  Server,
+  Wifi,
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import type { FloorPlan, Pin, PinType, Asset, AssetType } from '@/types';
+import type { FloorPlan, Pin, PinType, Asset, AssetType, Rack } from '@/types';
 
 // Dynamically import FloorPlanViewer (client-side only for Konva)
 const FloorPlanViewer = dynamic(
@@ -130,6 +133,7 @@ export default function FloorPlanDetailPage({
   const [exportFunction, setExportFunction] = useState<(() => void) | null>(null);
   const [newPinDescription, setNewPinDescription] = useState('');
   const [newPinAssetId, setNewPinAssetId] = useState<string>('');
+  const [newPinRackId, setNewPinRackId] = useState<string>('');
 
   const { data: floorPlan, isLoading } = useQuery<FloorPlan>({
     queryKey: ['floor-plan', id],
@@ -140,6 +144,13 @@ export default function FloorPlanDetailPage({
   const { data: assets } = useQuery<Asset[]>({
     queryKey: ['assets', floorPlan?.site?.id],
     queryFn: () => assetsApi.getAll({ siteId: floorPlan?.site?.id }),
+    enabled: !!floorPlan?.site?.id,
+  });
+
+  // Load racks from the site for RACK pin association
+  const { data: racks } = useQuery<Rack[]>({
+    queryKey: ['racks', floorPlan?.site?.id],
+    queryFn: () => racksApi.getAll(floorPlan?.site?.id),
     enabled: !!floorPlan?.site?.id,
   });
 
@@ -164,6 +175,8 @@ export default function FloorPlanDetailPage({
       setShowAddPinDialog(false);
       setNewPinLabel('');
       setNewPinDescription('');
+      setNewPinAssetId('');
+      setNewPinRackId('');
       setNewPinPosition(null);
     },
     onError: () => {
@@ -208,14 +221,27 @@ export default function FloorPlanDetailPage({
   const handleAddPin = () => {
     if (!newPinPosition) return;
 
-    createPinMutation.mutate({
+    const pinData: any = {
       pinType: newPinType,
       x: newPinPosition.x,
       y: newPinPosition.y,
       label: newPinLabel,
       description: newPinDescription,
-      assetId: newPinAssetId || undefined,
-    });
+    };
+
+    // RACK type → associate rackId, not assetId
+    if (newPinType === 'RACK') {
+      if (newPinRackId) pinData.rackId = newPinRackId;
+    } else {
+      if (newPinAssetId) pinData.assetId = newPinAssetId;
+    }
+
+    // NRO type → auto-fill description with provider info if empty
+    if (newPinType === 'NRO' && !newPinDescription && floorPlan?.site?.connectivity?.primary?.provider) {
+      pinData.description = `Fournisseur: ${floorPlan.site.connectivity.primary.provider}`;
+    }
+
+    createPinMutation.mutate(pinData);
   };
 
   const handlePinClick = (pin: Pin) => {
@@ -230,6 +256,7 @@ export default function FloorPlanDetailPage({
       label: pin.label,
       description: pin.description,
       assetId: pin.assetId,
+      rackId: pin.rackId,
     });
     setShowPinInfoDialog(false);
     setShowEditPinDialog(true);
@@ -416,6 +443,7 @@ export default function FloorPlanDetailPage({
               {floorPlan.pins && floorPlan.pins.length > 0 ? (
                 floorPlan.pins.map((pin) => {
                   const linkedAsset = pin.assetId ? assets?.find(a => a.id === pin.assetId) : null;
+                  const linkedRack = pin.rackId ? racks?.find(r => r.id === pin.rackId) : null;
                   return (
                     <div
                       key={pin.id}
@@ -427,9 +455,21 @@ export default function FloorPlanDetailPage({
                         <p className="text-xs text-muted-foreground">
                           {pinTypeLabels[pin.pinType]}
                         </p>
+                        {linkedRack && (
+                          <p className="text-xs text-purple-600 mt-0.5">
+                            <Server className="inline h-3 w-3 mr-1" />
+                            {linkedRack.name} ({linkedRack.heightU}U)
+                          </p>
+                        )}
                         {linkedAsset && (
                           <p className="text-xs text-blue-600 mt-0.5">
                             {getAssetLabel(linkedAsset)}
+                          </p>
+                        )}
+                        {pin.pinType === 'NRO' && floorPlan?.site?.connectivity?.primary?.provider && (
+                          <p className="text-xs text-purple-600 mt-0.5">
+                            <Wifi className="inline h-3 w-3 mr-1" />
+                            {floorPlan.site.connectivity.primary.provider}
                           </p>
                         )}
                         {pin.description && (
@@ -505,27 +545,106 @@ export default function FloorPlanDetailPage({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Équipement associé (optionnel)</Label>
-              <Select value={newPinAssetId || 'none'} onValueChange={(value) => setNewPinAssetId(value === 'none' ? '' : value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Aucun équipement" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Aucun équipement</SelectItem>
-                  {assets?.map((asset) => (
-                    <SelectItem key={asset.id} value={asset.id}>
-                      {getAssetLabel(asset)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {newPinAssetId && assets && (
-                <p className="text-xs text-muted-foreground">
-                  Lien vers la fiche équipement dans les détails du repère
-                </p>
-              )}
-            </div>
+            {/* Conditional association based on pin type */}
+            {newPinType === 'RACK' ? (
+              <div className="space-y-2">
+                <Label>Baie associée (optionnel)</Label>
+                <Select value={newPinRackId || 'none'} onValueChange={(value) => setNewPinRackId(value === 'none' ? '' : value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Aucune baie" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucune baie</SelectItem>
+                    {racks?.map((rack) => (
+                      <SelectItem key={rack.id} value={rack.id}>
+                        <span className="flex items-center gap-2">
+                          <Server className="h-3 w-3" />
+                          {rack.name} ({rack.heightU}U)
+                          {rack.location ? ` — ${rack.location}` : ''}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {newPinRackId && (
+                  <p className="text-xs text-muted-foreground">
+                    Lien vers la fiche baie dans les détails du repère
+                  </p>
+                )}
+              </div>
+            ) : newPinType === 'NRO' ? (
+              <div className="space-y-2">
+                {floorPlan?.site?.connectivity?.primary?.provider && (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Wifi className="h-4 w-4 text-purple-500" />
+                      <p className="text-sm font-medium">Connectivité du site</p>
+                    </div>
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">Fournisseur : </span>
+                      <span className="font-medium">{floorPlan.site.connectivity.primary.provider}</span>
+                    </p>
+                    {floorPlan.site.connectivity.primary.type && (
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Type : </span>
+                        {floorPlan.site.connectivity.primary.type}
+                      </p>
+                    )}
+                    {floorPlan.site.connectivity.primary.ref && (
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Réf : </span>
+                        {floorPlan.site.connectivity.primary.ref}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {floorPlan?.site?.connectivity?.backup?.provider && (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Wifi className="h-4 w-4 text-orange-500" />
+                      <p className="text-sm font-medium">Connectivité backup</p>
+                    </div>
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">Fournisseur : </span>
+                      <span className="font-medium">{floorPlan.site.connectivity.backup.provider}</span>
+                    </p>
+                    {floorPlan.site.connectivity.backup.type && (
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Type : </span>
+                        {floorPlan.site.connectivity.backup.type}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {!floorPlan?.site?.connectivity?.primary?.provider && (
+                  <p className="text-xs text-muted-foreground">
+                    Aucune info de connectivité sur ce site. Renseignez-la dans la fiche site.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Équipement associé (optionnel)</Label>
+                <Select value={newPinAssetId || 'none'} onValueChange={(value) => setNewPinAssetId(value === 'none' ? '' : value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Aucun équipement" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucun équipement</SelectItem>
+                    {assets?.map((asset) => (
+                      <SelectItem key={asset.id} value={asset.id}>
+                        {getAssetLabel(asset)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {newPinAssetId && assets && (
+                  <p className="text-xs text-muted-foreground">
+                    Lien vers la fiche équipement dans les détails du repère
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddPinDialog(false)}>
@@ -576,6 +695,34 @@ export default function FloorPlanDetailPage({
                 </div>
               )}
 
+              {/* Rack association for RACK pins */}
+              {selectedPin.rackId && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Baie associée</p>
+                  {(() => {
+                    const linkedRack = racks?.find(r => r.id === selectedPin.rackId);
+                    return (
+                      <div className="flex flex-col gap-1">
+                        {linkedRack && (
+                          <p className="text-sm font-medium">
+                            <Server className="inline h-3 w-3 mr-1" />
+                            {linkedRack.name} ({linkedRack.heightU}U)
+                            {linkedRack.location ? ` — ${linkedRack.location}` : ''}
+                          </p>
+                        )}
+                        <Link
+                          href={`/dashboard/racks/${selectedPin.rackId}`}
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          Voir la fiche baie
+                        </Link>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Asset association for non-RACK pins */}
               {selectedPin.assetId && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Équipement associé</p>
@@ -595,6 +742,22 @@ export default function FloorPlanDetailPage({
                       </div>
                     );
                   })()}
+                </div>
+              )}
+
+              {/* NRO connectivity info */}
+              {selectedPin.pinType === 'NRO' && floorPlan?.site?.connectivity?.primary?.provider && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Connectivité</p>
+                  <div className="p-2 bg-muted rounded-lg mt-1">
+                    <p className="text-sm">
+                      <Wifi className="inline h-3 w-3 mr-1 text-purple-500" />
+                      <span className="font-medium">{floorPlan.site.connectivity.primary.provider}</span>
+                      {floorPlan.site.connectivity.primary.type && (
+                        <span className="text-muted-foreground"> ({floorPlan.site.connectivity.primary.type})</span>
+                      )}
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -664,25 +827,71 @@ export default function FloorPlanDetailPage({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Équipement associé</Label>
-              <Select
-                value={editPinData.assetId || 'none'}
-                onValueChange={(value) => setEditPinData({ ...editPinData, assetId: value === 'none' ? undefined : value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Aucun équipement" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Aucun équipement</SelectItem>
-                  {assets?.map((asset) => (
-                    <SelectItem key={asset.id} value={asset.id}>
-                      {getAssetLabel(asset)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Conditional association based on pin type */}
+            {editPinData.pinType === 'RACK' ? (
+              <div className="space-y-2">
+                <Label>Baie associée</Label>
+                <Select
+                  value={editPinData.rackId || 'none'}
+                  onValueChange={(value) => setEditPinData({ ...editPinData, rackId: value === 'none' ? undefined : value, assetId: undefined })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Aucune baie" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucune baie</SelectItem>
+                    {racks?.map((rack) => (
+                      <SelectItem key={rack.id} value={rack.id}>
+                        <span className="flex items-center gap-2">
+                          <Server className="h-3 w-3" />
+                          {rack.name} ({rack.heightU}U)
+                          {rack.location ? ` — ${rack.location}` : ''}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : editPinData.pinType === 'NRO' ? (
+              <div className="space-y-2">
+                <Label>Connectivité du site</Label>
+                {floorPlan?.site?.connectivity?.primary?.provider ? (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-sm">
+                      <Wifi className="inline h-3 w-3 mr-1 text-purple-500" />
+                      <span className="font-medium">{floorPlan.site.connectivity.primary.provider}</span>
+                      {floorPlan.site.connectivity.primary.type && (
+                        <span className="text-muted-foreground"> ({floorPlan.site.connectivity.primary.type})</span>
+                      )}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Aucune info de connectivité. Renseignez-la dans la fiche site.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Équipement associé</Label>
+                <Select
+                  value={editPinData.assetId || 'none'}
+                  onValueChange={(value) => setEditPinData({ ...editPinData, assetId: value === 'none' ? undefined : value, rackId: undefined })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Aucun équipement" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucun équipement</SelectItem>
+                    {assets?.map((asset) => (
+                      <SelectItem key={asset.id} value={asset.id}>
+                        {getAssetLabel(asset)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditPinDialog(false)}>
