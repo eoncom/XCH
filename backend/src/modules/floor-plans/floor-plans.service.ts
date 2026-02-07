@@ -142,7 +142,7 @@ export class FloorPlansService {
         pins: {
           include: {
             asset: true,
-            rack: true,
+            rack: { include: { assets: true } },
           },
         },
       },
@@ -162,7 +162,7 @@ export class FloorPlansService {
         pins: {
           include: {
             asset: true,
-            rack: true,
+            rack: { include: { assets: true } },
           },
         },
       },
@@ -186,7 +186,7 @@ export class FloorPlansService {
         pins: {
           include: {
             asset: true,
-            rack: true,
+            rack: { include: { assets: true } },
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -275,7 +275,7 @@ export class FloorPlansService {
       },
       include: {
         asset: true,
-        rack: true,
+        rack: { include: { assets: true } },
       },
     });
   }
@@ -295,7 +295,7 @@ export class FloorPlansService {
       where,
       include: {
         asset: true,
-        rack: true,
+        rack: { include: { assets: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -340,7 +340,7 @@ export class FloorPlansService {
       data: updatePinDto,
       include: {
         asset: true,
-        rack: true,
+        rack: { include: { assets: true } },
       },
     });
   }

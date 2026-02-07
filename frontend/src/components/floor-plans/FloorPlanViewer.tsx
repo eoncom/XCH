@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Image as KonvaImage, Circle, Text, Group, Rect, Line, RegularPolygon } from 'react-konva';
 import { jsPDF } from 'jspdf';
-import type { FloorPlan, Pin, PinType } from '@/types';
+import type { FloorPlan, Pin, PinType, Rack } from '@/types';
 
 // Custom hook to load image
 function useImage(url: string): [HTMLImageElement | undefined, 'loading' | 'loaded' | 'failed'] {
@@ -624,15 +624,12 @@ export default function FloorPlanViewer({
       });
 
       // --- Step 4: Pin list table ---
+      let tY = legendStartY + Math.ceil(legendPinTypes.length / maxCols) * legendRowHeight + 4;
       if (currentPins.length > 0) {
-        const tableTop = legendStartY + Math.ceil(legendPinTypes.length / maxCols) * legendRowHeight + 4;
-
         // Check if we need a new page
-        if (tableTop + 10 > pageH - margin) {
+        if (tY + 10 > pageH - margin) {
           pdf.addPage();
-          var tY = margin + 6;
-        } else {
-          var tY = tableTop;
+          tY = margin + 6;
         }
 
         pdf.setFontSize(9);
@@ -666,12 +663,194 @@ export default function FloorPlanViewer({
             pdf.rect(margin, tY, availW, 5, 'F');
           }
 
+          // Build description — enrich NRO pins with provider info
+          let pinDesc = pin.description || '';
+          if (pin.pinType === 'NRO' && !pinDesc) {
+            const site = (currentFloorPlan as any).site;
+            const provider = site?.connectivity?.primary?.provider;
+            if (provider) pinDesc = `Fournisseur: ${provider}`;
+          }
+          // For RACK pins, show associated rack name
+          if (pin.pinType === 'RACK' && pin.rack && !pinDesc) {
+            pinDesc = `Baie: ${pin.rack.name} (${pin.rack.heightU}U)`;
+          }
+
           pdf.setFontSize(7);
           pdf.text(PIN_TYPE_NAMES[pin.pinType] || pin.pinType, margin + 2, tY + 3.5);
           pdf.text(pin.label || '—', margin + 30, tY + 3.5);
-          pdf.text((pin.description || '—').substring(0, 60), margin + 80, tY + 3.5);
+          pdf.text((pinDesc || '—').substring(0, 60), margin + 80, tY + 3.5);
           tY += 5;
         });
+      }
+
+      // --- Step 5: Racks section with mounted equipment ---
+      const rackPins = currentPins.filter(p => p.pinType === 'RACK' && p.rack);
+      if (rackPins.length > 0) {
+        // Check if we need a new page
+        if (tY + 20 > pageH - margin) {
+          pdf.addPage();
+          tY = margin + 6;
+        } else {
+          tY += 6;
+        }
+
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 0, 0);
+        pdf.text(`Baies (${rackPins.length})`, margin, tY);
+        tY += 5;
+
+        rackPins.forEach((pin) => {
+          const rack = pin.rack!;
+          const assets = (rack as any).assets || [];
+
+          // Check if we need a new page (rack header + at least a few lines)
+          if (tY + 15 > pageH - margin) {
+            pdf.addPage();
+            tY = margin + 6;
+          }
+
+          // Rack header
+          pdf.setFillColor(139, 92, 246); // purple
+          pdf.setTextColor(255, 255, 255);
+          pdf.rect(margin, tY, availW, 6, 'F');
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`${rack.name} — ${rack.heightU}U`, margin + 2, tY + 4);
+          if (pin.label) {
+            pdf.text(`(${pin.label})`, margin + 60, tY + 4);
+          }
+          tY += 6;
+
+          if (assets.length === 0) {
+            pdf.setTextColor(120, 120, 120);
+            pdf.setFont('helvetica', 'italic');
+            pdf.setFontSize(7);
+            pdf.text('Aucun équipement monté', margin + 4, tY + 3.5);
+            tY += 5;
+          } else {
+            // Equipment sub-header
+            pdf.setFillColor(245, 243, 255);
+            pdf.rect(margin, tY, availW, 5, 'F');
+            pdf.setTextColor(80, 80, 80);
+            pdf.setFontSize(6.5);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('Position', margin + 2, tY + 3.5);
+            pdf.text('Équipement', margin + 22, tY + 3.5);
+            pdf.text('Type', margin + 80, tY + 3.5);
+            pdf.text('S/N', margin + 110, tY + 3.5);
+            tY += 5;
+
+            // Sort assets by rackPosition
+            const sortedAssets = [...assets].sort((a: any, b: any) => {
+              const posA = a.rackPosition || 0;
+              const posB = b.rackPosition || 0;
+              return posA - posB;
+            });
+
+            pdf.setFont('helvetica', 'normal');
+            pdf.setTextColor(30, 30, 30);
+            pdf.setFontSize(6.5);
+
+            sortedAssets.forEach((asset: any, idx: number) => {
+              if (tY + 5 > pageH - margin) {
+                pdf.addPage();
+                tY = margin + 6;
+              }
+
+              if (idx % 2 === 0) {
+                pdf.setFillColor(250, 250, 252);
+                pdf.rect(margin, tY, availW, 5, 'F');
+              }
+
+              const pos = asset.rackPosition ? `U${asset.rackPosition}` : '—';
+              const assetName = asset.name || asset.model || '—';
+              const assetMfr = asset.manufacturer ? `${asset.manufacturer} ` : '';
+              const assetLabel = `${assetMfr}${assetName}`.substring(0, 40);
+              const assetType = asset.type || '—';
+              const assetSN = (asset.serialNumber || '—').substring(0, 20);
+
+              pdf.text(pos, margin + 2, tY + 3.5);
+              pdf.text(assetLabel, margin + 22, tY + 3.5);
+              pdf.text(assetType, margin + 80, tY + 3.5);
+              pdf.text(assetSN, margin + 110, tY + 3.5);
+              tY += 5;
+            });
+          }
+
+          tY += 3; // spacing between racks
+        });
+      }
+
+      // --- Step 6: NRO / Connectivity info ---
+      const nroPins = currentPins.filter(p => p.pinType === 'NRO');
+      const site = (currentFloorPlan as any).site;
+      if (nroPins.length > 0 && site?.connectivity) {
+        if (tY + 20 > pageH - margin) {
+          pdf.addPage();
+          tY = margin + 6;
+        } else {
+          tY += 4;
+        }
+
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 0, 0);
+        pdf.text('Connectivité NRO', margin, tY);
+        tY += 5;
+
+        const conn = site.connectivity;
+
+        // Primary provider
+        if (conn.primary) {
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(168, 85, 247); // purple
+          pdf.text('Fournisseur principal', margin + 2, tY + 3.5);
+          tY += 5;
+
+          pdf.setFont('helvetica', 'normal');
+          pdf.setTextColor(30, 30, 30);
+          pdf.setFontSize(7);
+          if (conn.primary.provider) {
+            pdf.text(`Fournisseur: ${conn.primary.provider}`, margin + 4, tY + 3.5);
+            tY += 4;
+          }
+          if (conn.primary.type) {
+            pdf.text(`Type: ${conn.primary.type}`, margin + 4, tY + 3.5);
+            tY += 4;
+          }
+          if (conn.primary.refClient) {
+            pdf.text(`Réf. client: ${conn.primary.refClient}`, margin + 4, tY + 3.5);
+            tY += 4;
+          }
+          if (conn.primary.bandwidth) {
+            pdf.text(`Débit: ${conn.primary.bandwidth}`, margin + 4, tY + 3.5);
+            tY += 4;
+          }
+        }
+
+        // Backup provider
+        if (conn.backup?.provider) {
+          tY += 2;
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(168, 85, 247);
+          pdf.text('Fournisseur backup', margin + 2, tY + 3.5);
+          tY += 5;
+
+          pdf.setFont('helvetica', 'normal');
+          pdf.setTextColor(30, 30, 30);
+          pdf.setFontSize(7);
+          if (conn.backup.provider) {
+            pdf.text(`Fournisseur: ${conn.backup.provider}`, margin + 4, tY + 3.5);
+            tY += 4;
+          }
+          if (conn.backup.type) {
+            pdf.text(`Type: ${conn.backup.type}`, margin + 4, tY + 3.5);
+            tY += 4;
+          }
+        }
       }
 
       // Save PDF
