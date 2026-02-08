@@ -115,14 +115,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        <div className="flex h-16 items-center justify-between border-b px-6">
-          <div className="flex items-center gap-2">
+        <div className="flex h-16 items-center justify-between border-b px-4">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {logoUrl && (
-              <img src={logoUrl} alt={orgName} className="h-7 w-7 object-contain rounded" />
+              <img src={logoUrl} alt={orgName} className="h-7 w-7 object-contain rounded flex-shrink-0" />
             )}
-            <h1 className="text-xl font-bold text-primary">{orgName || 'XCH'}</h1>
+            <h1 className="text-lg font-bold text-primary truncate" title={orgName || 'XCH'}>
+              {orgName || 'XCH'}
+            </h1>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <ThemeToggle />
             <Button
               variant="ghost"
@@ -216,15 +218,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Mobile header */}
         <div className="flex h-16 items-center justify-between border-b bg-card px-4 lg:hidden">
-          <div className="flex items-center">
-            <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
+          <div className="flex items-center min-w-0 flex-1">
+            <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)} className="flex-shrink-0">
               <Menu className="h-5 w-5" />
             </Button>
-            <div className="ml-4 flex items-center gap-2">
+            <div className="ml-3 flex items-center gap-2 min-w-0">
               {logoUrl && (
-                <img src={logoUrl} alt={orgName} className="h-6 w-6 object-contain rounded" />
+                <img src={logoUrl} alt={orgName} className="h-6 w-6 object-contain rounded flex-shrink-0" />
               )}
-              <h1 className="text-xl font-bold text-primary">{orgName || 'XCH'}</h1>
+              <h1 className="text-lg font-bold text-primary truncate" title={orgName || 'XCH'}>
+                {orgName || 'XCH'}
+              </h1>
             </div>
           </div>
           <ThemeToggle />

@@ -41,7 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X } from 'lucide-react';
+import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 import type { Site, Asset, Rack, Task, FloorPlan, User as UserType } from '@/types';
 
@@ -183,7 +183,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
   const { data: allUsers = [] } = useQuery<UserType[]>({
     queryKey: ['users'],
     queryFn: () => usersApi.getAll(),
-    enabled: isAdmin && showAddDialog,
+    enabled: isAdmin,
   });
 
   // Filter out users that already have access
@@ -229,12 +229,37 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
     },
   });
 
+  const bulkGrantMutation = useMutation({
+    mutationFn: (data: { userIds: string[]; siteId: string; accessLevel: 'READ' | 'WRITE' }) =>
+      siteAccessApi.bulkGrant(data),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['site-access', siteId] });
+      showToast.success(`Accès accordé à ${result.granted} utilisateur(s)`);
+    },
+    onError: () => {
+      showToast.error("Erreur lors de l'attribution en masse");
+    },
+  });
+
   const handleGrant = () => {
     if (!selectedUserId) return;
     grantMutation.mutate({
       userId: selectedUserId,
       siteId,
       accessLevel: selectedAccessLevel,
+    });
+  };
+
+  const handleGrantByRole = (role: string, accessLevel: 'READ' | 'WRITE') => {
+    const usersOfRole = allUsers.filter((u) => u.role === role && !accessList.some((a) => a.userId === u.id));
+    if (usersOfRole.length === 0) {
+      showToast.error(`Tous les ${role === 'TECHNICIEN' ? 'techniciens' : 'observateurs'} ont déjà accès`);
+      return;
+    }
+    bulkGrantMutation.mutate({
+      userIds: usersOfRole.map((u) => u.id),
+      siteId,
+      accessLevel,
     });
   };
 
@@ -272,10 +297,21 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
               Les administrateurs et managers ont accès à tous les chantiers. Les techniciens et observateurs nécessitent un accès explicite.
             </p>
           </div>
-          <Button size="sm" onClick={() => setShowAddDialog(true)}>
-            <UserPlus className="mr-2 h-4 w-4" />
-            Ajouter un accès
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleGrantByRole('TECHNICIEN', 'WRITE')}
+              disabled={bulkGrantMutation.isPending}
+            >
+              {bulkGrantMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+              Tous les techniciens
+            </Button>
+            <Button size="sm" onClick={() => setShowAddDialog(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Ajouter
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {accessList.length > 0 ? (
@@ -418,6 +454,129 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
   );
 }
 
+function CopyableField({ icon, label, value, isUrl }: { icon: React.ReactNode; label: string; value: string; isUrl?: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg group">
+      {icon}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {isUrl ? (
+          <a
+            href={value}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-600 hover:underline break-all block"
+          >
+            {value}
+            <ExternalLink className="inline h-3 w-3 ml-1" />
+          </a>
+        ) : (
+          <p className="text-sm text-muted-foreground font-mono break-all select-all cursor-text">{value}</p>
+        )}
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+        onClick={handleCopy}
+        title="Copier dans le presse-papier"
+      >
+        {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+      </Button>
+    </div>
+  );
+}
+
+function SiteContacts({ contacts }: { contacts: any[] }) {
+  const [contactSearch, setContactSearch] = useState('');
+
+  if (!contacts || contacts.length === 0) return null;
+
+  const filteredContacts = contactSearch.trim()
+    ? contacts.filter((c) => {
+        const q = contactSearch.toLowerCase();
+        return (
+          c.name?.toLowerCase().includes(q) ||
+          c.email?.toLowerCase().includes(q) ||
+          c.phone?.toLowerCase().includes(q) ||
+          c.role?.toLowerCase().includes(q) ||
+          c.company?.toLowerCase().includes(q)
+        );
+      })
+    : contacts;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Contacts ({contacts.length})
+          </CardTitle>
+        </div>
+        {contacts.length > 3 && (
+          <div className="relative mt-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher un contact (nom, email, rôle...)"
+              value={contactSearch}
+              onChange={(e) => setContactSearch(e.target.value)}
+              className="pl-9 h-9"
+            />
+          </div>
+        )}
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {filteredContacts.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Aucun contact ne correspond à « {contactSearch} »
+            </p>
+          ) : (
+            filteredContacts.map((contact, index) => (
+              <div key={index} className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{contact.name}</p>
+                    {contact.isPrimary && (
+                      <Badge variant="outline" className="text-xs">Principal</Badge>
+                    )}
+                  </div>
+                  {contact.role && (
+                    <p className="text-sm text-muted-foreground">{contact.role}</p>
+                  )}
+                  <div className="flex flex-wrap gap-4 mt-2">
+                    {contact.phone && (
+                      <a href={`tel:${contact.phone}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
+                        <Phone className="h-3 w-3" />
+                        {contact.phone}
+                      </a>
+                    )}
+                    {contact.email && (
+                      <a href={`mailto:${contact.email}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
+                        <Mail className="h-3 w-3" />
+                        {contact.email}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SiteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -428,12 +587,12 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
   const handleExport = async () => {
     setIsExporting(true);
-    setExportProgress('D\u00e9marrage...');
+    setExportProgress('D\émarrage...');
     try {
       await exportSiteZip(id, (progress) => {
         setExportProgress(progress.step);
       });
-      showToast.success('Export t\u00e9l\u00e9charg\u00e9 avec succ\u00e8s');
+      showToast.success('Export t\él\écharg\é avec succ\ès');
     } catch (error) {
       showToast.error("Erreur lors de l'export du chantier");
     } finally {
@@ -640,49 +799,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           </Card>
 
           {/* Contacts */}
-          {site.contacts && site.contacts.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Contacts
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {site.contacts.map((contact, index) => (
-                    <div key={index} className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium">{contact.name}</p>
-                          {contact.isPrimary && (
-                            <Badge variant="outline" className="text-xs">Principal</Badge>
-                          )}
-                        </div>
-                        {contact.role && (
-                          <p className="text-sm text-muted-foreground">{contact.role}</p>
-                        )}
-                        <div className="flex flex-wrap gap-4 mt-2">
-                          {contact.phone && (
-                            <a href={`tel:${contact.phone}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
-                              <Phone className="h-3 w-3" />
-                              {contact.phone}
-                            </a>
-                          )}
-                          {contact.email && (
-                            <a href={`mailto:${contact.email}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
-                              <Mail className="h-3 w-3" />
-                              {contact.email}
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          <SiteContacts contacts={site.contacts || []} />
 
           {/* Connectivity */}
           {site.connectivity && (site.connectivity.primary || site.connectivity.backup) && (
@@ -820,13 +937,11 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               <CardContent>
                 <div className="space-y-3">
                   {site.metadata.serverInfo.smbPath && (
-                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                      <FolderOpen className="h-5 w-5 text-blue-500 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">Partage SMB</p>
-                        <p className="text-sm text-muted-foreground font-mono truncate">{site.metadata.serverInfo.smbPath}</p>
-                      </div>
-                    </div>
+                    <CopyableField
+                      icon={<FolderOpen className="h-5 w-5 text-blue-500 flex-shrink-0" />}
+                      label="Partage SMB"
+                      value={site.metadata.serverInfo.smbPath}
+                    />
                   )}
                   {site.metadata.serverInfo.sharepointUrl && (
                     <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">

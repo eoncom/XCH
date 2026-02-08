@@ -366,10 +366,20 @@ export default function AssetDetailPage({
                       Scannez ce QR code pour accéder aux informations de
                       l'équipement
                     </p>
-                    <Button onClick={handleDownloadQR}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Télécharger
-                    </Button>
+                    <div className="flex items-center gap-2 justify-center">
+                      <Button onClick={handleDownloadQR}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Télécharger
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => generateQRMutation.mutate()}
+                        disabled={generateQRMutation.isPending}
+                      >
+                        <QrCode className="mr-2 h-4 w-4" />
+                        {generateQRMutation.isPending ? 'Régénération...' : 'Régénérer'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ) : (

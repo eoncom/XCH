@@ -16,7 +16,7 @@ import {
  * Simple theme toggle button (cycles through light -> dark -> system)
  */
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme, theme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -37,17 +37,27 @@ export function ThemeToggle() {
     else setTheme('light');
   };
 
+  const icon = resolvedTheme === 'dark' ? (
+    <Moon className="h-5 w-5" />
+  ) : (
+    <Sun className="h-5 w-5" />
+  );
+
+  const label = theme === 'light' ? 'Clair' : theme === 'dark' ? 'Sombre' : 'Auto';
+
   return (
     <Button
       variant="ghost"
       size="icon"
       onClick={cycleTheme}
-      title={`Theme: ${theme}`}
+      title={`Thème : ${label} — Cliquer pour changer`}
       className="relative"
     >
-      <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-      <span className="sr-only">Toggle theme</span>
+      {icon}
+      {theme === 'system' && (
+        <span className="absolute -bottom-0.5 -right-0.5 text-[8px] font-bold bg-primary text-primary-foreground rounded-full w-3 h-3 flex items-center justify-center">A</span>
+      )}
+      <span className="sr-only">Changer le thème ({label})</span>
     </Button>
   );
 }

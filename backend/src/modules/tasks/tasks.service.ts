@@ -28,8 +28,21 @@ export class TasksService {
         delete data.assetId;
       }
     }
-    if (data.assetId === '') {
+    if (data.assetId === '' || data.assetId === null) {
       data.assetId = null;
+    }
+
+    // Validate assignedTo FK if provided
+    if (data.assignedTo && data.assignedTo !== '') {
+      const assignedUser = await this.prisma.user.findFirst({
+        where: { id: data.assignedTo, tenantId },
+      });
+      if (!assignedUser) {
+        delete data.assignedTo;
+      }
+    }
+    if (data.assignedTo === '' || data.assignedTo === null) {
+      data.assignedTo = null;
     }
 
     const task = await this.prisma.task.create({
@@ -242,9 +255,24 @@ export class TasksService {
         delete data.assetId;
       }
     }
-    // Allow explicit null to unlink asset
-    if (data.assetId === '') {
+    // Allow explicit null/empty to unlink asset
+    if (data.assetId === '' || data.assetId === null) {
       data.assetId = null;
+    }
+
+    // Validate assignedTo FK if provided
+    if (data.assignedTo && data.assignedTo !== '') {
+      const assignedUser = await this.prisma.user.findFirst({
+        where: { id: data.assignedTo, tenantId },
+      });
+      if (!assignedUser) {
+        // If user doesn't exist, remove assignedTo to avoid FK violation
+        delete data.assignedTo;
+      }
+    }
+    // Allow explicit null/empty to unassign
+    if (data.assignedTo === '' || data.assignedTo === null) {
+      data.assignedTo = null;
     }
 
     const task = await this.prisma.task.update({

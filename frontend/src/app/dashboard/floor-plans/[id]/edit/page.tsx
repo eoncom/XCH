@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -42,17 +42,6 @@ export default function EditFloorPlanPage() {
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    setValue,
-    watch,
-    reset,
-  } = useForm<FloorPlanFormData>({
-    resolver: zodResolver(floorPlanSchema),
-  });
-
   // Récupérer plan existant
   const { data: floorPlan, isLoading: loadingPlan } = useQuery<FloorPlan>({
     queryKey: ['floor-plan', params.id],
@@ -64,23 +53,31 @@ export default function EditFloorPlanPage() {
     queryFn: sitesApi.getAll,
   });
 
-  // Pré-remplir formulaire
-  useEffect(() => {
-    if (floorPlan) {
-      reset({
-        siteId: floorPlan.siteId || '',
-        title: floorPlan.title,
-        floor: floorPlan.floor || '',
-        building: floorPlan.building || '',
-        notes: floorPlan.notes || '',
-      });
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    setValue,
+    watch,
+  } = useForm<FloorPlanFormData>({
+    resolver: zodResolver(floorPlanSchema),
+    values: floorPlan
+      ? {
+          siteId: floorPlan.siteId || '',
+          title: floorPlan.title,
+          floor: floorPlan.floor || '',
+          building: floorPlan.building || '',
+          notes: floorPlan.notes || '',
+        }
+      : undefined,
+  });
 
-      // Afficher preview du fichier existant
-      if (floorPlan.fileUrl) {
-        setFilePreview(floorPlan.fileUrl);
-      }
+  // Afficher preview du fichier existant
+  useEffect(() => {
+    if (floorPlan?.fileUrl && !filePreview) {
+      setFilePreview(floorPlan.fileUrl);
     }
-  }, [floorPlan, reset]);
+  }, [floorPlan, filePreview]);
 
   const updateMutation = useMutation({
     mutationFn: (formData: FormData) =>

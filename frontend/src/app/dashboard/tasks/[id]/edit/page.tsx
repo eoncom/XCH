@@ -118,9 +118,12 @@ export default function EditTaskPage() {
 
   const onSubmit = (data: TaskFormData) => {
     // Convert date to ISO-8601 DateTime if provided
+    // Convert empty strings to null for optional FK fields
     const taskData = {
       ...data,
       dueDate: data.dueDate ? new Date(data.dueDate).toISOString() : undefined,
+      assignedTo: data.assignedTo || null,
+      assetId: data.assetId || null,
     };
     updateMutation.mutate(taskData);
   };

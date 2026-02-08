@@ -47,7 +47,7 @@ export async function exportSiteZip(
   const site = await sitesApi.getById(siteId);
 
   // Step 2: Fetch related data in parallel
-  onProgress?.({ step: 'Chargement des donn\u00e9es associ\u00e9es...', percent: 15 });
+  onProgress?.({ step: 'Chargement des donn\ées associ\ées...', percent: 15 });
   const [allAssets, racks, allTasks, floorPlans, documents] = await Promise.all([
     assetsApi.getAll().catch(() => [] as Asset[]),
     racksApi.getAll(siteId).catch(() => [] as Rack[]),
@@ -60,7 +60,7 @@ export async function exportSiteZip(
   const tasks = allTasks.filter((t: Task) => t.siteId === siteId);
 
   // Step 3: Create manifest
-  onProgress?.({ step: 'G\u00e9n\u00e9ration du manifeste...', percent: 25 });
+  onProgress?.({ step: 'G\én\ération du manifeste...', percent: 25 });
   const manifest = {
     version: '1.0',
     exportDate: now.toISOString(),
@@ -91,33 +91,33 @@ export async function exportSiteZip(
   zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
   // Step 4: Generate site report PDF
-  onProgress?.({ step: 'G\u00e9n\u00e9ration du rapport PDF...', percent: 35 });
+  onProgress?.({ step: 'G\én\ération du rapport PDF...', percent: 35 });
   const reportPdf = generateSiteReportPdf(site, assets, racks, tasks, floorPlans);
   zip.file(`rapport-${site.code}.pdf`, reportPdf);
 
   // Step 5: Generate assets Excel
-  onProgress?.({ step: 'G\u00e9n\u00e9ration de l\'inventaire \u00e9quipements...', percent: 45 });
+  onProgress?.({ step: 'G\én\ération de l\'inventaire \équipements...', percent: 45 });
   if (assets.length > 0) {
     const assetsXlsx = generateAssetsExcel(assets, racks);
     zip.file('equipements.xlsx', assetsXlsx);
   }
 
   // Step 6: Generate racks Excel
-  onProgress?.({ step: 'G\u00e9n\u00e9ration de l\'inventaire baies...', percent: 55 });
+  onProgress?.({ step: 'G\én\ération de l\'inventaire baies...', percent: 55 });
   if (racks.length > 0) {
     const racksXlsx = generateRacksExcel(racks);
     zip.file('baies.xlsx', racksXlsx);
   }
 
   // Step 7: Generate tasks Excel
-  onProgress?.({ step: 'G\u00e9n\u00e9ration de la liste des t\u00e2ches...', percent: 65 });
+  onProgress?.({ step: 'G\én\ération de la liste des t\âches...', percent: 65 });
   if (tasks.length > 0) {
     const tasksXlsx = generateTasksExcel(tasks);
     zip.file('taches.xlsx', tasksXlsx);
   }
 
   // Step 8: Download documents
-  onProgress?.({ step: 'T\u00e9l\u00e9chargement des documents attach\u00e9s...', percent: 75 });
+  onProgress?.({ step: 'T\él\échargement des documents attach\és...', percent: 75 });
   if (documents.length > 0) {
     const docsFolder = zip.folder('documents');
     if (docsFolder) {
@@ -149,7 +149,7 @@ export async function exportSiteZip(
   }
 
   // Step 9: Add contacts and connectivity data
-  onProgress?.({ step: 'Ajout des donn\u00e9es compl\u00e9mentaires...', percent: 90 });
+  onProgress?.({ step: 'Ajout des donn\ées compl\émentaires...', percent: 90 });
   if (site.contacts && site.contacts.length > 0) {
     zip.file('contacts.json', JSON.stringify(site.contacts, null, 2));
   }
@@ -158,10 +158,10 @@ export async function exportSiteZip(
   }
 
   // Step 10: Generate ZIP and download
-  onProgress?.({ step: 'G\u00e9n\u00e9ration du fichier ZIP...', percent: 95 });
+  onProgress?.({ step: 'G\én\ération du fichier ZIP...', percent: 95 });
   const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
 
-  onProgress?.({ step: 'T\u00e9l\u00e9chargement...', percent: 100 });
+  onProgress?.({ step: 'T\él\échargement...', percent: 100 });
   saveAs(zipBlob, `chantier-${site.code}-${dateStr}.zip`);
 }
 
@@ -199,21 +199,21 @@ function generateSiteReportPdf(
   doc.text(`Code: ${site.code} | ${new Date().toLocaleDateString('fr-FR')}`, margin, y);
   y += 15;
 
-  // === Informations g\u00e9n\u00e9rales ===
+  // === Informations g\én\érales ===
   doc.setFontSize(14);
   doc.setTextColor(59, 130, 246);
-  doc.text('Informations g\u00e9n\u00e9rales', margin, y);
+  doc.text('Informations g\én\érales', margin, y);
   y += 8;
 
   doc.setFontSize(10);
   doc.setTextColor(30, 41, 59);
   const info = [
     ['Statut', site.status],
-    ['Sant\u00e9', site.healthStatus],
+    ['Sant\é', site.healthStatus],
     ['Adresse', `${site.address || ''}, ${site.postalCode || ''} ${site.city || ''}`],
-    ['\u00c9quipements', `${assets.length}`],
+    ['\Équipements', `${assets.length}`],
     ['Baies', `${racks.length}`],
-    ['T\u00e2ches', `${tasks.length}`],
+    ['T\âches', `${tasks.length}`],
     ['Plans', `${floorPlans.length}`],
   ];
 
@@ -236,7 +236,7 @@ function generateSiteReportPdf(
 
     autoTable(doc, {
       startY: y,
-      head: [['Nom', 'R\u00f4le', 'T\u00e9l\u00e9phone', 'Email']],
+      head: [['Nom', 'R\ôle', 'T\él\éphone', 'Email']],
       body: site.contacts.map((c: any) => [c.name, c.role || '-', c.phone || '-', c.email || '-']),
       theme: 'striped',
       headStyles: { fillColor: [59, 130, 246] },
@@ -246,12 +246,12 @@ function generateSiteReportPdf(
     y = (doc as any).lastAutoTable.finalY + 10;
   }
 
-  // === Connectivit\u00e9 ===
+  // === Connectivit\é ===
   if (site.connectivity && (site.connectivity.primary || site.connectivity.backup)) {
     if (y > pageH - 50) { doc.addPage(); y = 20; }
     doc.setFontSize(14);
     doc.setTextColor(59, 130, 246);
-    doc.text('Connectivit\u00e9', margin, y);
+    doc.text('Connectivit\é', margin, y);
     y += 8;
 
     doc.setFontSize(10);
@@ -260,34 +260,34 @@ function generateSiteReportPdf(
       doc.setFont('helvetica', 'bold');
       doc.text('Principale:', margin, y); y += 5;
       doc.setFont('helvetica', 'normal');
-      if (site.connectivity.primary.provider) { doc.text(`  Op\u00e9rateur: ${site.connectivity.primary.provider}`, margin, y); y += 5; }
+      if (site.connectivity.primary.provider) { doc.text(`  Op\érateur: ${site.connectivity.primary.provider}`, margin, y); y += 5; }
       if (site.connectivity.primary.type) { doc.text(`  Type: ${site.connectivity.primary.type}`, margin, y); y += 5; }
-      if (site.connectivity.primary.ref) { doc.text(`  R\u00e9f: ${site.connectivity.primary.ref}`, margin, y); y += 5; }
+      if (site.connectivity.primary.ref) { doc.text(`  R\éf: ${site.connectivity.primary.ref}`, margin, y); y += 5; }
       y += 3;
     }
     if (site.connectivity.backup) {
       doc.setFont('helvetica', 'bold');
       doc.text('Secours:', margin, y); y += 5;
       doc.setFont('helvetica', 'normal');
-      if (site.connectivity.backup.provider) { doc.text(`  Op\u00e9rateur: ${site.connectivity.backup.provider}`, margin, y); y += 5; }
+      if (site.connectivity.backup.provider) { doc.text(`  Op\érateur: ${site.connectivity.backup.provider}`, margin, y); y += 5; }
       if (site.connectivity.backup.type) { doc.text(`  Type: ${site.connectivity.backup.type}`, margin, y); y += 5; }
-      if (site.connectivity.backup.ref) { doc.text(`  R\u00e9f: ${site.connectivity.backup.ref}`, margin, y); y += 5; }
+      if (site.connectivity.backup.ref) { doc.text(`  R\éf: ${site.connectivity.backup.ref}`, margin, y); y += 5; }
       y += 3;
     }
     y += 5;
   }
 
-  // === \u00c9quipements ===
+  // === \Équipements ===
   if (assets.length > 0) {
     if (y > pageH - 60) { doc.addPage(); y = 20; }
     doc.setFontSize(14);
     doc.setTextColor(59, 130, 246);
-    doc.text(`\u00c9quipements (${assets.length})`, margin, y);
+    doc.text(`\Équipements (${assets.length})`, margin, y);
     y += 3;
 
     autoTable(doc, {
       startY: y,
-      head: [['Type', 'Nom', 'Fabricant', 'Mod\u00e8le', 'N\u00b0 S\u00e9rie', 'Statut']],
+      head: [['Type', 'Nom', 'Fabricant', 'Mod\èle', 'N\° S\érie', 'Statut']],
       body: assets.map((a) => [
         a.type, a.name || '-', a.manufacturer || '-', a.model || '-', a.serialNumber || '-', a.status,
       ]),
@@ -309,7 +309,7 @@ function generateSiteReportPdf(
 
     autoTable(doc, {
       startY: y,
-      head: [['Nom', 'Hauteur', 'Type', '\u00c9quipements', 'Emplacement', 'Statut']],
+      head: [['Nom', 'Hauteur', 'Type', '\Équipements', 'Emplacement', 'Statut']],
       body: racks.map((r) => [
         r.name, `${r.heightU}U`, r.rackType || '-', `${r.assets?.length || 0}`, r.location || '-', r.status,
       ]),
@@ -331,7 +331,7 @@ function generateSiteReportPdf(
 
         autoTable(doc, {
           startY: y,
-          head: [['Position', 'Hauteur', '\u00c9quipement', 'Type', 'Fabricant', 'N\u00b0 S\u00e9rie']],
+          head: [['Position', 'Hauteur', '\Équipement', 'Type', 'Fabricant', 'N\° S\érie']],
           body: rack.assets
             .sort((a, b) => (b.rackPositionU || 0) - (a.rackPositionU || 0))
             .map((a) => [
@@ -349,17 +349,17 @@ function generateSiteReportPdf(
     }
   }
 
-  // === T\u00e2ches ===
+  // === T\âches ===
   if (tasks.length > 0) {
     if (y > pageH - 60) { doc.addPage(); y = 20; }
     doc.setFontSize(14);
     doc.setTextColor(59, 130, 246);
-    doc.text(`T\u00e2ches (${tasks.length})`, margin, y);
+    doc.text(`T\âches (${tasks.length})`, margin, y);
     y += 3;
 
     autoTable(doc, {
       startY: y,
-      head: [['Titre', 'Statut', 'Priorit\u00e9', 'Assign\u00e9 \u00e0', '\u00c9ch\u00e9ance']],
+      head: [['Titre', 'Statut', 'Priorit\é', 'Assign\é \à', '\Éch\éance']],
       body: tasks.map((t) => [
         t.title,
         t.status,
@@ -380,7 +380,7 @@ function generateSiteReportPdf(
     if (y > pageH - 50) { doc.addPage(); y = 20; }
     doc.setFontSize(14);
     doc.setTextColor(59, 130, 246);
-    doc.text('Serveurs & Donn\u00e9es de production', margin, y);
+    doc.text('Serveurs & Donn\ées de production', margin, y);
     y += 8;
 
     doc.setFontSize(10);
@@ -414,9 +414,9 @@ function generateAssetsExcel(assets: Asset[], racks: Rack[]): ArrayBuffer {
   const rackMap = Object.fromEntries(racks.map((r) => [r.id, r.name]));
 
   const wsData: any[][] = [
-    ['Inventaire \u00c9quipements', '', '', '', '', '', '', '', ''],
+    ['Inventaire \Équipements', '', '', '', '', '', '', '', ''],
     [],
-    ['Type', 'Nom', 'Fabricant', 'Mod\u00e8le', 'N\u00b0 S\u00e9rie', 'Statut', 'Baie', 'Position U', 'Notes'],
+    ['Type', 'Nom', 'Fabricant', 'Mod\èle', 'N\° S\érie', 'Statut', 'Baie', 'Position U', 'Notes'],
   ];
 
   for (const a of assets) {
@@ -440,7 +440,7 @@ function generateAssetsExcel(assets: Asset[], racks: Rack[]): ArrayBuffer {
   ];
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '\u00c9quipements');
+  XLSX.utils.book_append_sheet(wb, ws, '\Équipements');
 
   return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 }
@@ -452,7 +452,7 @@ function generateRacksExcel(racks: Rack[]): ArrayBuffer {
   const summaryData: any[][] = [
     ['Inventaire Baies', '', '', '', '', ''],
     [],
-    ['Nom', 'Hauteur', 'Type', 'Statut', 'Emplacement', '\u00c9quipements mont\u00e9s'],
+    ['Nom', 'Hauteur', 'Type', 'Statut', 'Emplacement', '\Équipements mont\és'],
   ];
   for (const r of racks) {
     summaryData.push([
@@ -465,7 +465,7 @@ function generateRacksExcel(racks: Rack[]): ArrayBuffer {
   summaryWs['!cols'] = [
     { wch: 20 }, { wch: 10 }, { wch: 18 }, { wch: 15 }, { wch: 20 }, { wch: 15 },
   ];
-  XLSX.utils.book_append_sheet(wb, summaryWs, 'R\u00e9sum\u00e9');
+  XLSX.utils.book_append_sheet(wb, summaryWs, 'R\ésum\é');
 
   // Detail sheet per rack
   for (const rack of racks) {
@@ -473,7 +473,7 @@ function generateRacksExcel(racks: Rack[]): ArrayBuffer {
       const detailData: any[][] = [
         [`Baie: ${rack.name} (${rack.heightU}U)`, '', '', '', '', ''],
         [],
-        ['Position', 'Hauteur', 'Type', 'Fabricant', 'Mod\u00e8le', 'N\u00b0 S\u00e9rie'],
+        ['Position', 'Hauteur', 'Type', 'Fabricant', 'Mod\èle', 'N\° S\érie'],
       ];
       for (const a of rack.assets.sort((x, y) => (y.rackPositionU || 0) - (x.rackPositionU || 0))) {
         detailData.push([
@@ -495,9 +495,9 @@ function generateRacksExcel(racks: Rack[]): ArrayBuffer {
 
 function generateTasksExcel(tasks: Task[]): ArrayBuffer {
   const wsData: any[][] = [
-    ['Liste des T\u00e2ches', '', '', '', '', '', ''],
+    ['Liste des T\âches', '', '', '', '', '', ''],
     [],
-    ['Titre', 'Statut', 'Priorit\u00e9', 'Assign\u00e9 \u00e0', '\u00c9ch\u00e9ance', 'Cr\u00e9\u00e9 le', 'Description'],
+    ['Titre', 'Statut', 'Priorit\é', 'Assign\é \à', '\Éch\éance', 'Cr\é\é le', 'Description'],
   ];
 
   for (const t of tasks) {
@@ -519,7 +519,7 @@ function generateTasksExcel(tasks: Task[]): ArrayBuffer {
   ];
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'T\u00e2ches');
+  XLSX.utils.book_append_sheet(wb, ws, 'T\âches');
 
   return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 }

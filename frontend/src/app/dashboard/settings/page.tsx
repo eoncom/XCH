@@ -63,10 +63,10 @@ export default function SettingsPage() {
   const [logoUrl, setLogoUrl] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#0070f3');
   const [securityReminders, setSecurityReminders] = useState<SecurityReminder[]>([
-    { id: '1', text: "Badge d'acc\u00e8s obligatoire sur tous les chantiers" },
-    { id: '2', text: 'Carte BTP \u00e0 jour requise' },
+    { id: '1', text: "Badge d'accès obligatoire sur tous les chantiers" },
+    { id: '2', text: 'Carte BTP à jour requise' },
     { id: '3', text: 'EPI obligatoires (casque, gilet, chaussures)' },
-    { id: '4', text: 'Respecter les consignes affich\u00e9es sur site' },
+    { id: '4', text: 'Respecter les consignes affichées sur site' },
   ]);
   const [newReminder, setNewReminder] = useState('');
 
@@ -84,7 +84,7 @@ export default function SettingsPage() {
         setOrgName(tenant.name || 'Mon Organisation');
         setDomain(tenant.config?.domain || tenant.subdomain || 'xch.local');
         setTimezone(tenant.config?.timezone || 'Europe/Paris');
-        setLanguage(tenant.config?.language || 'Fran\u00e7ais');
+        setLanguage(tenant.config?.language || 'Français');
         setLogoUrl(tenant.logoUrl || '');
         setPrimaryColor(tenant.primaryColor || '#0070f3');
         if (tenant.config?.securityReminders?.length > 0) {
@@ -355,7 +355,7 @@ export default function SettingsPage() {
                     Couleur principale
                   </h4>
                   <p className="text-sm text-muted-foreground mb-3">
-                    D\u00e9finit la couleur d'accent utilis\u00e9e dans les boutons, liens et \u00e9l\u00e9ments interactifs.
+                    Définit la couleur d'accent utilisée dans les boutons, liens et éléments interactifs.
                   </p>
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
@@ -392,9 +392,9 @@ export default function SettingsPage() {
                       onClick={async () => {
                         try {
                           await apiClient.patch('/api/tenants/current', { primaryColor });
-                          toast.success('Couleur mise \u00e0 jour');
+                          toast.success('Couleur mise à jour');
                         } catch {
-                          toast.error('Erreur lors de la mise \u00e0 jour');
+                          toast.error('Erreur lors de la mise à jour');
                         }
                       }}
                     >
@@ -406,7 +406,7 @@ export default function SettingsPage() {
               )}
 
               <div className="border-t pt-4">
-                <h4 className="font-medium mb-2">Pr\u00e9visualisation</h4>
+                <h4 className="font-medium mb-2">Prévisualisation</h4>
                 <div className="p-4 rounded-lg border bg-card">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center">
@@ -531,7 +531,7 @@ export default function SettingsPage() {
                             <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p className="text-xs">Affich\u00e9 dans les exports PDF et l'en-t\u00eate de l'application. URL vers une image (PNG, JPG, SVG).</p>
+                            <p className="text-xs">Affiché dans les exports PDF et l'en-tête de l'application. URL vers une image (PNG, JPG, SVG).</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -557,20 +557,20 @@ export default function SettingsPage() {
                   <div className="border-t pt-4 space-y-3">
                     <Label className="flex items-center gap-2">
                       <ShieldAlert className="h-4 w-4" />
-                      Rappels de s\u00e9curit\u00e9 chantier
+                      Rappels de sécurité chantier
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p className="text-xs">Affich\u00e9s dans les info-bulles de s\u00e9curit\u00e9 sur les pages chantier.</p>
+                            <p className="text-xs">Affichés dans les info-bulles de sécurité sur les pages chantier.</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      Ces rappels apparaissent dans l'info-bulle de s\u00e9curit\u00e9 pr\u00e8s des "Informations d'acc\u00e8s" sur chaque chantier.
+                      Ces rappels apparaissent dans l'info-bulle de sécurité près des "Informations d'accès" sur chaque chantier.
                     </p>
                     <div className="space-y-2">
                       {securityReminders.map((reminder, idx) => (
@@ -604,7 +604,7 @@ export default function SettingsPage() {
                         <Input
                           value={newReminder}
                           onChange={(e) => setNewReminder(e.target.value)}
-                          placeholder="Nouveau rappel de s\u00e9curit\u00e9..."
+                          placeholder="Nouveau rappel de sécurité..."
                           className="flex-1 text-sm"
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && newReminder.trim()) {

@@ -17,7 +17,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { usersApi } from '@/lib/api/users';
-import { ArrowLeft } from 'lucide-react';
+import { siteAccessApi, type UserSiteAccess } from '@/lib/api/site-access';
+import { ArrowLeft, MapPin, Lock, Unlock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import type { User, UserRole } from '@/types';
 
@@ -47,6 +49,13 @@ export default function EditUserPage() {
   const { data: user, isLoading } = useQuery<User>({
     queryKey: ['user', userId],
     queryFn: () => usersApi.getById(userId),
+  });
+
+  // Load sites this user has access to
+  const { data: userSiteAccess = [] } = useQuery<UserSiteAccess[]>({
+    queryKey: ['site-access-user', userId],
+    queryFn: () => siteAccessApi.listByUser(userId),
+    enabled: !!userId,
   });
 
   const {
@@ -195,6 +204,50 @@ export default function EditUserPage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Site Access Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5" />
+            Chantiers accessibles
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {user?.role === 'ADMIN' || user?.role === 'MANAGER' ? (
+            <p className="text-sm text-muted-foreground">
+              Les {userRoleLabels[user?.role || 'ADMIN'].toLowerCase()}s ont accès à tous les chantiers par défaut.
+            </p>
+          ) : userSiteAccess.length > 0 ? (
+            <div className="space-y-2">
+              {userSiteAccess.map((access) => (
+                <div key={access.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <Link
+                      href={`/dashboard/sites/${access.siteId}`}
+                      className="text-sm font-medium hover:underline text-primary"
+                    >
+                      {access.site?.code} - {access.site?.name}
+                    </Link>
+                  </div>
+                  <Badge variant="outline" className="text-xs flex items-center gap-1">
+                    {access.accessLevel === 'WRITE' ? (
+                      <><Unlock className="h-3 w-3" /> Écriture</>
+                    ) : (
+                      <><Lock className="h-3 w-3" /> Lecture</>
+                    )}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Aucun accès spécifique configuré. Allez sur la page d'un chantier pour accorder l'accès.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
