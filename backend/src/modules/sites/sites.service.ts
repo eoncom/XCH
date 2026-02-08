@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateSiteDto } from './dto/create-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
@@ -52,11 +52,24 @@ export class SitesService {
     return this.findOne(result[0].id, tenantId);
   }
 
-  async findAll(tenantId: string, filter?: FilterSiteDto) {
+  async findAll(tenantId: string, filter?: FilterSiteDto, accessibleSiteIds?: string[] | null) {
     // Build WHERE clause for raw query
     let whereClause = `s."tenantId" = $1`;
     const params: any[] = [tenantId];
     let paramIndex = 2;
+
+    // Site access filtering: if accessibleSiteIds is an array (not null), restrict results
+    // null = ADMIN/MANAGER with access to all sites, array = specific site IDs
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      if (accessibleSiteIds.length === 0) {
+        // No accessible sites — return empty
+        return [];
+      }
+      const placeholders = accessibleSiteIds.map((_, i) => `$${paramIndex + i}`).join(', ');
+      whereClause += ` AND s.id IN (${placeholders})`;
+      params.push(...accessibleSiteIds);
+      paramIndex += accessibleSiteIds.length;
+    }
 
     if (filter?.status) {
       whereClause += ` AND s.status = $${paramIndex}`;

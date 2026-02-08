@@ -15,6 +15,7 @@ import { FloorPlansModule } from './modules/floor-plans/floor-plans.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ContactTypesModule } from './modules/contact-types/contact-types.module';
+import { SiteAccessModule } from './modules/site-access/site-access.module';
 import { SeedModule } from './modules/seed/seed.module';
 
 @Module({
@@ -60,6 +61,7 @@ import { SeedModule } from './modules/seed/seed.module';
     ContactsModule,
     ContactTypesModule,
     IntegrationsModule,
+    SiteAccessModule,
     SeedModule,
   ],
 })

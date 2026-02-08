@@ -93,6 +93,7 @@ model User {
   createdTasks  Task[]     @relation("CreatedBy")
   auditLogs     AuditLog[]
   photos        Photo[]
+  siteAccess    UserSiteAccess[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -200,6 +201,7 @@ model Site {
   tasks        Task[]
   externalRefs ExternalRef[]
   photos       Photo[]
+  userAccess   UserSiteAccess[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -722,6 +724,36 @@ model AuditLog {
   @@index([tenantId, userId])
   @@index([tenantId, entityType, entityId])
   @@map("audit_logs")
+}
+
+// ============================================================================
+// SITE ACCESS CONTROL (Per-user site permissions)
+// ============================================================================
+
+enum SiteAccessLevel {
+  READ
+  WRITE
+}
+
+model UserSiteAccess {
+  id       String          @id @default(cuid())
+  tenantId String
+
+  userId   String
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  siteId   String
+  site     Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  accessLevel SiteAccessLevel @default(READ)
+
+  grantedBy   String?
+  grantedAt   DateTime     @default(now())
+
+  @@unique([userId, siteId])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([siteId])
+  @@map("user_site_access")
 }
 
 // ============================================================================

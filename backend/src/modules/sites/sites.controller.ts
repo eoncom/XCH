@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, 
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { SitesService } from './sites.service';
+import { SiteAccessService } from '../site-access/site-access.service';
 import { CreateSiteDto } from './dto/create-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
 import { FilterSiteDto } from './dto/filter-site.dto';
@@ -16,7 +17,10 @@ import { AuthRequest } from '../../types/request.interface';
 @UseGuards(JwtAuthGuard, CasbinGuard)
 @ApiBearerAuth()
 export class SitesController {
-  constructor(private readonly sitesService: SitesService) {}
+  constructor(
+    private readonly sitesService: SitesService,
+    private readonly siteAccessService: SiteAccessService,
+  ) {}
 
   @Post()
   @Resource('sites') @Action('create')
@@ -27,9 +31,15 @@ export class SitesController {
 
   @Get()
   @Resource('sites') @Action('read')
-  @ApiOperation({ summary: 'Get all sites' })
-  findAll(@Query() filter: FilterSiteDto, @Request() req: AuthRequest) {
-    return this.sitesService.findAll(req.user.tenantId, filter);
+  @ApiOperation({ summary: 'Get all sites (filtered by user access for TECHNICIEN/VIEWER)' })
+  async findAll(@Query() filter: FilterSiteDto, @Request() req: AuthRequest) {
+    // Get accessible site IDs (null = all sites for ADMIN/MANAGER)
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+
+    return this.sitesService.findAll(req.user.tenantId, filter, accessibleSiteIds);
   }
 
   @Get('nearby')

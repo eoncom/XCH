@@ -395,6 +395,32 @@ export interface NetboxRackRemote {
   role?: { id: number; name: string; slug: string };
 }
 
+// Site Access Control
+export type SiteAccessLevel = 'READ' | 'WRITE';
+
+export interface UserSiteAccess {
+  id: string;
+  tenantId: string;
+  userId: string;
+  siteId: string;
+  accessLevel: SiteAccessLevel;
+  grantedBy?: string;
+  grantedAt: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    avatarUrl?: string;
+  };
+  site?: {
+    id: string;
+    name: string;
+    code: string;
+    status?: string;
+  };
+}
+
 // Pagination
 export interface PaginatedResponse<T> {
   data: T[];

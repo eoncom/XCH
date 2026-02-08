@@ -27,10 +27,21 @@ import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
 import { floorPlansApi } from '@/lib/api/floor-plans';
+import { siteAccessApi, type UserSiteAccess } from '@/lib/api/site-access';
+import { usersApi } from '@/lib/api/users';
+import { useAuthStore } from '@/stores/auth-store';
 import { Attachments } from '@/components/Attachments';
-import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info } from 'lucide-react';
+import { showToast } from '@/lib/toast';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X } from 'lucide-react';
 import Link from 'next/link';
-import type { Site, Asset, Rack, Task, FloorPlan } from '@/types';
+import type { Site, Asset, Rack, Task, FloorPlan, User as UserType } from '@/types';
 
 const healthStatusColors = {
   HEALTHY: 'success' as const,
@@ -152,6 +163,259 @@ function AggregatedDocuments({ siteId }: { siteId: string }) {
   );
 }
 
+function SiteAccessManager({ siteId }: { siteId: string }) {
+  const queryClient = useQueryClient();
+  const { user: currentUser } = useAuthStore();
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedAccessLevel, setSelectedAccessLevel] = useState<'READ' | 'WRITE'>('READ');
+
+  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
+
+  const { data: accessList = [], isLoading } = useQuery<UserSiteAccess[]>({
+    queryKey: ['site-access', siteId],
+    queryFn: () => siteAccessApi.listBySite(siteId),
+    enabled: isAdmin,
+  });
+
+  const { data: allUsers = [] } = useQuery<UserType[]>({
+    queryKey: ['users'],
+    queryFn: () => usersApi.getAll(),
+    enabled: isAdmin && showAddDialog,
+  });
+
+  // Filter out users that already have access
+  const availableUsers = allUsers.filter(
+    (u) => !accessList.some((a) => a.userId === u.id)
+  );
+
+  const grantMutation = useMutation({
+    mutationFn: (data: { userId: string; siteId: string; accessLevel: 'READ' | 'WRITE' }) =>
+      siteAccessApi.grant(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['site-access', siteId] });
+      showToast.success('Accès accordé avec succès');
+      setShowAddDialog(false);
+      setSelectedUserId('');
+      setSelectedAccessLevel('READ');
+    },
+    onError: () => {
+      showToast.error("Erreur lors de l'attribution de l'accès");
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, accessLevel }: { id: string; accessLevel: 'READ' | 'WRITE' }) =>
+      siteAccessApi.update(id, { accessLevel }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['site-access', siteId] });
+      showToast.success('Niveau d\'accès mis à jour');
+    },
+    onError: () => {
+      showToast.error('Erreur lors de la mise à jour');
+    },
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (accessId: string) => siteAccessApi.revoke(accessId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['site-access', siteId] });
+      showToast.success('Accès révoqué');
+    },
+    onError: () => {
+      showToast.error("Erreur lors de la révocation de l'accès");
+    },
+  });
+
+  const handleGrant = () => {
+    if (!selectedUserId) return;
+    grantMutation.mutate({
+      userId: selectedUserId,
+      siteId,
+      accessLevel: selectedAccessLevel,
+    });
+  };
+
+  if (!isAdmin) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-muted-foreground">
+          <Lock className="h-8 w-8 mx-auto mb-2" />
+          Seuls les administrateurs et managers peuvent gérer les accès.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Droits d'accès ({accessList.length})
+            </CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Les administrateurs et managers ont accès à tous les chantiers. Les techniciens et observateurs nécessitent un accès explicite.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setShowAddDialog(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Ajouter un accès
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {accessList.length > 0 ? (
+            <div className="space-y-3">
+              {accessList.map((access) => (
+                <div
+                  key={access.id}
+                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+                      <User className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{access.user?.name}</p>
+                      <p className="text-xs text-muted-foreground">{access.user?.email}</p>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {access.user?.role}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={access.accessLevel}
+                      onValueChange={(value: 'READ' | 'WRITE') =>
+                        updateMutation.mutate({ id: access.id, accessLevel: value })
+                      }
+                    >
+                      <SelectTrigger className="w-[120px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="READ">
+                          <span className="flex items-center gap-1">
+                            <Lock className="h-3 w-3" /> Lecture
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="WRITE">
+                          <span className="flex items-center gap-1">
+                            <Unlock className="h-3 w-3" /> Écriture
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => revokeMutation.mutate(access.id)}
+                      disabled={revokeMutation.isPending}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Shield className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+              <p className="text-muted-foreground mb-2">Aucun accès spécifique configuré</p>
+              <p className="text-xs text-muted-foreground">
+                Les administrateurs et managers ont accès à tous les chantiers par défaut.
+                Ajoutez des accès pour les techniciens et observateurs.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add Access Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ajouter un accès au chantier</DialogTitle>
+            <DialogDescription>
+              Sélectionnez un utilisateur et le niveau d'accès à accorder.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Utilisateur</label>
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sélectionner un utilisateur..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableUsers.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      <span className="flex items-center gap-2">
+                        {u.name} <span className="text-muted-foreground text-xs">({u.email})</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                  {availableUsers.length === 0 && (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      Tous les utilisateurs ont déjà accès
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Niveau d'accès</label>
+              <Select value={selectedAccessLevel} onValueChange={(v: 'READ' | 'WRITE') => setSelectedAccessLevel(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="READ">
+                    <span className="flex items-center gap-2">
+                      <Lock className="h-3 w-3" /> Lecture seule — peut consulter le chantier
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="WRITE">
+                    <span className="flex items-center gap-2">
+                      <Unlock className="h-3 w-3" /> Lecture/Écriture — peut modifier le chantier
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleGrant}
+              disabled={!selectedUserId || grantMutation.isPending}
+            >
+              {grantMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Accorder l'accès
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export default function SiteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -255,6 +519,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           <TabsTrigger value="tasks">Tâches ({tasks.length})</TabsTrigger>
           <TabsTrigger value="plans">Plans</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="access">
+            <Lock className="mr-1 h-3 w-3" />
+            Accès
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="space-y-6">
@@ -755,6 +1023,11 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Access Tab */}
+        <TabsContent value="access">
+          <SiteAccessManager siteId={id} />
         </TabsContent>
 
         {/* Plans Tab */}
