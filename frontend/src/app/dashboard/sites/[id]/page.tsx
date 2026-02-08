@@ -32,6 +32,7 @@ import { usersApi } from '@/lib/api/users';
 import { useAuthStore } from '@/stores/auth-store';
 import { Attachments } from '@/components/Attachments';
 import { showToast } from '@/lib/toast';
+import { exportSiteZip } from '@/lib/export-site';
 import {
   Select,
   SelectContent,
@@ -421,6 +422,24 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const router = useRouter();
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState('');
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    setExportProgress('D\u00e9marrage...');
+    try {
+      await exportSiteZip(id, (progress) => {
+        setExportProgress(progress.step);
+      });
+      showToast.success('Export t\u00e9l\u00e9charg\u00e9 avec succ\u00e8s');
+    } catch (error) {
+      showToast.error("Erreur lors de l'export du chantier");
+    } finally {
+      setIsExporting(false);
+      setExportProgress('');
+    }
+  };
 
   const { data: site, isLoading } = useQuery<Site>({
     queryKey: ['site', id],
@@ -497,6 +516,24 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           </Badge>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            disabled={isExporting}
+            data-testid="export-site-btn"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {exportProgress || 'Export...'}
+              </>
+            ) : (
+              <>
+                <Download className="mr-2 h-4 w-4" />
+                Exporter
+              </>
+            )}
+          </Button>
           <Button variant="outline" asChild data-testid="edit-site-btn">
             <Link href={`/dashboard/sites/${id}/edit`}>
               <Edit className="mr-2 h-4 w-4" />
