@@ -170,159 +170,189 @@ export default function EditFloorPlanPage() {
         <h1 className="text-3xl font-bold">Modifier le plan</h1>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Informations du plan</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-4">
-              {/* Site */}
-              <div className="space-y-2">
-                <Label htmlFor="siteId">
-                  Chantier <span className="text-red-600">*</span>
-                </Label>
-                <Select
-                  value={watch('siteId')}
-                  onValueChange={(value) => setValue('siteId', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner un chantier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sites?.map((site) => (
-                      <SelectItem key={site.id} value={site.id}>
-                        {site.code} - {site.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.siteId && (
-                  <p className="text-sm text-red-600">{errors.siteId.message}</p>
-                )}
-              </div>
+      <div className="grid lg:grid-cols-5 gap-6">
+        {/* Formulaire - 2 colonnes */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Informations du plan</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                {/* Site */}
+                <div className="space-y-2">
+                  <Label htmlFor="siteId">
+                    Chantier <span className="text-red-600">*</span>
+                  </Label>
+                  <Select
+                    value={watch('siteId')}
+                    onValueChange={(value) => setValue('siteId', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionner un chantier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sites?.map((site) => (
+                        <SelectItem key={site.id} value={site.id}>
+                          {site.code} - {site.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.siteId && (
+                    <p className="text-sm text-red-600">{errors.siteId.message}</p>
+                  )}
+                </div>
 
-              {/* Titre */}
-              <div className="space-y-2">
-                <Label htmlFor="title">
-                  Nom du plan <span className="text-red-600">*</span>
-                </Label>
-                <Input
-                  id="title"
-                  {...register('title')}
-                  placeholder="ex: Datacenter - Étage 3"
-                />
-                {errors.title && (
-                  <p className="text-sm text-red-600">{errors.title.message}</p>
-                )}
-              </div>
+                {/* Titre */}
+                <div className="space-y-2">
+                  <Label htmlFor="title">
+                    Nom du plan <span className="text-red-600">*</span>
+                  </Label>
+                  <Input
+                    id="title"
+                    {...register('title')}
+                    placeholder="ex: Datacenter - Étage 3"
+                  />
+                  {errors.title && (
+                    <p className="text-sm text-red-600">{errors.title.message}</p>
+                  )}
+                </div>
 
-              {/* Building */}
-              <div className="space-y-2">
-                <Label htmlFor="building">Bâtiment</Label>
-                <Input
-                  id="building"
-                  {...register('building')}
-                  placeholder="ex: Bâtiment A"
-                />
-              </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Building */}
+                  <div className="space-y-2">
+                    <Label htmlFor="building">Bâtiment</Label>
+                    <Input
+                      id="building"
+                      {...register('building')}
+                      placeholder="ex: Bâtiment A"
+                    />
+                  </div>
 
-              {/* Floor */}
-              <div className="space-y-2">
-                <Label htmlFor="floor">Étage</Label>
-                <Input
-                  id="floor"
-                  {...register('floor')}
-                  placeholder="ex: RDC, Étage 1, Sous-sol"
-                />
-              </div>
-            </div>
+                  {/* Floor */}
+                  <div className="space-y-2">
+                    <Label htmlFor="floor">Étage</Label>
+                    <Input
+                      id="floor"
+                      {...register('floor')}
+                      placeholder="ex: RDC"
+                    />
+                  </div>
+                </div>
 
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                {...register('notes')}
-                placeholder="Notes additionnelles..."
-                rows={4}
-              />
-            </div>
+                {/* Notes */}
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    {...register('notes')}
+                    placeholder="Notes additionnelles..."
+                    rows={3}
+                  />
+                </div>
 
-            {/* Upload fichier (optionnel pour créer nouvelle version) */}
-            <div className="space-y-2">
-              <Label htmlFor="file">Nouveau fichier (optionnel)</Label>
-              <p className="text-sm text-muted-foreground mb-2">
-                Uploader un nouveau fichier créera une nouvelle version du plan. Formats acceptés: PNG, JPG, PDF (max 10MB)
-              </p>
-              <div className="flex items-center gap-4">
-                <Input
-                  id="file"
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,application/pdf"
-                  onChange={handleFileChange}
-                  className="cursor-pointer"
-                />
-                {file && (
+                {/* Upload fichier */}
+                <div className="space-y-2">
+                  <Label htmlFor="file">Nouveau fichier (optionnel)</Label>
+                  <p className="text-xs text-muted-foreground mb-1">
+                    PNG, JPG, PDF (max 10MB)
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      id="file"
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,application/pdf"
+                      onChange={handleFileChange}
+                      className="cursor-pointer"
+                    />
+                    {file && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setFile(null);
+                          setFilePreview(floorPlan.fileUrl || null);
+                        }}
+                      >
+                        Annuler
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-2 pt-2">
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setFile(null);
-                      setFilePreview(floorPlan.fileUrl || null);
-                    }}
+                    variant="outline"
+                    onClick={() => router.push(`/dashboard/floor-plans/${params.id}`)}
                   >
                     Annuler
                   </Button>
-                )}
-              </div>
-            </div>
+                  <Button
+                    type="submit"
+                    data-testid="save-floor-plan-btn"
+                    disabled={updateMutation.isPending}
+                  >
+                    {updateMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Enregistrer
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
 
-            {/* Preview */}
-            {filePreview && (
-              <div className="space-y-2">
-                <Label>Aperçu</Label>
-                <div className="border rounded-lg p-4 bg-muted/50">
+        {/* Aperçu - 3 colonnes */}
+        <div className="lg:col-span-3">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>Aperçu</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filePreview ? (
+                <div className="space-y-3">
                   {filePreview.endsWith('.pdf') || !filePreview.startsWith('data:') ? (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Upload className="h-5 w-5" />
-                      <span>{file ? file.name : floorPlan.originalFilename || 'Plan existant'}</span>
+                    <div className="flex flex-col items-center justify-center py-20">
+                      <Upload className="h-10 w-10 text-muted-foreground mb-3" />
+                      <p className="text-muted-foreground font-medium">
+                        {file ? file.name : floorPlan.originalFilename || 'Plan existant'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Fichier PDF</p>
                     </div>
                   ) : (
-                    <img
-                      src={filePreview}
-                      alt="Aperçu du plan"
-                      className="max-w-full h-auto max-h-64 mx-auto"
-                    />
+                    <div className="border rounded-lg overflow-hidden bg-muted/30">
+                      <img
+                        src={filePreview}
+                        alt="Aperçu du plan"
+                        className="w-full h-auto object-contain max-h-[70vh]"
+                      />
+                    </div>
+                  )}
+                  {file && (
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <p>Nouveau : {file.name}</p>
+                      <p>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
                   )}
                 </div>
-              </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.push(`/dashboard/floor-plans/${params.id}`)}
-              >
-                Annuler
-              </Button>
-              <Button
-                type="submit"
-                data-testid="save-floor-plan-btn"
-                disabled={updateMutation.isPending}
-              >
-                {updateMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Enregistrer les modifications
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <Upload className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground">Aucun aperçu disponible</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Uploadez un fichier image pour voir l'aperçu
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
