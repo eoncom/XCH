@@ -128,7 +128,7 @@ export default function EditAssetPage() {
   const updateMutation = useMutation({
     mutationFn: (data: UpdateAssetDto) => assetsApi.update(assetId, data),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['assets', assetId] });
+      queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       if (result.siteId) {
         queryClient.invalidateQueries({ queryKey: ['sites', result.siteId] });

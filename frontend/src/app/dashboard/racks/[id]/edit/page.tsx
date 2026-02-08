@@ -86,7 +86,7 @@ export default function EditRackPage() {
   const updateMutation = useMutation({
     mutationFn: (data: Partial<RackFormData>) => racksApi.update(rackId, data),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['racks', rackId] });
+      queryClient.invalidateQueries({ queryKey: ['rack', rackId] });
       queryClient.invalidateQueries({ queryKey: ['racks'] });
       if (result.siteId) {
         queryClient.invalidateQueries({ queryKey: ['sites', result.siteId] });

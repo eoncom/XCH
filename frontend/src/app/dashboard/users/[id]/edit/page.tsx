@@ -81,7 +81,7 @@ export default function EditUserPage() {
   const updateMutation = useMutation({
     mutationFn: (data: Partial<UserFormData>) => usersApi.update(userId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users', userId] });
+      queryClient.invalidateQueries({ queryKey: ['user', userId] });
       queryClient.invalidateQueries({ queryKey: ['users'] });
       router.push('/dashboard/users');
     },

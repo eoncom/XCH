@@ -107,7 +107,7 @@ export default function EditTaskPage() {
   const updateMutation = useMutation({
     mutationFn: (data: UpdateTaskDto) => tasksApi.update(taskId, data),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks', taskId] });
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       if (result.siteId) {
         queryClient.invalidateQueries({ queryKey: ['sites', result.siteId] });
