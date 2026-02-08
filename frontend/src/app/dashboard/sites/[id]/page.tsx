@@ -30,6 +30,7 @@ import { floorPlansApi } from '@/lib/api/floor-plans';
 import { siteAccessApi, type UserSiteAccess } from '@/lib/api/site-access';
 import { usersApi } from '@/lib/api/users';
 import { useAuthStore } from '@/stores/auth-store';
+import { apiClient } from '@/lib/api-client';
 import { Attachments } from '@/components/Attachments';
 import { showToast } from '@/lib/toast';
 import { exportSiteZip } from '@/lib/export-site';
@@ -476,6 +477,20 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     enabled: !!id,
   });
 
+  // Load tenant config for dynamic security reminders
+  const { data: tenantConfig } = useQuery<{ config?: { securityReminders?: { id: string; text: string }[] } }>({
+    queryKey: ['tenant-config'],
+    queryFn: () => apiClient.get('/api/tenants/current'),
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  const securityReminders = tenantConfig?.config?.securityReminders ?? [
+    { id: '1', text: "Badge d'accès obligatoire sur tous les chantiers" },
+    { id: '2', text: 'Carte BTP à jour requise' },
+    { id: '3', text: 'EPI obligatoires (casque, gilet, chaussures)' },
+    { id: '4', text: 'Respecter les consignes affichées sur site' },
+  ];
+
   const deleteMutation = useMutation({
     mutationFn: () => sitesApi.delete(id),
     onSuccess: () => {
@@ -741,10 +756,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                       <TooltipContent side="right" className="max-w-xs">
                         <p className="font-medium mb-1">Rappel sécurité chantier</p>
                         <ul className="text-xs space-y-1">
-                          <li>• Badge d'accès obligatoire sur tous les chantiers</li>
-                          <li>• Carte BTP à jour requise</li>
-                          <li>• EPI obligatoires (casque, gilet, chaussures)</li>
-                          <li>• Respecter les consignes affichées sur site</li>
+                          {securityReminders.map((reminder) => (
+                            <li key={reminder.id}>• {reminder.text}</li>
+                          ))}
                         </ul>
                       </TooltipContent>
                     </Tooltip>

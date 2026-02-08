@@ -25,6 +25,7 @@ import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { DashboardSkeleton } from '@/components/ui/skeleton';
+import { useBranding } from '@/components/BrandingProvider';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -48,6 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const { logoUrl, orgName } = useBranding();
 
   // Check session on mount (verify HTTP-only cookie is valid)
   useEffect(() => {
@@ -114,7 +116,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
       >
         <div className="flex h-16 items-center justify-between border-b px-6">
-          <h1 className="text-xl font-bold text-primary">XCH</h1>
+          <div className="flex items-center gap-2">
+            {logoUrl && (
+              <img src={logoUrl} alt={orgName} className="h-7 w-7 object-contain rounded" />
+            )}
+            <h1 className="text-xl font-bold text-primary">{orgName || 'XCH'}</h1>
+          </div>
           <div className="flex items-center gap-1">
             <ThemeToggle />
             <Button
@@ -213,7 +220,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
               <Menu className="h-5 w-5" />
             </Button>
-            <h1 className="ml-4 text-xl font-bold text-primary">XCH</h1>
+            <div className="ml-4 flex items-center gap-2">
+              {logoUrl && (
+                <img src={logoUrl} alt={orgName} className="h-6 w-6 object-contain rounded" />
+              )}
+              <h1 className="text-xl font-bold text-primary">{orgName || 'XCH'}</h1>
+            </div>
           </div>
           <ThemeToggle />
         </div>

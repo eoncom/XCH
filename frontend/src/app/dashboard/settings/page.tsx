@@ -14,19 +14,28 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 
+interface SecurityReminder {
+  id: string;
+  text: string;
+}
+
 interface TenantConfig {
   name: string;
   subdomain: string;
+  logoUrl?: string;
+  primaryColor?: string;
   config: {
     domain?: string;
     timezone?: string;
     language?: string;
+    securityReminders?: SecurityReminder[];
   };
 }
 
@@ -50,6 +59,17 @@ export default function SettingsPage() {
   const [kumaToken, setKumaToken] = useState('');
   const [isTesting, setIsTesting] = useState<string | null>(null);
 
+  // Branding state
+  const [logoUrl, setLogoUrl] = useState('');
+  const [primaryColor, setPrimaryColor] = useState('#0070f3');
+  const [securityReminders, setSecurityReminders] = useState<SecurityReminder[]>([
+    { id: '1', text: "Badge d'acc\u00e8s obligatoire sur tous les chantiers" },
+    { id: '2', text: 'Carte BTP \u00e0 jour requise' },
+    { id: '3', text: 'EPI obligatoires (casque, gilet, chaussures)' },
+    { id: '4', text: 'Respecter les consignes affich\u00e9es sur site' },
+  ]);
+  const [newReminder, setNewReminder] = useState('');
+
   // Demo data management
   const [isLoadingDemo, setIsLoadingDemo] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -64,7 +84,12 @@ export default function SettingsPage() {
         setOrgName(tenant.name || 'Mon Organisation');
         setDomain(tenant.config?.domain || tenant.subdomain || 'xch.local');
         setTimezone(tenant.config?.timezone || 'Europe/Paris');
-        setLanguage(tenant.config?.language || 'Français');
+        setLanguage(tenant.config?.language || 'Fran\u00e7ais');
+        setLogoUrl(tenant.logoUrl || '');
+        setPrimaryColor(tenant.primaryColor || '#0070f3');
+        if (tenant.config?.securityReminders?.length > 0) {
+          setSecurityReminders(tenant.config.securityReminders);
+        }
       } catch (error) {
         console.error('Failed to load tenant:', error);
         toast.error('Erreur lors du chargement des paramètres');
@@ -91,11 +116,14 @@ export default function SettingsPage() {
     try {
       await apiClient.patch('/api/tenants/current', {
         name: orgName,
+        logoUrl: logoUrl || null,
+        primaryColor,
         config: {
           ...tenantData?.config,
           domain,
           timezone,
           language,
+          securityReminders,
         },
       });
       toast.success('Organisation mise à jour avec succès');
@@ -319,8 +347,66 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* Primary Color */}
+              {user?.role === 'ADMIN' && (
+                <div className="border-t pt-4">
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <PaintBucket className="h-4 w-4" />
+                    Couleur principale
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    D\u00e9finit la couleur d'accent utilis\u00e9e dans les boutons, liens et \u00e9l\u00e9ments interactifs.
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={primaryColor}
+                        onChange={(e) => setPrimaryColor(e.target.value)}
+                        className="w-10 h-10 rounded cursor-pointer border-0"
+                      />
+                      <Input
+                        value={primaryColor}
+                        onChange={(e) => setPrimaryColor(e.target.value)}
+                        placeholder="#0070f3"
+                        className="w-28 font-mono text-sm"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      {['#0070f3', '#7c3aed', '#059669', '#dc2626', '#ea580c', '#0891b2'].map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => setPrimaryColor(color)}
+                          className={`w-8 h-8 rounded-full border-2 transition-all ${
+                            primaryColor === color ? 'border-foreground scale-110' : 'border-transparent'
+                          }`}
+                          style={{ backgroundColor: color }}
+                          title={color}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <Button
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await apiClient.patch('/api/tenants/current', { primaryColor });
+                          toast.success('Couleur mise \u00e0 jour');
+                        } catch {
+                          toast.error('Erreur lors de la mise \u00e0 jour');
+                        }
+                      }}
+                    >
+                      <Save className="mr-2 h-3 w-3" />
+                      Appliquer la couleur
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="border-t pt-4">
-                <h4 className="font-medium mb-2">Prévisualisation</h4>
+                <h4 className="font-medium mb-2">Pr\u00e9visualisation</h4>
                 <div className="p-4 rounded-lg border bg-card">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center">
@@ -432,6 +518,123 @@ export default function SettingsPage() {
                         disabled={user?.role !== 'ADMIN'}
                       />
                     </div>
+                  </div>
+
+                  {/* Logo */}
+                  <div className="border-t pt-4 space-y-2">
+                    <Label htmlFor="logoUrl" className="flex items-center gap-2">
+                      <Image className="h-4 w-4" />
+                      Logo de l'organisation
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">Affich\u00e9 dans les exports PDF et l'en-t\u00eate de l'application. URL vers une image (PNG, JPG, SVG).</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
+                    <div className="flex items-center gap-4">
+                      {logoUrl && (
+                        <div className="h-12 w-12 rounded-lg border bg-white flex items-center justify-center overflow-hidden">
+                          <img src={logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+                        </div>
+                      )}
+                      <Input
+                        id="logoUrl"
+                        value={logoUrl}
+                        onChange={(e) => setLogoUrl(e.target.value)}
+                        placeholder="https://example.com/logo.png"
+                        disabled={user?.role !== 'ADMIN'}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Security Reminders */}
+                  <div className="border-t pt-4 space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <ShieldAlert className="h-4 w-4" />
+                      Rappels de s\u00e9curit\u00e9 chantier
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">Affich\u00e9s dans les info-bulles de s\u00e9curit\u00e9 sur les pages chantier.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Ces rappels apparaissent dans l'info-bulle de s\u00e9curit\u00e9 pr\u00e8s des "Informations d'acc\u00e8s" sur chaque chantier.
+                    </p>
+                    <div className="space-y-2">
+                      {securityReminders.map((reminder, idx) => (
+                        <div key={reminder.id} className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground w-4">{idx + 1}.</span>
+                          <Input
+                            value={reminder.text}
+                            onChange={(e) => {
+                              const updated = [...securityReminders];
+                              updated[idx] = { ...reminder, text: e.target.value };
+                              setSecurityReminders(updated);
+                            }}
+                            disabled={user?.role !== 'ADMIN'}
+                            className="flex-1 text-sm"
+                          />
+                          {user?.role === 'ADMIN' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-500 hover:text-red-700"
+                              onClick={() => setSecurityReminders(securityReminders.filter((_, i) => i !== idx))}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {user?.role === 'ADMIN' && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={newReminder}
+                          onChange={(e) => setNewReminder(e.target.value)}
+                          placeholder="Nouveau rappel de s\u00e9curit\u00e9..."
+                          className="flex-1 text-sm"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && newReminder.trim()) {
+                              setSecurityReminders([
+                                ...securityReminders,
+                                { id: Date.now().toString(), text: newReminder.trim() },
+                              ]);
+                              setNewReminder('');
+                            }
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (newReminder.trim()) {
+                              setSecurityReminders([
+                                ...securityReminders,
+                                { id: Date.now().toString(), text: newReminder.trim() },
+                              ]);
+                              setNewReminder('');
+                            }
+                          }}
+                          disabled={!newReminder.trim()}
+                        >
+                          <Plus className="mr-1 h-3 w-3" />
+                          Ajouter
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   {user?.role === 'ADMIN' && (
