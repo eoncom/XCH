@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsEnum, IsNumber, IsObject, IsDateString } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { AssetType, AssetStatus } from '@prisma/client';
 
@@ -68,11 +69,13 @@ export class CreateAssetDto {
   rackHeightU?: number;
 
   @ApiProperty({ required: false })
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   @IsDateString()
   @IsOptional()
   purchaseDate?: string;
 
   @ApiProperty({ required: false })
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   @IsDateString()
   @IsOptional()
   warrantyEnd?: string;

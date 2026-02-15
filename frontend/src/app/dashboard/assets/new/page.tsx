@@ -120,7 +120,16 @@ export default function NewAssetPage() {
   });
 
   const onSubmit = (data: AssetFormData) => {
-    createMutation.mutate(data);
+    // Clean empty strings to undefined to avoid backend validation errors
+    const cleaned: any = { ...data };
+    if (!cleaned.purchaseDate) delete cleaned.purchaseDate;
+    if (!cleaned.warrantyEnd) delete cleaned.warrantyEnd;
+    if (!cleaned.name) delete cleaned.name;
+    if (!cleaned.manufacturer) delete cleaned.manufacturer;
+    if (!cleaned.model) delete cleaned.model;
+    if (!cleaned.serialNumber) delete cleaned.serialNumber;
+    if (cleaned.siteId === 'none' || !cleaned.siteId) delete cleaned.siteId;
+    createMutation.mutate(cleaned);
   };
 
   const type = watch('type');
