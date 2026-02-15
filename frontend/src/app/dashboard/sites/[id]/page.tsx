@@ -496,7 +496,7 @@ function CopyableField({ icon, label, value, isUrl }: { icon: React.ReactNode; l
 }
 
 // === Contacts en grille de 3 ===
-function SiteContactsGrid({ contacts }: { contacts: any[] }) {
+function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: string }) {
   const [contactSearch, setContactSearch] = useState('');
 
   if (!contacts || contacts.length === 0) return null;
@@ -514,11 +514,17 @@ function SiteContactsGrid({ contacts }: { contacts: any[] }) {
       })
     : contacts;
 
-  // Séparer contacts internes et externes
-  const internalRoles = ['responsable', 'assistante', 'accueil', 'sécurité', 'chef de chantier', 'directeur', 'conducteur'];
+  // Séparer contacts internes et externes via le champ category (si dispo) ou fallback par rôle
+  const internalCategories = ['INTERNAL', 'EMERGENCY'];
+  const externalCategories = ['PROVIDER', 'PARTNER', 'TECHNICAL'];
+
   const isInternal = (c: any) => {
+    // 1) Si category est défini, l'utiliser
+    if (c.category) return internalCategories.includes(c.category);
+    // 2) Fallback : deviner par le rôle/company
     const role = (c.role || '').toLowerCase();
-    return internalRoles.some(r => role.includes(r)) || (!c.company && !role.includes('fournisseur') && !role.includes('sous-traitant') && !role.includes('prestataire') && !role.includes('opérateur'));
+    const hasExternalMarkers = c.company || role.includes('fournisseur') || role.includes('sous-traitant') || role.includes('prestataire') || role.includes('opérateur');
+    return !hasExternalMarkers;
   };
 
   const internalContacts = filteredContacts.filter(isInternal);
@@ -557,6 +563,8 @@ function SiteContactsGrid({ contacts }: { contacts: any[] }) {
     </div>
   );
 
+  const editLink = `/dashboard/sites/${siteId}/edit?step=3`;
+
   return (
     <div className="space-y-6">
       {/* Barre de recherche si beaucoup de contacts */}
@@ -587,7 +595,12 @@ function SiteContactsGrid({ contacts }: { contacts: any[] }) {
                     <Users className="h-5 w-5" />
                     Contacts internes du chantier
                   </CardTitle>
-                  <span className="text-xs text-muted-foreground">Source : module Contacts</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Source : module Contacts</span>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -609,7 +622,12 @@ function SiteContactsGrid({ contacts }: { contacts: any[] }) {
                     <Globe className="h-5 w-5" />
                     Contacts externes / IT Partenaires
                   </CardTitle>
-                  <span className="text-xs text-muted-foreground">Source : module Contacts</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Source : module Contacts</span>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -622,14 +640,19 @@ function SiteContactsGrid({ contacts }: { contacts: any[] }) {
             </Card>
           )}
 
-          {/* Si pas de séparation possible (tous dans un groupe), afficher en grille simple */}
+          {/* Si tous les contacts n'ont pas de catégorie et pas de company → afficher en grille simple */}
           {internalContacts.length === 0 && externalContacts.length === 0 && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <User className="h-5 w-5" />
-                  Contacts ({filteredContacts.length})
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <User className="h-5 w-5" />
+                    Contacts ({filteredContacts.length})
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid md:grid-cols-3 gap-4">
@@ -647,7 +670,7 @@ function SiteContactsGrid({ contacts }: { contacts: any[] }) {
 }
 
 // === Connectivité côte à côte ===
-function SiteConnectivitySection({ connectivity }: { connectivity: Site['connectivity'] }) {
+function SiteConnectivitySection({ connectivity, siteId }: { connectivity: Site['connectivity']; siteId: string }) {
   if (!connectivity || (!connectivity.primary && !connectivity.backup)) return null;
 
   const ConnBlock = ({ conn, label, variant }: { conn: { type?: string; provider?: string; ref?: string }; label: string; variant: 'primary' | 'backup' }) => (
@@ -674,10 +697,15 @@ function SiteConnectivitySection({ connectivity }: { connectivity: Site['connect
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Wifi className="h-5 w-5" />
-          Connectivité
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Wifi className="h-5 w-5" />
+            Connectivité
+          </CardTitle>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/dashboard/sites/${siteId}/edit?step=2`}><Edit className="h-3.5 w-3.5" /></Link>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid md:grid-cols-2 gap-4">
@@ -703,7 +731,7 @@ function SiteConnectivitySection({ connectivity }: { connectivity: Site['connect
 }
 
 // === Ressources & Partages (bien visible en haut) ===
-function SiteResourcesSection({ serverInfo }: { serverInfo: any }) {
+function SiteResourcesSection({ serverInfo, siteId }: { serverInfo: any; siteId: string }) {
   if (!serverInfo) return null;
 
   const hasAny = serverInfo.smbPath || serverInfo.sharepointUrl || serverInfo.gedUrl || serverInfo.accessRightsUrl;
@@ -712,10 +740,15 @@ function SiteResourcesSection({ serverInfo }: { serverInfo: any }) {
   return (
     <Card className="border-l-4 border-l-primary">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <HardDrive className="h-5 w-5" />
-          Ressources &amp; Partages
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <HardDrive className="h-5 w-5" />
+            Ressources &amp; Partages
+          </CardTitle>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/dashboard/sites/${siteId}/edit?step=4`}><Edit className="h-3.5 w-3.5" /></Link>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid md:grid-cols-2 gap-3">
@@ -762,16 +795,17 @@ function SiteResourcesSection({ serverInfo }: { serverInfo: any }) {
 }
 
 // === Infos accès site ===
-function SiteAccessInfoSection({ accessNotes, securityReminders }: { accessNotes: Site['accessNotes']; securityReminders: { id: string; text: string }[] }) {
+function SiteAccessInfoSection({ accessNotes, securityReminders, siteId }: { accessNotes: Site['accessNotes']; securityReminders: { id: string; text: string }[]; siteId: string }) {
   if (!accessNotes || (!accessNotes.schedules && !accessNotes.badges && !accessNotes.procedures && !accessNotes.safety)) return null;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Shield className="h-5 w-5" />
-          Accès au site
-          <TooltipProvider>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-5 w-5" />
+            Accès au site
+            <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Info className="h-4 w-4 text-amber-500 cursor-help" />
@@ -786,7 +820,11 @@ function SiteAccessInfoSection({ accessNotes, securityReminders }: { accessNotes
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-        </CardTitle>
+          </CardTitle>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/dashboard/sites/${siteId}/edit?step=3`}><Edit className="h-3.5 w-3.5" /></Link>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid md:grid-cols-2 gap-4">
@@ -1046,7 +1084,12 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           {/* Informations générales */}
           <Card>
             <CardHeader>
-              <CardTitle>Informations générales</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Informations générales</CardTitle>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href={`/dashboard/sites/${id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
@@ -1142,16 +1185,16 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
         {hasInfosPratiques && (
           <TabsContent value="infos-pratiques" className="space-y-6">
             {/* Ressources & Partages (bien visible en haut) */}
-            <SiteResourcesSection serverInfo={site.metadata?.serverInfo} />
+            <SiteResourcesSection serverInfo={site.metadata?.serverInfo} siteId={id} />
 
             {/* Contacts en grille de 3 */}
-            <SiteContactsGrid contacts={site.contacts || []} />
+            <SiteContactsGrid contacts={site.contacts || []} siteId={id} />
 
             {/* Connectivité primary + backup côte à côte */}
-            <SiteConnectivitySection connectivity={site.connectivity} />
+            <SiteConnectivitySection connectivity={site.connectivity} siteId={id} />
 
             {/* Accès au site */}
-            <SiteAccessInfoSection accessNotes={site.accessNotes} securityReminders={securityReminders} />
+            <SiteAccessInfoSection accessNotes={site.accessNotes} securityReminders={securityReminders} siteId={id} />
           </TabsContent>
         )}
 

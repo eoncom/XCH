@@ -643,7 +643,9 @@ export default function EditSitePage({
                               role: existing.role || existing.type?.name || '',
                               phone: existing.phone || existing.mobile || '',
                               email: existing.email || '',
+                              company: existing.company || '',
                               isPrimary: false,
+                              category: existing.type?.category || undefined,
                             }]);
                             toast.success(`Contact "${existing.name}" ajouté`);
                           }

@@ -47,7 +47,9 @@ export interface SiteContact {
   phone?: string;
   email?: string;
   role?: string;
+  company?: string;
   isPrimary?: boolean;
+  category?: 'INTERNAL' | 'PROVIDER' | 'PARTNER' | 'TECHNICAL' | 'EMERGENCY';
 }
 
 export interface SiteConnectivity {
