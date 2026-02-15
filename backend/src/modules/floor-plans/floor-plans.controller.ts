@@ -132,6 +132,43 @@ export class FloorPlansController {
     return this.floorPlansService.getStats(id, req.user.tenantId);
   }
 
+  @Get(':id/versions')
+  @Resource('floor-plans')
+  @Action('read')
+  @ApiOperation({ summary: 'Get version history for a floor plan' })
+  getVersionHistory(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.floorPlansService.getVersionHistory(id, req.user.tenantId);
+  }
+
+  @Post(':id/new-version')
+  @Resource('floor-plans')
+  @Action('create')
+  @ApiOperation({ summary: 'Create a new version of a floor plan (copies pins)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        notes: { type: 'string' },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async createNewVersion(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+    @Body('notes') notes?: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.floorPlansService.createNewVersion(
+      id,
+      req.user.tenantId,
+      notes,
+      file,
+    );
+  }
+
   @Patch(':id')
   @Resource('floor-plans')
   @Action('update')

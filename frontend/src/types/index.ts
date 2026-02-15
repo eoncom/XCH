@@ -248,6 +248,7 @@ export interface FloorPlan {
   floor?: string;
   building?: string;
   version: number;
+  planGroupId?: string;
   fileUrl?: string;
   fileType?: string;
   fileSize?: number;
@@ -259,6 +260,7 @@ export interface FloorPlan {
   updatedAt?: string;
   site?: Site;
   pins?: Pin[];
+  _count?: { pins: number };
 }
 
 // Contact types

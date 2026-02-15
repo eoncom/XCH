@@ -28,23 +28,35 @@ export class FloorPlansService {
       throw new NotFoundException('Site not found');
     }
 
-    // Auto-increment version if not specified
+    // Auto-increment version based on planGroupId or siteId
     let version = createFloorPlanDto.version || 1;
     if (!createFloorPlanDto.version) {
-      const lastPlan = await this.prisma.floorPlan.findFirst({
-        where: { siteId: createFloorPlanDto.siteId },
-        orderBy: { version: 'desc' },
-      });
-      if (lastPlan) {
-        version = lastPlan.version + 1;
+      if (createFloorPlanDto.planGroupId) {
+        // Version within same group
+        const lastPlan = await this.prisma.floorPlan.findFirst({
+          where: { planGroupId: createFloorPlanDto.planGroupId },
+          orderBy: { version: 'desc' },
+        });
+        if (lastPlan) {
+          version = lastPlan.version + 1;
+        }
+      } else {
+        const lastPlan = await this.prisma.floorPlan.findFirst({
+          where: { siteId: createFloorPlanDto.siteId },
+          orderBy: { version: 'desc' },
+        });
+        if (lastPlan) {
+          version = lastPlan.version + 1;
+        }
       }
     }
 
-    return await this.prisma.floorPlan.create({
+    const floorPlan = await this.prisma.floorPlan.create({
       data: {
         siteId: createFloorPlanDto.siteId,
         title: createFloorPlanDto.name,
         version,
+        planGroupId: createFloorPlanDto.planGroupId || undefined,
         fileUrl: '',
         uploadedBy: tenantId,
         notes: createFloorPlanDto.notes,
@@ -54,6 +66,17 @@ export class FloorPlansService {
         pins: true,
       },
     });
+
+    // If no planGroupId was specified, set it to own id (first version of group)
+    if (!floorPlan.planGroupId) {
+      return await this.prisma.floorPlan.update({
+        where: { id: floorPlan.id },
+        data: { planGroupId: floorPlan.id },
+        include: { site: true, pins: true },
+      });
+    }
+
+    return floorPlan;
   }
 
   /**
@@ -235,6 +258,104 @@ export class FloorPlansService {
 
     this.logger.log(`Floor plan deleted: ${id}`);
     return { message: 'Floor plan deleted successfully' };
+  }
+
+  // ==================== VERSIONING ====================
+
+  /**
+   * Create a new version of an existing floor plan (copies pins, requires new file upload)
+   */
+  async createNewVersion(
+    id: string,
+    tenantId: string,
+    notes?: string,
+    file?: Express.Multer.File,
+  ) {
+    const sourcePlan = await this.findOne(id, tenantId);
+
+    // Get or create planGroupId
+    const planGroupId = sourcePlan.planGroupId || sourcePlan.id;
+
+    // Get next version number within this group
+    const lastInGroup = await this.prisma.floorPlan.findFirst({
+      where: { planGroupId },
+      orderBy: { version: 'desc' },
+    });
+    const nextVersion = (lastInGroup?.version || sourcePlan.version) + 1;
+
+    // Ensure source has planGroupId set (backfill for old plans)
+    if (!sourcePlan.planGroupId) {
+      await this.prisma.floorPlan.update({
+        where: { id: sourcePlan.id },
+        data: { planGroupId },
+      });
+    }
+
+    // Create new floor plan version
+    const newPlan = await this.prisma.floorPlan.create({
+      data: {
+        siteId: sourcePlan.siteId,
+        title: sourcePlan.title,
+        version: nextVersion,
+        planGroupId,
+        fileUrl: '',
+        uploadedBy: tenantId,
+        notes: notes || `Version ${nextVersion} — basée sur v${sourcePlan.version}`,
+      },
+    });
+
+    // Copy pins from source plan
+    const sourcePins = await this.prisma.pin.findMany({
+      where: { floorPlanId: sourcePlan.id },
+    });
+
+    if (sourcePins.length > 0) {
+      await this.prisma.pin.createMany({
+        data: sourcePins.map((pin) => ({
+          floorPlanId: newPlan.id,
+          pinType: pin.pinType,
+          x: pin.x,
+          y: pin.y,
+          assetId: pin.assetId,
+          rackId: pin.rackId,
+          label: pin.label,
+          description: pin.description,
+          icon: pin.icon,
+          color: pin.color,
+        })),
+      });
+    }
+
+    // Upload file if provided
+    if (file) {
+      return await this.uploadFile(newPlan.id, tenantId, file);
+    }
+
+    this.logger.log(
+      `New version created: ${newPlan.id} (v${nextVersion}) from ${sourcePlan.id} (v${sourcePlan.version}), ${sourcePins.length} pins copied`,
+    );
+
+    return await this.findOne(newPlan.id, tenantId);
+  }
+
+  /**
+   * Get version history for a floor plan (all versions in the same group)
+   */
+  async getVersionHistory(id: string, tenantId: string) {
+    const floorPlan = await this.findOne(id, tenantId);
+    const planGroupId = floorPlan.planGroupId || floorPlan.id;
+
+    return await this.prisma.floorPlan.findMany({
+      where: {
+        planGroupId,
+        site: { tenantId },
+      },
+      include: {
+        site: true,
+        _count: { select: { pins: true } },
+      },
+      orderBy: { version: 'desc' },
+    });
   }
 
   // ==================== PINS CRUD ====================

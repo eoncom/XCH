@@ -3362,3 +3362,24 @@ feat: dashboard enrichi avec alertes critiques globales et layout amélioré
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-15
+
+**Date:** 2026-02-15 16:07:48
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 3
+
+**Commit message:**
+```
+feat: add overdue/alert indicators on tasks Kanban board
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

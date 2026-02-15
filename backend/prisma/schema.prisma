@@ -348,11 +348,12 @@ model Rack {
 // ============================================================================
 
 model FloorPlan {
-  id      String @id @default(cuid())
-  siteId  String
-  site    Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  title   String
-  version Int    @default(1)
+  id         String  @id @default(cuid())
+  siteId     String
+  site       Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  title      String
+  version    Int     @default(1)
+  planGroupId String? // Groups versions of the same plan together
 
   // File
   fileUrl  String
@@ -369,6 +370,7 @@ model FloorPlan {
 
   @@index([siteId])
   @@index([siteId, version])
+  @@index([planGroupId])
   @@map("floor_plans")
 }
 

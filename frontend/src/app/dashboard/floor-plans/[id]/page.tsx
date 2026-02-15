@@ -27,6 +27,7 @@ import { floorPlansApi } from '@/lib/api/floor-plans';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { showToast } from '@/lib/toast';
+import { Textarea } from '@/components/ui/textarea';
 import {
   ArrowLeft,
   Edit,
@@ -37,6 +38,9 @@ import {
   Info,
   Server,
   Wifi,
+  Copy,
+  History,
+  Upload,
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -134,6 +138,9 @@ export default function FloorPlanDetailPage({
   const [newPinDescription, setNewPinDescription] = useState('');
   const [newPinAssetId, setNewPinAssetId] = useState<string>('');
   const [newPinRackId, setNewPinRackId] = useState<string>('');
+  const [showNewVersionDialog, setShowNewVersionDialog] = useState(false);
+  const [newVersionNotes, setNewVersionNotes] = useState('');
+  const [newVersionFile, setNewVersionFile] = useState<File | null>(null);
 
   const { data: floorPlan, isLoading } = useQuery<FloorPlan>({
     queryKey: ['floor-plan', id],
@@ -152,6 +159,35 @@ export default function FloorPlanDetailPage({
     queryKey: ['racks', floorPlan?.site?.id],
     queryFn: () => racksApi.getAll(floorPlan?.site?.id),
     enabled: !!floorPlan?.site?.id,
+  });
+
+  // Version history
+  const { data: versionHistory } = useQuery<FloorPlan[]>({
+    queryKey: ['floor-plan-versions', id],
+    queryFn: () => floorPlansApi.getVersionHistory(id),
+    enabled: !!id,
+  });
+
+  const createVersionMutation = useMutation({
+    mutationFn: async () => {
+      const formData = new FormData();
+      if (newVersionNotes) formData.append('notes', newVersionNotes);
+      if (newVersionFile) formData.append('file', newVersionFile);
+      return floorPlansApi.createNewVersion(id, formData);
+    },
+    onSuccess: (newPlan: FloorPlan) => {
+      showToast.success(`Version ${newPlan.version} créée avec succès`);
+      queryClient.invalidateQueries({ queryKey: ['floor-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['floor-plan-versions', id] });
+      setShowNewVersionDialog(false);
+      setNewVersionNotes('');
+      setNewVersionFile(null);
+      // Navigate to the new version
+      router.push(`/dashboard/floor-plans/${newPlan.id}`);
+    },
+    onError: () => {
+      showToast.error('Erreur lors de la création de la nouvelle version');
+    },
   });
 
   const deleteMutation = useMutation({
@@ -327,6 +363,10 @@ export default function FloorPlanDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowNewVersionDialog(true)}>
+            <Copy className="mr-2 h-4 w-4" />
+            Nouvelle version
+          </Button>
           <Button variant="outline" onClick={handleDownload} data-testid="download-plan-btn">
             <Download className="mr-2 h-4 w-4" />
             Télécharger PDF
@@ -428,6 +468,58 @@ export default function FloorPlanDetailPage({
               )}
             </CardContent>
           </Card>
+
+          {/* Version History */}
+          {versionHistory && versionHistory.length > 1 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-4 w-4" />
+                    Versions
+                  </CardTitle>
+                  <span className="text-sm text-muted-foreground">
+                    {versionHistory.length}
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {versionHistory.map((version) => (
+                  <Link
+                    key={version.id}
+                    href={`/dashboard/floor-plans/${version.id}`}
+                    className={`block p-2 border rounded-lg hover:bg-muted/50 transition-colors ${
+                      version.id === id ? 'border-primary bg-primary/5' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={version.id === id ? 'default' : 'secondary'} className="text-xs">
+                          v{version.version}
+                        </Badge>
+                        {version.id === id && (
+                          <span className="text-xs text-primary font-medium">actuelle</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {version._count?.pins ?? version.pins?.length ?? 0} repères
+                      </span>
+                    </div>
+                    {version.notes && (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                        {version.notes}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {version.uploadedAt
+                        ? new Date(version.uploadedAt).toLocaleDateString('fr-FR')
+                        : '—'}
+                    </p>
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Pins List */}
           <Card>
@@ -902,6 +994,57 @@ export default function FloorPlanDetailPage({
               disabled={!editPinData.label || updatePinMutation.isPending}
             >
               {updatePinMutation.isPending ? 'Mise à jour...' : 'Mettre à jour'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Version Dialog */}
+      <Dialog open={showNewVersionDialog} onOpenChange={setShowNewVersionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Copy className="h-5 w-5" />
+              Créer une nouvelle version
+            </DialogTitle>
+            <DialogDescription>
+              Crée la version {(floorPlan.version || 1) + 1} à partir de la v{floorPlan.version}.
+              Les {floorPlan.pins?.length || 0} repères seront copiés.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nouveau plan (optionnel)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="file"
+                  accept="image/png,image/jpeg,application/pdf"
+                  onChange={(e) => setNewVersionFile(e.target.files?.[0] || null)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Si non fourni, vous pourrez uploader le fichier après la création.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                value={newVersionNotes}
+                onChange={(e) => setNewVersionNotes(e.target.value)}
+                placeholder="Ex: Mise à jour après travaux bâtiment B..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewVersionDialog(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={() => createVersionMutation.mutate()}
+              disabled={createVersionMutation.isPending}
+            >
+              {createVersionMutation.isPending ? 'Création...' : 'Créer la version'}
             </Button>
           </DialogFooter>
         </DialogContent>

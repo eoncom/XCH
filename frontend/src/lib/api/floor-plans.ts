@@ -24,6 +24,23 @@ export const floorPlansApi = {
 
   delete: (id: string) => apiClient.delete(`/api/floor-plans/${id}`),
 
+  // Versioning
+  getVersionHistory: (id: string) =>
+    apiClient.get<FloorPlan[]>(`/api/floor-plans/${id}/versions`),
+
+  createNewVersion: async (id: string, data: FormData) => {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/floor-plans/${id}/new-version`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        body: data,
+      },
+    );
+    if (!response.ok) throw new Error('Failed to create new version');
+    return response.json();
+  },
+
   // Pins
   createPin: (floorPlanId: string, data: Omit<Pin, 'id' | 'createdAt' | 'updatedAt' | 'tenantId' | 'floorPlanId'>) =>
     apiClient.post<Pin>(`/api/floor-plans/${floorPlanId}/pins`, data),

@@ -26,6 +26,11 @@ export class CreateFloorPlanDto {
   @IsOptional()
   version?: number;
 
+  @ApiProperty({ required: false, description: 'Group ID for versioning (auto-generated if not set)' })
+  @IsString()
+  @IsOptional()
+  planGroupId?: string;
+
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
