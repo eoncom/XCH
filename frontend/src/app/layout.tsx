@@ -33,7 +33,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
         <Providers>
           {children}
-          <Toaster />
+          <Toaster position="bottom-right" toastOptions={{ style: { zIndex: 9999 } }} />
         </Providers>
       </body>
     </html>

@@ -5,7 +5,7 @@ export const showToast = {
   success: (message: string) => {
     toast.success(message, {
       duration: 4000,
-      position: 'top-right',
+      position: 'bottom-right',
       style: {
         background: '#10b981',
         color: '#fff',
@@ -18,7 +18,7 @@ export const showToast = {
   error: (message: string) => {
     toast.error(message, {
       duration: 5000,
-      position: 'top-right',
+      position: 'bottom-right',
       style: {
         background: '#ef4444',
         color: '#fff',
@@ -30,7 +30,7 @@ export const showToast = {
 
   loading: (message: string) => {
     return toast.loading(message, {
-      position: 'top-right',
+      position: 'bottom-right',
       style: {
         background: '#3b82f6',
         color: '#fff',
@@ -56,7 +56,7 @@ export const showToast = {
         error: messages.error,
       },
       {
-        position: 'top-right',
+        position: 'bottom-right',
         style: {
           padding: '16px',
           borderRadius: '8px',

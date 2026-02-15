@@ -52,6 +52,43 @@ const healthStatusColors = {
   UNKNOWN: 'secondary' as const,
 };
 
+const assetStatusColors: Record<string, 'success' | 'secondary' | 'warning' | 'error'> = {
+  IN_SERVICE: 'success',
+  OUT_OF_SERVICE: 'secondary',
+  IN_TRANSIT: 'warning',
+  STOCK: 'secondary',
+  RETIRED: 'error',
+};
+
+const assetStatusLabels: Record<string, string> = {
+  IN_SERVICE: 'En service',
+  OUT_OF_SERVICE: 'Hors service',
+  IN_TRANSIT: 'En transit',
+  STOCK: 'En stock',
+  RETIRED: 'Retiré',
+};
+
+const assetTypeLabels: Record<string, string> = {
+  PRINTER: 'Imprimante',
+  IPAD: 'iPad',
+  TABLET: 'Tablette',
+  SWITCH: 'Switch',
+  FIREWALL: 'Firewall',
+  ROUTER: 'Routeur',
+  WIFI_AP: 'Point d\'accès WiFi',
+  ACCESS_POINT: 'Point d\'accès',
+  TEAMS_ROOM: 'Teams Room',
+  WEBCAM: 'Webcam',
+  DISPLAY: 'Écran',
+  CAMERA: 'Caméra',
+  SERVER: 'Serveur',
+  CABLE: 'Câble',
+  PATCH_PANEL: 'Panneau de brassage',
+  PDU: 'PDU',
+  BOX_5G: 'Box 5G',
+  OTHER: 'Autre',
+};
+
 const sourceLabels: Record<string, string> = {
   site: 'Site',
   asset: 'Équipement',
@@ -1338,39 +1375,55 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
         {/* ============================== */}
         <TabsContent value="assets">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Équipements ({assets.length})</CardTitle>
+              <Button asChild size="sm">
+                <Link href={`/dashboard/assets/new?siteId=${id}`}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nouvel équipement
+                </Link>
+              </Button>
             </CardHeader>
             <CardContent>
               {assets.length > 0 ? (
                 <div className="space-y-3">
                   {assets.map((asset) => (
-                    <div
+                    <Link
                       key={asset.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50"
+                      href={`/dashboard/assets/${asset.id}`}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                     >
-                      <div className="flex items-center gap-3">
-                        <Package className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <Link
-                            href={`/dashboard/assets/${asset.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {asset.manufacturer} {asset.model}
-                          </Link>
-                          <p className="text-sm text-muted-foreground">
-                            {asset.type} • {asset.serialNumber}
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Package className="h-5 w-5 text-muted-foreground shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">
+                            {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}
+                          </p>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {assetTypeLabels[asset.type] || asset.type}
+                            {asset.serialNumber && ` • ${asset.serialNumber}`}
                           </p>
                         </div>
                       </div>
-                      <Badge>{asset.status}</Badge>
-                    </div>
+                      <Badge variant={assetStatusColors[asset.status] || 'secondary'} className="shrink-0 ml-2">
+                        {assetStatusLabels[asset.status] || asset.status}
+                      </Badge>
+                    </Link>
                   ))}
                 </div>
               ) : (
-                <p className="text-center py-12 text-muted-foreground">
-                  Aucun équipement sur ce site
-                </p>
+                <div className="text-center py-12">
+                  <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground mb-4">
+                    Aucun équipement sur ce site
+                  </p>
+                  <Button asChild variant="outline">
+                    <Link href={`/dashboard/assets/new?siteId=${id}`}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Ajouter un équipement
+                    </Link>
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>

@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select';
 import { assetsApi } from '@/lib/api/assets';
 import { sitesApi } from '@/lib/api/sites';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
 import type { Asset, AssetType, AssetStatus, Site, UpdateAssetDto } from '@/types';
 
@@ -169,15 +169,19 @@ export default function EditAssetPage() {
         <h1 className="text-3xl font-bold">Modifier l'équipement</h1>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Informations de l'équipement</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {/* Section 1: Classification (required) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Classification
+              <span className="text-xs font-normal text-red-500 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded">Obligatoire</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="type">Type *</Label>
+                <Label htmlFor="type">Type <span className="text-red-500">*</span></Label>
                 <Select
                   value={type}
                   onValueChange={(value) => setValue('type', value as AssetType)}
@@ -196,7 +200,7 @@ export default function EditAssetPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="status">Statut *</Label>
+                <Label htmlFor="status">Statut <span className="text-red-500">*</span></Label>
                 <Select
                   value={status}
                   onValueChange={(value) => setValue('status', value as AssetStatus)}
@@ -213,13 +217,36 @@ export default function EditAssetPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          </CardContent>
+        </Card>
 
+        {/* Section 2: Identification (optional) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Identification
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Nom</Label>
+                <Label htmlFor="name">Nom personnalisé</Label>
                 <Input
                   id="name"
                   {...register('name')}
-                  placeholder="Switch Salle Serveur, etc."
+                  placeholder="Ex: Switch Salle Serveur"
+                />
+                <p className="text-xs text-muted-foreground">Nom libre pour identifier facilement l'équipement</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="serialNumber">Numéro de série</Label>
+                <Input
+                  id="serialNumber"
+                  {...register('serialNumber')}
+                  placeholder="Ex: SN123456789"
                 />
               </div>
 
@@ -228,7 +255,7 @@ export default function EditAssetPage() {
                 <Input
                   id="manufacturer"
                   {...register('manufacturer')}
-                  placeholder="HP, Cisco, etc."
+                  placeholder="Ex: HP, Cisco, Ubiquiti..."
                 />
               </div>
 
@@ -237,27 +264,31 @@ export default function EditAssetPage() {
                 <Input
                   id="model"
                   {...register('model')}
-                  placeholder="Model XYZ"
+                  placeholder="Ex: ProCurve 2530-48G"
                 />
               </div>
+            </div>
+          </CardContent>
+        </Card>
 
+        {/* Section 3: Affectation & Dates (optional) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Affectation & Dates
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="serialNumber">Numéro de série</Label>
-                <Input
-                  id="serialNumber"
-                  {...register('serialNumber')}
-                  placeholder="SN123456789"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="siteId">Site</Label>
+                <Label htmlFor="siteId">Site d'affectation</Label>
                 <Select value={siteId} onValueChange={(value) => setValue('siteId', value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Sélectionner un site" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Aucun</SelectItem>
+                    <SelectItem value="none">Aucun (en stock)</SelectItem>
                     {sites?.map((site) => (
                       <SelectItem key={site.id} value={site.id}>
                         {site.name}
@@ -266,6 +297,8 @@ export default function EditAssetPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div></div>
 
               <div className="space-y-2">
                 <Label htmlFor="purchaseDate">Date d'achat</Label>
@@ -277,22 +310,29 @@ export default function EditAssetPage() {
                 <Input id="warrantyEnd" type="date" {...register('warrantyEnd')} />
               </div>
             </div>
+          </CardContent>
+        </Card>
 
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.push(`/dashboard/assets/${assetId}`)}
-              >
-                Annuler
-              </Button>
-              <Button type="submit" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+        {/* Actions */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground flex items-center gap-1">
+            <Info className="h-4 w-4" />
+            Les champs marqués <span className="text-red-500">*</span> sont obligatoires
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push(`/dashboard/assets/${assetId}`)}
+            >
+              Annuler
+            </Button>
+            <Button type="submit" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+            </Button>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

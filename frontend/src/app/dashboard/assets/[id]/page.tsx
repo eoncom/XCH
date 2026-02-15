@@ -26,6 +26,13 @@ import {
   Download,
   Package,
   MapPin,
+  ClipboardList,
+  Plus,
+  CheckCircle2,
+  Circle,
+  Clock,
+  XCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -66,6 +73,14 @@ const assetStatusLabels: Record<AssetStatus, string> = {
   IN_TRANSIT: 'En transit',
   STOCK: 'En stock',
   RETIRED: 'Retiré',
+};
+
+const taskStatusConfig: Record<string, { label: string; variant: 'secondary' | 'default' | 'error' | 'success' | 'warning'; icon: typeof Circle }> = {
+  TODO: { label: 'À faire', variant: 'secondary', icon: Circle },
+  IN_PROGRESS: { label: 'En cours', variant: 'default', icon: Clock },
+  BLOCKED: { label: 'Bloquée', variant: 'error', icon: AlertTriangle },
+  DONE: { label: 'Terminée', variant: 'success', icon: CheckCircle2 },
+  CANCELLED: { label: 'Annulée', variant: 'secondary', icon: XCircle },
 };
 
 export default function AssetDetailPage({
@@ -184,6 +199,9 @@ export default function AssetDetailPage({
       <Tabs defaultValue="info" className="w-full">
         <TabsList>
           <TabsTrigger value="info">Informations</TabsTrigger>
+          <TabsTrigger value="tasks">
+            Tâches{(asset as any).tasks?.length > 0 && ` (${(asset as any).tasks.length})`}
+          </TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="qr">QR Code</TabsTrigger>
           <TabsTrigger value="history">Historique</TabsTrigger>
@@ -326,6 +344,58 @@ export default function AssetDetailPage({
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="tasks">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Tâches liées</CardTitle>
+              <Button asChild size="sm">
+                <Link href={`/dashboard/tasks/new?assetId=${id}${asset.siteId ? `&siteId=${asset.siteId}` : ''}`}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nouvelle tâche
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {(asset as any).tasks?.length > 0 ? (
+                <div className="space-y-3">
+                  {(asset as any).tasks.map((task: { id: string; title: string; status: string }) => {
+                    const config = taskStatusConfig[task.status] || taskStatusConfig.TODO;
+                    const StatusIcon = config.icon;
+                    return (
+                      <Link
+                        key={task.id}
+                        href={`/dashboard/tasks/${task.id}`}
+                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <StatusIcon className="h-5 w-5 text-muted-foreground shrink-0" />
+                          <p className="font-medium truncate">{task.title}</p>
+                        </div>
+                        <Badge variant={config.variant} className="shrink-0 ml-2">
+                          {config.label}
+                        </Badge>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <ClipboardList className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground mb-4">
+                    Aucune tâche liée à cet équipement
+                  </p>
+                  <Button asChild variant="outline">
+                    <Link href={`/dashboard/tasks/new?assetId=${id}${asset.siteId ? `&siteId=${asset.siteId}` : ''}`}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Créer une tâche
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="documents">
