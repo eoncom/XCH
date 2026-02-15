@@ -314,29 +314,35 @@ export default function NewSitePage() {
         <h1 className="text-3xl font-bold">Nouveau chantier</h1>
       </div>
 
-      {/* Steps indicator */}
-      <div className="flex items-center justify-center gap-2 mb-8">
+      {/* Steps indicator — cliquable, navigation libre */}
+      <div className="flex items-center justify-center gap-4 mb-8">
         {STEPS.map((step, index) => (
           <div key={step.id} className="flex items-center">
-            <div className="flex flex-col items-center">
-              <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
-                currentStep > step.id
-                  ? 'bg-green-500 border-green-500 text-white'
-                  : currentStep === step.id
-                    ? 'bg-blue-500 border-blue-500 text-white'
-                    : 'bg-gray-200 border-gray-300 text-gray-500'
-              }`}>
-                {currentStep > step.id ? <Check className="h-5 w-5" /> : step.id}
+            <button
+              type="button"
+              onClick={() => setCurrentStep(step.id)}
+              className="flex flex-col items-center group cursor-pointer"
+            >
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                  currentStep === step.id
+                    ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-200'
+                    : 'bg-white border-gray-300 text-gray-500 group-hover:border-blue-400 group-hover:text-blue-600'
+                }`}
+              >
+                <span className="text-sm font-semibold">{step.id}</span>
               </div>
               <div className="mt-2 text-center">
-                <p className={`text-sm font-medium ${currentStep === step.id ? 'text-blue-600' : 'text-gray-500'}`}>
+                <div className={`text-sm font-medium transition-colors ${
+                  currentStep === step.id ? 'text-blue-700' : 'text-gray-500 group-hover:text-blue-600'
+                }`}>
                   {step.name}
-                </p>
-                <p className="text-xs text-gray-400">{step.description}</p>
+                </div>
+                <div className="text-xs text-gray-400">{step.description}</div>
               </div>
-            </div>
+            </button>
             {index < STEPS.length - 1 && (
-              <div className={`w-20 h-1 mx-2 ${currentStep > step.id ? 'bg-green-500' : 'bg-gray-300'}`} />
+              <div className="w-16 h-0.5 mx-4 bg-gray-200" />
             )}
           </div>
         ))}

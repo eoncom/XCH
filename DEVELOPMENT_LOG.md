@@ -3320,3 +3320,24 @@ feat: séparation contacts internes/externes + boutons éditer par bloc
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-15
+
+**Date:** 2026-02-15 15:05:48
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix: boutons éditer ouvrent la bonne étape + sélecteur contacts avancé
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

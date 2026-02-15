@@ -595,12 +595,9 @@ function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: strin
                     <Users className="h-5 w-5" />
                     Contacts internes du chantier
                   </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Source : module Contacts</span>
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
-                    </Button>
-                  </div>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -622,12 +619,9 @@ function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: strin
                     <Globe className="h-5 w-5" />
                     Contacts externes / IT Partenaires
                   </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Source : module Contacts</span>
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
-                    </Button>
-                  </div>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -794,21 +788,36 @@ function SiteResourcesSection({ serverInfo, siteId }: { serverInfo: any; siteId:
   );
 }
 
-// === Infos accès site ===
+// === Infos accès site (compact, collapsible) ===
 function SiteAccessInfoSection({ accessNotes, securityReminders, siteId }: { accessNotes: Site['accessNotes']; securityReminders: { id: string; text: string }[]; siteId: string }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (!accessNotes || (!accessNotes.schedules && !accessNotes.badges && !accessNotes.procedures && !accessNotes.safety)) return null;
 
+  // Résumé compact : horaires + badges en une ligne
+  const summaryParts: string[] = [];
+  if (accessNotes.schedules) summaryParts.push(`🕐 ${accessNotes.schedules}`);
+  if (accessNotes.badges) summaryParts.push(`🪪 ${accessNotes.badges}`);
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Shield className="h-5 w-5" />
-            Accès au site
-            <TooltipProvider>
+    <div className="border rounded-lg bg-muted/20">
+      {/* Header compact cliquable */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors rounded-lg text-left"
+      >
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <Shield className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <span className="text-sm font-medium">Accès au site</span>
+          {!expanded && summaryParts.length > 0 && (
+            <span className="text-xs text-muted-foreground truncate">
+              — {summaryParts.join(' · ')}
+            </span>
+          )}
+          <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Info className="h-4 w-4 text-amber-500 cursor-help" />
+                <Info className="h-3.5 w-3.5 text-amber-500 cursor-help flex-shrink-0" />
               </TooltipTrigger>
               <TooltipContent side="right" className="max-w-xs">
                 <p className="font-medium mb-1">Rappel sécurité chantier</p>
@@ -820,53 +829,64 @@ function SiteAccessInfoSection({ accessNotes, securityReminders, siteId }: { acc
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          </CardTitle>
-          <Button variant="ghost" size="sm" asChild>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button variant="ghost" size="sm" asChild onClick={(e) => e.stopPropagation()}>
             <Link href={`/dashboard/sites/${siteId}/edit?step=3`}><Edit className="h-3.5 w-3.5" /></Link>
           </Button>
+          <svg
+            className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
         </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid md:grid-cols-2 gap-4">
-          {accessNotes.schedules && (
-            <div className="flex items-start gap-2 bg-muted/50 rounded-lg p-3">
-              <Clock className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium">Horaires</p>
-                <p className="text-sm text-muted-foreground">{accessNotes.schedules}</p>
+      </button>
+
+      {/* Contenu déplié */}
+      {expanded && (
+        <div className="px-4 pb-4 pt-1">
+          <div className="grid md:grid-cols-2 gap-3">
+            {accessNotes.schedules && (
+              <div className="flex items-start gap-2 bg-background rounded-lg p-2.5 border">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium">Horaires</p>
+                  <p className="text-xs text-muted-foreground">{accessNotes.schedules}</p>
+                </div>
               </div>
-            </div>
-          )}
-          {accessNotes.badges && (
-            <div className="flex items-start gap-2 bg-muted/50 rounded-lg p-3">
-              <Shield className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium">Badges</p>
-                <p className="text-sm text-muted-foreground">{accessNotes.badges}</p>
+            )}
+            {accessNotes.badges && (
+              <div className="flex items-start gap-2 bg-background rounded-lg p-2.5 border">
+                <Shield className="h-3.5 w-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium">Badges</p>
+                  <p className="text-xs text-muted-foreground">{accessNotes.badges}</p>
+                </div>
               </div>
-            </div>
-          )}
-          {accessNotes.procedures && (
-            <div className="flex items-start gap-2 bg-muted/50 rounded-lg p-3">
-              <Globe className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium">Procédures</p>
-                <p className="text-sm text-muted-foreground">{accessNotes.procedures}</p>
+            )}
+            {accessNotes.procedures && (
+              <div className="flex items-start gap-2 bg-background rounded-lg p-2.5 border">
+                <Globe className="h-3.5 w-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium">Procédures</p>
+                  <p className="text-xs text-muted-foreground">{accessNotes.procedures}</p>
+                </div>
               </div>
-            </div>
-          )}
-          {accessNotes.safety && (
-            <div className="flex items-start gap-2 bg-muted/50 rounded-lg p-3">
-              <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium">Sécurité</p>
-                <p className="text-sm text-muted-foreground">{accessNotes.safety}</p>
+            )}
+            {accessNotes.safety && (
+              <div className="flex items-start gap-2 bg-background rounded-lg p-2.5 border">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium">Sécurité</p>
+                  <p className="text-xs text-muted-foreground">{accessNotes.safety}</p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 
@@ -1081,99 +1101,206 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
         {/* TAB: VUE GENERALE              */}
         {/* ============================== */}
         <TabsContent value="info" className="space-y-6">
-          {/* Informations générales */}
+          {/* Alertes critiques */}
+          {(() => {
+            const blockedTasks = tasks.filter(t => t.status === 'BLOCKED');
+            const urgentTasks = tasks.filter(t => t.priority === 'URGENT' && t.status !== 'DONE' && t.status !== 'CANCELLED');
+            const overdueTasks = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'DONE' && t.status !== 'CANCELLED');
+            const brokenAssets = assets.filter(a => a.status === 'OUT_OF_SERVICE');
+            const totalAlerts = blockedTasks.length + urgentTasks.length + overdueTasks.length + brokenAssets.length;
+
+            if (totalAlerts === 0) return null;
+
+            return (
+              <div className="space-y-2">
+                {blockedTasks.length > 0 && (
+                  <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
+                    <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-red-800 dark:text-red-200">
+                        {blockedTasks.length} tâche{blockedTasks.length > 1 ? 's' : ''} bloquée{blockedTasks.length > 1 ? 's' : ''}
+                      </span>
+                      <span className="text-xs text-red-600 dark:text-red-300 ml-2">
+                        {blockedTasks.slice(0, 2).map(t => t.title).join(', ')}{blockedTasks.length > 2 ? '…' : ''}
+                      </span>
+                    </div>
+                    <Button variant="ghost" size="sm" className="text-red-700 hover:text-red-800 flex-shrink-0" asChild>
+                      <Link href="#" onClick={(e) => { e.preventDefault(); document.querySelector('[value="tasks"]')?.dispatchEvent(new Event('click', { bubbles: true })); }}>
+                        Voir
+                      </Link>
+                    </Button>
+                  </div>
+                )}
+                {urgentTasks.length > 0 && (
+                  <div className="flex items-center gap-3 p-3 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg">
+                    <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-orange-800 dark:text-orange-200">
+                        {urgentTasks.length} tâche{urgentTasks.length > 1 ? 's' : ''} urgente{urgentTasks.length > 1 ? 's' : ''}
+                      </span>
+                      <span className="text-xs text-orange-600 dark:text-orange-300 ml-2">
+                        {urgentTasks.slice(0, 2).map(t => t.title).join(', ')}{urgentTasks.length > 2 ? '…' : ''}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {overdueTasks.length > 0 && (
+                  <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                        {overdueTasks.length} tâche{overdueTasks.length > 1 ? 's' : ''} en retard
+                      </span>
+                      <span className="text-xs text-amber-600 dark:text-amber-300 ml-2">
+                        {overdueTasks.slice(0, 2).map(t => t.title).join(', ')}{overdueTasks.length > 2 ? '…' : ''}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {brokenAssets.length > 0 && (
+                  <div className="flex items-center gap-3 p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg">
+                    <Package className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-purple-800 dark:text-purple-200">
+                        {brokenAssets.length} équipement{brokenAssets.length > 1 ? 's' : ''} hors service
+                      </span>
+                      <span className="text-xs text-purple-600 dark:text-purple-300 ml-2">
+                        {brokenAssets.slice(0, 2).map(a => `${a.manufacturer} ${a.model}`).join(', ')}{brokenAssets.length > 2 ? '…' : ''}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Synthèse rapide : contact principal + horaires */}
+          {(() => {
+            const primaryContact = (site.contacts || []).find((c: any) => c.isPrimary) || (site.contacts || [])[0];
+            const schedules = site.accessNotes?.schedules;
+            if (!primaryContact && !schedules) return null;
+
+            return (
+              <div className="grid md:grid-cols-2 gap-4">
+                {primaryContact && (
+                  <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg border">
+                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <User className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Contact principal</p>
+                      <p className="text-sm font-semibold truncate">{primaryContact.name}</p>
+                      <div className="flex gap-3 text-xs text-muted-foreground">
+                        {primaryContact.phone && (
+                          <a href={`tel:${primaryContact.phone}`} className="hover:text-primary">{primaryContact.phone}</a>
+                        )}
+                        {primaryContact.email && (
+                          <a href={`mailto:${primaryContact.email}`} className="hover:text-primary truncate">{primaryContact.email}</a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {schedules && (
+                  <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg border">
+                    <div className="h-9 w-9 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                      <Clock className="h-4 w-4 text-amber-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Horaires chantier</p>
+                      <p className="text-sm font-semibold">{schedules}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Informations générales (compact) */}
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle>Informations générales</CardTitle>
+                <CardTitle className="text-base">Informations générales</CardTitle>
                 <Button variant="ghost" size="sm" asChild>
                   <Link href={`/dashboard/sites/${id}/edit?step=1`}><Edit className="h-3.5 w-3.5" /></Link>
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
+            <CardContent>
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Code</label>
-                  <p className="text-lg">{site.code}</p>
+                  <label className="text-xs font-medium text-muted-foreground">Code</label>
+                  <p className="text-sm font-semibold">{site.code}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Statut</label>
-                  <p className="text-lg">{site.status}</p>
+                  <label className="text-xs font-medium text-muted-foreground">Statut</label>
+                  <p className="text-sm font-semibold">{site.status}</p>
                 </div>
                 {site.city && (
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground">Ville</label>
-                    <p className="text-lg">{site.city}</p>
+                    <label className="text-xs font-medium text-muted-foreground">Ville</label>
+                    <p className="text-sm font-semibold">{site.city}{site.postalCode ? ` (${site.postalCode})` : ''}</p>
                   </div>
                 )}
-                {site.postalCode && (
+                {(site.latitude && site.longitude) && (
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Code postal
-                    </label>
-                    <p className="text-lg">{site.postalCode}</p>
+                    <label className="text-xs font-medium text-muted-foreground">GPS</label>
+                    <p className="text-sm font-mono">{site.latitude.toFixed(4)}, {site.longitude.toFixed(4)}</p>
                   </div>
                 )}
               </div>
-
-              {site.address && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Adresse</label>
-                  <p className="text-lg">{site.address}</p>
-                </div>
-              )}
-
-              {(site.latitude && site.longitude) && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Coordonnées GPS
-                  </label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <p className="text-lg">
-                      {site.latitude.toFixed(6)}, {site.longitude.toFixed(6)}
-                    </p>
-                  </div>
-                </div>
-              )}
-
               {site.notes && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Notes</label>
-                  <p className="text-sm mt-1">{site.notes}</p>
+                <div className="mt-3 pt-3 border-t">
+                  <p className="text-xs text-muted-foreground">{site.notes}</p>
                 </div>
               )}
             </CardContent>
           </Card>
 
           {/* Statistiques */}
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-4 gap-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Équipements</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold">{assets.length}</p>
-                <p className="text-sm text-muted-foreground">Total</p>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold">{assets.length}</p>
+                    <p className="text-xs text-muted-foreground">Équipements</p>
+                  </div>
+                  <Package className="h-8 w-8 text-muted-foreground/20" />
+                </div>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Baies</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold">{racks.length}</p>
-                <p className="text-sm text-muted-foreground">Total</p>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold">{racks.length}</p>
+                    <p className="text-xs text-muted-foreground">Baies</p>
+                  </div>
+                  <Server className="h-8 w-8 text-muted-foreground/20" />
+                </div>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Tâches</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold">{activeTasks.length}</p>
-                <p className="text-sm text-muted-foreground">En cours</p>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold">{activeTasks.length}</p>
+                    <p className="text-xs text-muted-foreground">Tâches en cours</p>
+                  </div>
+                  <FileText className="h-8 w-8 text-muted-foreground/20" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold">{floorPlans.length}</p>
+                    <p className="text-xs text-muted-foreground">Plans</p>
+                  </div>
+                  <Map className="h-8 w-8 text-muted-foreground/20" />
+                </div>
               </CardContent>
             </Card>
           </div>

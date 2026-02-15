@@ -366,39 +366,35 @@ function EditSitePage({
         <h1 className="text-3xl font-bold">Modifier {site.name}</h1>
       </div>
 
-      {/* Progress Indicator */}
+      {/* Progress Indicator — cliquable, navigation libre */}
       <div className="flex items-center justify-center gap-4">
         {STEPS.map((step, index) => (
           <div key={step.id} className="flex items-center">
-            <div className="flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => setCurrentStep(step.id)}
+              className="flex flex-col items-center group cursor-pointer"
+            >
               <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${
-                  currentStep > step.id
-                    ? 'bg-green-600 border-green-600 text-white'
-                    : currentStep === step.id
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'bg-white border-gray-300 text-gray-400'
+                className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                  currentStep === step.id
+                    ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-200'
+                    : 'bg-white border-gray-300 text-gray-500 group-hover:border-blue-400 group-hover:text-blue-600'
                 }`}
               >
-                {currentStep > step.id ? (
-                  <Check className="w-5 h-5" />
-                ) : (
-                  <span>{step.id}</span>
-                )}
+                <span className="text-sm font-semibold">{step.id}</span>
               </div>
               <div className="mt-2 text-center">
-                <div className={`text-sm font-medium ${currentStep >= step.id ? 'text-gray-900' : 'text-gray-400'}`}>
+                <div className={`text-sm font-medium transition-colors ${
+                  currentStep === step.id ? 'text-blue-700' : 'text-gray-500 group-hover:text-blue-600'
+                }`}>
                   {step.name}
                 </div>
-                <div className="text-xs text-gray-500">{step.description}</div>
+                <div className="text-xs text-gray-400">{step.description}</div>
               </div>
-            </div>
+            </button>
             {index < STEPS.length - 1 && (
-              <div
-                className={`w-16 h-0.5 mx-4 transition-colors ${
-                  currentStep > step.id ? 'bg-green-600' : 'bg-gray-300'
-                }`}
-              />
+              <div className="w-16 h-0.5 mx-4 bg-gray-200" />
             )}
           </div>
         ))}
