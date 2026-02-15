@@ -992,15 +992,15 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
   // Compute latest version per plan group (for display in Plans tab)
   const latestFloorPlans = useMemo(() => {
-    const grouped = new Map<string, typeof floorPlans[0]>();
+    const grouped: Record<string, any> = {};
     floorPlans.forEach((plan: any) => {
       const groupKey = plan.planGroupId || plan.id;
-      const existing = grouped.get(groupKey);
+      const existing = grouped[groupKey];
       if (!existing || (plan.version || 1) > (existing.version || 1)) {
-        grouped.set(groupKey, plan);
+        grouped[groupKey] = plan;
       }
     });
-    return Array.from(grouped.values());
+    return Object.values(grouped);
   }, [floorPlans]);
 
   // Load site attachments count
