@@ -102,6 +102,13 @@ export default function AssetDetailPage({
     queryFn: () => assetsApi.getById(id),
   });
 
+  // Load asset attachments count
+  const { data: assetAttachments = [] } = useQuery<any[]>({
+    queryKey: ['assets', id, 'attachments'],
+    queryFn: () => assetsApi.listAttachments(id),
+    enabled: !!id,
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => assetsApi.delete(id),
     onSuccess: () => {
@@ -202,7 +209,7 @@ export default function AssetDetailPage({
           <TabsTrigger value="tasks">
             Tâches{(asset as any).tasks?.length > 0 && ` (${(asset as any).tasks.length})`}
           </TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="documents">Documents ({assetAttachments.length})</TabsTrigger>
           <TabsTrigger value="qr">QR Code</TabsTrigger>
           <TabsTrigger value="history">Historique</TabsTrigger>
         </TabsList>
@@ -349,7 +356,7 @@ export default function AssetDetailPage({
         <TabsContent value="tasks">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Tâches liées</CardTitle>
+              <CardTitle>Tâches ({(asset as any).tasks?.length || 0})</CardTitle>
               <Button asChild size="sm">
                 <Link href={`/dashboard/tasks/new?assetId=${id}${asset.siteId ? `&siteId=${asset.siteId}` : ''}`}>
                   <Plus className="mr-2 h-4 w-4" />
@@ -360,23 +367,60 @@ export default function AssetDetailPage({
             <CardContent>
               {(asset as any).tasks?.length > 0 ? (
                 <div className="space-y-3">
-                  {(asset as any).tasks.map((task: { id: string; title: string; status: string }) => {
-                    const config = taskStatusConfig[task.status] || taskStatusConfig.TODO;
-                    const StatusIcon = config.icon;
+                  {(asset as any).tasks.map((task: { id: string; title: string; status: string; priority?: string; description?: string; dueDate?: string; assignedUser?: { id: string; name: string } }) => {
+                    const statusCfg: Record<string, { label: string; variant: 'secondary' | 'default' | 'error' | 'success' | 'warning' }> = {
+                      TODO: { label: 'À faire', variant: 'secondary' },
+                      IN_PROGRESS: { label: 'En cours', variant: 'default' },
+                      BLOCKED: { label: 'Bloqué', variant: 'error' },
+                      DONE: { label: 'Terminé', variant: 'success' },
+                      CANCELLED: { label: 'Annulé', variant: 'secondary' },
+                    };
+                    const priorityCfg: Record<string, { label: string; variant: 'secondary' | 'default' | 'warning' | 'error' }> = {
+                      LOW: { label: 'Faible', variant: 'secondary' },
+                      MEDIUM: { label: 'Moyenne', variant: 'default' },
+                      HIGH: { label: 'Haute', variant: 'warning' },
+                      URGENT: { label: 'Urgente', variant: 'error' },
+                    };
+                    const sc = statusCfg[task.status] || { label: task.status, variant: 'secondary' as const };
+                    const pc = task.priority ? (priorityCfg[task.priority] || { label: task.priority, variant: 'secondary' as const }) : null;
+                    const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'DONE' && task.status !== 'CANCELLED';
+
                     return (
-                      <Link
+                      <div
                         key={task.id}
-                        href={`/dashboard/tasks/${task.id}`}
                         className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                       >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <StatusIcon className="h-5 w-5 text-muted-foreground shrink-0" />
-                          <p className="font-medium truncate">{task.title}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/dashboard/tasks/${task.id}`}
+                              className="font-medium hover:underline truncate"
+                            >
+                              {task.title}
+                            </Link>
+                            {isOverdue && (
+                              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 flex-shrink-0">
+                                <Clock className="h-3 w-3" />
+                                En retard
+                              </span>
+                            )}
+                          </div>
+                          {task.description && (
+                            <p className="text-sm text-muted-foreground truncate mt-0.5">
+                              {task.description}
+                            </p>
+                          )}
+                          {task.assignedUser && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              → {task.assignedUser.name}
+                            </p>
+                          )}
                         </div>
-                        <Badge variant={config.variant} className="shrink-0 ml-2">
-                          {config.label}
-                        </Badge>
-                      </Link>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                          {pc && <Badge variant={pc.variant}>{pc.label}</Badge>}
+                          <Badge variant={sc.variant}>{sc.label}</Badge>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>

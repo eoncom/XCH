@@ -935,6 +935,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
   const [activeTab, setActiveTab] = useState('info');
+  const [taskSearch, setTaskSearch] = useState('');
+  const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState<string>('all');
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -984,6 +987,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const { data: floorPlans = [] } = useQuery<FloorPlan[]>({
     queryKey: ['floor-plans', { siteId: id }],
     queryFn: () => floorPlansApi.getAll(id),
+    enabled: !!id,
+  });
+
+  // Load site attachments count
+  const { data: siteAttachments = [] } = useQuery<any[]>({
+    queryKey: ['sites', id, 'attachments'],
+    queryFn: () => sitesApi.listAttachments(id),
     enabled: !!id,
   });
 
@@ -1127,8 +1137,8 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           <TabsTrigger value="assets">Équipements ({assets.length})</TabsTrigger>
           <TabsTrigger value="racks">Baies ({racks.length})</TabsTrigger>
           <TabsTrigger value="tasks">Tâches ({tasks.length})</TabsTrigger>
-          <TabsTrigger value="plans">Plans</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="plans">Plans ({floorPlans.length})</TabsTrigger>
+          <TabsTrigger value="documents">Documents ({siteAttachments.length})</TabsTrigger>
           <TabsTrigger value="access">
             <Lock className="mr-1 h-3 w-3" />
             Accès
@@ -1443,71 +1453,144 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                 </Link>
               </Button>
             </CardHeader>
-            <CardContent>
-              {tasks.length > 0 ? (
-                <div className="space-y-3">
-                  {tasks.map((task) => {
-                    const statusConfig: Record<string, { label: string; variant: 'secondary' | 'default' | 'error' | 'success' | 'warning' }> = {
-                      TODO: { label: 'À faire', variant: 'secondary' },
-                      IN_PROGRESS: { label: 'En cours', variant: 'default' },
-                      BLOCKED: { label: 'Bloqué', variant: 'error' },
-                      DONE: { label: 'Terminé', variant: 'success' },
-                      CANCELLED: { label: 'Annulé', variant: 'secondary' },
-                    };
-                    const priorityConfig: Record<string, { label: string; variant: 'secondary' | 'default' | 'warning' | 'error' }> = {
-                      LOW: { label: 'Faible', variant: 'secondary' },
-                      MEDIUM: { label: 'Moyenne', variant: 'default' },
-                      HIGH: { label: 'Haute', variant: 'warning' },
-                      URGENT: { label: 'Urgente', variant: 'error' },
-                    };
-                    const sc = statusConfig[task.status] || { label: task.status, variant: 'secondary' as const };
-                    const pc = priorityConfig[task.priority] || { label: task.priority, variant: 'secondary' as const };
-                    const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'DONE' && task.status !== 'CANCELLED';
-
-                    return (
-                      <div
-                        key={task.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <Link
-                              href={`/dashboard/tasks/${task.id}`}
-                              className="font-medium hover:underline truncate"
-                            >
-                              {task.title}
-                            </Link>
-                            {isOverdue && (
-                              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 flex-shrink-0">
-                                <Clock className="h-3 w-3" />
-                                En retard
-                              </span>
-                            )}
-                          </div>
-                          {task.description && (
-                            <p className="text-sm text-muted-foreground truncate mt-0.5">
-                              {task.description}
-                            </p>
-                          )}
-                          {task.assignedUser && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              → {task.assignedUser.name}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                          <Badge variant={pc.variant}>{pc.label}</Badge>
-                          <Badge variant={sc.variant}>{sc.label}</Badge>
-                        </div>
-                      </div>
-                    );
-                  })}
+            <CardContent className="space-y-4">
+              {/* Filtres */}
+              {tasks.length > 0 && (
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Rechercher..."
+                      value={taskSearch}
+                      onChange={(e) => setTaskSearch(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <Select value={taskStatusFilter} onValueChange={setTaskStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tous les statuts" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tous les statuts</SelectItem>
+                      <SelectItem value="TODO">À faire</SelectItem>
+                      <SelectItem value="IN_PROGRESS">En cours</SelectItem>
+                      <SelectItem value="BLOCKED">Bloqué</SelectItem>
+                      <SelectItem value="DONE">Terminé</SelectItem>
+                      <SelectItem value="CANCELLED">Annulé</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={taskPriorityFilter} onValueChange={setTaskPriorityFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Toutes les priorités" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Toutes les priorités</SelectItem>
+                      <SelectItem value="LOW">Faible</SelectItem>
+                      <SelectItem value="MEDIUM">Moyenne</SelectItem>
+                      <SelectItem value="HIGH">Haute</SelectItem>
+                      <SelectItem value="URGENT">Urgente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {(taskSearch || taskStatusFilter !== 'all' || taskPriorityFilter !== 'all') && (
+                    <Button variant="ghost" onClick={() => { setTaskSearch(''); setTaskStatusFilter('all'); setTaskPriorityFilter('all'); }} className="flex items-center gap-2">
+                      <X className="h-4 w-4" />
+                      Effacer
+                    </Button>
+                  )}
                 </div>
-              ) : (
-                <p className="text-center py-12 text-muted-foreground">
-                  Aucune tâche pour ce site
-                </p>
               )}
+
+              {/* Liste filtrée */}
+              {(() => {
+                const filteredTasks = tasks.filter((task) => {
+                  if (taskSearch) {
+                    const s = taskSearch.toLowerCase();
+                    if (!task.title.toLowerCase().includes(s) && !task.description?.toLowerCase().includes(s) && !task.assignedUser?.name?.toLowerCase().includes(s)) return false;
+                  }
+                  if (taskStatusFilter !== 'all' && task.status !== taskStatusFilter) return false;
+                  if (taskPriorityFilter !== 'all' && task.priority !== taskPriorityFilter) return false;
+                  return true;
+                });
+
+                const statusConfig: Record<string, { label: string; variant: 'secondary' | 'default' | 'error' | 'success' | 'warning' }> = {
+                  TODO: { label: 'À faire', variant: 'secondary' },
+                  IN_PROGRESS: { label: 'En cours', variant: 'default' },
+                  BLOCKED: { label: 'Bloqué', variant: 'error' },
+                  DONE: { label: 'Terminé', variant: 'success' },
+                  CANCELLED: { label: 'Annulé', variant: 'secondary' },
+                };
+                const priorityConfig: Record<string, { label: string; variant: 'secondary' | 'default' | 'warning' | 'error' }> = {
+                  LOW: { label: 'Faible', variant: 'secondary' },
+                  MEDIUM: { label: 'Moyenne', variant: 'default' },
+                  HIGH: { label: 'Haute', variant: 'warning' },
+                  URGENT: { label: 'Urgente', variant: 'error' },
+                };
+
+                if (filteredTasks.length > 0) {
+                  return (
+                    <div className="space-y-3">
+                      {(taskSearch || taskStatusFilter !== 'all' || taskPriorityFilter !== 'all') && (
+                        <p className="text-xs text-muted-foreground">{filteredTasks.length} résultat{filteredTasks.length > 1 ? 's' : ''} sur {tasks.length}</p>
+                      )}
+                      {filteredTasks.map((task) => {
+                        const sc = statusConfig[task.status] || { label: task.status, variant: 'secondary' as const };
+                        const pc = priorityConfig[task.priority] || { label: task.priority, variant: 'secondary' as const };
+                        const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'DONE' && task.status !== 'CANCELLED';
+
+                        return (
+                          <div
+                            key={task.id}
+                            className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <Link
+                                  href={`/dashboard/tasks/${task.id}`}
+                                  className="font-medium hover:underline truncate"
+                                >
+                                  {task.title}
+                                </Link>
+                                {isOverdue && (
+                                  <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 flex-shrink-0">
+                                    <Clock className="h-3 w-3" />
+                                    En retard
+                                  </span>
+                                )}
+                              </div>
+                              {task.description && (
+                                <p className="text-sm text-muted-foreground truncate mt-0.5">
+                                  {task.description}
+                                </p>
+                              )}
+                              {task.assignedUser && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  → {task.assignedUser.name}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                              <Badge variant={pc.variant}>{pc.label}</Badge>
+                              <Badge variant={sc.variant}>{sc.label}</Badge>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                } else if (tasks.length > 0) {
+                  return (
+                    <p className="text-center py-8 text-muted-foreground">
+                      Aucune tâche ne correspond aux filtres
+                    </p>
+                  );
+                } else {
+                  return (
+                    <p className="text-center py-12 text-muted-foreground">
+                      Aucune tâche pour ce site
+                    </p>
+                  );
+                }
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

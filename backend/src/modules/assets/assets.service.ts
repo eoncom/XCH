@@ -155,6 +155,18 @@ export class AssetsService {
             id: true,
             title: true,
             status: true,
+            priority: true,
+            description: true,
+            dueDate: true,
+            assignedUser: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
           },
         },
         photos: true,
