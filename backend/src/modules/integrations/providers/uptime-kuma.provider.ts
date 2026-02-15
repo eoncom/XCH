@@ -3,6 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import { UptimeKumaProvider } from '../interfaces/integration-provider.interface';
 import axios, { AxiosInstance } from 'axios';
 
+interface ParsedMonitor {
+  id: number;
+  name: string;
+  type: string;
+  status: 'up' | 'down' | 'unknown';
+  responseTime: number;
+  certExpiry?: number;
+}
+
 @Injectable()
 export class UptimeKumaProviderService implements UptimeKumaProvider {
   private readonly logger = new Logger(UptimeKumaProviderService.name);
@@ -12,25 +21,25 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
 
   constructor(private configService: ConfigService) {
     const baseURL = this.configService.get<string>('UPTIME_KUMA_URL');
-    const username = this.configService.get<string>('UPTIME_KUMA_USERNAME');
-    const password = this.configService.get<string>('UPTIME_KUMA_PASSWORD');
 
-    this.enabled = !!(baseURL && username && password);
+    // Uptime Kuma's /metrics endpoint doesn't require authentication
+    // Username/password are optional (kept for backward compatibility)
+    this.enabled = !!baseURL;
 
     if (this.enabled) {
+      const username = this.configService.get<string>('UPTIME_KUMA_USERNAME');
+      const password = this.configService.get<string>('UPTIME_KUMA_PASSWORD');
+
       this.client = axios.create({
         baseURL,
-        auth: {
-          username: username!,
-          password: password!,
-        },
-        timeout: 10000,
+        timeout: 15000,
+        ...(username && password ? { auth: { username, password } } : {}),
       });
 
       this.logger.log('Uptime Kuma provider initialized');
     } else {
       this.logger.warn(
-        'Uptime Kuma provider disabled (missing UPTIME_KUMA_URL, USERNAME, or PASSWORD)',
+        'Uptime Kuma provider disabled (missing UPTIME_KUMA_URL)',
       );
     }
   }
@@ -44,38 +53,50 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
   }
 
   /**
-   * Test connection to Uptime Kuma
-   * Note: Uptime Kuma API is limited, this uses a simple GET to check availability
+   * Test connection to Uptime Kuma using /metrics endpoint (Prometheus format)
    */
   async testConnection(): Promise<{ success: boolean; message: string; details?: any }> {
     if (!this.enabled) {
       return {
         success: false,
-        message: 'Uptime Kuma provider is disabled (missing configuration)',
+        message: 'Uptime Kuma provider is disabled (missing UPTIME_KUMA_URL)',
       };
     }
 
     try {
-      // Uptime Kuma doesn't have a standard /status endpoint
-      // Try to fetch monitors as a health check
-      const response = await this.client.get('/api/status-page/heartbeat');
+      const response = await this.client.get('/metrics');
+      const monitors = this.parsePrometheusMetrics(response.data);
       this.status = 'connected';
 
       return {
         success: true,
-        message: 'Connected to Uptime Kuma successfully',
+        message: `Connected to Uptime Kuma — ${monitors.length} monitors detected`,
         details: {
           endpoint: this.client.defaults.baseURL,
+          monitorCount: monitors.length,
+          monitors: monitors.map((m) => ({
+            id: m.id,
+            name: m.name,
+            status: m.status,
+          })),
         },
       };
     } catch (error: unknown) {
-      // If 401/403, credentials are wrong but service is reachable
-      const axiosError = error as { response?: { status?: number } };
+      const axiosError = error as { response?: { status?: number }; code?: string };
+
       if (axiosError.response?.status === 401 || axiosError.response?.status === 403) {
         this.status = 'error';
         return {
           success: false,
           message: 'Authentication failed (check credentials)',
+        };
+      }
+
+      if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ENOTFOUND') {
+        this.status = 'error';
+        return {
+          success: false,
+          message: `Cannot reach Uptime Kuma at ${this.client.defaults.baseURL}`,
         };
       }
 
@@ -91,38 +112,118 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
   }
 
   /**
-   * Fetch all monitors from Uptime Kuma
-   * Note: This is a simplified implementation
-   * Real implementation depends on Uptime Kuma API version and availability
+   * Parse Prometheus metrics from /metrics endpoint
+   * Extracts monitor_status, monitor_response_time, monitor_cert_days_remaining
    */
-  async fetchMonitors(): Promise<any[]> {
+  private parsePrometheusMetrics(metricsText: string): ParsedMonitor[] {
+    const monitors = new Map<number, ParsedMonitor>();
+
+    // Parse monitor_status{monitor_name="...",monitor_type="...",monitor_url="...",monitor_hostname="...",monitor_port=""} 1
+    const statusRegex = /monitor_status\{[^}]*monitor_name="([^"]*)"[^}]*\}\s+(\d+)/g;
+    let match;
+    while ((match = statusRegex.exec(metricsText)) !== null) {
+      const name = match[1];
+      const statusValue = parseInt(match[2]);
+
+      // Extract monitor_id from the line if available, or use name hash
+      const idMatch = metricsText.match(
+        new RegExp(`monitor_status\\{[^}]*monitor_name="${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^}]*\\}`)
+      );
+
+      // Try to extract ID from nearby lines
+      const idRegex = new RegExp(`monitor_response_time\\{[^}]*monitor_name="${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^}]*\\}\\s+([\\d.]+)`);
+      const rtMatch = idRegex.exec(metricsText);
+
+      // Use name-based hash as ID since Prometheus metrics don't include monitor_id
+      const id = this.hashName(name);
+
+      if (!monitors.has(id)) {
+        // Extract type from the metrics
+        const typeMatch = metricsText.match(
+          new RegExp(`monitor_status\\{[^}]*monitor_name="${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^}]*monitor_type="([^"]*)"`)
+        );
+
+        monitors.set(id, {
+          id,
+          name,
+          type: typeMatch ? typeMatch[1] : 'http',
+          status: statusValue === 1 ? 'up' : statusValue === 0 ? 'down' : 'unknown',
+          responseTime: 0,
+        });
+      }
+    }
+
+    // Parse response times
+    const rtRegex = /monitor_response_time\{[^}]*monitor_name="([^"]*)"[^}]*\}\s+([\d.]+)/g;
+    while ((match = rtRegex.exec(metricsText)) !== null) {
+      const name = match[1];
+      const responseTime = parseFloat(match[2]);
+      const id = this.hashName(name);
+      const monitor = monitors.get(id);
+      if (monitor) {
+        monitor.responseTime = responseTime;
+      }
+    }
+
+    // Parse cert expiry
+    const certRegex = /monitor_cert_days_remaining\{[^}]*monitor_name="([^"]*)"[^}]*\}\s+([\d.]+)/g;
+    while ((match = certRegex.exec(metricsText)) !== null) {
+      const name = match[1];
+      const certExpiry = parseFloat(match[2]);
+      const id = this.hashName(name);
+      const monitor = monitors.get(id);
+      if (monitor) {
+        monitor.certExpiry = certExpiry;
+      }
+    }
+
+    return Array.from(monitors.values());
+  }
+
+  /**
+   * Simple hash for monitor name -> numeric ID
+   */
+  private hashName(name: string): number {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      const char = name.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash |= 0; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  }
+
+  /**
+   * Fetch all monitors from Uptime Kuma via /metrics
+   */
+  async fetchMonitors(): Promise<ParsedMonitor[]> {
     if (!this.enabled) {
       throw new Error('Uptime Kuma provider is disabled');
     }
 
     try {
-      // Uptime Kuma API structure varies by version
-      // This is a generic approach - adapt based on your Uptime Kuma setup
-      const response = await this.client.get('/api/monitors');
+      const response = await this.client.get('/metrics');
+      const monitors = this.parsePrometheusMetrics(response.data);
 
-      this.logger.log(`Fetched ${response.data?.length || 0} monitors from Uptime Kuma`);
-      return response.data || [];
+      this.status = 'connected';
+      this.logger.log(`Fetched ${monitors.length} monitors from Uptime Kuma`);
+      return monitors;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error('Failed to fetch monitors from Uptime Kuma', errorMessage);
+      this.status = 'error';
 
       // Return empty array instead of throwing (circuit breaker pattern)
-      this.logger.warn('Returning empty monitors list due to API error');
       return [];
     }
   }
 
   /**
-   * Get monitor status by identifier (tag or name)
+   * Get monitor status by name identifier
    */
   async getMonitorStatus(
     identifier: string,
-  ): Promise<{ status: 'up' | 'down' | 'unknown'; uptime: number; lastCheck: Date } | null> {
+  ): Promise<{ status: 'up' | 'down' | 'unknown'; uptime: number; lastCheck: Date; responseTime: number } | null> {
     if (!this.enabled) {
       throw new Error('Uptime Kuma provider is disabled');
     }
@@ -130,11 +231,12 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
     try {
       const monitors = await this.fetchMonitors();
 
-      // Search by name or tag
+      // Search by exact name or partial match (case insensitive)
       const monitor = monitors.find(
         (m) =>
           m.name === identifier ||
-          m.tags?.some((tag: any) => tag.name === identifier || tag.tag_id === identifier),
+          m.name.toLowerCase() === identifier.toLowerCase() ||
+          m.name.toLowerCase().includes(identifier.toLowerCase()),
       );
 
       if (!monitor) {
@@ -142,35 +244,15 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
       }
 
       return {
-        status: monitor.status === 1 ? 'up' : monitor.status === 0 ? 'down' : 'unknown',
-        uptime: monitor.uptime || 0,
-        lastCheck: new Date(monitor.last_check || Date.now()),
+        status: monitor.status,
+        uptime: monitor.status === 'up' ? 100 : 0,
+        lastCheck: new Date(),
+        responseTime: monitor.responseTime,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to get monitor status for ${identifier}`, errorMessage);
       return null;
-    }
-  }
-
-  /**
-   * Get heartbeats for a monitor
-   */
-  async getHeartbeats(monitorId: number, limit: number = 100): Promise<any[]> {
-    if (!this.enabled) {
-      throw new Error('Uptime Kuma provider is disabled');
-    }
-
-    try {
-      const response = await this.client.get(`/api/monitors/${monitorId}/heartbeats`, {
-        params: { limit },
-      });
-
-      return response.data || [];
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to get heartbeats for monitor ${monitorId}`, errorMessage);
-      return [];
     }
   }
 

@@ -115,6 +115,14 @@ export class IntegrationsController {
 
   // ==================== UPTIME KUMA ====================
 
+  @Get('uptime-kuma/monitors')
+  @Resource('integrations')
+  @Action('read')
+  @ApiOperation({ summary: 'List all monitors from Uptime Kuma' })
+  getUptimeKumaMonitors() {
+    return this.integrationsService.getUptimeKumaMonitors();
+  }
+
   @Post('uptime-kuma/sync/health/:siteId')
   @Resource('integrations')
   @Action('update')

@@ -328,6 +328,13 @@ export class IntegrationsService {
   // ==================== UPTIME KUMA MONITORING ====================
 
   /**
+   * Get all monitors from Uptime Kuma
+   */
+  async getUptimeKumaMonitors() {
+    return this.uptimeKumaProvider.fetchMonitors();
+  }
+
+  /**
    * Update site health status from Uptime Kuma monitor
    */
   async updateSiteHealthFromMonitor(siteId: string, tenantId: string, monitorIdentifier: string) {
@@ -351,6 +358,7 @@ export class IntegrationsService {
       where: { id: siteId },
       data: {
         healthStatus: healthStatus as HealthStatus,
+        lastHealthCheck: new Date(),
         connectivity: {
           ...((site.connectivity as any) || {}),
           monitoring: {
@@ -358,6 +366,7 @@ export class IntegrationsService {
             monitor: monitorIdentifier,
             lastCheck: monitorStatus.lastCheck,
             uptime: monitorStatus.uptime,
+            responseTime: monitorStatus.responseTime,
           },
         },
       },
