@@ -6,11 +6,14 @@ import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
-import { MapPin, Package, Server, CheckSquare, MapIcon } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { MapPin, Package, Server, CheckSquare, MapIcon, AlertTriangle, Clock, Ban, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import type { Task, Asset, Site } from '@/types';
 
 // Dynamically import map component (client-side only)
 const SitesMap = dynamic(() => import('@/components/maps/SitesMap'), {
@@ -105,6 +108,50 @@ export default function DashboardPage() {
     };
   }, [sites, assets, racks, tasks]);
 
+  // Calculate critical alerts across all sites
+  const alerts = useMemo(() => {
+    const blockedTasks = tasks.filter((t: Task) => t.status === 'BLOCKED');
+    const urgentTasks = tasks.filter((t: Task) => t.priority === 'URGENT' && t.status !== 'DONE' && t.status !== 'CANCELLED');
+    const now = new Date();
+    const overdueTasks = tasks.filter((t: Task) => t.dueDate && new Date(t.dueDate) < now && t.status !== 'DONE' && t.status !== 'CANCELLED');
+    const outOfServiceAssets = assets.filter((a: Asset) => a.status === 'OUT_OF_SERVICE');
+
+    // Group alerts by site for "sites en souffrance"
+    const siteAlertMap = new Map<string, { blocked: Task[]; urgent: Task[]; overdue: Task[]; broken: Asset[] }>();
+
+    const ensureSite = (siteId: string | undefined) => {
+      if (!siteId) return;
+      if (!siteAlertMap.has(siteId)) {
+        siteAlertMap.set(siteId, { blocked: [], urgent: [], overdue: [], broken: [] });
+      }
+    };
+
+    blockedTasks.forEach((t: Task) => { ensureSite(t.siteId); if (t.siteId) siteAlertMap.get(t.siteId)!.blocked.push(t); });
+    urgentTasks.forEach((t: Task) => { ensureSite(t.siteId); if (t.siteId) siteAlertMap.get(t.siteId)!.urgent.push(t); });
+    overdueTasks.forEach((t: Task) => { ensureSite(t.siteId); if (t.siteId) siteAlertMap.get(t.siteId)!.overdue.push(t); });
+    outOfServiceAssets.forEach((a: Asset) => { ensureSite(a.siteId); if (a.siteId) siteAlertMap.get(a.siteId)!.broken.push(a); });
+
+    // Sort sites by total alert count
+    const sitesWithAlerts = Array.from(siteAlertMap.entries())
+      .map(([siteId, a]) => ({
+        siteId,
+        site: sites.find((s: Site) => s.id === siteId),
+        total: a.blocked.length + a.urgent.length + a.overdue.length + a.broken.length,
+        ...a,
+      }))
+      .filter(s => s.total > 0)
+      .sort((a, b) => b.total - a.total);
+
+    return {
+      blockedTasks,
+      urgentTasks,
+      overdueTasks,
+      outOfServiceAssets,
+      totalAlerts: blockedTasks.length + urgentTasks.length + overdueTasks.length + outOfServiceAssets.length,
+      sitesWithAlerts,
+    };
+  }, [tasks, assets, sites]);
+
   const isLoading = sitesLoading || assetsLoading || racksLoading || tasksLoading;
   const router = useRouter();
 
@@ -192,69 +239,198 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Sites Map */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MapIcon className="h-5 w-5" />
-            Carte des chantiers
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {sitesWithCoords.length > 0 ? (
-            <SitesMap
-              sites={sites}
-              onSiteClick={handleSiteClick}
-              height="400px"
-            />
-          ) : (
-            <div className="h-[400px] flex items-center justify-center rounded-md border bg-gray-50 text-sm text-muted-foreground">
-              Aucun chantier avec coordonnées GPS disponible
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Sites récents</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {sites.length > 0 ? (
-            <div className="space-y-3">
-              {sites.slice(0, 5).map((site) => (
-                <div
-                  key={site.id}
-                  className="flex items-center justify-between border-b pb-2 last:border-0"
-                >
+      {/* Alertes critiques globales */}
+      {alerts.totalAlerts > 0 && (
+        <Card className="border-red-200 dark:border-red-800 bg-red-50/30 dark:bg-red-950/10">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              Alertes critiques
+              <Badge variant="destructive" className="ml-1">{alerts.totalAlerts}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* Compteurs résumés en ligne */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              {alerts.blockedTasks.length > 0 && (
+                <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
+                  <Ban className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <div>
-                    <p className="font-medium">{site.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {site.city} • {site.code}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                        site.status === 'ACTIVE'
-                          ? 'bg-green-50 text-green-700'
-                          : site.status === 'PREPARATION'
-                          ? 'bg-yellow-50 text-yellow-700'
-                          : 'bg-gray-50 text-gray-700'
-                      }`}
-                    >
-                      {site.status}
-                    </span>
+                    <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.blockedTasks.length}</p>
+                    <p className="text-xs text-red-600 dark:text-red-400">Bloquée{alerts.blockedTasks.length > 1 ? 's' : ''}</p>
                   </div>
                 </div>
-              ))}
+              )}
+              {alerts.urgentTasks.length > 0 && (
+                <div className="flex items-center gap-2 p-2.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg border border-orange-200 dark:border-orange-800">
+                  <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-orange-700 dark:text-orange-300">{alerts.urgentTasks.length}</p>
+                    <p className="text-xs text-orange-600 dark:text-orange-400">Urgente{alerts.urgentTasks.length > 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+              )}
+              {alerts.overdueTasks.length > 0 && (
+                <div className="flex items-center gap-2 p-2.5 bg-amber-100 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{alerts.overdueTasks.length}</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400">En retard</p>
+                  </div>
+                </div>
+              )}
+              {alerts.outOfServiceAssets.length > 0 && (
+                <div className="flex items-center gap-2 p-2.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <Package className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-purple-700 dark:text-purple-300">{alerts.outOfServiceAssets.length}</p>
+                    <p className="text-xs text-purple-600 dark:text-purple-400">Hors service</p>
+                  </div>
+                </div>
+              )}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Aucun site disponible</p>
-          )}
-        </CardContent>
-      </Card>
+
+            {/* Sites en souffrance — détail par site */}
+            {alerts.sitesWithAlerts.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sites concernés</p>
+                {alerts.sitesWithAlerts.slice(0, 5).map(({ siteId, site, blocked, urgent, overdue, broken, total }) => (
+                  <Link
+                    key={siteId}
+                    href={`/dashboard/sites/${siteId}`}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-background hover:bg-muted/50 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        {site?.healthStatus === 'CRITICAL' && (
+                          <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+                        )}
+                        {site?.healthStatus === 'WARNING' && (
+                          <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                        )}
+                        {(!site?.healthStatus || site.healthStatus === 'HEALTHY' || site.healthStatus === 'UNKNOWN') && (
+                          <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{site?.name || 'Site inconnu'}</p>
+                        <p className="text-xs text-muted-foreground">{site?.code} — {site?.city || 'N/A'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {blocked.length > 0 && (
+                        <Badge variant="destructive" className="text-xs">
+                          {blocked.length} bloquée{blocked.length > 1 ? 's' : ''}
+                        </Badge>
+                      )}
+                      {urgent.length > 0 && (
+                        <Badge className="text-xs bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900 dark:text-orange-200">
+                          {urgent.length} urgente{urgent.length > 1 ? 's' : ''}
+                        </Badge>
+                      )}
+                      {overdue.length > 0 && (
+                        <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900 dark:text-amber-200">
+                          {overdue.length} retard
+                        </Badge>
+                      )}
+                      {broken.length > 0 && (
+                        <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900 dark:text-purple-200">
+                          {broken.length} HS
+                        </Badge>
+                      )}
+                      <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </Link>
+                ))}
+                {alerts.sitesWithAlerts.length > 5 && (
+                  <p className="text-xs text-muted-foreground text-center pt-1">
+                    + {alerts.sitesWithAlerts.length - 5} autre{alerts.sitesWithAlerts.length - 5 > 1 ? 's' : ''} site{alerts.sitesWithAlerts.length - 5 > 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Carte + Sites récents côte à côte */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Sites Map — 2/3 */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <MapIcon className="h-5 w-5" />
+              Carte des chantiers
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {sitesWithCoords.length > 0 ? (
+              <SitesMap
+                sites={sites}
+                onSiteClick={handleSiteClick}
+                height="400px"
+              />
+            ) : (
+              <div className="h-[400px] flex items-center justify-center rounded-md border bg-gray-50 text-sm text-muted-foreground">
+                Aucun chantier avec coordonnées GPS disponible
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Sites récents — 1/3 */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Sites récents</CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/dashboard/sites">Voir tous</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {sites.length > 0 ? (
+              <div className="space-y-3">
+                {sites.slice(0, 8).map((site) => (
+                  <Link
+                    key={site.id}
+                    href={`/dashboard/sites/${site.id}`}
+                    className="flex items-center justify-between py-2 border-b last:border-0 hover:bg-muted/30 -mx-2 px-2 rounded transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{site.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {site.city || 'N/A'} · {site.code}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          site.status === 'ACTIVE'
+                            ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                            : site.status === 'PREPARATION'
+                            ? 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+                            : 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                        }`}
+                      >
+                        {site.status === 'ACTIVE' ? 'Actif' : site.status === 'PREPARATION' ? 'Prépa' : site.status}
+                      </span>
+                      {site.healthStatus === 'CRITICAL' && (
+                        <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" title="Critique" />
+                      )}
+                      {site.healthStatus === 'WARNING' && (
+                        <span className="h-2 w-2 rounded-full bg-amber-500" title="Attention" />
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Aucun site disponible</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
