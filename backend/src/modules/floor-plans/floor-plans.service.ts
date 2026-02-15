@@ -263,7 +263,7 @@ export class FloorPlansService {
   // ==================== VERSIONING ====================
 
   /**
-   * Create a new version of an existing floor plan (copies pins, requires new file upload)
+   * Create a new version of an existing floor plan (copies pins, optionally keeps previous plan image)
    */
   async createNewVersion(
     id: string,
@@ -291,6 +291,15 @@ export class FloorPlansService {
       });
     }
 
+    // If no new file provided, keep the plan image from the source version
+    const inheritedFileData = !file
+      ? {
+          fileUrl: sourcePlan.fileUrl || '',
+          fileSize: sourcePlan.fileSize || null,
+          mimeType: sourcePlan.mimeType || null,
+        }
+      : { fileUrl: '' };
+
     // Create new floor plan version
     const newPlan = await this.prisma.floorPlan.create({
       data: {
@@ -298,7 +307,7 @@ export class FloorPlansService {
         title: sourcePlan.title,
         version: nextVersion,
         planGroupId,
-        fileUrl: '',
+        ...inheritedFileData,
         uploadedBy: tenantId,
         notes: notes || `Version ${nextVersion} — basée sur v${sourcePlan.version}`,
       },
@@ -326,13 +335,13 @@ export class FloorPlansService {
       });
     }
 
-    // Upload file if provided
+    // Upload new file if provided (overrides inherited file)
     if (file) {
       return await this.uploadFile(newPlan.id, tenantId, file);
     }
 
     this.logger.log(
-      `New version created: ${newPlan.id} (v${nextVersion}) from ${sourcePlan.id} (v${sourcePlan.version}), ${sourcePins.length} pins copied`,
+      `New version created: ${newPlan.id} (v${nextVersion}) from ${sourcePlan.id} (v${sourcePlan.version}), ${sourcePins.length} pins copied, file ${file ? 'new upload' : 'inherited from source'}`,
     );
 
     return await this.findOne(newPlan.id, tenantId);

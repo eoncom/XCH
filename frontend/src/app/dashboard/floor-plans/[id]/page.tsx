@@ -1023,7 +1023,7 @@ export default function FloorPlanDetailPage({
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Si non fourni, vous pourrez uploader le fichier après la création.
+                Si non fourni, le plan actuel sera conservé pour la nouvelle version.
               </p>
             </div>
             <div className="space-y-2">
