@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -31,9 +32,13 @@ import {
   Circle,
   Plus,
   ExternalLink,
+  MessageSquare,
+  Send,
+  Pencil,
+  Bot,
 } from 'lucide-react';
 import Link from 'next/link';
-import type { Task, TaskStatus, TaskPriority, ChecklistItem } from '@/types';
+import type { Task, TaskStatus, TaskPriority, TaskComment, ChecklistItem } from '@/types';
 
 // Validation schema pour nouveaux items checklist
 const checklistItemSchema = z.object({
@@ -70,6 +75,21 @@ const taskPriorityLabels: Record<TaskPriority, string> = {
   URGENT: 'Urgente',
 };
 
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHour = Math.floor(diffMs / 3600000);
+  const diffDay = Math.floor(diffMs / 86400000);
+
+  if (diffMin < 1) return "À l'instant";
+  if (diffMin < 60) return `Il y a ${diffMin} min`;
+  if (diffHour < 24) return `Il y a ${diffHour}h`;
+  if (diffDay < 7) return `Il y a ${diffDay}j`;
+  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: diffDay > 365 ? 'numeric' : undefined });
+}
+
 export default function TaskDetailPage({
   params,
 }: {
@@ -84,9 +104,22 @@ export default function TaskDetailPage({
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Comment state
+  const [newComment, setNewComment] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
+  const [showDeleteCommentDialog, setShowDeleteCommentDialog] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
+  const commentsEndRef = useRef<HTMLDivElement>(null);
+
   const { data: task, isLoading } = useQuery<Task>({
     queryKey: ['task', id],
     queryFn: () => tasksApi.getById(id),
+  });
+
+  const { data: comments = [] } = useQuery<TaskComment[]>({
+    queryKey: ['task-comments', id],
+    queryFn: () => tasksApi.getComments(id),
   });
 
   const deleteMutation = useMutation({
@@ -105,7 +138,6 @@ export default function TaskDetailPage({
     mutationFn: (checklist: ChecklistItem[]) =>
       tasksApi.updateChecklist(id, checklist),
     onSuccess: () => {
-      // CRITIQUE: Invalider queries pour refresh données
       queryClient.invalidateQueries({ queryKey: ['task', id] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       showToast.success('Checklist mise à jour');
@@ -115,6 +147,53 @@ export default function TaskDetailPage({
     },
   });
 
+  // Comment mutations
+  const createCommentMutation = useMutation({
+    mutationFn: (text: string) => tasksApi.createComment(id, text),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-comments', id] });
+      setNewComment('');
+      showToast.success('Commentaire ajouté');
+    },
+    onError: () => {
+      showToast.error("Erreur lors de l'ajout du commentaire");
+    },
+  });
+
+  const updateCommentMutation = useMutation({
+    mutationFn: ({ commentId, text }: { commentId: string; text: string }) =>
+      tasksApi.updateComment(id, commentId, text),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-comments', id] });
+      setEditingCommentId(null);
+      setEditingCommentText('');
+      showToast.success('Commentaire modifié');
+    },
+    onError: () => {
+      showToast.error('Erreur lors de la modification');
+    },
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: (commentId: string) => tasksApi.deleteComment(id, commentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-comments', id] });
+      setShowDeleteCommentDialog(false);
+      setCommentToDelete(null);
+      showToast.success('Commentaire supprimé');
+    },
+    onError: () => {
+      showToast.error('Erreur lors de la suppression');
+    },
+  });
+
+  // Auto-scroll to bottom when new comments are added
+  useEffect(() => {
+    if (comments.length > 0) {
+      commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [comments.length]);
+
   const handleDelete = () => {
     deleteMutation.mutate();
     setShowDeleteDialog(false);
@@ -123,7 +202,6 @@ export default function TaskDetailPage({
   const toggleChecklistItem = (itemId: string) => {
     if (!task?.checklist) return;
 
-    // Filter out invalid items (empty arrays or objects without proper structure)
     const validChecklist = task.checklist.filter(
       (item): item is ChecklistItem =>
         item && typeof item === 'object' && !Array.isArray(item) && 'id' in item
@@ -139,7 +217,6 @@ export default function TaskDetailPage({
   const addChecklistItem = () => {
     if (!task) return;
 
-    // Valider avec Zod
     const validation = checklistItemSchema.safeParse({ text: newChecklistItem.trim() });
 
     if (!validation.success) {
@@ -149,10 +226,8 @@ export default function TaskDetailPage({
       return;
     }
 
-    // Clear validation error
     setValidationError(null);
 
-    // Filter out invalid items before adding new one
     const validChecklist = (task.checklist || []).filter(
       (item): item is ChecklistItem =>
         item && typeof item === 'object' && !Array.isArray(item) && 'id' in item
@@ -178,7 +253,6 @@ export default function TaskDetailPage({
   const confirmDeleteItem = () => {
     if (!task?.checklist || !itemToDelete) return;
 
-    // Filter out invalid items and then remove the target item
     const validChecklist = task.checklist.filter(
       (item): item is ChecklistItem =>
         item && typeof item === 'object' && !Array.isArray(item) && 'id' in item
@@ -187,9 +261,22 @@ export default function TaskDetailPage({
     const updatedChecklist = validChecklist.filter((item) => item.id !== itemToDelete);
     updateChecklistMutation.mutate(updatedChecklist);
 
-    // Reset state
     setShowDeleteItemDialog(false);
     setItemToDelete(null);
+  };
+
+  const handleSubmitComment = () => {
+    const trimmed = newComment.trim();
+    if (!trimmed) return;
+    createCommentMutation.mutate(trimmed);
+  };
+
+  const handleSaveEditComment = () => {
+    if (!editingCommentId || !editingCommentText.trim()) return;
+    updateCommentMutation.mutate({
+      commentId: editingCommentId,
+      text: editingCommentText.trim(),
+    });
   };
 
   if (isLoading) {
@@ -355,6 +442,164 @@ export default function TaskDetailPage({
               </div>
             </CardContent>
           </Card>
+
+          {/* Comments */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                <CardTitle>
+                  Commentaires
+                  {comments.length > 0 && (
+                    <span className="text-muted-foreground font-normal ml-2">
+                      ({comments.length})
+                    </span>
+                  )}
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Comment list */}
+              <div className="space-y-4 mb-4 max-h-[500px] overflow-y-auto">
+                {comments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Aucun commentaire. Soyez le premier !
+                  </p>
+                ) : (
+                  comments.map((comment) => (
+                    <div
+                      key={comment.id}
+                      className={`flex gap-3 group ${
+                        comment.isSystem ? 'bg-muted/50 rounded-lg p-3 -mx-1' : ''
+                      }`}
+                    >
+                      {/* Avatar */}
+                      <div className="flex-shrink-0">
+                        {comment.isSystem ? (
+                          <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+                            <Bot className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                          </div>
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <span className="text-sm font-medium text-primary">
+                              {comment.author?.name?.charAt(0)?.toUpperCase() || '?'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-sm font-medium">
+                            {comment.isSystem ? 'Système' : comment.author?.name || 'Inconnu'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatRelativeTime(comment.createdAt)}
+                          </span>
+                          {comment.updatedAt !== comment.createdAt && (
+                            <span className="text-xs text-muted-foreground italic">
+                              (modifié)
+                            </span>
+                          )}
+                        </div>
+
+                        {editingCommentId === comment.id ? (
+                          <div className="mt-1 space-y-2">
+                            <Textarea
+                              value={editingCommentText}
+                              onChange={(e) => setEditingCommentText(e.target.value)}
+                              className="min-h-[60px] text-sm"
+                              autoFocus
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={handleSaveEditComment}
+                                disabled={updateCommentMutation.isPending || !editingCommentText.trim()}
+                              >
+                                {updateCommentMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingCommentId(null);
+                                  setEditingCommentText('');
+                                }}
+                              >
+                                Annuler
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-0.5">
+                            {comment.text}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Actions (only for non-system, non-editing) */}
+                      {!comment.isSystem && editingCommentId !== comment.id && (
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              setEditingCommentId(comment.id);
+                              setEditingCommentText(comment.text);
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              setCommentToDelete(comment.id);
+                              setShowDeleteCommentDialog(true);
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+                <div ref={commentsEndRef} />
+              </div>
+
+              {/* Add comment form */}
+              <div className="flex gap-2 pt-3 border-t">
+                <Textarea
+                  placeholder="Ajouter un commentaire..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      handleSubmitComment();
+                    }
+                  }}
+                  className="min-h-[60px] text-sm resize-none"
+                  disabled={createCommentMutation.isPending}
+                />
+                <Button
+                  size="icon"
+                  onClick={handleSubmitComment}
+                  disabled={createCommentMutation.isPending || !newComment.trim()}
+                  className="flex-shrink-0 self-end"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Ctrl+Entrée pour envoyer
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Sidebar */}
@@ -435,6 +680,21 @@ export default function TaskDetailPage({
                   </div>
                 </div>
               )}
+
+              {task.creator && (
+                <div className="flex items-start gap-3">
+                  <User className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Créé par</p>
+                    <p className="text-sm text-muted-foreground">
+                      {task.creator.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(task.createdAt).toLocaleDateString('fr-FR')}
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -506,6 +766,36 @@ export default function TaskDetailPage({
               data-testid="confirm-delete-item-btn"
             >
               {updateChecklistMutation.isPending ? 'Suppression...' : 'Supprimer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete comment confirmation dialog */}
+      <Dialog open={showDeleteCommentDialog} onOpenChange={setShowDeleteCommentDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer le commentaire</DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir supprimer ce commentaire ? Cette action est irréversible.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteCommentDialog(false);
+                setCommentToDelete(null);
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => commentToDelete && deleteCommentMutation.mutate(commentToDelete)}
+              disabled={deleteCommentMutation.isPending}
+            >
+              {deleteCommentMutation.isPending ? 'Suppression...' : 'Supprimer'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -199,6 +199,23 @@ export interface Task {
   asset?: Asset;
   assignedUser?: User;
   creator?: User;
+  comments?: TaskComment[];
+}
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  authorId: string;
+  text: string;
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+  author?: {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl?: string;
+  };
 }
 
 // FloorPlan types

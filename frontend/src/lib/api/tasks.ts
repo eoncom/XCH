@@ -1,5 +1,5 @@
 import { apiClient } from '../api-client';
-import type { Task, CreateTaskDto, UpdateTaskDto } from '@/types';
+import type { Task, TaskComment, CreateTaskDto, UpdateTaskDto } from '@/types';
 
 export const tasksApi = {
   getAll: (params?: {
@@ -47,4 +47,17 @@ export const tasksApi = {
 
   deleteAttachment: (id: string, attachmentId: string) =>
     apiClient.delete(`/api/tasks/${id}/attachments/${attachmentId}`),
+
+  // Comments
+  getComments: (id: string) =>
+    apiClient.get<TaskComment[]>(`/api/tasks/${id}/comments`),
+
+  createComment: (id: string, text: string) =>
+    apiClient.post<TaskComment>(`/api/tasks/${id}/comments`, { text }),
+
+  updateComment: (id: string, commentId: string, text: string) =>
+    apiClient.patch<TaskComment>(`/api/tasks/${id}/comments/${commentId}`, { text }),
+
+  deleteComment: (id: string, commentId: string) =>
+    apiClient.delete(`/api/tasks/${id}/comments/${commentId}`),
 };

@@ -89,8 +89,9 @@ model User {
   updatedAt   DateTime  @updatedAt
 
   // Relations
-  assignedTasks Task[]     @relation("AssignedTo")
-  createdTasks  Task[]     @relation("CreatedBy")
+  assignedTasks Task[]        @relation("AssignedTo")
+  createdTasks  Task[]        @relation("CreatedBy")
+  taskComments  TaskComment[] @relation("TaskComments")
   auditLogs     AuditLog[]
   photos        Photo[]
   siteAccess    UserSiteAccess[]
@@ -467,6 +468,7 @@ model Task {
   // Relations
   photos         Photo[]
   checklistItems TaskChecklistItem[]
+  comments       TaskComment[]
 
   @@index([tenantId])
   @@index([tenantId, siteId])
@@ -489,6 +491,24 @@ model TaskChecklistItem {
   @@index([taskId])
   @@index([taskId, order])
   @@map("task_checklist_items")
+}
+
+model TaskComment {
+  id       String @id @default(cuid())
+  taskId   String
+  task     Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User   @relation("TaskComments", fields: [authorId], references: [id])
+  text     String @db.Text
+  // isSystem: true = auto-generated comment (status change, blocking reason, etc.)
+  isSystem Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([taskId, createdAt])
+  @@map("task_comments")
 }
 
 // ============================================================================

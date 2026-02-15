@@ -7,6 +7,7 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { FilterTaskDto } from './dto/filter-task.dto';
 import { UpdateChecklistDto } from './dto/update-checklist.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
+import { CreateCommentDto } from './dto/create-comment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
@@ -151,5 +152,50 @@ export class TasksController {
     @Request() req: AuthRequest,
   ) {
     return this.tasksService.deleteAttachment(attachmentId, req.user.tenantId, id);
+  }
+
+  // ============================================================================
+  // COMMENTS
+  // ============================================================================
+
+  @Post(':id/comments')
+  @Resource('tasks') @Action('update')
+  @ApiOperation({ summary: 'Add comment to task' })
+  createComment(
+    @Param('id') id: string,
+    @Body() createCommentDto: CreateCommentDto,
+    @Request() req: AuthRequest,
+  ) {
+    return this.tasksService.createComment(id, req.user.tenantId, req.user.id, createCommentDto);
+  }
+
+  @Get(':id/comments')
+  @Resource('tasks') @Action('read')
+  @ApiOperation({ summary: 'Get comments for task' })
+  getComments(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.tasksService.getComments(id, req.user.tenantId);
+  }
+
+  @Patch(':id/comments/:commentId')
+  @Resource('tasks') @Action('update')
+  @ApiOperation({ summary: 'Update comment' })
+  updateComment(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Body() body: { text: string },
+    @Request() req: AuthRequest,
+  ) {
+    return this.tasksService.updateComment(commentId, req.user.tenantId, req.user.id, body.text, req.user.role);
+  }
+
+  @Delete(':id/comments/:commentId')
+  @Resource('tasks') @Action('update')
+  @ApiOperation({ summary: 'Delete comment' })
+  deleteComment(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Request() req: AuthRequest,
+  ) {
+    return this.tasksService.deleteComment(commentId, req.user.tenantId, req.user.id, req.user.role);
   }
 }

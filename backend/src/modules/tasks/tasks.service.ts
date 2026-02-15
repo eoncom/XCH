@@ -1,9 +1,10 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { FilterTaskDto } from './dto/filter-task.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
+import { CreateCommentDto } from './dto/create-comment.dto';
 import { StorageService } from '../../common/services/storage.service';
 import { createId } from '@paralleldrive/cuid2';
 
@@ -453,5 +454,133 @@ export class TasksService {
     });
 
     return { message: 'Attachment deleted successfully' };
+  }
+
+  // ============================================================================
+  // COMMENTS
+  // ============================================================================
+
+  async createComment(taskId: string, tenantId: string, userId: string, dto: CreateCommentDto) {
+    // Verify task exists and belongs to tenant
+    await this.findOne(taskId, tenantId);
+
+    const comment = await this.prisma.taskComment.create({
+      data: {
+        taskId,
+        authorId: userId,
+        text: dto.text,
+        isSystem: dto.isSystem || false,
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    return comment;
+  }
+
+  async getComments(taskId: string, tenantId: string) {
+    // Verify task exists and belongs to tenant
+    await this.findOne(taskId, tenantId);
+
+    const comments = await this.prisma.taskComment.findMany({
+      where: { taskId },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatarUrl: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return comments;
+  }
+
+  async updateComment(commentId: string, tenantId: string, userId: string, text: string, userRole: string) {
+    const comment = await this.prisma.taskComment.findFirst({
+      where: { id: commentId },
+      include: {
+        task: { select: { tenantId: true } },
+      },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    if (comment.task.tenantId !== tenantId) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    // Only the author or ADMIN can edit
+    if (comment.authorId !== userId && userRole !== 'ADMIN') {
+      throw new ForbiddenException('Vous ne pouvez modifier que vos propres commentaires');
+    }
+
+    return this.prisma.taskComment.update({
+      where: { id: commentId },
+      data: { text },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+  }
+
+  async deleteComment(commentId: string, tenantId: string, userId: string, userRole: string) {
+    const comment = await this.prisma.taskComment.findFirst({
+      where: { id: commentId },
+      include: {
+        task: { select: { tenantId: true } },
+      },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    if (comment.task.tenantId !== tenantId) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    // Only the author or ADMIN can delete
+    if (comment.authorId !== userId && userRole !== 'ADMIN') {
+      throw new ForbiddenException('Vous ne pouvez supprimer que vos propres commentaires');
+    }
+
+    await this.prisma.taskComment.delete({
+      where: { id: commentId },
+    });
+
+    return { message: 'Comment deleted successfully' };
+  }
+
+  /**
+   * Add a system comment when task status changes to BLOCKED
+   * Requires a blocking reason
+   */
+  async addBlockingReason(taskId: string, tenantId: string, userId: string, reason: string) {
+    return this.createComment(taskId, tenantId, userId, {
+      text: `⛔ Raison du blocage : ${reason}`,
+      isSystem: true,
+    });
   }
 }
