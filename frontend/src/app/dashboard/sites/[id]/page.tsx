@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -941,12 +941,12 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
   const handleExport = async () => {
     setIsExporting(true);
-    setExportProgress('D\u00e9marrage...');
+    setExportProgress('Démarrage...');
     try {
       await exportSiteZip(id, (progress) => {
         setExportProgress(progress.step);
       });
-      showToast.success('Export t\u00e9l\u00e9charg\u00e9 avec succ\u00e8s');
+      showToast.success('Export téléchargé avec succès');
     } catch (error) {
       showToast.error("Erreur lors de l'export du chantier");
     } finally {
@@ -990,6 +990,19 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     enabled: !!id,
   });
 
+  // Compute latest version per plan group (for display in Plans tab)
+  const latestFloorPlans = useMemo(() => {
+    const grouped = new Map<string, typeof floorPlans[0]>();
+    floorPlans.forEach((plan: any) => {
+      const groupKey = plan.planGroupId || plan.id;
+      const existing = grouped.get(groupKey);
+      if (!existing || (plan.version || 1) > (existing.version || 1)) {
+        grouped.set(groupKey, plan);
+      }
+    });
+    return Array.from(grouped.values());
+  }, [floorPlans]);
+
   // Load site attachments count
   const { data: siteAttachments = [] } = useQuery<any[]>({
     queryKey: ['sites', id, 'attachments'],
@@ -1005,10 +1018,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   });
 
   const securityReminders = tenantConfig?.config?.securityReminders ?? [
-    { id: '1', text: "Badge d'acc\u00e8s obligatoire sur tous les chantiers" },
-    { id: '2', text: 'Carte BTP \u00e0 jour requise' },
+    { id: '1', text: "Badge d'accès obligatoire sur tous les chantiers" },
+    { id: '2', text: 'Carte BTP à jour requise' },
     { id: '3', text: 'EPI obligatoires (casque, gilet, chaussures)' },
-    { id: '4', text: 'Respecter les consignes affich\u00e9es sur site' },
+    { id: '4', text: 'Respecter les consignes affichées sur site' },
   ];
 
   const deleteMutation = useMutation({
@@ -1137,7 +1150,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           <TabsTrigger value="assets">Équipements ({assets.length})</TabsTrigger>
           <TabsTrigger value="racks">Baies ({racks.length})</TabsTrigger>
           <TabsTrigger value="tasks">Tâches ({tasks.length})</TabsTrigger>
-          <TabsTrigger value="plans">Plans ({floorPlans.length})</TabsTrigger>
+          <TabsTrigger value="plans">Plans ({latestFloorPlans.length})</TabsTrigger>
           <TabsTrigger value="documents">Documents ({siteAttachments.length})</TabsTrigger>
           <TabsTrigger value="access">
             <Lock className="mr-1 h-3 w-3" />
@@ -1351,7 +1364,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-2xl font-bold">{floorPlans.length}</p>
+                    <p className="text-2xl font-bold">{latestFloorPlans.length}</p>
                     <p className="text-xs text-muted-foreground">Plans</p>
                   </div>
                   <Map className="h-8 w-8 text-muted-foreground/20" />
@@ -1693,7 +1706,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Map className="h-5 w-5" />
-                Plans d&apos;étage ({floorPlans.length})
+                Plans d&apos;étage ({latestFloorPlans.length})
               </CardTitle>
               <Button asChild size="sm">
                 <Link href={`/dashboard/floor-plans/new?siteId=${id}`}>
@@ -1703,39 +1716,48 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               </Button>
             </CardHeader>
             <CardContent>
-              {floorPlans.length > 0 ? (
+              {latestFloorPlans.length > 0 ? (
                 <div className="grid md:grid-cols-2 gap-4">
-                  {floorPlans.map((plan) => (
-                    <Link
-                      key={plan.id}
-                      href={`/dashboard/floor-plans/${plan.id}`}
-                      className="block"
-                    >
-                      <div className="border rounded-lg p-4 hover:bg-muted/50 transition-colors hover:shadow-sm">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h4 className="font-medium">{plan.title}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              {plan.building && `Bât. ${plan.building}`}
-                              {plan.building && plan.floor && ' — '}
-                              {plan.floor && `Étage ${plan.floor}`}
-                              {!plan.building && !plan.floor && 'Plan principal'}
-                            </p>
+                  {latestFloorPlans.map((plan: any) => {
+                    const groupKey = plan.planGroupId || plan.id;
+                    const versionCount = floorPlans.filter((p: any) => (p.planGroupId || p.id) === groupKey).length;
+                    return (
+                      <Link
+                        key={plan.id}
+                        href={`/dashboard/floor-plans/${plan.id}`}
+                        className="block"
+                      >
+                        <div className="border rounded-lg p-4 hover:bg-muted/50 transition-colors hover:shadow-sm">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h4 className="font-medium">{plan.title}</h4>
+                              <p className="text-sm text-muted-foreground">
+                                {plan.building && `Bât. ${plan.building}`}
+                                {plan.building && plan.floor && ' — '}
+                                {plan.floor && `Étage ${plan.floor}`}
+                                {!plan.building && !plan.floor && 'Plan principal'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Badge variant="outline" className="text-xs">v{plan.version}</Badge>
+                              {versionCount > 1 && (
+                                <Badge variant="secondary" className="text-xs">{versionCount} versions</Badge>
+                              )}
+                            </div>
                           </div>
-                          <Badge variant="outline" className="text-xs">v{plan.version}</Badge>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              {plan.pins?.length || 0} repères
+                            </span>
+                            {plan.fileSize && (
+                              <span>{(plan.fileSize / 1024).toFixed(0)} KB</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {plan.pins?.length || 0} repères
-                          </span>
-                          {plan.fileSize && (
-                            <span>{(plan.fileSize / 1024).toFixed(0)} KB</span>
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
+                      </Link>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-12">

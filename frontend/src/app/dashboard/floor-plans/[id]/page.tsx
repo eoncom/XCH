@@ -202,6 +202,27 @@ export default function FloorPlanDetailPage({
     },
   });
 
+  const deleteVersionMutation = useMutation({
+    mutationFn: (versionId: string) => floorPlansApi.delete(versionId),
+    onSuccess: (_, deletedId) => {
+      showToast.success('Version supprimée');
+      queryClient.invalidateQueries({ queryKey: ['floor-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['floor-plan-versions', id] });
+      // If we deleted the currently viewed version, redirect to another version
+      if (deletedId === id) {
+        const remaining = versionHistory?.filter(v => v.id !== deletedId);
+        if (remaining && remaining.length > 0) {
+          router.push(`/dashboard/floor-plans/${remaining[0].id}`);
+        } else {
+          router.push('/dashboard/floor-plans');
+        }
+      }
+    },
+    onError: () => {
+      showToast.error('Erreur lors de la suppression de la version');
+    },
+  });
+
   const createPinMutation = useMutation({
     mutationFn: (data: Omit<Pin, 'id' | 'createdAt' | 'updatedAt' | 'tenantId' | 'floorPlanId'>) =>
       floorPlansApi.createPin(id, data),
@@ -485,37 +506,59 @@ export default function FloorPlanDetailPage({
               </CardHeader>
               <CardContent className="space-y-2">
                 {versionHistory.map((version) => (
-                  <Link
+                  <div
                     key={version.id}
-                    href={`/dashboard/floor-plans/${version.id}`}
-                    className={`block p-2 border rounded-lg hover:bg-muted/50 transition-colors ${
+                    className={`relative p-2 border rounded-lg hover:bg-muted/50 transition-colors ${
                       version.id === id ? 'border-primary bg-primary/5' : ''
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge variant={version.id === id ? 'default' : 'secondary'} className="text-xs">
-                          v{version.version}
-                        </Badge>
-                        {version.id === id && (
-                          <span className="text-xs text-primary font-medium">actuelle</span>
-                        )}
+                    <Link
+                      href={`/dashboard/floor-plans/${version.id}`}
+                      className="block"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={version.id === id ? 'default' : 'secondary'} className="text-xs">
+                            v{version.version}
+                          </Badge>
+                          {version.id === id && (
+                            <span className="text-xs text-primary font-medium">actuelle</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground mr-6">
+                          {version._count?.pins ?? version.pins?.length ?? 0} repères
+                        </span>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {version._count?.pins ?? version.pins?.length ?? 0} repères
-                      </span>
-                    </div>
-                    {version.notes && (
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                        {version.notes}
+                      {version.notes && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                          {version.notes}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {version.uploadedAt
+                          ? new Date(version.uploadedAt).toLocaleDateString('fr-FR')
+                          : '—'}
                       </p>
+                    </Link>
+                    {/* Delete version button (only if more than 1 version) */}
+                    {versionHistory.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute top-1 right-1 h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (confirm(`Supprimer la version ${version.version} ? Cette action est irréversible.`)) {
+                            deleteVersionMutation.mutate(version.id);
+                          }
+                        }}
+                        disabled={deleteVersionMutation.isPending}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     )}
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {version.uploadedAt
-                        ? new Date(version.uploadedAt).toLocaleDateString('fr-FR')
-                        : '—'}
-                    </p>
-                  </Link>
+                  </div>
                 ))}
               </CardContent>
             </Card>

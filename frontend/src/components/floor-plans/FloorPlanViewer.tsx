@@ -536,9 +536,10 @@ export default function FloorPlanViewer({
       const margin = 10;
 
       // Title
+      const planVersion = currentFloorPlan.version || 1;
       pdf.setFontSize(16);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(planName, margin, margin + 6);
+      pdf.text(`${planName} — v${planVersion}`, margin, margin + 6);
 
       // Subtitle: site + floor info
       let subtitle = '';
@@ -854,7 +855,7 @@ export default function FloorPlanViewer({
       }
 
       // Save PDF
-      pdf.save(`${planName}-plan.pdf`);
+      pdf.save(`${planName}-v${planVersion}-plan.pdf`);
     };
 
     onExportReady(exportFn);

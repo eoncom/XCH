@@ -28,7 +28,7 @@ import type { RackStatus, Site } from '@/types';
 const rackStatusLabels: Record<RackStatus, string> = {
   IN_SERVICE: 'En service',
   OUT_OF_SERVICE: 'Hors service',
-  PREPARATION: 'Pr\u00e9paration',
+  PREPARATION: 'Préparation',
 };
 
 const rackHeightOptions = [4, 6, 12, 18, 24, 42];
@@ -122,7 +122,7 @@ export default function NewRackPage() {
               <div className="space-y-2">
                 <Label htmlFor="siteId">Site <span className="text-red-500">*</span></Label>
                 <Select value={siteId} onValueChange={(value) => setValue('siteId', value)}>
-                  <SelectTrigger><SelectValue placeholder="S\u00e9lectionner un site" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner un site" /></SelectTrigger>
                   <SelectContent>
                     {sites?.map((site) => (<SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>))}
                   </SelectContent>
@@ -167,13 +167,13 @@ export default function NewRackPage() {
                 <Input id="manufacturer" {...register('manufacturer')} placeholder="Ex: Dell, HP, APC..." />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="model">Mod\u00e8le</Label>
+                <Label htmlFor="model">Modèle</Label>
                 <Input id="model" {...register('model')} placeholder="Ex: NetShelter SX 42U" />
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="location">Emplacement</Label>
-                <Input id="location" {...register('location')} placeholder="Ex: Salle serveur, rang\u00e9e B, position 3" />
-                <p className="text-xs text-muted-foreground">Emplacement physique de la baie dans le b\u00e2timent</p>
+                <Input id="location" {...register('location')} placeholder="Ex: Salle serveur, rangée B, position 3" />
+                <p className="text-xs text-muted-foreground">Emplacement physique de la baie dans le bâtiment</p>
               </div>
             </div>
           </CardContent>
@@ -188,7 +188,7 @@ export default function NewRackPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Textarea id="notes" {...register('notes')} placeholder="Informations compl\u00e9mentaires sur la baie..." rows={4} />
+            <Textarea id="notes" {...register('notes')} placeholder="Informations complémentaires sur la baie..." rows={4} />
           </CardContent>
         </Card>
 
@@ -196,12 +196,12 @@ export default function NewRackPage() {
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground flex items-center gap-1">
             <Info className="h-4 w-4" />
-            Les champs marqu\u00e9s <span className="text-red-500">*</span> sont obligatoires
+            Les champs marqués <span className="text-red-500">*</span> sont obligatoires
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => router.push('/dashboard/racks')}>Annuler</Button>
             <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Cr\u00e9ation...' : 'Cr\u00e9er la baie'}
+              {createMutation.isPending ? 'Création...' : 'Créer la baie'}
             </Button>
           </div>
         </div>

@@ -3467,3 +3467,24 @@ fix: keep previous plan image when creating new version without file upload
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-15
+
+**Date:** 2026-02-15 21:32:31
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 5
+
+**Commit message:**
+```
+feat: improve UX — forms, filters, task tabs, count badges
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
