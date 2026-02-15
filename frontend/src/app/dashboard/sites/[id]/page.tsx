@@ -897,6 +897,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
+  const [activeTab, setActiveTab] = useState('info');
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -1077,7 +1078,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="info" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="info">Vue générale</TabsTrigger>
           {hasInfosPratiques && (
@@ -1124,10 +1125,8 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         {blockedTasks.slice(0, 2).map(t => t.title).join(', ')}{blockedTasks.length > 2 ? '…' : ''}
                       </span>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-red-700 hover:text-red-800 flex-shrink-0" asChild>
-                      <Link href="#" onClick={(e) => { e.preventDefault(); document.querySelector('[value="tasks"]')?.dispatchEvent(new Event('click', { bubbles: true })); }}>
+                    <Button variant="ghost" size="sm" className="text-red-700 hover:text-red-800 flex-shrink-0" onClick={() => setActiveTab('tasks')}>
                         Voir
-                      </Link>
                     </Button>
                   </div>
                 )}
@@ -1142,6 +1141,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         {urgentTasks.slice(0, 2).map(t => t.title).join(', ')}{urgentTasks.length > 2 ? '…' : ''}
                       </span>
                     </div>
+                    <Button variant="ghost" size="sm" className="text-orange-700 hover:text-orange-800 flex-shrink-0" onClick={() => setActiveTab('tasks')}>
+                        Voir
+                    </Button>
                   </div>
                 )}
                 {overdueTasks.length > 0 && (
@@ -1155,6 +1157,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         {overdueTasks.slice(0, 2).map(t => t.title).join(', ')}{overdueTasks.length > 2 ? '…' : ''}
                       </span>
                     </div>
+                    <Button variant="ghost" size="sm" className="text-amber-700 hover:text-amber-800 flex-shrink-0" onClick={() => setActiveTab('tasks')}>
+                        Voir
+                    </Button>
                   </div>
                 )}
                 {brokenAssets.length > 0 && (
@@ -1168,6 +1173,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         {brokenAssets.slice(0, 2).map(a => `${a.manufacturer} ${a.model}`).join(', ')}{brokenAssets.length > 2 ? '…' : ''}
                       </span>
                     </div>
+                    <Button variant="ghost" size="sm" className="text-purple-700 hover:text-purple-800 flex-shrink-0" onClick={() => setActiveTab('assets')}>
+                        Voir
+                    </Button>
                   </div>
                 )}
               </div>
@@ -1373,31 +1381,74 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
         {/* ============================== */}
         <TabsContent value="tasks">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Tâches ({tasks.length})</CardTitle>
+              <Button asChild size="sm">
+                <Link href={`/dashboard/tasks/new?siteId=${id}`}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nouvelle tâche
+                </Link>
+              </Button>
             </CardHeader>
             <CardContent>
               {tasks.length > 0 ? (
                 <div className="space-y-3">
-                  {tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
-                    >
-                      <div>
-                        <Link
-                          href={`/dashboard/tasks/${task.id}`}
-                          className="font-medium hover:underline"
-                        >
-                          {task.title}
-                        </Link>
-                        <p className="text-sm text-muted-foreground">
-                          {task.description}
-                        </p>
+                  {tasks.map((task) => {
+                    const statusConfig: Record<string, { label: string; variant: 'secondary' | 'default' | 'error' | 'success' | 'warning' }> = {
+                      TODO: { label: 'À faire', variant: 'secondary' },
+                      IN_PROGRESS: { label: 'En cours', variant: 'default' },
+                      BLOCKED: { label: 'Bloqué', variant: 'error' },
+                      DONE: { label: 'Terminé', variant: 'success' },
+                      CANCELLED: { label: 'Annulé', variant: 'secondary' },
+                    };
+                    const priorityConfig: Record<string, { label: string; variant: 'secondary' | 'default' | 'warning' | 'error' }> = {
+                      LOW: { label: 'Faible', variant: 'secondary' },
+                      MEDIUM: { label: 'Moyenne', variant: 'default' },
+                      HIGH: { label: 'Haute', variant: 'warning' },
+                      URGENT: { label: 'Urgente', variant: 'error' },
+                    };
+                    const sc = statusConfig[task.status] || { label: task.status, variant: 'secondary' as const };
+                    const pc = priorityConfig[task.priority] || { label: task.priority, variant: 'secondary' as const };
+                    const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'DONE' && task.status !== 'CANCELLED';
+
+                    return (
+                      <div
+                        key={task.id}
+                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/dashboard/tasks/${task.id}`}
+                              className="font-medium hover:underline truncate"
+                            >
+                              {task.title}
+                            </Link>
+                            {isOverdue && (
+                              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 flex-shrink-0">
+                                <Clock className="h-3 w-3" />
+                                En retard
+                              </span>
+                            )}
+                          </div>
+                          {task.description && (
+                            <p className="text-sm text-muted-foreground truncate mt-0.5">
+                              {task.description}
+                            </p>
+                          )}
+                          {task.assignedUser && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              → {task.assignedUser.name}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                          <Badge variant={pc.variant}>{pc.label}</Badge>
+                          <Badge variant={sc.variant}>{sc.label}</Badge>
+                        </div>
                       </div>
-                      <Badge>{task.status}</Badge>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-center py-12 text-muted-foreground">
