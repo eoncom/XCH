@@ -746,7 +746,7 @@ function SiteResourcesSection({ serverInfo, siteId }: { serverInfo: any; siteId:
             Ressources &amp; Partages
           </CardTitle>
           <Button variant="ghost" size="sm" asChild>
-            <Link href={`/dashboard/sites/${siteId}/edit?step=4`}><Edit className="h-3.5 w-3.5" /></Link>
+            <Link href={`/dashboard/sites/${siteId}/edit?step=3`}><Edit className="h-3.5 w-3.5" /></Link>
           </Button>
         </div>
       </CardHeader>
@@ -1087,7 +1087,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               <div className="flex items-center justify-between">
                 <CardTitle>Informations générales</CardTitle>
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/dashboard/sites/${id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
+                  <Link href={`/dashboard/sites/${id}/edit?step=1`}><Edit className="h-3.5 w-3.5" /></Link>
                 </Button>
               </div>
             </CardHeader>
