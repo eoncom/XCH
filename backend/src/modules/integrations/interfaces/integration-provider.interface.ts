@@ -64,10 +64,11 @@ export interface UptimeKumaProvider extends IntegrationProvider {
     status: 'up' | 'down' | 'unknown';
     uptime: number;
     lastCheck: Date;
+    responseTime?: number;
   } | null>;
 
   /**
-   * Get heartbeats for a monitor
+   * Map monitor status to XCH health status
    */
-  getHeartbeats(monitorId: number, limit?: number): Promise<any[]>;
+  mapToHealthStatus(monitorStatus: 'up' | 'down' | 'unknown'): string;
 }
