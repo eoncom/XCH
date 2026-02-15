@@ -291,7 +291,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
           <div>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Droits d'accès ({accessList.length})
+              Droits d&apos;accès ({accessList.length})
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
               Les administrateurs et managers ont accès à tous les chantiers. Les techniciens et observateurs nécessitent un accès explicite.
@@ -388,7 +388,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
           <DialogHeader>
             <DialogTitle>Ajouter un accès au chantier</DialogTitle>
             <DialogDescription>
-              Sélectionnez un utilisateur et le niveau d'accès à accorder.
+              Sélectionnez un utilisateur et le niveau d&apos;accès à accorder.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -416,7 +416,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Niveau d'accès</label>
+              <label className="text-sm font-medium">Niveau d&apos;accès</label>
               <Select value={selectedAccessLevel} onValueChange={(v: 'READ' | 'WRITE') => setSelectedAccessLevel(v)}>
                 <SelectTrigger>
                   <SelectValue />
@@ -445,7 +445,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
               disabled={!selectedUserId || grantMutation.isPending}
             >
               {grantMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Accorder l'accès
+              Accorder l&apos;accès
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -495,7 +495,8 @@ function CopyableField({ icon, label, value, isUrl }: { icon: React.ReactNode; l
   );
 }
 
-function SiteContacts({ contacts }: { contacts: any[] }) {
+// === Contacts en grille de 3 ===
+function SiteContactsGrid({ contacts }: { contacts: any[] }) {
   const [contactSearch, setContactSearch] = useState('');
 
   if (!contacts || contacts.length === 0) return null;
@@ -513,63 +514,317 @@ function SiteContacts({ contacts }: { contacts: any[] }) {
       })
     : contacts;
 
+  // Séparer contacts internes et externes
+  const internalRoles = ['responsable', 'assistante', 'accueil', 'sécurité', 'chef de chantier', 'directeur', 'conducteur'];
+  const isInternal = (c: any) => {
+    const role = (c.role || '').toLowerCase();
+    return internalRoles.some(r => role.includes(r)) || (!c.company && !role.includes('fournisseur') && !role.includes('sous-traitant') && !role.includes('prestataire') && !role.includes('opérateur'));
+  };
+
+  const internalContacts = filteredContacts.filter(isInternal);
+  const externalContacts = filteredContacts.filter(c => !isInternal(c));
+
+  const ContactCard = ({ contact }: { contact: any }) => (
+    <div className="border rounded-lg p-4 hover:shadow-sm transition-shadow">
+      <div className="flex items-start justify-between mb-2">
+        {contact.role && (
+          <Badge variant={contact.isPrimary ? 'default' : 'outline'} className="text-xs">
+            {contact.role}
+          </Badge>
+        )}
+        {contact.isPrimary && !contact.role && (
+          <Badge variant="default" className="text-xs">Principal</Badge>
+        )}
+      </div>
+      <p className="font-semibold mt-1">{contact.name}</p>
+      {contact.company && (
+        <p className="text-sm text-muted-foreground">{contact.company}</p>
+      )}
+      <div className="mt-3 space-y-1">
+        {contact.phone && (
+          <a href={`tel:${contact.phone}`} className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
+            <Phone className="h-3.5 w-3.5" />
+            {contact.phone}
+          </a>
+        )}
+        {contact.email && (
+          <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
+            <Mail className="h-3.5 w-3.5" />
+            {contact.email}
+          </a>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Barre de recherche si beaucoup de contacts */}
+      {contacts.length > 4 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher un contact (nom, email, rôle...)"
+            value={contactSearch}
+            onChange={(e) => setContactSearch(e.target.value)}
+            className="pl-9 h-9"
+          />
+        </div>
+      )}
+
+      {filteredContacts.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          Aucun contact ne correspond à &laquo; {contactSearch} &raquo;
+        </p>
+      ) : (
+        <>
+          {/* Contacts internes */}
+          {internalContacts.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Users className="h-5 w-5" />
+                    Contacts internes du chantier
+                  </CardTitle>
+                  <span className="text-xs text-muted-foreground">Source : module Contacts</span>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-3 gap-4">
+                  {internalContacts.map((contact, index) => (
+                    <ContactCard key={index} contact={contact} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Contacts externes */}
+          {externalContacts.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Globe className="h-5 w-5" />
+                    Contacts externes / IT Partenaires
+                  </CardTitle>
+                  <span className="text-xs text-muted-foreground">Source : module Contacts</span>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-3 gap-4">
+                  {externalContacts.map((contact, index) => (
+                    <ContactCard key={index} contact={contact} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Si pas de séparation possible (tous dans un groupe), afficher en grille simple */}
+          {internalContacts.length === 0 && externalContacts.length === 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <User className="h-5 w-5" />
+                  Contacts ({filteredContacts.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-3 gap-4">
+                  {filteredContacts.map((contact, index) => (
+                    <ContactCard key={index} contact={contact} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// === Connectivité côte à côte ===
+function SiteConnectivitySection({ connectivity }: { connectivity: Site['connectivity'] }) {
+  if (!connectivity || (!connectivity.primary && !connectivity.backup)) return null;
+
+  const ConnBlock = ({ conn, label, variant }: { conn: { type?: string; provider?: string; ref?: string }; label: string; variant: 'primary' | 'backup' }) => (
+    <div className={`border rounded-lg p-4 ${variant === 'backup' ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800' : ''}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{label}</p>
+          {conn.provider && <p className="text-lg font-bold mt-0.5">{conn.provider}</p>}
+          {conn.type && <p className="text-sm text-muted-foreground">{conn.type}</p>}
+        </div>
+        <Badge variant={variant === 'primary' ? 'success' : 'warning'}>
+          {variant === 'primary' ? 'Actif' : 'Veille'}
+        </Badge>
+      </div>
+      {conn.ref && (
+        <div className="bg-muted/50 rounded-lg p-3">
+          <p className="text-xs text-muted-foreground font-medium">Référence ligne</p>
+          <p className="text-sm font-mono mt-0.5">{conn.ref}</p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Contacts ({contacts.length})
-          </CardTitle>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Wifi className="h-5 w-5" />
+          Connectivité
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-4">
+          {connectivity.primary && (
+            <ConnBlock conn={connectivity.primary} label="Lien primaire" variant="primary" />
+          )}
+          {connectivity.backup && (
+            <ConnBlock conn={connectivity.backup} label="Lien backup" variant="backup" />
+          )}
         </div>
-        {contacts.length > 3 && (
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Rechercher un contact (nom, email, rôle...)"
-              value={contactSearch}
-              onChange={(e) => setContactSearch(e.target.value)}
-              className="pl-9 h-9"
-            />
+        {connectivity.cutProcedure && (
+          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+            <p className="text-sm font-medium flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+              <AlertTriangle className="h-4 w-4" />
+              Procédure en cas de coupure
+            </p>
+            <p className="text-sm mt-1 text-yellow-700 dark:text-yellow-300">{connectivity.cutProcedure}</p>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// === Ressources & Partages (bien visible en haut) ===
+function SiteResourcesSection({ serverInfo }: { serverInfo: any }) {
+  if (!serverInfo) return null;
+
+  const hasAny = serverInfo.smbPath || serverInfo.sharepointUrl || serverInfo.gedUrl || serverInfo.accessRightsUrl;
+  if (!hasAny) return null;
+
+  return (
+    <Card className="border-l-4 border-l-primary">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <HardDrive className="h-5 w-5" />
+          Ressources &amp; Partages
+        </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
-          {filteredContacts.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Aucun contact ne correspond à « {contactSearch} »
-            </p>
-          ) : (
-            filteredContacts.map((contact, index) => (
-              <div key={index} className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{contact.name}</p>
-                    {contact.isPrimary && (
-                      <Badge variant="outline" className="text-xs">Principal</Badge>
-                    )}
-                  </div>
-                  {contact.role && (
-                    <p className="text-sm text-muted-foreground">{contact.role}</p>
-                  )}
-                  <div className="flex flex-wrap gap-4 mt-2">
-                    {contact.phone && (
-                      <a href={`tel:${contact.phone}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
-                        <Phone className="h-3 w-3" />
-                        {contact.phone}
-                      </a>
-                    )}
-                    {contact.email && (
-                      <a href={`mailto:${contact.email}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
-                        <Mail className="h-3 w-3" />
-                        {contact.email}
-                      </a>
-                    )}
-                  </div>
-                </div>
+        <div className="grid md:grid-cols-2 gap-3">
+          {serverInfo.smbPath && (
+            <CopyableField
+              icon={<FolderOpen className="h-5 w-5 text-blue-500 flex-shrink-0" />}
+              label="Partage réseau (SMB)"
+              value={serverInfo.smbPath}
+            />
+          )}
+          {serverInfo.sharepointUrl && (
+            <CopyableField
+              icon={<Globe className="h-5 w-5 text-blue-600 flex-shrink-0" />}
+              label="SharePoint"
+              value={serverInfo.sharepointUrl}
+              isUrl
+            />
+          )}
+          {serverInfo.gedUrl && (
+            <CopyableField
+              icon={<FileText className="h-5 w-5 text-green-600 flex-shrink-0" />}
+              label="GED"
+              value={serverInfo.gedUrl}
+              isUrl
+            />
+          )}
+          {serverInfo.accessRightsUrl && (
+            <CopyableField
+              icon={<Shield className="h-5 w-5 text-orange-500 flex-shrink-0" />}
+              label="Droits d'accès serveur"
+              value={serverInfo.accessRightsUrl}
+              isUrl
+            />
+          )}
+        </div>
+        {serverInfo.notes && (
+          <div className="mt-3 p-3 bg-muted/30 rounded-lg">
+            <p className="text-sm text-muted-foreground">{serverInfo.notes}</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// === Infos accès site ===
+function SiteAccessInfoSection({ accessNotes, securityReminders }: { accessNotes: Site['accessNotes']; securityReminders: { id: string; text: string }[] }) {
+  if (!accessNotes || (!accessNotes.schedules && !accessNotes.badges && !accessNotes.procedures && !accessNotes.safety)) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Shield className="h-5 w-5" />
+          Accès au site
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-4 w-4 text-amber-500 cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-xs">
+                <p className="font-medium mb-1">Rappel sécurité chantier</p>
+                <ul className="text-xs space-y-1">
+                  {securityReminders.map((reminder) => (
+                    <li key={reminder.id}>• {reminder.text}</li>
+                  ))}
+                </ul>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid md:grid-cols-2 gap-4">
+          {accessNotes.schedules && (
+            <div className="flex items-start gap-2 bg-muted/50 rounded-lg p-3">
+              <Clock className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Horaires</p>
+                <p className="text-sm text-muted-foreground">{accessNotes.schedules}</p>
               </div>
-            ))
+            </div>
+          )}
+          {accessNotes.badges && (
+            <div className="flex items-start gap-2 bg-muted/50 rounded-lg p-3">
+              <Shield className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Badges</p>
+                <p className="text-sm text-muted-foreground">{accessNotes.badges}</p>
+              </div>
+            </div>
+          )}
+          {accessNotes.procedures && (
+            <div className="flex items-start gap-2 bg-muted/50 rounded-lg p-3">
+              <Globe className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Procédures</p>
+                <p className="text-sm text-muted-foreground">{accessNotes.procedures}</p>
+              </div>
+            </div>
+          )}
+          {accessNotes.safety && (
+            <div className="flex items-start gap-2 bg-muted/50 rounded-lg p-3">
+              <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Sécurité</p>
+                <p className="text-sm text-muted-foreground">{accessNotes.safety}</p>
+              </div>
+            </div>
           )}
         </div>
       </CardContent>
@@ -587,12 +842,12 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
   const handleExport = async () => {
     setIsExporting(true);
-    setExportProgress('D\émarrage...');
+    setExportProgress('D\u00e9marrage...');
     try {
       await exportSiteZip(id, (progress) => {
         setExportProgress(progress.step);
       });
-      showToast.success('Export t\él\écharg\é avec succ\ès');
+      showToast.success('Export t\u00e9l\u00e9charg\u00e9 avec succ\u00e8s');
     } catch (error) {
       showToast.error("Erreur lors de l'export du chantier");
     } finally {
@@ -644,10 +899,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   });
 
   const securityReminders = tenantConfig?.config?.securityReminders ?? [
-    { id: '1', text: "Badge d'accès obligatoire sur tous les chantiers" },
-    { id: '2', text: 'Carte BTP à jour requise' },
+    { id: '1', text: "Badge d'acc\u00e8s obligatoire sur tous les chantiers" },
+    { id: '2', text: 'Carte BTP \u00e0 jour requise' },
     { id: '3', text: 'EPI obligatoires (casque, gilet, chaussures)' },
-    { id: '4', text: 'Respecter les consignes affichées sur site' },
+    { id: '4', text: 'Respecter les consignes affich\u00e9es sur site' },
   ];
 
   const deleteMutation = useMutation({
@@ -671,6 +926,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     return <div className="text-center py-12">Chantier non trouvé</div>;
   }
 
+  // Déterminer si on a du contenu pour l'onglet Infos pratiques
+  const hasServerInfo = site.metadata?.serverInfo && (site.metadata.serverInfo.smbPath || site.metadata.serverInfo.sharepointUrl || site.metadata.serverInfo.gedUrl || site.metadata.serverInfo.accessRightsUrl);
+  const hasContacts = site.contacts && site.contacts.length > 0;
+  const hasConnectivity = site.connectivity && (site.connectivity.primary || site.connectivity.backup);
+  const hasAccessNotes = site.accessNotes && (site.accessNotes.schedules || site.accessNotes.badges || site.accessNotes.procedures || site.accessNotes.safety);
+  const hasInfosPratiques = hasServerInfo || hasContacts || hasConnectivity || hasAccessNotes;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -682,12 +944,47 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             </Link>
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">{site.name}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold">{site.name}</h1>
+              <Badge variant={healthStatusColors[site.healthStatus]}>
+                {site.healthStatus}
+              </Badge>
+            </div>
             <p className="text-muted-foreground">{site.code}</p>
+            {site.address && (
+              <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
+                <MapPin className="h-3.5 w-3.5" />
+                {site.address}{site.postalCode ? `, ${site.postalCode}` : ''}{site.city ? ` ${site.city}` : ''}
+              </p>
+            )}
+            {/* Badges référents */}
+            {site.metadata?.referents && (
+              <div className="flex gap-3 mt-2 flex-wrap">
+                {site.metadata.referents.it && (
+                  <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-950/30 px-3 py-1.5 rounded-lg">
+                    <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-white">
+                      {site.metadata.referents.it.split(' ').map((n: string) => n[0]).join('').substring(0, 2)}
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground leading-none">Référent IT</p>
+                      <p className="text-sm font-semibold leading-tight">{site.metadata.referents.it}</p>
+                    </div>
+                  </div>
+                )}
+                {site.metadata.referents.pm && (
+                  <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 rounded-lg">
+                    <div className="h-7 w-7 rounded-full bg-amber-600 flex items-center justify-center text-xs font-bold text-white">
+                      {site.metadata.referents.pm.split(' ').map((n: string) => n[0]).join('').substring(0, 2)}
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground leading-none">Chef de Projet</p>
+                      <p className="text-sm font-semibold leading-tight">{site.metadata.referents.pm}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <Badge variant={healthStatusColors[site.healthStatus]}>
-            {site.healthStatus}
-          </Badge>
         </div>
         <div className="flex gap-2">
           <Button
@@ -724,7 +1021,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
       {/* Tabs */}
       <Tabs defaultValue="info" className="w-full">
         <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="info">Informations</TabsTrigger>
+          <TabsTrigger value="info">Vue générale</TabsTrigger>
+          {hasInfosPratiques && (
+            <TabsTrigger value="infos-pratiques">
+              <Info className="mr-1 h-3 w-3" />
+              Infos pratiques
+            </TabsTrigger>
+          )}
           <TabsTrigger value="assets">Équipements ({assets.length})</TabsTrigger>
           <TabsTrigger value="racks">Baies ({racks.length})</TabsTrigger>
           <TabsTrigger value="tasks">Tâches ({tasks.length})</TabsTrigger>
@@ -736,6 +1039,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           </TabsTrigger>
         </TabsList>
 
+        {/* ============================== */}
+        {/* TAB: VUE GENERALE              */}
+        {/* ============================== */}
         <TabsContent value="info" className="space-y-6">
           {/* Informations générales */}
           <Card>
@@ -798,212 +1104,6 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             </CardContent>
           </Card>
 
-          {/* Contacts */}
-          <SiteContacts contacts={site.contacts || []} />
-
-          {/* Connectivity */}
-          {site.connectivity && (site.connectivity.primary || site.connectivity.backup) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Wifi className="h-5 w-5" />
-                  Connectivité
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 gap-4">
-                  {site.connectivity.primary && (
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Connexion principale</p>
-                      <div className="space-y-1">
-                        {site.connectivity.primary.type && (
-                          <p className="text-sm"><strong>Type:</strong> {site.connectivity.primary.type}</p>
-                        )}
-                        {site.connectivity.primary.provider && (
-                          <p className="text-sm"><strong>Opérateur:</strong> {site.connectivity.primary.provider}</p>
-                        )}
-                        {site.connectivity.primary.ref && (
-                          <p className="text-sm"><strong>Réf:</strong> {site.connectivity.primary.ref}</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {site.connectivity.backup && (
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Connexion de secours</p>
-                      <div className="space-y-1">
-                        {site.connectivity.backup.type && (
-                          <p className="text-sm"><strong>Type:</strong> {site.connectivity.backup.type}</p>
-                        )}
-                        {site.connectivity.backup.provider && (
-                          <p className="text-sm"><strong>Opérateur:</strong> {site.connectivity.backup.provider}</p>
-                        )}
-                        {site.connectivity.backup.ref && (
-                          <p className="text-sm"><strong>Réf:</strong> {site.connectivity.backup.ref}</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {site.connectivity.cutProcedure && (
-                  <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                    <p className="text-sm font-medium flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
-                      <AlertTriangle className="h-4 w-4" />
-                      Procédure en cas de coupure
-                    </p>
-                    <p className="text-sm mt-1 text-yellow-700 dark:text-yellow-300">{site.connectivity.cutProcedure}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Access Notes */}
-          {site.accessNotes && (site.accessNotes.schedules || site.accessNotes.badges || site.accessNotes.procedures || site.accessNotes.safety) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Informations d'accès
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-4 w-4 text-amber-500 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="max-w-xs">
-                        <p className="font-medium mb-1">Rappel sécurité chantier</p>
-                        <ul className="text-xs space-y-1">
-                          {securityReminders.map((reminder) => (
-                            <li key={reminder.id}>• {reminder.text}</li>
-                          ))}
-                        </ul>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 gap-4">
-                  {site.accessNotes.schedules && (
-                    <div className="flex items-start gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground mt-1" />
-                      <div>
-                        <p className="text-sm font-medium">Horaires</p>
-                        <p className="text-sm text-muted-foreground">{site.accessNotes.schedules}</p>
-                      </div>
-                    </div>
-                  )}
-                  {site.accessNotes.badges && (
-                    <div className="flex items-start gap-2">
-                      <Shield className="h-4 w-4 text-muted-foreground mt-1" />
-                      <div>
-                        <p className="text-sm font-medium">Badges</p>
-                        <p className="text-sm text-muted-foreground">{site.accessNotes.badges}</p>
-                      </div>
-                    </div>
-                  )}
-                  {site.accessNotes.procedures && (
-                    <div className="flex items-start gap-2">
-                      <Globe className="h-4 w-4 text-muted-foreground mt-1" />
-                      <div>
-                        <p className="text-sm font-medium">Procédures</p>
-                        <p className="text-sm text-muted-foreground">{site.accessNotes.procedures}</p>
-                      </div>
-                    </div>
-                  )}
-                  {site.accessNotes.safety && (
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle className="h-4 w-4 text-muted-foreground mt-1" />
-                      <div>
-                        <p className="text-sm font-medium">Sécurité</p>
-                        <p className="text-sm text-muted-foreground">{site.accessNotes.safety}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Server / Production Info */}
-          {site.metadata?.serverInfo && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <HardDrive className="h-5 w-5" />
-                  Serveurs &amp; Données de production
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {site.metadata.serverInfo.smbPath && (
-                    <CopyableField
-                      icon={<FolderOpen className="h-5 w-5 text-blue-500 flex-shrink-0" />}
-                      label="Partage SMB"
-                      value={site.metadata.serverInfo.smbPath}
-                    />
-                  )}
-                  {site.metadata.serverInfo.sharepointUrl && (
-                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                      <Globe className="h-5 w-5 text-blue-600 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">SharePoint</p>
-                        <a
-                          href={site.metadata.serverInfo.sharepointUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline truncate block"
-                        >
-                          {site.metadata.serverInfo.sharepointUrl}
-                          <ExternalLink className="inline h-3 w-3 ml-1" />
-                        </a>
-                      </div>
-                    </div>
-                  )}
-                  {site.metadata.serverInfo.gedUrl && (
-                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                      <FileText className="h-5 w-5 text-green-600 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">GED</p>
-                        <a
-                          href={site.metadata.serverInfo.gedUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline truncate block"
-                        >
-                          {site.metadata.serverInfo.gedUrl}
-                          <ExternalLink className="inline h-3 w-3 ml-1" />
-                        </a>
-                      </div>
-                    </div>
-                  )}
-                  {site.metadata.serverInfo.accessRightsUrl && (
-                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                      <Shield className="h-5 w-5 text-orange-500 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">Droits d'accès serveur</p>
-                        <a
-                          href={site.metadata.serverInfo.accessRightsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline truncate block"
-                        >
-                          {site.metadata.serverInfo.accessRightsUrl}
-                          <ExternalLink className="inline h-3 w-3 ml-1" />
-                        </a>
-                      </div>
-                    </div>
-                  )}
-                  {site.metadata.serverInfo.notes && (
-                    <div className="p-3 bg-muted/30 rounded-lg">
-                      <p className="text-sm text-muted-foreground">{site.metadata.serverInfo.notes}</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Statistiques */}
           <div className="grid md:grid-cols-3 gap-4">
             <Card>
@@ -1036,6 +1136,28 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         </TabsContent>
 
+        {/* ============================== */}
+        {/* TAB: INFOS PRATIQUES           */}
+        {/* ============================== */}
+        {hasInfosPratiques && (
+          <TabsContent value="infos-pratiques" className="space-y-6">
+            {/* Ressources & Partages (bien visible en haut) */}
+            <SiteResourcesSection serverInfo={site.metadata?.serverInfo} />
+
+            {/* Contacts en grille de 3 */}
+            <SiteContactsGrid contacts={site.contacts || []} />
+
+            {/* Connectivité primary + backup côte à côte */}
+            <SiteConnectivitySection connectivity={site.connectivity} />
+
+            {/* Accès au site */}
+            <SiteAccessInfoSection accessNotes={site.accessNotes} securityReminders={securityReminders} />
+          </TabsContent>
+        )}
+
+        {/* ============================== */}
+        {/* TAB: ÉQUIPEMENTS               */}
+        {/* ============================== */}
         <TabsContent value="assets">
           <Card>
             <CardHeader>
@@ -1076,6 +1198,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           </Card>
         </TabsContent>
 
+        {/* ============================== */}
+        {/* TAB: TÂCHES                    */}
+        {/* ============================== */}
         <TabsContent value="tasks">
           <Card>
             <CardHeader>
@@ -1113,6 +1238,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           </Card>
         </TabsContent>
 
+        {/* ============================== */}
+        {/* TAB: DOCUMENTS                 */}
+        {/* ============================== */}
         <TabsContent value="documents" className="space-y-6">
           {/* Upload documents directly to site */}
           <Attachments
@@ -1125,7 +1253,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           <AggregatedDocuments siteId={id} />
         </TabsContent>
 
-        {/* Racks Tab */}
+        {/* ============================== */}
+        {/* TAB: BAIES                     */}
+        {/* ============================== */}
         <TabsContent value="racks">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -1191,18 +1321,22 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           </Card>
         </TabsContent>
 
-        {/* Access Tab */}
+        {/* ============================== */}
+        {/* TAB: ACCÈS                     */}
+        {/* ============================== */}
         <TabsContent value="access">
           <SiteAccessManager siteId={id} />
         </TabsContent>
 
-        {/* Plans Tab */}
+        {/* ============================== */}
+        {/* TAB: PLANS                     */}
+        {/* ============================== */}
         <TabsContent value="plans">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Map className="h-5 w-5" />
-                Plans d'étage ({floorPlans.length})
+                Plans d&apos;étage ({floorPlans.length})
               </CardTitle>
               <Button asChild size="sm">
                 <Link href={`/dashboard/floor-plans/new?siteId=${id}`}>
@@ -1249,7 +1383,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               ) : (
                 <div className="text-center py-12">
                   <Map className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground mb-4">Aucun plan d'étage pour ce chantier</p>
+                  <p className="text-muted-foreground mb-4">Aucun plan d&apos;étage pour ce chantier</p>
                   <Button asChild variant="outline">
                     <Link href={`/dashboard/floor-plans/new?siteId=${id}`}>
                       <Plus className="mr-2 h-4 w-4" />
