@@ -42,11 +42,12 @@ export class TasksController {
 
   @Get()
   @Resource('tasks') @Action('read')
-  @ApiOperation({ summary: 'Get all tasks (filtered by user site access)' })
+  @ApiOperation({ summary: 'Get all tasks (filtered by user site access + resource permissions)' })
   async findAll(@Query() filter: FilterTaskDto, @Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
+      'tasks',
     );
     return this.tasksService.findAll(req.user.tenantId, filter, accessibleSiteIds);
   }
@@ -55,9 +56,10 @@ export class TasksController {
   @Resource('tasks') @Action('read')
   @ApiOperation({ summary: 'Get tasks assigned to me' })
   async getMyTasks(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
+      'tasks',
     );
     return this.tasksService.getMyTasks(req.user.tenantId, req.user.id, accessibleSiteIds);
   }
@@ -66,9 +68,10 @@ export class TasksController {
   @Resource('tasks') @Action('read')
   @ApiOperation({ summary: 'Get overdue tasks' })
   async getOverdueTasks(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
+      'tasks',
     );
     return this.tasksService.getOverdueTasks(req.user.tenantId, accessibleSiteIds);
   }
@@ -77,9 +80,10 @@ export class TasksController {
   @Resource('tasks') @Action('read')
   @ApiOperation({ summary: 'Get tasks statistics by status' })
   async getStatsByStatus(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
+      'tasks',
     );
     return this.tasksService.getStatsByStatus(req.user.tenantId, accessibleSiteIds);
   }
@@ -88,9 +92,10 @@ export class TasksController {
   @Resource('tasks') @Action('read')
   @ApiOperation({ summary: 'Get tasks statistics by priority' })
   async getStatsByPriority(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
+      'tasks',
     );
     return this.tasksService.getStatsByPriority(req.user.tenantId, accessibleSiteIds);
   }

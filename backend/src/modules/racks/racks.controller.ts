@@ -40,11 +40,12 @@ export class RacksController {
 
   @Get()
   @Resource('racks') @Action('read')
-  @ApiOperation({ summary: 'Get all racks (filtered by user site access)' })
+  @ApiOperation({ summary: 'Get all racks (filtered by user site access + resource permissions)' })
   async findAll(@Query('siteId') siteId: string, @Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
+      'racks',
     );
     return this.racksService.findAll(req.user.tenantId, siteId, accessibleSiteIds);
   }

@@ -42,11 +42,12 @@ export class AssetsController {
 
   @Get()
   @Resource('assets') @Action('read')
-  @ApiOperation({ summary: 'Get all assets (filtered by user site access)' })
+  @ApiOperation({ summary: 'Get all assets (filtered by user site access + resource permissions)' })
   async findAll(@Query() filter: FilterAssetDto, @Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
+      'assets',
     );
     return this.assetsService.findAll(req.user.tenantId, filter, accessibleSiteIds);
   }
@@ -55,9 +56,10 @@ export class AssetsController {
   @Resource('assets') @Action('read')
   @ApiOperation({ summary: 'Get assets statistics by type' })
   async getStatsByType(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
+      'assets',
     );
     return this.assetsService.getStatsByType(req.user.tenantId, accessibleSiteIds);
   }
@@ -66,9 +68,10 @@ export class AssetsController {
   @Resource('assets') @Action('read')
   @ApiOperation({ summary: 'Get assets statistics by site' })
   async getStatsBySite(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
+      'assets',
     );
     return this.assetsService.getStatsBySite(req.user.tenantId, accessibleSiteIds);
   }

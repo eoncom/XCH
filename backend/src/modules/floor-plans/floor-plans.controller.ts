@@ -129,11 +129,12 @@ export class FloorPlansController {
   @Get()
   @Resource('floor-plans')
   @Action('read')
-  @ApiOperation({ summary: 'Get all floor plans (filtered by user site access)' })
+  @ApiOperation({ summary: 'Get all floor plans (filtered by user site access + resource permissions)' })
   async findAll(@Request() req: AuthRequest, @Query('siteId') siteId?: string) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
+      'floorPlans',
     );
     return this.floorPlansService.findAll(req.user.tenantId, siteId, accessibleSiteIds);
   }

@@ -167,7 +167,7 @@ export default function EditContactPage({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="typeId">Type <span className="text-red-500">*</span></Label>
-                <Select value={typeId} onValueChange={(value) => setValue('typeId', value)}>
+                <Select key={typeId || 'empty'} value={typeId || ''} onValueChange={(value) => setValue('typeId', value)}>
                   <SelectTrigger><SelectValue placeholder="Selectionner un type" /></SelectTrigger>
                   <SelectContent>
                     {contactTypes?.map((type) => (

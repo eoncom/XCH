@@ -61,7 +61,7 @@ export default function ContactsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const { canCreate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete, isManagerOrAbove } = usePermissions();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -145,12 +145,14 @@ export default function ContactsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/contacts/types">
-              <Settings className="mr-2 h-4 w-4" />
-              Types
-            </Link>
-          </Button>
+          {isManagerOrAbove && (
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/contacts/types">
+                <Settings className="mr-2 h-4 w-4" />
+                Types
+              </Link>
+            </Button>
+          )}
           {canCreate('contacts') && (
             <Button asChild data-testid="create-contact-btn">
               <Link href="/dashboard/contacts/new">
@@ -285,16 +287,18 @@ export default function ContactsPage() {
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          asChild
-                          data-testid="edit-contact-btn"
-                        >
-                          <Link href={`/dashboard/contacts/${contact.id}/edit`}>
-                            <Pencil className="h-4 w-4" />
-                          </Link>
-                        </Button>
+                        {canUpdate('contacts') && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            asChild
+                            data-testid="edit-contact-btn"
+                          >
+                            <Link href={`/dashboard/contacts/${contact.id}/edit`}>
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                        )}
                         {canDelete('contacts') && (
                           <Button
                             variant="ghost"
@@ -320,7 +324,7 @@ export default function ContactsPage() {
                   ? 'Essayez de modifier vos filtres de recherche'
                   : 'Commencez par ajouter un nouveau contact'}
               </p>
-              {!search && categoryFilter === 'ALL' && typeFilter === 'ALL' && (
+              {!search && categoryFilter === 'ALL' && typeFilter === 'ALL' && canCreate('contacts') && (
                 <Button asChild className="mt-4">
                   <Link href="/dashboard/contacts/new">
                     <Plus className="mr-2 h-4 w-4" />

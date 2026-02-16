@@ -155,14 +155,16 @@ export default function ContactDetailPage({
           </Badge>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => toggleActiveMutation.mutate()}
-            disabled={toggleActiveMutation.isPending}
-          >
-            <Power className="mr-2 h-4 w-4" />
-            {contact.isActive ? 'Desactiver' : 'Activer'}
-          </Button>
+          {canUpdate('contacts') && (
+            <Button
+              variant="outline"
+              onClick={() => toggleActiveMutation.mutate()}
+              disabled={toggleActiveMutation.isPending}
+            >
+              <Power className="mr-2 h-4 w-4" />
+              {contact.isActive ? 'Desactiver' : 'Activer'}
+            </Button>
+          )}
           {canUpdate('contacts') && (
             <Button variant="outline" asChild data-testid="edit-contact-btn">
               <Link href={`/dashboard/contacts/${id}/edit`}>

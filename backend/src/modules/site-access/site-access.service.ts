@@ -236,6 +236,47 @@ export class SiteAccessService {
   }
 
   /**
+   * Get accessible site IDs filtered by per-resource permissions.
+   * Excludes sites where user has NONE permission for the given resource.
+   * Returns null for ADMIN/MANAGER (all sites).
+   */
+  async getAccessibleSiteIdsForResource(
+    tenantId: string,
+    userId: string,
+    resource: string,
+  ): Promise<string[] | null> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { role: true },
+    });
+
+    if (!user) return [];
+
+    // ADMIN and MANAGER see all sites
+    if (user.role === 'ADMIN' || user.role === 'MANAGER') {
+      return null; // null = all sites accessible
+    }
+
+    // Get explicit access entries with resourcePermissions
+    const accessRecords = await this.prisma.userSiteAccess.findMany({
+      where: { tenantId, userId },
+      select: { siteId: true, accessLevel: true, resourcePermissions: true },
+    });
+
+    // Filter out sites where this resource is explicitly set to NONE
+    return accessRecords
+      .filter((access) => {
+        const resourcePerms = access.resourcePermissions as ResourcePermissions | null;
+        if (resourcePerms && resource in resourcePerms) {
+          return (resourcePerms as any)[resource] !== ResourcePermissionLevel.NONE;
+        }
+        // No override → uses global accessLevel (READ or WRITE), so resource is accessible
+        return true;
+      })
+      .map((a) => a.siteId);
+  }
+
+  /**
    * Get the effective permission level for a user on a specific resource within a site.
    * Resolution order:
    * 1. ADMIN/MANAGER → always WRITE

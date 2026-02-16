@@ -38,6 +38,7 @@ p, ADMIN, contact-types, update, *
 p, ADMIN, contact-types, delete, *
 
 # MANAGER
+p, MANAGER, tenants, read, *
 p, MANAGER, sites, read, *
 p, MANAGER, assets, read, *
 p, MANAGER, racks, read, *
@@ -54,6 +55,7 @@ p, MANAGER, contacts, update, *
 p, MANAGER, contact-types, read, *
 
 # TECHNICIEN
+p, TECHNICIEN, tenants, read, *
 p, TECHNICIEN, sites, read, *
 p, TECHNICIEN, assets, create, *
 p, TECHNICIEN, assets, read, *
@@ -67,12 +69,11 @@ p, TECHNICIEN, tasks, update, *
 p, TECHNICIEN, floor-plans, read, *
 p, TECHNICIEN, floor-plans, create, *
 p, TECHNICIEN, floor-plans, update, *
-p, TECHNICIEN, contacts, create, *
 p, TECHNICIEN, contacts, read, *
-p, TECHNICIEN, contacts, update, *
 p, TECHNICIEN, contact-types, read, *
 
 # VIEWER
+p, VIEWER, tenants, read, *
 p, VIEWER, sites, read, *
 p, VIEWER, assets, read, *
 p, VIEWER, racks, read, *

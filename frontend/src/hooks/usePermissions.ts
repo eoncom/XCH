@@ -35,15 +35,17 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
   },
   TECHNICIEN: {
     sites: ['read'],
+    tenants: ['read'],
     assets: ['create', 'read', 'update'],
     racks: ['create', 'read', 'update'],
     tasks: ['create', 'read', 'update'],
     'floor-plans': ['read', 'create', 'update'],
-    contacts: ['create', 'read', 'update'],
+    contacts: ['read'],
     'contact-types': ['read'],
   },
   VIEWER: {
     sites: ['read'],
+    tenants: ['read'],
     assets: ['read'],
     racks: ['read'],
     tasks: ['read'],

@@ -3551,3 +3551,24 @@ fix: enforce per-resource permissions + show only latest floor plan versions
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-16
+
+**Date:** 2026-02-16 23:58:03
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 6
+- Frontend files modified: 4
+
+**Commit message:**
+```
+fix: QR code persistence, remove access text, reorder site edit form
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
