@@ -321,7 +321,7 @@ export default function TaskDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
-          {canUpdate('tasks') && (
+          {canUpdate('tasks', task?.siteId) && (
             <Button variant="outline" asChild data-testid="edit-task-btn">
               <Link href={`/dashboard/tasks/${id}/edit`}>
                 <Edit className="mr-2 h-4 w-4" />
@@ -329,7 +329,7 @@ export default function TaskDetailPage({
               </Link>
             </Button>
           )}
-          {canDelete('tasks') && (
+          {canDelete('tasks', task?.siteId) && (
             <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-task-btn">
               <Trash2 className="mr-2 h-4 w-4" />
               Supprimer

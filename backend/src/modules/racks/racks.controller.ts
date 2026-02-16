@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RacksService } from './racks.service';
@@ -11,6 +11,7 @@ import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { SiteAccessService } from '../site-access/site-access.service';
+import { ResourcePermissionLevel } from '../site-access/dto/grant-site-access.dto';
 
 @ApiTags('racks')
 @Controller('racks')
@@ -25,7 +26,15 @@ export class RacksController {
   @Post()
   @Resource('racks') @Action('create')
   @ApiOperation({ summary: 'Create new rack' })
-  create(@Body() createRackDto: CreateRackDto, @Request() req: AuthRequest) {
+  async create(@Body() createRackDto: CreateRackDto, @Request() req: AuthRequest) {
+    if (createRackDto.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, createRackDto.siteId, 'racks',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions for racks on this site');
+      }
+    }
     return this.racksService.create(req.user.tenantId, createRackDto);
   }
 
@@ -43,8 +52,17 @@ export class RacksController {
   @Get(':id')
   @Resource('racks') @Action('read')
   @ApiOperation({ summary: 'Get rack by id with occupation details' })
-  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.racksService.findOne(id, req.user.tenantId);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
+    const rack = await this.racksService.findOne(id, req.user.tenantId);
+    if (rack.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, rack.siteId, 'racks',
+      );
+      if (perm === ResourcePermissionLevel.NONE) {
+        throw new ForbiddenException('No access to racks on this site');
+      }
+    }
+    return rack;
   }
 
   @Get(':id/available-spaces')
@@ -61,36 +79,72 @@ export class RacksController {
   @Post(':id/mount')
   @Resource('racks') @Action('update')
   @ApiOperation({ summary: 'Mount equipment on rack' })
-  mountEquipment(
+  async mountEquipment(
     @Param('id') id: string,
     @Body() mountDto: MountEquipmentDto,
     @Request() req: AuthRequest,
   ) {
+    const rack = await this.racksService.findOne(id, req.user.tenantId);
+    if (rack.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, rack.siteId, 'racks',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions to modify racks on this site');
+      }
+    }
     return this.racksService.mountEquipment(id, req.user.tenantId, mountDto);
   }
 
   @Delete(':id/unmount/:assetId')
   @Resource('racks') @Action('update')
   @ApiOperation({ summary: 'Unmount equipment from rack' })
-  unmountEquipment(
+  async unmountEquipment(
     @Param('id') id: string,
     @Param('assetId') assetId: string,
     @Request() req: AuthRequest,
   ) {
+    const rack = await this.racksService.findOne(id, req.user.tenantId);
+    if (rack.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, rack.siteId, 'racks',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions to modify racks on this site');
+      }
+    }
     return this.racksService.unmountEquipment(id, assetId, req.user.tenantId);
   }
 
   @Patch(':id')
   @Resource('racks') @Action('update')
   @ApiOperation({ summary: 'Update rack' })
-  update(@Param('id') id: string, @Body() updateRackDto: UpdateRackDto, @Request() req: AuthRequest) {
+  async update(@Param('id') id: string, @Body() updateRackDto: UpdateRackDto, @Request() req: AuthRequest) {
+    const rack = await this.racksService.findOne(id, req.user.tenantId);
+    if (rack.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, rack.siteId, 'racks',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions to modify racks on this site');
+      }
+    }
     return this.racksService.update(id, req.user.tenantId, updateRackDto);
   }
 
   @Delete(':id')
   @Resource('racks') @Action('delete')
   @ApiOperation({ summary: 'Delete rack' })
-  remove(@Param('id') id: string, @Request() req: AuthRequest) {
+  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
+    const rack = await this.racksService.findOne(id, req.user.tenantId);
+    if (rack.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, rack.siteId, 'racks',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions to delete racks on this site');
+      }
+    }
     return this.racksService.remove(id, req.user.tenantId);
   }
 

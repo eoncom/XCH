@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AssetsService } from './assets.service';
@@ -12,6 +12,7 @@ import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { SiteAccessService } from '../site-access/site-access.service';
+import { ResourcePermissionLevel } from '../site-access/dto/grant-site-access.dto';
 
 @ApiTags('assets')
 @Controller('assets')
@@ -26,7 +27,16 @@ export class AssetsController {
   @Post()
   @Resource('assets') @Action('create')
   @ApiOperation({ summary: 'Create new asset' })
-  create(@Body() createAssetDto: CreateAssetDto, @Request() req: AuthRequest) {
+  async create(@Body() createAssetDto: CreateAssetDto, @Request() req: AuthRequest) {
+    // Check per-resource permission on the target site
+    if (createAssetDto.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, createAssetDto.siteId, 'assets',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions for assets on this site');
+      }
+    }
     return this.assetsService.create(req.user.tenantId, createAssetDto);
   }
 
@@ -66,8 +76,18 @@ export class AssetsController {
   @Get(':id')
   @Resource('assets') @Action('read')
   @ApiOperation({ summary: 'Get asset by id' })
-  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.assetsService.findOne(id, req.user.tenantId);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
+    const asset = await this.assetsService.findOne(id, req.user.tenantId);
+    // Check per-resource read permission
+    if (asset.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, asset.siteId, 'assets',
+      );
+      if (perm === ResourcePermissionLevel.NONE) {
+        throw new ForbiddenException('No access to assets on this site');
+      }
+    }
+    return asset;
   }
 
   @Post(':id/qr-code')
@@ -87,14 +107,33 @@ export class AssetsController {
   @Patch(':id')
   @Resource('assets') @Action('update')
   @ApiOperation({ summary: 'Update asset' })
-  update(@Param('id') id: string, @Body() updateAssetDto: UpdateAssetDto, @Request() req: AuthRequest) {
+  async update(@Param('id') id: string, @Body() updateAssetDto: UpdateAssetDto, @Request() req: AuthRequest) {
+    // Get asset to check siteId
+    const asset = await this.assetsService.findOne(id, req.user.tenantId);
+    if (asset.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, asset.siteId, 'assets',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions to modify assets on this site');
+      }
+    }
     return this.assetsService.update(id, req.user.tenantId, updateAssetDto);
   }
 
   @Delete(':id')
   @Resource('assets') @Action('delete')
   @ApiOperation({ summary: 'Delete asset' })
-  remove(@Param('id') id: string, @Request() req: AuthRequest) {
+  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
+    const asset = await this.assetsService.findOne(id, req.user.tenantId);
+    if (asset.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, asset.siteId, 'assets',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions to delete assets on this site');
+      }
+    }
     return this.assetsService.remove(id, req.user.tenantId);
   }
 

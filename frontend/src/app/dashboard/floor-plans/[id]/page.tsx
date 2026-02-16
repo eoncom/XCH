@@ -394,7 +394,7 @@ export default function FloorPlanDetailPage({
             <Download className="mr-2 h-4 w-4" />
             Télécharger PDF
           </Button>
-          {canUpdate('floor-plans') && (
+          {canUpdate('floor-plans', floorPlan?.siteId) && (
             <Button variant="outline" asChild data-testid="edit-floor-plan-btn">
               <Link href={`/dashboard/floor-plans/${id}/edit`}>
                 <Edit className="mr-2 h-4 w-4" />
@@ -402,7 +402,7 @@ export default function FloorPlanDetailPage({
               </Link>
             </Button>
           )}
-          {canDelete('floor-plans') && (
+          {canDelete('floor-plans', floorPlan?.siteId) && (
             <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-floor-plan-btn">
               <Trash2 className="mr-2 h-4 w-4" />
               Supprimer

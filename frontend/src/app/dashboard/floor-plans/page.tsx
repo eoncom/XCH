@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -15,10 +16,43 @@ import {
 } from '@/components/ui/select';
 import { floorPlansApi } from '@/lib/api/floor-plans';
 import { sitesApi } from '@/lib/api/sites';
-import { Plus, Search, FileImage, MapPin, Download } from 'lucide-react';
+import { Plus, Search, FileImage, MapPin, Layers } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { FloorPlan, Site } from '@/types';
+
+/**
+ * Deduplicate floor plans by planGroupId, keeping only the latest version.
+ * Plans without planGroupId are treated as unique.
+ */
+function getLatestVersions(plans: FloorPlan[]): FloorPlan[] {
+  const groupMap = new Map<string, FloorPlan>();
+
+  for (const plan of plans) {
+    const groupKey = plan.planGroupId || plan.id;
+    const existing = groupMap.get(groupKey);
+
+    if (!existing || plan.version > existing.version) {
+      groupMap.set(groupKey, plan);
+    }
+  }
+
+  return Array.from(groupMap.values());
+}
+
+/**
+ * Count total versions per planGroupId
+ */
+function getVersionCounts(plans: FloorPlan[]): Map<string, number> {
+  const counts = new Map<string, number>();
+
+  for (const plan of plans) {
+    const groupKey = plan.planGroupId || plan.id;
+    counts.set(groupKey, (counts.get(groupKey) || 0) + 1);
+  }
+
+  return counts;
+}
 
 export default function FloorPlansPage() {
   const [search, setSearch] = useState('');
@@ -36,7 +70,11 @@ export default function FloorPlansPage() {
     queryFn: sitesApi.getAll,
   });
 
-  const filteredFloorPlans = floorPlans?.filter((plan) => {
+  // Deduplicate: show only latest version per plan group
+  const latestPlans = floorPlans ? getLatestVersions(floorPlans) : [];
+  const versionCounts = floorPlans ? getVersionCounts(floorPlans) : new Map<string, number>();
+
+  const filteredFloorPlans = latestPlans.filter((plan) => {
     const searchLower = search.toLowerCase();
     return (
       plan.title?.toLowerCase().includes(searchLower) ||
@@ -98,68 +136,81 @@ export default function FloorPlansPage() {
 
       {/* Floor Plans Grid */}
       <div data-testid="floor-plans-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {filteredFloorPlans?.map((plan) => (
-          <Card
-            key={plan.id}
-            data-testid="floor-plan-card"
-            className="hover:shadow-lg transition-shadow cursor-pointer"
-          >
-            <Link href={`/dashboard/floor-plans/${plan.id}`}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileImage className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <CardTitle className="text-lg">{plan.title}</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        v{plan.version}
-                      </p>
+        {filteredFloorPlans?.map((plan) => {
+          const groupKey = plan.planGroupId || plan.id;
+          const totalVersions = versionCounts.get(groupKey) || 1;
+
+          return (
+            <Card
+              key={plan.id}
+              data-testid="floor-plan-card"
+              className="hover:shadow-lg transition-shadow cursor-pointer"
+            >
+              <Link href={`/dashboard/floor-plans/${plan.id}`}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileImage className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <CardTitle className="text-lg">{plan.title}</CardTitle>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-muted-foreground">
+                            v{plan.version}
+                          </p>
+                          {totalVersions > 1 && (
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                              <Layers className="h-3 w-3 mr-1" />
+                              {totalVersions} versions
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 text-sm">
-                  {plan.site && (
-                    <div className="flex items-center text-muted-foreground">
-                      <MapPin className="mr-2 h-4 w-4" />
-                      {plan.site.name}
-                    </div>
-                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 text-sm">
+                    {plan.site && (
+                      <div className="flex items-center text-muted-foreground">
+                        <MapPin className="mr-2 h-4 w-4" />
+                        {plan.site.name}
+                      </div>
+                    )}
 
-                  {(plan.building || plan.floor) && (
-                    <div className="text-muted-foreground">
-                      {plan.building && `Bâtiment ${plan.building}`}
-                      {plan.building && plan.floor && ' - '}
-                      {plan.floor && `Étage ${plan.floor}`}
-                    </div>
-                  )}
+                    {(plan.building || plan.floor) && (
+                      <div className="text-muted-foreground">
+                        {plan.building && `Bâtiment ${plan.building}`}
+                        {plan.building && plan.floor && ' - '}
+                        {plan.floor && `Étage ${plan.floor}`}
+                      </div>
+                    )}
 
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Repères:</span>
-                    <span className="font-medium">{plan.pins?.length || 0}</span>
-                  </div>
-
-                  {plan.fileSize && (
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Taille:</span>
-                      <span className="font-medium">
-                        {(plan.fileSize / 1024 / 1024).toFixed(2)} MB
-                      </span>
+                      <span className="text-muted-foreground">Repères:</span>
+                      <span className="font-medium">{plan.pins?.length || 0}</span>
                     </div>
-                  )}
 
-                  {plan.uploadedAt && (
-                    <div className="text-xs text-muted-foreground">
-                      Ajouté le{' '}
-                      {new Date(plan.uploadedAt).toLocaleDateString('fr-FR')}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Link>
-          </Card>
-        ))}
+                    {plan.fileSize && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Taille:</span>
+                        <span className="font-medium">
+                          {(plan.fileSize / 1024 / 1024).toFixed(2)} MB
+                        </span>
+                      </div>
+                    )}
+
+                    {plan.uploadedAt && (
+                      <div className="text-xs text-muted-foreground">
+                        Ajouté le{' '}
+                        {new Date(plan.uploadedAt).toLocaleDateString('fr-FR')}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Link>
+            </Card>
+          );
+        })}
       </div>
 
       {filteredFloorPlans?.length === 0 && (

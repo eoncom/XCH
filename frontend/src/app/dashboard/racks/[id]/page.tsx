@@ -239,7 +239,7 @@ export default function RackDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
-          {canUpdate('racks') && (
+          {canUpdate('racks', rack?.siteId) && (
             <Button variant="outline" asChild data-testid="edit-rack-btn">
               <Link href={`/dashboard/racks/${id}/edit`}>
                 <Edit className="mr-2 h-4 w-4" />
@@ -247,7 +247,7 @@ export default function RackDetailPage({
               </Link>
             </Button>
           )}
-          {canDelete('racks') && (
+          {canDelete('racks', rack?.siteId) && (
             <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-rack-btn">
               <Trash2 className="mr-2 h-4 w-4" />
               Supprimer

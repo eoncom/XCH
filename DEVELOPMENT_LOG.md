@@ -3509,3 +3509,24 @@ fix: crash on site detail page — replace Map with plain object in useMemo
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-16
+
+**Date:** 2026-02-16 01:38:41
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 7
+
+**Commit message:**
+```
+feat: RBAC complet, permissions granulaires, monitoring Uptime Kuma, harmonisation UI
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

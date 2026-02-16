@@ -1219,7 +1219,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               </>
             )}
           </Button>
-          {canUpdate('sites') && (
+          {canUpdate('sites', id) && (
             <Button variant="outline" asChild data-testid="edit-site-btn">
               <Link href={`/dashboard/sites/${id}/edit`}>
                 <Edit className="mr-2 h-4 w-4" />
@@ -1227,7 +1227,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               </Link>
             </Button>
           )}
-          {canDelete('sites') && (
+          {canDelete('sites', id) && (
             <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-site-btn">
               <Trash2 className="mr-2 h-4 w-4" />
               Supprimer

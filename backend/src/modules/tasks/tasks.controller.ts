@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TasksService } from './tasks.service';
@@ -13,6 +13,7 @@ import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { SiteAccessService } from '../site-access/site-access.service';
+import { ResourcePermissionLevel } from '../site-access/dto/grant-site-access.dto';
 
 @ApiTags('tasks')
 @Controller('tasks')
@@ -27,7 +28,15 @@ export class TasksController {
   @Post()
   @Resource('tasks') @Action('create')
   @ApiOperation({ summary: 'Create new task' })
-  create(@Body() createTaskDto: CreateTaskDto, @Request() req: AuthRequest) {
+  async create(@Body() createTaskDto: CreateTaskDto, @Request() req: AuthRequest) {
+    if (createTaskDto.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, createTaskDto.siteId, 'tasks',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions for tasks on this site');
+      }
+    }
     return this.tasksService.create(req.user.tenantId, req.user.id, createTaskDto);
   }
 
@@ -89,32 +98,68 @@ export class TasksController {
   @Get(':id')
   @Resource('tasks') @Action('read')
   @ApiOperation({ summary: 'Get task by id' })
-  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.tasksService.findOne(id, req.user.tenantId);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
+    const task = await this.tasksService.findOne(id, req.user.tenantId);
+    if (task.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, task.siteId, 'tasks',
+      );
+      if (perm === ResourcePermissionLevel.NONE) {
+        throw new ForbiddenException('No access to tasks on this site');
+      }
+    }
+    return task;
   }
 
   @Patch(':id')
   @Resource('tasks') @Action('update')
   @ApiOperation({ summary: 'Update task' })
-  update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto, @Request() req: AuthRequest) {
+  async update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto, @Request() req: AuthRequest) {
+    const task = await this.tasksService.findOne(id, req.user.tenantId);
+    if (task.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, task.siteId, 'tasks',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions to modify tasks on this site');
+      }
+    }
     return this.tasksService.update(id, req.user.tenantId, updateTaskDto);
   }
 
   @Patch(':id/checklist')
   @Resource('tasks') @Action('update')
   @ApiOperation({ summary: 'Update task checklist' })
-  updateChecklist(
+  async updateChecklist(
     @Param('id') id: string,
     @Body() updateChecklistDto: UpdateChecklistDto,
     @Request() req: AuthRequest,
   ) {
+    const task = await this.tasksService.findOne(id, req.user.tenantId);
+    if (task.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, task.siteId, 'tasks',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions to modify tasks on this site');
+      }
+    }
     return this.tasksService.updateChecklist(id, req.user.tenantId, updateChecklistDto.checklist);
   }
 
   @Delete(':id')
   @Resource('tasks') @Action('delete')
   @ApiOperation({ summary: 'Delete task' })
-  remove(@Param('id') id: string, @Request() req: AuthRequest) {
+  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
+    const task = await this.tasksService.findOne(id, req.user.tenantId);
+    if (task.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, task.siteId, 'tasks',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions to delete tasks on this site');
+      }
+    }
     return this.tasksService.remove(id, req.user.tenantId);
   }
 

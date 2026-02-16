@@ -191,7 +191,7 @@ export default function AssetDetailPage({
             <QrCode className="mr-2 h-4 w-4" />
             {generateQRMutation.isPending ? 'Génération...' : 'Générer QR Code'}
           </Button>
-          {canUpdate('assets') && (
+          {canUpdate('assets', asset?.siteId) && (
             <Button variant="outline" asChild data-testid="edit-asset-btn">
               <Link href={`/dashboard/assets/${id}/edit`}>
                 <Edit className="mr-2 h-4 w-4" />
@@ -199,7 +199,7 @@ export default function AssetDetailPage({
               </Link>
             </Button>
           )}
-          {canDelete('assets') && (
+          {canDelete('assets', asset?.siteId) && (
             <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-asset-btn">
               <Trash2 className="mr-2 h-4 w-4" />
               Supprimer
