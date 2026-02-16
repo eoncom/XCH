@@ -271,6 +271,10 @@ model Asset {
   rackHeightU   Int? // Height in U
   rackNotes     String? // Notes for this asset when mounted in rack
 
+  // QR Code
+  qrCodeUrl   String?   @db.Text  // Base64 data URL of QR code image
+  qrCodeToken String?             // Secure token for QR validation
+
   // Metadata
   purchaseDate     DateTime?
   warrantyEnd      DateTime?

@@ -236,8 +236,14 @@ export class AssetsService {
 
     const qrCodeDataUrl = await this.qrCodeService.generateQRCode(qrUrl);
 
-    // TODO: Store token in database for validation on scan
-    // For now, return QR code directly
+    // Persist QR code in database
+    await this.prisma.asset.update({
+      where: { id },
+      data: {
+        qrCodeUrl: qrCodeDataUrl,
+        qrCodeToken: token,
+      },
+    });
 
     return {
       assetId: asset.id,

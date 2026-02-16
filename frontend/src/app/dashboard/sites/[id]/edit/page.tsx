@@ -990,49 +990,6 @@ function EditSitePage({
                   </DialogContent>
                 </Dialog>
 
-                {/* Access Notes */}
-                <div className="border-t pt-6">
-                  <h3 className="text-lg font-semibold mb-4">Notes d'Accès</h3>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Horaires d'accès</Label>
-                      <Textarea
-                        placeholder="Lun-Ven 8h-18h, Sam 9h-12h..."
-                        rows={2}
-                        value={accessNotes.schedules}
-                        onChange={(e) => setAccessNotes({...accessNotes, schedules: e.target.value})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Badges requis</Label>
-                      <Textarea
-                        placeholder="Badge site + badge bâtiment A..."
-                        rows={2}
-                        value={accessNotes.badges}
-                        onChange={(e) => setAccessNotes({...accessNotes, badges: e.target.value})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Procédures d'entrée</Label>
-                      <Textarea
-                        placeholder="1. S'enregistrer à l'accueil&#10;2. Récupérer badge..."
-                        rows={3}
-                        value={accessNotes.procedures}
-                        onChange={(e) => setAccessNotes({...accessNotes, procedures: e.target.value})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Consignes de sécurité</Label>
-                      <Textarea
-                        placeholder="Port du casque obligatoire, EPI requis..."
-                        rows={3}
-                        value={accessNotes.safety}
-                        onChange={(e) => setAccessNotes({...accessNotes, safety: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                </div>
-
                 {/* Serveurs & Données de production */}
                 <div className="border-t pt-6">
                   <h3 className="text-lg font-semibold mb-4">Serveurs & Données de production</h3>
@@ -1096,6 +1053,49 @@ function EditSitePage({
                         rows={3}
                         value={serverInfo.notes}
                         onChange={(e) => setServerInfo({...serverInfo, notes: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Access Notes */}
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-semibold mb-4">Notes d'Accès</h3>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Horaires d'accès</Label>
+                      <Textarea
+                        placeholder="Lun-Ven 8h-18h, Sam 9h-12h..."
+                        rows={2}
+                        value={accessNotes.schedules}
+                        onChange={(e) => setAccessNotes({...accessNotes, schedules: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Badges requis</Label>
+                      <Textarea
+                        placeholder="Badge site + badge bâtiment A..."
+                        rows={2}
+                        value={accessNotes.badges}
+                        onChange={(e) => setAccessNotes({...accessNotes, badges: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Procédures d'entrée</Label>
+                      <Textarea
+                        placeholder="1. S'enregistrer à l'accueil&#10;2. Récupérer badge..."
+                        rows={3}
+                        value={accessNotes.procedures}
+                        onChange={(e) => setAccessNotes({...accessNotes, procedures: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Consignes de sécurité</Label>
+                      <Textarea
+                        placeholder="Port du casque obligatoire, EPI requis..."
+                        rows={3}
+                        value={accessNotes.safety}
+                        onChange={(e) => setAccessNotes({...accessNotes, safety: e.target.value})}
                       />
                     </div>
                   </div>

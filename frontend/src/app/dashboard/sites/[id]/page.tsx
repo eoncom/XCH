@@ -314,14 +314,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
   };
 
   if (!isAdmin) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <Lock className="h-8 w-8 mx-auto mb-2" />
-          Seuls les administrateurs et managers peuvent gérer les accès.
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   if (isLoading) {

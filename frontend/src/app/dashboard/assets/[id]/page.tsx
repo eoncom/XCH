@@ -140,10 +140,11 @@ export default function AssetDetailPage({
   };
 
   const handleDownloadQR = () => {
-    if (!qrCodeData) return;
+    const dataUrl = qrCodeData?.qrCodeDataUrl || asset?.qrCodeUrl;
+    if (!dataUrl) return;
 
     const link = document.createElement('a');
-    link.href = qrCodeData.qrCodeDataUrl;
+    link.href = dataUrl;
     link.download = `qr-${asset?.serialNumber || id}.png`;
     link.click();
   };
