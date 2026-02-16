@@ -150,11 +150,19 @@ export class FloorPlansService {
   /**
    * Find all floor plans for tenant (with optional filters)
    */
-  async findAll(tenantId: string, siteId?: string) {
+  async findAll(tenantId: string, siteId?: string, accessibleSiteIds?: string[] | null) {
     const where: any = {
       site: { tenantId }  // Filter via site relation
     };
+
+    // Site access filtering
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      if (accessibleSiteIds.length === 0) return [];
+      where.siteId = { in: accessibleSiteIds };
+    }
+
     if (siteId) {
+      if (accessibleSiteIds && !accessibleSiteIds.includes(siteId)) return [];
       where.siteId = siteId;
     }
 

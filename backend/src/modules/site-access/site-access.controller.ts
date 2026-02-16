@@ -75,4 +75,23 @@ export class SiteAccessController {
   myAccessibleSites(@Request() req: AuthRequest) {
     return this.siteAccessService.listByUser(req.user.tenantId, req.user.userId);
   }
+
+  @Get('my-permissions')
+  @ApiOperation({ summary: 'Get current user permissions (role + site access)' })
+  async myPermissions(@Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    const siteAccess = await this.siteAccessService.listByUser(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return {
+      role: req.user.role,
+      allSitesAccess: accessibleSiteIds === null, // true for ADMIN/MANAGER
+      accessibleSiteIds,
+      siteAccess, // detailed access per site with resourcePermissions
+    };
+  }
 }

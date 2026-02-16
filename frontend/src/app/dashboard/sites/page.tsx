@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sitesApi } from '@/lib/api/sites';
 import { Plus, MapPin, Search, List, Map } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
@@ -35,6 +36,7 @@ const healthStatusColors = {
 export default function SitesPage() {
   const [search, setSearch] = useState('');
   const router = useRouter();
+  const { canCreate } = usePermissions();
 
   const { data: sites, isLoading } = useQuery<Site[]>({
     queryKey: ['sites'],
@@ -81,12 +83,14 @@ export default function SitesPage() {
             disabled={!filteredSites?.length}
             label="Exporter"
           />
-          <Button asChild data-testid="create-site-btn">
-            <Link href="/dashboard/sites/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Nouveau chantier
-            </Link>
-          </Button>
+          {canCreate('sites') && (
+            <Button asChild data-testid="create-site-btn">
+              <Link href="/dashboard/sites/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Nouveau chantier
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 

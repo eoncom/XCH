@@ -67,8 +67,14 @@ export class AssetsService {
     return asset;
   }
 
-  async findAll(tenantId: string, filter?: FilterAssetDto) {
+  async findAll(tenantId: string, filter?: FilterAssetDto, accessibleSiteIds?: string[] | null) {
     const where: any = { tenantId };
+
+    // Site access filtering: restrict to accessible sites for TECHNICIEN/VIEWER
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      if (accessibleSiteIds.length === 0) return [];
+      where.siteId = { in: accessibleSiteIds };
+    }
 
     if (filter?.type) {
       where.type = filter.type;
@@ -79,6 +85,8 @@ export class AssetsService {
     }
 
     if (filter?.siteId) {
+      // Override with specific siteId filter (already validated by site access if array)
+      if (accessibleSiteIds && !accessibleSiteIds.includes(filter.siteId)) return [];
       where.siteId = filter.siteId;
     }
 
@@ -257,10 +265,16 @@ export class AssetsService {
     return qrCodes;
   }
 
-  async getStatsByType(tenantId: string) {
+  async getStatsByType(tenantId: string, accessibleSiteIds?: string[] | null) {
+    const where: any = { tenantId };
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      if (accessibleSiteIds.length === 0) return [];
+      where.siteId = { in: accessibleSiteIds };
+    }
+
     const stats = await this.prisma.asset.groupBy({
       by: ['type'],
-      where: { tenantId },
+      where,
       _count: {
         type: true,
       },
@@ -269,10 +283,16 @@ export class AssetsService {
     return stats;
   }
 
-  async getStatsBySite(tenantId: string) {
+  async getStatsBySite(tenantId: string, accessibleSiteIds?: string[] | null) {
+    const where: any = { tenantId };
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      if (accessibleSiteIds.length === 0) return [];
+      where.siteId = { in: accessibleSiteIds };
+    }
+
     const stats = await this.prisma.asset.groupBy({
       by: ['siteId'],
-      where: { tenantId },
+      where,
       _count: {
         siteId: true,
       },

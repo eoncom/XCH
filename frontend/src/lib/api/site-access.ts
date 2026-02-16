@@ -1,11 +1,23 @@
 import { apiClient } from '../api-client';
 
+export type ResourcePermissionLevel = 'NONE' | 'READ' | 'WRITE';
+
+export interface ResourcePermissions {
+  sites?: ResourcePermissionLevel;
+  assets?: ResourcePermissionLevel;
+  racks?: ResourcePermissionLevel;
+  tasks?: ResourcePermissionLevel;
+  floorPlans?: ResourcePermissionLevel;
+  contacts?: ResourcePermissionLevel;
+}
+
 export interface UserSiteAccess {
   id: string;
   tenantId: string;
   userId: string;
   siteId: string;
   accessLevel: 'READ' | 'WRITE';
+  resourcePermissions?: ResourcePermissions | null;
   grantedBy?: string;
   grantedAt: string;
   user?: {
@@ -37,15 +49,15 @@ export const siteAccessApi = {
     apiClient.get<UserSiteAccess[]>('/api/site-access/my-sites'),
 
   // Grant access
-  grant: (data: { userId: string; siteId: string; accessLevel?: 'READ' | 'WRITE' }) =>
+  grant: (data: { userId: string; siteId: string; accessLevel?: 'READ' | 'WRITE'; resourcePermissions?: ResourcePermissions }) =>
     apiClient.post<UserSiteAccess>('/api/site-access', data),
 
   // Bulk grant access
   bulkGrant: (data: { userIds: string[]; siteId: string; accessLevel?: 'READ' | 'WRITE' }) =>
     apiClient.post<{ granted: number; skipped: number }>('/api/site-access/bulk', data),
 
-  // Update access level
-  update: (id: string, data: { accessLevel: 'READ' | 'WRITE' }) =>
+  // Update access level and/or resource permissions
+  update: (id: string, data: { accessLevel?: 'READ' | 'WRITE'; resourcePermissions?: ResourcePermissions }) =>
     apiClient.patch<UserSiteAccess>(`/api/site-access/${id}`, data),
 
   // Revoke access
@@ -55,4 +67,13 @@ export const siteAccessApi = {
   // Check if current user has access
   checkAccess: (siteId: string) =>
     apiClient.get<{ hasAccess: boolean }>(`/api/site-access/check?siteId=${siteId}`),
+
+  // Get current user's permissions
+  myPermissions: () =>
+    apiClient.get<{
+      role: string;
+      allSitesAccess: boolean;
+      accessibleSiteIds: string[] | null;
+      siteAccess: UserSiteAccess[];
+    }>('/api/site-access/my-permissions'),
 };

@@ -54,13 +54,10 @@ p, MANAGER, contacts, update, *
 p, MANAGER, contact-types, read, *
 
 # TECHNICIEN
-p, TECHNICIEN, sites, create, *
 p, TECHNICIEN, sites, read, *
-p, TECHNICIEN, sites, update, *
 p, TECHNICIEN, assets, create, *
 p, TECHNICIEN, assets, read, *
 p, TECHNICIEN, assets, update, *
-p, TECHNICIEN, assets, delete, *
 p, TECHNICIEN, racks, create, *
 p, TECHNICIEN, racks, read, *
 p, TECHNICIEN, racks, update, *

@@ -69,6 +69,11 @@ export class CreateAssetDto {
   rackHeightU?: number;
 
   @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  rackNotes?: string;
+
+  @ApiProperty({ required: false })
   @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   @IsDateString()
   @IsOptional()

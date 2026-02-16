@@ -46,10 +46,17 @@ export class RacksService {
     return rack;
   }
 
-  async findAll(tenantId: string, siteId?: string) {
+  async findAll(tenantId: string, siteId?: string, accessibleSiteIds?: string[] | null) {
     const where: any = { tenantId };
 
+    // Site access filtering
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      if (accessibleSiteIds.length === 0) return [];
+      where.siteId = { in: accessibleSiteIds };
+    }
+
     if (siteId) {
+      if (accessibleSiteIds && !accessibleSiteIds.includes(siteId)) return [];
       where.siteId = siteId;
     }
 
@@ -117,6 +124,7 @@ export class RacksService {
             serialNumber: true,
             rackPositionU: true,
             rackHeightU: true,
+            rackNotes: true,
             status: true,
           },
         },

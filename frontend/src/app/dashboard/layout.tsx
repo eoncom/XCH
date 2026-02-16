@@ -35,10 +35,10 @@ const navigation = [
   { name: 'Tâches', href: '/dashboard/tasks', icon: CheckSquare },
   { name: 'Plans', href: '/dashboard/floor-plans', icon: LayoutTemplate },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Contact2 },
-  { name: 'Intégrations', href: '/dashboard/integrations', icon: Plug },
 ];
 
 const adminNavigation = [
+  { name: 'Intégrations', href: '/dashboard/integrations', icon: Plug },
   { name: 'Utilisateurs', href: '/dashboard/users', icon: Users },
   { name: 'Paramètres', href: '/dashboard/settings', icon: Settings },
 ];

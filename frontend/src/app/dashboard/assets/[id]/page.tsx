@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { assetsApi } from '@/lib/api/assets';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Attachments } from '@/components/Attachments';
 import {
   ArrowLeft,
@@ -96,6 +97,7 @@ export default function AssetDetailPage({
     qrCodeDataUrl: string;
     qrUrl: string;
   } | null>(null);
+  const { canUpdate, canDelete } = usePermissions();
 
   const { data: asset, isLoading } = useQuery<Asset>({
     queryKey: ['asset', id],
@@ -189,16 +191,20 @@ export default function AssetDetailPage({
             <QrCode className="mr-2 h-4 w-4" />
             {generateQRMutation.isPending ? 'Génération...' : 'Générer QR Code'}
           </Button>
-          <Button variant="outline" asChild data-testid="edit-asset-btn">
-            <Link href={`/dashboard/assets/${id}/edit`}>
-              <Edit className="mr-2 h-4 w-4" />
-              Modifier
-            </Link>
-          </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-asset-btn">
-            <Trash2 className="mr-2 h-4 w-4" />
-            Supprimer
-          </Button>
+          {canUpdate('assets') && (
+            <Button variant="outline" asChild data-testid="edit-asset-btn">
+              <Link href={`/dashboard/assets/${id}/edit`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Modifier
+              </Link>
+            </Button>
+          )}
+          {canDelete('assets') && (
+            <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-asset-btn">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Supprimer
+            </Button>
+          )}
         </div>
       </div>
 

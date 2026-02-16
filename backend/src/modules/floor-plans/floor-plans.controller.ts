@@ -25,13 +25,17 @@ import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource } from '../../common/decorators/permissions.decorator';
 import { Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
+import { SiteAccessService } from '../site-access/site-access.service';
 
 @ApiTags('floor-plans')
 @ApiBearerAuth()
 @Controller('floor-plans')
 @UseGuards(JwtAuthGuard, CasbinGuard)
 export class FloorPlansController {
-  constructor(private readonly floorPlansService: FloorPlansService) {}
+  constructor(
+    private readonly floorPlansService: FloorPlansService,
+    private readonly siteAccessService: SiteAccessService,
+  ) {}
 
   @Post()
   @Resource('floor-plans')
@@ -103,9 +107,13 @@ export class FloorPlansController {
   @Get()
   @Resource('floor-plans')
   @Action('read')
-  @ApiOperation({ summary: 'Get all floor plans (optionally filtered by site)' })
-  findAll(@Request() req: AuthRequest, @Query('siteId') siteId?: string) {
-    return this.floorPlansService.findAll(req.user.tenantId, siteId);
+  @ApiOperation({ summary: 'Get all floor plans (filtered by user site access)' })
+  async findAll(@Request() req: AuthRequest, @Query('siteId') siteId?: string) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.floorPlansService.findAll(req.user.tenantId, siteId, accessibleSiteIds);
   }
 
   @Get('site/:siteId/latest')

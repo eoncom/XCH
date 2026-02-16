@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { floorPlansApi } from '@/lib/api/floor-plans';
+import { usePermissions } from '@/hooks/usePermissions';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { showToast } from '@/lib/toast';
@@ -124,6 +125,7 @@ export default function FloorPlanDetailPage({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { canUpdate, canDelete } = usePermissions();
   const [showAddPinDialog, setShowAddPinDialog] = useState(false);
   const [showPinInfoDialog, setShowPinInfoDialog] = useState(false);
   const [showEditPinDialog, setShowEditPinDialog] = useState(false);
@@ -392,16 +394,20 @@ export default function FloorPlanDetailPage({
             <Download className="mr-2 h-4 w-4" />
             Télécharger PDF
           </Button>
-          <Button variant="outline" asChild data-testid="edit-floor-plan-btn">
-            <Link href={`/dashboard/floor-plans/${id}/edit`}>
-              <Edit className="mr-2 h-4 w-4" />
-              Modifier
-            </Link>
-          </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-floor-plan-btn">
-            <Trash2 className="mr-2 h-4 w-4" />
-            Supprimer
-          </Button>
+          {canUpdate('floor-plans') && (
+            <Button variant="outline" asChild data-testid="edit-floor-plan-btn">
+              <Link href={`/dashboard/floor-plans/${id}/edit`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Modifier
+              </Link>
+            </Button>
+          )}
+          {canDelete('floor-plans') && (
+            <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-floor-plan-btn">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Supprimer
+            </Button>
+          )}
         </div>
       </div>
 

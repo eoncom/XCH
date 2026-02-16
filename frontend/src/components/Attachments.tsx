@@ -2,11 +2,9 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -126,32 +124,23 @@ export function Attachments({ entityId, entityType, apiModule }: AttachmentsProp
   };
 
   return (
-    <div className="space-y-6">
-      {/* Upload section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ajouter un document</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="attachment-file">Fichier (max 10MB)</Label>
+    <div className="space-y-4">
+      {/* Upload section — compact grid */}
+      <div className="border rounded-lg p-4 space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="md:col-span-2 space-y-1">
+            <Label htmlFor="attachment-file" className="text-xs">Fichier (max 10MB)</Label>
             <Input
               id="attachment-file"
               type="file"
               onChange={handleFileChange}
-              className="cursor-pointer"
+              className="cursor-pointer h-9"
             />
-            {file && (
-              <p className="text-sm text-muted-foreground">
-                Fichier sélectionné: {file.name} ({formatFileSize(file.size)})
-              </p>
-            )}
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="category">Catégorie</Label>
+          <div className="space-y-1">
+            <Label htmlFor="category" className="text-xs">Catégorie</Label>
             <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -164,104 +153,106 @@ export function Attachments({ entityId, entityType, apiModule }: AttachmentsProp
               </SelectContent>
             </Select>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description (optionnel)</Label>
-            <Textarea
+        </div>
+        <div className="flex gap-3 items-end">
+          <div className="flex-1 space-y-1">
+            <Label htmlFor="description" className="text-xs">Description (optionnel)</Label>
+            <Input
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ajouter une description..."
-              rows={3}
+              placeholder="Description du document..."
+              className="h-9"
             />
           </div>
-
           <Button
             data-testid="upload-attachment-btn"
             onClick={handleUpload}
             disabled={!file || uploadMutation.isPending}
-            className="w-full"
+            size="sm"
           >
-            {uploadMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <Upload className="mr-2 h-4 w-4" />
-            Uploader le fichier
+            {uploadMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="mr-2 h-4 w-4" />
+            )}
+            Uploader
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+        {file && (
+          <p className="text-xs text-muted-foreground">
+            {file.name} ({formatFileSize(file.size)})
+          </p>
+        )}
+      </div>
 
       {/* Attachments list */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Documents ({attachments.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : attachments.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              Aucun document. Uploadez votre premier fichier ci-dessus.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {attachments.map((attachment) => (
-                <div
-                  key={attachment.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <FileIcon className="h-8 w-8 text-primary flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{attachment.originalFilename}</p>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span>{formatFileSize(attachment.size)}</span>
-                        <span>•</span>
-                        <span>{formatDate(attachment.uploadedAt)}</span>
-                        {attachment.category && (
-                          <>
-                            <span>•</span>
-                            <span className="capitalize">{attachment.category}</span>
-                          </>
-                        )}
-                      </div>
-                      {attachment.description && (
-                        <p className="text-sm text-muted-foreground mt-1 truncate">
-                          {attachment.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Button
-                      data-testid="download-attachment-btn"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(attachment.url, '_blank')}
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      data-testid="delete-attachment-btn"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        if (confirm('Êtes-vous sûr de vouloir supprimer ce fichier ?')) {
-                          deleteMutation.mutate(attachment.id);
-                        }
-                      }}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : attachments.length === 0 ? (
+        <p className="text-center text-muted-foreground py-6 text-sm">
+          Aucun document
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {attachments.map((attachment) => (
+            <div
+              key={attachment.id}
+              className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <FileIcon className="h-6 w-6 text-primary flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{attachment.originalFilename}</p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{formatFileSize(attachment.size)}</span>
+                    <span>·</span>
+                    <span>{formatDate(attachment.uploadedAt)}</span>
+                    {attachment.category && (
+                      <>
+                        <span>·</span>
+                        <span className="capitalize">{attachment.category}</span>
+                      </>
+                    )}
+                    {attachment.description && (
+                      <>
+                        <span>·</span>
+                        <span className="truncate">{attachment.description}</span>
+                      </>
+                    )}
                   </div>
                 </div>
-              ))}
+              </div>
+
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Button
+                  data-testid="download-attachment-btn"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => window.open(attachment.url, '_blank')}
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button
+                  data-testid="delete-attachment-btn"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (confirm('Êtes-vous sûr de vouloir supprimer ce fichier ?')) {
+                      deleteMutation.mutate(attachment.id);
+                    }
+                  }}
+                  disabled={deleteMutation.isPending}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

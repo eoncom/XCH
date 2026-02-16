@@ -1,10 +1,24 @@
-import { IsString, IsEnum, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsArray, IsObject } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
 
 export enum SiteAccessLevel {
   READ = 'READ',
   WRITE = 'WRITE',
+}
+
+export enum ResourcePermissionLevel {
+  NONE = 'NONE',
+  READ = 'READ',
+  WRITE = 'WRITE',
+}
+
+export interface ResourcePermissions {
+  sites?: ResourcePermissionLevel;
+  assets?: ResourcePermissionLevel;
+  racks?: ResourcePermissionLevel;
+  tasks?: ResourcePermissionLevel;
+  floorPlans?: ResourcePermissionLevel;
+  contacts?: ResourcePermissionLevel;
 }
 
 export class GrantSiteAccessDto {
@@ -20,6 +34,11 @@ export class GrantSiteAccessDto {
   @IsEnum(SiteAccessLevel)
   @IsOptional()
   accessLevel?: SiteAccessLevel;
+
+  @ApiProperty({ description: 'Per-resource permission overrides (JSON)', required: false })
+  @IsObject()
+  @IsOptional()
+  resourcePermissions?: ResourcePermissions;
 }
 
 export class BulkGrantSiteAccessDto {
@@ -41,5 +60,11 @@ export class BulkGrantSiteAccessDto {
 export class UpdateSiteAccessDto {
   @ApiProperty({ enum: SiteAccessLevel })
   @IsEnum(SiteAccessLevel)
-  accessLevel: SiteAccessLevel;
+  @IsOptional()
+  accessLevel?: SiteAccessLevel;
+
+  @ApiProperty({ description: 'Per-resource permission overrides (JSON)', required: false })
+  @IsObject()
+  @IsOptional()
+  resourcePermissions?: ResourcePermissions;
 }

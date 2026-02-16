@@ -10,13 +10,17 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
+import { SiteAccessService } from '../site-access/site-access.service';
 
 @ApiTags('racks')
 @Controller('racks')
 @UseGuards(JwtAuthGuard, CasbinGuard)
 @ApiBearerAuth()
 export class RacksController {
-  constructor(private readonly racksService: RacksService) {}
+  constructor(
+    private readonly racksService: RacksService,
+    private readonly siteAccessService: SiteAccessService,
+  ) {}
 
   @Post()
   @Resource('racks') @Action('create')
@@ -27,9 +31,13 @@ export class RacksController {
 
   @Get()
   @Resource('racks') @Action('read')
-  @ApiOperation({ summary: 'Get all racks' })
-  findAll(@Query('siteId') siteId: string, @Request() req: AuthRequest) {
-    return this.racksService.findAll(req.user.tenantId, siteId);
+  @ApiOperation({ summary: 'Get all racks (filtered by user site access)' })
+  async findAll(@Query('siteId') siteId: string, @Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.racksService.findAll(req.user.tenantId, siteId, accessibleSiteIds);
   }
 
   @Get(':id')

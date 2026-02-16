@@ -19,6 +19,7 @@ import { CardSkeleton } from '@/components/ui/skeleton';
 import { assetsApi } from '@/lib/api/assets';
 import { exportAssets } from '@/lib/export-utils';
 import { Plus, Search, QrCode, Package } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Asset, AssetType, AssetStatus } from '@/types';
 
@@ -63,6 +64,7 @@ export default function AssetsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const { canCreate } = usePermissions();
   const router = useRouter();
 
   const { data: assets, isLoading } = useQuery<Asset[]>({
@@ -136,12 +138,14 @@ export default function AssetsPage() {
               Scanner QR
             </Link>
           </Button>
-          <Button asChild className="press-effect" data-testid="create-asset-btn">
-            <Link href="/dashboard/assets/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Nouvel équipement
-            </Link>
-          </Button>
+          {canCreate('assets') && (
+            <Button asChild className="press-effect" data-testid="create-asset-btn">
+              <Link href="/dashboard/assets/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Nouvel équipement
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 

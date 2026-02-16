@@ -17,6 +17,7 @@ import {
 import { racksApi } from '@/lib/api/racks';
 import { sitesApi } from '@/lib/api/sites';
 import { Plus, Search, Server, MapPin } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Rack, RackStatus, Site } from '@/types';
 import { ExportMenu } from '@/components/ui/export-menu';
@@ -37,6 +38,7 @@ const rackStatusLabels: Record<RackStatus, string> = {
 export default function RacksPage() {
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState<string>('all');
+  const { canCreate } = usePermissions();
   const router = useRouter();
 
   const { data: racks, isLoading } = useQuery<Rack[]>({
@@ -130,12 +132,14 @@ export default function RacksPage() {
             disabled={!filteredRacks?.length}
             label="Exporter"
           />
-          <Button asChild data-testid="create-rack-btn">
-            <Link href="/dashboard/racks/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Nouvelle baie
-            </Link>
-          </Button>
+          {canCreate('racks') && (
+            <Button asChild data-testid="create-rack-btn">
+              <Link href="/dashboard/racks/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Nouvelle baie
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 

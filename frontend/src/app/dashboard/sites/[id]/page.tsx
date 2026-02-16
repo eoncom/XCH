@@ -27,9 +27,10 @@ import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
 import { floorPlansApi } from '@/lib/api/floor-plans';
-import { siteAccessApi, type UserSiteAccess } from '@/lib/api/site-access';
+import { siteAccessApi, type UserSiteAccess, type ResourcePermissions, type ResourcePermissionLevel } from '@/lib/api/site-access';
 import { usersApi } from '@/lib/api/users';
 import { useAuthStore } from '@/stores/auth-store';
+import { usePermissions } from '@/hooks/usePermissions';
 import { apiClient } from '@/lib/api-client';
 import { Attachments } from '@/components/Attachments';
 import { showToast } from '@/lib/toast';
@@ -41,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X, Copy, Check } from 'lucide-react';
+import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X, Copy, Check, ChevronDown, ChevronRight, Settings } from 'lucide-react';
 import Link from 'next/link';
 import type { Site, Asset, Rack, Task, FloorPlan, User as UserType } from '@/types';
 
@@ -202,12 +203,24 @@ function AggregatedDocuments({ siteId }: { siteId: string }) {
   );
 }
 
+const RESOURCE_LABELS: Record<string, string> = {
+  sites: 'Chantier',
+  assets: 'Équipements',
+  racks: 'Baies',
+  tasks: 'Tâches',
+  floorPlans: 'Plans',
+  contacts: 'Contacts',
+};
+
+const RESOURCE_KEYS = ['sites', 'assets', 'racks', 'tasks', 'floorPlans', 'contacts'] as const;
+
 function SiteAccessManager({ siteId }: { siteId: string }) {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuthStore();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedAccessLevel, setSelectedAccessLevel] = useState<'READ' | 'WRITE'>('READ');
+  const [expandedAccessId, setExpandedAccessId] = useState<string | null>(null);
 
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
 
@@ -244,11 +257,11 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, accessLevel }: { id: string; accessLevel: 'READ' | 'WRITE' }) =>
-      siteAccessApi.update(id, { accessLevel }),
+    mutationFn: ({ id, accessLevel, resourcePermissions }: { id: string; accessLevel?: 'READ' | 'WRITE'; resourcePermissions?: ResourcePermissions }) =>
+      siteAccessApi.update(id, { ...(accessLevel && { accessLevel }), ...(resourcePermissions !== undefined && { resourcePermissions }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['site-access', siteId] });
-      showToast.success('Niveau d\'accès mis à jour');
+      showToast.success('Permissions mises à jour');
     },
     onError: () => {
       showToast.error('Erreur lors de la mise à jour');
@@ -353,58 +366,139 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
         <CardContent>
           {accessList.length > 0 ? (
             <div className="space-y-3">
-              {accessList.map((access) => (
-                <div
-                  key={access.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="h-4 w-4 text-primary" />
+              {accessList.map((access) => {
+                const isExpanded = expandedAccessId === access.id;
+                const resPerms = (access.resourcePermissions || {}) as ResourcePermissions;
+                const hasCustomPerms = Object.keys(resPerms).length > 0;
+
+                return (
+                  <div key={access.id} className="border rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between p-3 hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+                          <User className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{access.user?.name}</p>
+                          <p className="text-xs text-muted-foreground">{access.user?.email}</p>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {access.user?.role}
+                        </Badge>
+                        {hasCustomPerms && (
+                          <Badge variant="secondary" className="text-xs">
+                            <Settings className="h-3 w-3 mr-1" />
+                            Personnalisé
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={access.accessLevel}
+                          onValueChange={(value: 'READ' | 'WRITE') =>
+                            updateMutation.mutate({ id: access.id, accessLevel: value })
+                          }
+                        >
+                          <SelectTrigger className="w-[120px] h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="READ">
+                              <span className="flex items-center gap-1">
+                                <Lock className="h-3 w-3" /> Lecture
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="WRITE">
+                              <span className="flex items-center gap-1">
+                                <Unlock className="h-3 w-3" /> Écriture
+                              </span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setExpandedAccessId(isExpanded ? null : access.id)}
+                          title="Permissions par ressource"
+                        >
+                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => revokeMutation.mutate(access.id)}
+                          disabled={revokeMutation.isPending}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-sm">{access.user?.name}</p>
-                      <p className="text-xs text-muted-foreground">{access.user?.email}</p>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {access.user?.role}
-                    </Badge>
+
+                    {/* Per-resource permissions panel */}
+                    {isExpanded && (
+                      <div className="border-t bg-muted/30 p-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">
+                          Permissions par ressource (vide = hérite du niveau global)
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {RESOURCE_KEYS.map((resource) => {
+                            const currentLevel = resPerms[resource] || '';
+                            return (
+                              <div key={resource} className="flex items-center gap-2">
+                                <span className="text-xs font-medium w-20">{RESOURCE_LABELS[resource]}</span>
+                                <Select
+                                  value={currentLevel || 'inherit'}
+                                  onValueChange={(value: string) => {
+                                    const newPerms = { ...resPerms };
+                                    if (value === 'inherit') {
+                                      delete newPerms[resource];
+                                    } else {
+                                      newPerms[resource] = value as ResourcePermissionLevel;
+                                    }
+                                    updateMutation.mutate({
+                                      id: access.id,
+                                      resourcePermissions: newPerms,
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className="h-7 text-xs flex-1">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="inherit">
+                                      <span className="text-muted-foreground">— Hérité</span>
+                                    </SelectItem>
+                                    <SelectItem value="NONE">Aucun</SelectItem>
+                                    <SelectItem value="READ">Lecture</SelectItem>
+                                    <SelectItem value="WRITE">Écriture</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {hasCustomPerms && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-2 text-xs"
+                            onClick={() => {
+                              updateMutation.mutate({
+                                id: access.id,
+                                resourcePermissions: {},
+                              });
+                            }}
+                          >
+                            Réinitialiser les permissions
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={access.accessLevel}
-                      onValueChange={(value: 'READ' | 'WRITE') =>
-                        updateMutation.mutate({ id: access.id, accessLevel: value })
-                      }
-                    >
-                      <SelectTrigger className="w-[120px] h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="READ">
-                          <span className="flex items-center gap-1">
-                            <Lock className="h-3 w-3" /> Lecture
-                          </span>
-                        </SelectItem>
-                        <SelectItem value="WRITE">
-                          <span className="flex items-center gap-1">
-                            <Unlock className="h-3 w-3" /> Écriture
-                          </span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                      onClick={() => revokeMutation.mutate(access.id)}
-                      disabled={revokeMutation.isPending}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8">
@@ -938,6 +1032,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const [taskSearch, setTaskSearch] = useState('');
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<string>('all');
+  const { canUpdate, canDelete } = usePermissions();
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -1124,16 +1219,20 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               </>
             )}
           </Button>
-          <Button variant="outline" asChild data-testid="edit-site-btn">
-            <Link href={`/dashboard/sites/${id}/edit`}>
-              <Edit className="mr-2 h-4 w-4" />
-              Modifier
-            </Link>
-          </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-site-btn">
-            <Trash2 className="mr-2 h-4 w-4" />
-            Supprimer
-          </Button>
+          {canUpdate('sites') && (
+            <Button variant="outline" asChild data-testid="edit-site-btn">
+              <Link href={`/dashboard/sites/${id}/edit`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Modifier
+              </Link>
+            </Button>
+          )}
+          {canDelete('sites') && (
+            <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-site-btn">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Supprimer
+            </Button>
+          )}
         </div>
       </div>
 

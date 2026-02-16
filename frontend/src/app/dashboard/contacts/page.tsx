@@ -35,6 +35,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
 import { Plus, Search, Eye, Pencil, Trash2, Users, Settings } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Contact, ContactType, ContactCategory } from '@/types';
 import { toast } from 'sonner';
@@ -60,6 +61,7 @@ export default function ContactsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const { canCreate, canDelete } = usePermissions();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -149,12 +151,14 @@ export default function ContactsPage() {
               Types
             </Link>
           </Button>
-          <Button asChild data-testid="create-contact-btn">
-            <Link href="/dashboard/contacts/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Nouveau contact
-            </Link>
-          </Button>
+          {canCreate('contacts') && (
+            <Button asChild data-testid="create-contact-btn">
+              <Link href="/dashboard/contacts/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Nouveau contact
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -291,14 +295,16 @@ export default function ContactsPage() {
                             <Pencil className="h-4 w-4" />
                           </Link>
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteId(contact.id)}
-                          data-testid="delete-contact-btn"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        {canDelete('contacts') && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeleteId(contact.id)}
+                            data-testid="delete-contact-btn"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

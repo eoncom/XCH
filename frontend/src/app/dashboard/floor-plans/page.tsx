@@ -16,12 +16,14 @@ import {
 import { floorPlansApi } from '@/lib/api/floor-plans';
 import { sitesApi } from '@/lib/api/sites';
 import { Plus, Search, FileImage, MapPin, Download } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { FloorPlan, Site } from '@/types';
 
 export default function FloorPlansPage() {
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState<string>('all');
+  const { canCreate } = usePermissions();
   const router = useRouter();
 
   const { data: floorPlans, isLoading } = useQuery<FloorPlan[]>({
@@ -57,12 +59,14 @@ export default function FloorPlansPage() {
             Gérez vos plans avec annotations et repères
           </p>
         </div>
-        <Button asChild data-testid="create-floor-plan-btn">
-          <Link href="/dashboard/floor-plans/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Nouveau plan
-          </Link>
-        </Button>
+        {canCreate('floor-plans') && (
+          <Button asChild data-testid="create-floor-plan-btn">
+            <Link href="/dashboard/floor-plans/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Nouveau plan
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Filters */}

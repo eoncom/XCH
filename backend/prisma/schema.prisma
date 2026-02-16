@@ -269,6 +269,7 @@ model Asset {
   rack          Rack?   @relation(fields: [rackId], references: [id], onDelete: SetNull)
   rackPositionU Int? // Starting U position
   rackHeightU   Int? // Height in U
+  rackNotes     String? // Notes for this asset when mounted in rack
 
   // Metadata
   purchaseDate     DateTime?
@@ -767,6 +768,7 @@ model UserSiteAccess {
   site     Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   accessLevel SiteAccessLevel @default(READ)
+  resourcePermissions Json? @db.JsonB // Per-resource permission overrides: {"assets":"WRITE","tasks":"READ","floorPlans":"NONE",...}
 
   grantedBy   String?
   grantedAt   DateTime     @default(now())

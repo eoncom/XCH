@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { tasksApi } from '@/lib/api/tasks';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Attachments } from '@/components/Attachments';
 import { showToast } from '@/lib/toast';
 import {
@@ -99,6 +100,7 @@ export default function TaskDetailPage({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { canUpdate, canDelete } = usePermissions();
   const [showDeleteItemDialog, setShowDeleteItemDialog] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [newChecklistItem, setNewChecklistItem] = useState('');
@@ -319,16 +321,20 @@ export default function TaskDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" asChild data-testid="edit-task-btn">
-            <Link href={`/dashboard/tasks/${id}/edit`}>
-              <Edit className="mr-2 h-4 w-4" />
-              Modifier
-            </Link>
-          </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-task-btn">
-            <Trash2 className="mr-2 h-4 w-4" />
-            Supprimer
-          </Button>
+          {canUpdate('tasks') && (
+            <Button variant="outline" asChild data-testid="edit-task-btn">
+              <Link href={`/dashboard/tasks/${id}/edit`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Modifier
+              </Link>
+            </Button>
+          )}
+          {canDelete('tasks') && (
+            <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-task-btn">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Supprimer
+            </Button>
+          )}
         </div>
       </div>
 

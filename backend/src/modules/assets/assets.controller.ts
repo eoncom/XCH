@@ -11,13 +11,17 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
+import { SiteAccessService } from '../site-access/site-access.service';
 
 @ApiTags('assets')
 @Controller('assets')
 @UseGuards(JwtAuthGuard, CasbinGuard)
 @ApiBearerAuth()
 export class AssetsController {
-  constructor(private readonly assetsService: AssetsService) {}
+  constructor(
+    private readonly assetsService: AssetsService,
+    private readonly siteAccessService: SiteAccessService,
+  ) {}
 
   @Post()
   @Resource('assets') @Action('create')
@@ -28,23 +32,35 @@ export class AssetsController {
 
   @Get()
   @Resource('assets') @Action('read')
-  @ApiOperation({ summary: 'Get all assets' })
-  findAll(@Query() filter: FilterAssetDto, @Request() req: AuthRequest) {
-    return this.assetsService.findAll(req.user.tenantId, filter);
+  @ApiOperation({ summary: 'Get all assets (filtered by user site access)' })
+  async findAll(@Query() filter: FilterAssetDto, @Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.assetsService.findAll(req.user.tenantId, filter, accessibleSiteIds);
   }
 
   @Get('stats/by-type')
   @Resource('assets') @Action('read')
   @ApiOperation({ summary: 'Get assets statistics by type' })
-  getStatsByType(@Request() req: AuthRequest) {
-    return this.assetsService.getStatsByType(req.user.tenantId);
+  async getStatsByType(@Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.assetsService.getStatsByType(req.user.tenantId, accessibleSiteIds);
   }
 
   @Get('stats/by-site')
   @Resource('assets') @Action('read')
   @ApiOperation({ summary: 'Get assets statistics by site' })
-  getStatsBySite(@Request() req: AuthRequest) {
-    return this.assetsService.getStatsBySite(req.user.tenantId);
+  async getStatsBySite(@Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.assetsService.getStatsBySite(req.user.tenantId, accessibleSiteIds);
   }
 
   @Get(':id')

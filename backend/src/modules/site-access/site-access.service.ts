@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { GrantSiteAccessDto, BulkGrantSiteAccessDto, UpdateSiteAccessDto, SiteAccessLevel } from './dto/grant-site-access.dto';
+import { GrantSiteAccessDto, BulkGrantSiteAccessDto, UpdateSiteAccessDto, SiteAccessLevel, ResourcePermissions, ResourcePermissionLevel } from './dto/grant-site-access.dto';
 
 @Injectable()
 export class SiteAccessService {
@@ -36,6 +36,7 @@ export class SiteAccessService {
       },
       update: {
         accessLevel: dto.accessLevel || 'READ',
+        ...(dto.resourcePermissions !== undefined && { resourcePermissions: dto.resourcePermissions as any }),
         grantedBy,
         grantedAt: new Date(),
       },
@@ -44,6 +45,7 @@ export class SiteAccessService {
         userId: dto.userId,
         siteId: dto.siteId,
         accessLevel: dto.accessLevel || 'READ',
+        ...(dto.resourcePermissions !== undefined && { resourcePermissions: dto.resourcePermissions as any }),
         grantedBy,
       },
       include: {
@@ -111,9 +113,13 @@ export class SiteAccessService {
       throw new NotFoundException('Site access record not found');
     }
 
+    const data: any = {};
+    if (dto.accessLevel) data.accessLevel = dto.accessLevel;
+    if (dto.resourcePermissions !== undefined) data.resourcePermissions = dto.resourcePermissions;
+
     return this.prisma.userSiteAccess.update({
       where: { id: accessId },
-      data: { accessLevel: dto.accessLevel },
+      data,
       include: {
         user: { select: { id: true, name: true, email: true, role: true } },
         site: { select: { id: true, name: true, code: true } },
@@ -227,5 +233,49 @@ export class SiteAccessService {
     });
 
     return access.map((a: { siteId: string }) => a.siteId);
+  }
+
+  /**
+   * Get the effective permission level for a user on a specific resource within a site.
+   * Resolution order:
+   * 1. ADMIN/MANAGER → always WRITE
+   * 2. If resourcePermissions[resource] is set → use it
+   * 3. Fallback → accessLevel (READ/WRITE mapped to ResourcePermissionLevel)
+   */
+  async getResourcePermission(
+    tenantId: string,
+    userId: string,
+    siteId: string,
+    resource: string,
+  ): Promise<ResourcePermissionLevel> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { role: true },
+    });
+
+    if (!user) return ResourcePermissionLevel.NONE;
+
+    // ADMIN/MANAGER always have full WRITE access
+    if (user.role === 'ADMIN' || user.role === 'MANAGER') {
+      return ResourcePermissionLevel.WRITE;
+    }
+
+    // Get explicit access record
+    const access = await this.prisma.userSiteAccess.findUnique({
+      where: { userId_siteId: { userId, siteId } },
+    });
+
+    if (!access) return ResourcePermissionLevel.NONE;
+
+    // Check resourcePermissions if set
+    const resourcePerms = access.resourcePermissions as ResourcePermissions | null;
+    if (resourcePerms && resource in resourcePerms) {
+      return (resourcePerms as any)[resource] || ResourcePermissionLevel.NONE;
+    }
+
+    // Fallback to global accessLevel
+    return access.accessLevel === 'WRITE'
+      ? ResourcePermissionLevel.WRITE
+      : ResourcePermissionLevel.READ;
   }
 }

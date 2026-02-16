@@ -83,8 +83,14 @@ export class TasksService {
     return task;
   }
 
-  async findAll(tenantId: string, filter?: FilterTaskDto) {
+  async findAll(tenantId: string, filter?: FilterTaskDto, accessibleSiteIds?: string[] | null) {
     const where: any = { tenantId };
+
+    // Site access filtering
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      if (accessibleSiteIds.length === 0) return [];
+      where.siteId = { in: accessibleSiteIds };
+    }
 
     if (filter?.status) {
       where.status = filter.status;
@@ -95,6 +101,7 @@ export class TasksService {
     }
 
     if (filter?.siteId) {
+      if (accessibleSiteIds && !accessibleSiteIds.includes(filter.siteId)) return [];
       where.siteId = filter.siteId;
     }
 
@@ -329,10 +336,16 @@ export class TasksService {
     return this.findOne(id, tenantId);
   }
 
-  async getStatsByStatus(tenantId: string) {
+  async getStatsByStatus(tenantId: string, accessibleSiteIds?: string[] | null) {
+    const where: any = { tenantId };
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      if (accessibleSiteIds.length === 0) return [];
+      where.siteId = { in: accessibleSiteIds };
+    }
+
     const stats = await this.prisma.task.groupBy({
       by: ['status'],
-      where: { tenantId },
+      where,
       _count: {
         status: true,
       },
@@ -341,10 +354,16 @@ export class TasksService {
     return stats;
   }
 
-  async getStatsByPriority(tenantId: string) {
+  async getStatsByPriority(tenantId: string, accessibleSiteIds?: string[] | null) {
+    const where: any = { tenantId };
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      if (accessibleSiteIds.length === 0) return [];
+      where.siteId = { in: accessibleSiteIds };
+    }
+
     const stats = await this.prisma.task.groupBy({
       by: ['priority'],
-      where: { tenantId },
+      where,
       _count: {
         priority: true,
       },
@@ -353,12 +372,12 @@ export class TasksService {
     return stats;
   }
 
-  async getMyTasks(tenantId: string, userId: string) {
-    return this.findAll(tenantId, { assignedTo: userId });
+  async getMyTasks(tenantId: string, userId: string, accessibleSiteIds?: string[] | null) {
+    return this.findAll(tenantId, { assignedTo: userId }, accessibleSiteIds);
   }
 
-  async getOverdueTasks(tenantId: string) {
-    return this.findAll(tenantId, { overdue: 'true' });
+  async getOverdueTasks(tenantId: string, accessibleSiteIds?: string[] | null) {
+    return this.findAll(tenantId, { overdue: 'true' }, accessibleSiteIds);
   }
 
   // ============================================================================

@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { contactsApi } from '@/lib/api/contacts';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   ArrowLeft,
   Edit,
@@ -62,6 +63,7 @@ export default function ContactDetailPage({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { canUpdate, canDelete } = usePermissions();
 
   const { data: contact, isLoading } = useQuery<Contact>({
     queryKey: ['contact', id],
@@ -161,20 +163,24 @@ export default function ContactDetailPage({
             <Power className="mr-2 h-4 w-4" />
             {contact.isActive ? 'Desactiver' : 'Activer'}
           </Button>
-          <Button variant="outline" asChild data-testid="edit-contact-btn">
-            <Link href={`/dashboard/contacts/${id}/edit`}>
-              <Edit className="mr-2 h-4 w-4" />
-              Modifier
-            </Link>
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => setShowDeleteDialog(true)}
-            data-testid="delete-contact-btn"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Supprimer
-          </Button>
+          {canUpdate('contacts') && (
+            <Button variant="outline" asChild data-testid="edit-contact-btn">
+              <Link href={`/dashboard/contacts/${id}/edit`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Modifier
+              </Link>
+            </Button>
+          )}
+          {canDelete('contacts') && (
+            <Button
+              variant="destructive"
+              onClick={() => setShowDeleteDialog(true)}
+              data-testid="delete-contact-btn"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Supprimer
+            </Button>
+          )}
         </div>
       </div>
 

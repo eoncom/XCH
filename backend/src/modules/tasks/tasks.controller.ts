@@ -12,13 +12,17 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
+import { SiteAccessService } from '../site-access/site-access.service';
 
 @ApiTags('tasks')
 @Controller('tasks')
 @UseGuards(JwtAuthGuard, CasbinGuard)
 @ApiBearerAuth()
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(
+    private readonly tasksService: TasksService,
+    private readonly siteAccessService: SiteAccessService,
+  ) {}
 
   @Post()
   @Resource('tasks') @Action('create')
@@ -29,37 +33,57 @@ export class TasksController {
 
   @Get()
   @Resource('tasks') @Action('read')
-  @ApiOperation({ summary: 'Get all tasks' })
-  findAll(@Query() filter: FilterTaskDto, @Request() req: AuthRequest) {
-    return this.tasksService.findAll(req.user.tenantId, filter);
+  @ApiOperation({ summary: 'Get all tasks (filtered by user site access)' })
+  async findAll(@Query() filter: FilterTaskDto, @Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.tasksService.findAll(req.user.tenantId, filter, accessibleSiteIds);
   }
 
   @Get('my-tasks')
   @Resource('tasks') @Action('read')
   @ApiOperation({ summary: 'Get tasks assigned to me' })
-  getMyTasks(@Request() req: AuthRequest) {
-    return this.tasksService.getMyTasks(req.user.tenantId, req.user.id);
+  async getMyTasks(@Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.tasksService.getMyTasks(req.user.tenantId, req.user.id, accessibleSiteIds);
   }
 
   @Get('overdue')
   @Resource('tasks') @Action('read')
   @ApiOperation({ summary: 'Get overdue tasks' })
-  getOverdueTasks(@Request() req: AuthRequest) {
-    return this.tasksService.getOverdueTasks(req.user.tenantId);
+  async getOverdueTasks(@Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.tasksService.getOverdueTasks(req.user.tenantId, accessibleSiteIds);
   }
 
   @Get('stats/by-status')
   @Resource('tasks') @Action('read')
   @ApiOperation({ summary: 'Get tasks statistics by status' })
-  getStatsByStatus(@Request() req: AuthRequest) {
-    return this.tasksService.getStatsByStatus(req.user.tenantId);
+  async getStatsByStatus(@Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.tasksService.getStatsByStatus(req.user.tenantId, accessibleSiteIds);
   }
 
   @Get('stats/by-priority')
   @Resource('tasks') @Action('read')
   @ApiOperation({ summary: 'Get tasks statistics by priority' })
-  getStatsByPriority(@Request() req: AuthRequest) {
-    return this.tasksService.getStatsByPriority(req.user.tenantId);
+  async getStatsByPriority(@Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.tasksService.getStatsByPriority(req.user.tenantId, accessibleSiteIds);
   }
 
   @Get(':id')

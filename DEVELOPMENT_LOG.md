@@ -3488,3 +3488,24 @@ feat: improve UX — forms, filters, task tabs, count badges
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-16
+
+**Date:** 2026-02-16 01:01:33
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 19
+- Frontend files modified: 18
+
+**Commit message:**
+```
+fix: crash on site detail page — replace Map with plain object in useMemo
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

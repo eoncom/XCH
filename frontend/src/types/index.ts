@@ -133,6 +133,7 @@ export interface Asset {
   rackId?: string;
   rackPositionU?: number;
   rackHeightU?: number;
+  rackNotes?: string;
   qrCodeUrl?: string;
   qrCodeToken?: string;
   connectivity?: any;

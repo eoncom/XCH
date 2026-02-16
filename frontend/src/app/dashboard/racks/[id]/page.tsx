@@ -24,8 +24,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { racksApi } from '@/lib/api/racks';
+import { usePermissions } from '@/hooks/usePermissions';
 import { assetsApi } from '@/lib/api/assets';
 import { Attachments } from '@/components/Attachments';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   ArrowLeft,
   Edit,
@@ -34,6 +42,9 @@ import {
   MapPin,
   Package,
   MoveVertical,
+  MessageSquare,
+  Check,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -70,12 +81,15 @@ export default function RackDetailPage({
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showMountDialog, setShowMountDialog] = useState(false);
+  const { canUpdate, canDelete } = usePermissions();
   const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState<number | undefined>();
   const [mountAssetId, setMountAssetId] = useState('');
   const [mountHeightU, setMountHeightU] = useState('1');
   const [moveAsset, setMoveAsset] = useState<Asset | null>(null);
   const [movePositionU, setMovePositionU] = useState('');
+  const [editingNoteAssetId, setEditingNoteAssetId] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
 
   const { data: rack, isLoading, error, isError } = useQuery<Rack>({
     queryKey: ['rack', id],
@@ -120,6 +134,25 @@ export default function RackDetailPage({
       queryClient.invalidateQueries({ queryKey: ['rack', id] });
     },
   });
+
+  const updateRackNotesMutation = useMutation({
+    mutationFn: ({ assetId, rackNotes }: { assetId: string; rackNotes: string }) =>
+      assetsApi.update(assetId, { rackNotes: rackNotes || null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rack', id] });
+      setEditingNoteAssetId(null);
+      setEditingNoteText('');
+    },
+  });
+
+  const startEditingNote = (asset: Asset) => {
+    setEditingNoteAssetId(asset.id);
+    setEditingNoteText(asset.rackNotes || '');
+  };
+
+  const saveNote = (assetId: string) => {
+    updateRackNotesMutation.mutate({ assetId, rackNotes: editingNoteText });
+  };
 
   const handleDelete = () => {
     deleteMutation.mutate();
@@ -206,16 +239,20 @@ export default function RackDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" asChild data-testid="edit-rack-btn">
-            <Link href={`/dashboard/racks/${id}/edit`}>
-              <Edit className="mr-2 h-4 w-4" />
-              Modifier
-            </Link>
-          </Button>
-          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-rack-btn">
-            <Trash2 className="mr-2 h-4 w-4" />
-            Supprimer
-          </Button>
+          {canUpdate('racks') && (
+            <Button variant="outline" asChild data-testid="edit-rack-btn">
+              <Link href={`/dashboard/racks/${id}/edit`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Modifier
+              </Link>
+            </Button>
+          )}
+          {canDelete('racks') && (
+            <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} data-testid="delete-rack-btn">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Supprimer
+            </Button>
+          )}
         </div>
       </div>
 
@@ -300,45 +337,104 @@ export default function RackDetailPage({
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
+              <TooltipProvider>
               {rack.assets && rack.assets.length > 0 ? (
                 rack.assets.map((asset) => (
                   <div
                     key={asset.id}
-                    className="flex items-start justify-between p-3 border rounded-lg"
+                    className="p-3 border rounded-lg space-y-2"
                   >
-                    <div className="flex items-start gap-2">
-                      <Package className="h-4 w-4 text-muted-foreground mt-0.5" />
-                      <div>
-                        <Link
-                          href={`/dashboard/assets/${asset.id}`}
-                          className="text-sm font-medium hover:underline text-blue-600"
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-2">
+                        <Package className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <Link
+                            href={`/dashboard/assets/${asset.id}`}
+                            className="text-sm font-medium hover:underline text-blue-600"
+                          >
+                            {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}
+                          </Link>
+                          <p className="text-xs text-muted-foreground">
+                            U{asset.rackPositionU} ({asset.rackHeightU}U)
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        {asset.rackNotes && editingNoteAssetId !== asset.id ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => startEditingNote(asset)}
+                              >
+                                <MessageSquare className="h-4 w-4 text-blue-500" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="max-w-[200px]">
+                              <p className="text-xs">{asset.rackNotes}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : editingNoteAssetId !== asset.id ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Ajouter une note"
+                            onClick={() => startEditingNote(asset)}
+                          >
+                            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        ) : null}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Déplacer"
+                          onClick={() => openMoveDialog(asset)}
                         >
-                          {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}
-                        </Link>
-                        <p className="text-xs text-muted-foreground">
-                          U{asset.rackPositionU} ({asset.rackHeightU}U)
-                        </p>
+                          <MoveVertical className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Démonter"
+                          onClick={() => unmountMutation.mutate(asset.id)}
+                          disabled={unmountMutation.isPending}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title="Déplacer"
-                        onClick={() => openMoveDialog(asset)}
-                      >
-                        <MoveVertical className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title="Démonter"
-                        onClick={() => unmountMutation.mutate(asset.id)}
-                        disabled={unmountMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {/* Inline note editing */}
+                    {editingNoteAssetId === asset.id && (
+                      <div className="flex gap-2 items-end">
+                        <Textarea
+                          value={editingNoteText}
+                          onChange={(e) => setEditingNoteText(e.target.value)}
+                          placeholder="Note sur cet équipement..."
+                          rows={2}
+                          className="text-xs flex-1"
+                        />
+                        <div className="flex flex-col gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => saveNote(asset.id)}
+                            disabled={updateRackNotesMutation.isPending}
+                          >
+                            <Check className="h-4 w-4 text-green-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => { setEditingNoteAssetId(null); setEditingNoteText(''); }}
+                          >
+                            <X className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (
@@ -346,6 +442,7 @@ export default function RackDetailPage({
                   Aucun équipement monté
                 </p>
               )}
+              </TooltipProvider>
             </CardContent>
           </Card>
         </div>

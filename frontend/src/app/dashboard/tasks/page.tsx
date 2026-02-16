@@ -18,6 +18,7 @@ import {
 import { tasksApi } from '@/lib/api/tasks';
 import { sitesApi } from '@/lib/api/sites';
 import { Plus, Calendar, User, AlertCircle, Clock, AlertTriangle, Search, X } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Task, TaskStatus, TaskPriority, Site } from '@/types';
 
@@ -217,6 +218,7 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
+  const { canCreate } = usePermissions();
 
   const { data: tasks, isLoading } = useQuery<Task[]>({
     queryKey: ['tasks'],
@@ -286,12 +288,14 @@ export default function TasksPage() {
           <h1 className="text-3xl font-bold">Tâches</h1>
           <p className="text-muted-foreground">Gérez vos tâches et interventions ({filteredTasks.length}{hasFilters ? ` / ${tasks?.length || 0}` : ''})</p>
         </div>
-        <Button asChild data-testid="create-task-btn">
-          <Link href="/dashboard/tasks/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Nouvelle tâche
-          </Link>
-        </Button>
+        {canCreate('tasks') && (
+          <Button asChild data-testid="create-task-btn">
+            <Link href="/dashboard/tasks/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Nouvelle tâche
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
