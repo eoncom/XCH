@@ -1,5 +1,5 @@
 import { apiClient } from '../api-client';
-import type { Asset, CreateAssetDto, UpdateAssetDto } from '@/types';
+import type { Asset, AssetMovement, CreateAssetDto, UpdateAssetDto } from '@/types';
 
 export const assetsApi = {
   getAll: (params?: {
@@ -57,4 +57,8 @@ export const assetsApi = {
 
   deleteAttachment: (id: string, attachmentId: string) =>
     apiClient.delete(`/api/assets/${id}/attachments/${attachmentId}`),
+
+  // Movement history
+  getMovements: (id: string) =>
+    apiClient.get<AssetMovement[]>(`/api/assets/${id}/movements`),
 };

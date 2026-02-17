@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
@@ -11,6 +11,7 @@ import { createId } from '@paralleldrive/cuid2';
 
 @Injectable()
 export class AssetsService {
+  private readonly logger = new Logger(AssetsService.name);
   private readonly SERIAL_REQUIRED_TYPES = ['PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'TEAMS_ROOM'];
 
   constructor(
@@ -20,7 +21,7 @@ export class AssetsService {
     private storageService: StorageService,
   ) {}
 
-  async create(tenantId: string, createAssetDto: CreateAssetDto) {
+  async create(tenantId: string, createAssetDto: CreateAssetDto, userId?: string) {
     // Validate serial number for critical types
     if (this.SERIAL_REQUIRED_TYPES.includes(createAssetDto.type) && !createAssetDto.serialNumber) {
       throw new BadRequestException(
@@ -63,6 +64,24 @@ export class AssetsService {
         },
       },
     });
+
+    // Log creation movement
+    try {
+      await this.prisma.assetMovement.create({
+        data: {
+          tenantId,
+          assetId: asset.id,
+          userId: userId || null,
+          type: 'CREATED',
+          toSiteId: asset.siteId || null,
+          toRackId: asset.rackId || null,
+          toRackPositionU: asset.rackPositionU || null,
+          toStatus: asset.status,
+        },
+      });
+    } catch (e) {
+      this.logger.warn(`Failed to log CREATED movement for asset ${asset.id}: ${e.message}`);
+    }
 
     return asset;
   }
@@ -189,16 +208,13 @@ export class AssetsService {
     return asset;
   }
 
-  async update(id: string, tenantId: string, updateAssetDto: UpdateAssetDto) {
-    await this.findOne(id, tenantId);
+  async update(id: string, tenantId: string, updateAssetDto: UpdateAssetDto, userId?: string) {
+    // Get current state BEFORE update for movement tracking
+    const currentAsset = await this.findOne(id, tenantId);
 
     // Validate serial number if type is being changed to critical type
     if (updateAssetDto.type && this.SERIAL_REQUIRED_TYPES.includes(updateAssetDto.type)) {
-      const asset = await this.prisma.asset.findUnique({ where: { id } });
-      if (!asset) {
-        throw new NotFoundException('Asset not found');
-      }
-      if (!asset.serialNumber && !updateAssetDto.serialNumber) {
+      if (!currentAsset.serialNumber && !updateAssetDto.serialNumber) {
         throw new BadRequestException(
           `Serial number is required for asset type: ${updateAssetDto.type}`,
         );
@@ -214,7 +230,108 @@ export class AssetsService {
       },
     });
 
+    // Track movement history
+    try {
+      await this.trackMovements(tenantId, id, currentAsset, asset, userId);
+    } catch (e) {
+      this.logger.warn(`Failed to log movement for asset ${id}: ${e.message}`);
+    }
+
     return asset;
+  }
+
+  /**
+   * Detect and log all location/status changes between old and new asset state
+   */
+  private async trackMovements(
+    tenantId: string,
+    assetId: string,
+    oldAsset: any,
+    newAsset: any,
+    userId?: string,
+  ) {
+    const movements: any[] = [];
+
+    // Detect site change
+    if (oldAsset.siteId !== newAsset.siteId) {
+      movements.push({
+        tenantId,
+        assetId,
+        userId: userId || null,
+        type: 'SITE_CHANGE',
+        fromSiteId: oldAsset.siteId || null,
+        toSiteId: newAsset.siteId || null,
+      });
+    }
+
+    // Detect rack changes
+    const oldRackId = oldAsset.rackId;
+    const newRackId = newAsset.rackId;
+    const oldPosition = oldAsset.rackPositionU;
+    const newPosition = newAsset.rackPositionU;
+
+    if (!oldRackId && newRackId) {
+      // Mounted in rack
+      movements.push({
+        tenantId,
+        assetId,
+        userId: userId || null,
+        type: 'RACK_MOUNT',
+        toRackId: newRackId,
+        toRackPositionU: newPosition || null,
+      });
+    } else if (oldRackId && !newRackId) {
+      // Unmounted from rack
+      movements.push({
+        tenantId,
+        assetId,
+        userId: userId || null,
+        type: 'RACK_UNMOUNT',
+        fromRackId: oldRackId,
+        fromRackPositionU: oldPosition || null,
+      });
+    } else if (oldRackId && newRackId && oldRackId !== newRackId) {
+      // Changed rack
+      movements.push({
+        tenantId,
+        assetId,
+        userId: userId || null,
+        type: 'RACK_CHANGE',
+        fromRackId: oldRackId,
+        fromRackPositionU: oldPosition || null,
+        toRackId: newRackId,
+        toRackPositionU: newPosition || null,
+      });
+    } else if (oldRackId && newRackId && oldRackId === newRackId && oldPosition !== newPosition) {
+      // Moved within same rack (position change)
+      movements.push({
+        tenantId,
+        assetId,
+        userId: userId || null,
+        type: 'RACK_MOVE',
+        fromRackId: oldRackId,
+        fromRackPositionU: oldPosition || null,
+        toRackId: newRackId,
+        toRackPositionU: newPosition || null,
+      });
+    }
+
+    // Detect status change
+    if (oldAsset.status !== newAsset.status) {
+      movements.push({
+        tenantId,
+        assetId,
+        userId: userId || null,
+        type: 'STATUS_CHANGE',
+        fromStatus: oldAsset.status,
+        toStatus: newAsset.status,
+      });
+    }
+
+    // Batch create all movements
+    if (movements.length > 0) {
+      await this.prisma.assetMovement.createMany({ data: movements });
+    }
   }
 
   async remove(id: string, tenantId: string) {
@@ -417,5 +534,61 @@ export class AssetsService {
     });
 
     return { message: 'Attachment deleted successfully' };
+  }
+
+  // ============================================================================
+  // MOVEMENT HISTORY
+  // ============================================================================
+
+  async getMovementHistory(assetId: string, tenantId: string) {
+    // Verify asset exists
+    await this.findOne(assetId, tenantId);
+
+    const movements = await this.prisma.assetMovement.findMany({
+      where: {
+        assetId,
+        tenantId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        fromSite: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+        toSite: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+        fromRack: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        toRack: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        timestamp: 'desc',
+      },
+    });
+
+    return movements;
   }
 }

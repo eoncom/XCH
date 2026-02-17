@@ -37,7 +37,7 @@ export class AssetsController {
         throw new ForbiddenException('Insufficient permissions for assets on this site');
       }
     }
-    return this.assetsService.create(req.user.tenantId, createAssetDto);
+    return this.assetsService.create(req.user.tenantId, createAssetDto, req.user.userId);
   }
 
   @Get()
@@ -121,7 +121,7 @@ export class AssetsController {
         throw new ForbiddenException('Insufficient permissions to modify assets on this site');
       }
     }
-    return this.assetsService.update(id, req.user.tenantId, updateAssetDto);
+    return this.assetsService.update(id, req.user.tenantId, updateAssetDto, req.user.userId);
   }
 
   @Delete(':id')
@@ -138,6 +138,17 @@ export class AssetsController {
       }
     }
     return this.assetsService.remove(id, req.user.tenantId);
+  }
+
+  // ============================================================================
+  // MOVEMENT HISTORY
+  // ============================================================================
+
+  @Get(':id/movements')
+  @Resource('assets') @Action('read')
+  @ApiOperation({ summary: 'Get movement history for asset' })
+  getMovementHistory(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.assetsService.getMovementHistory(id, req.user.tenantId);
   }
 
   // ============================================================================

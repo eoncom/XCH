@@ -89,12 +89,13 @@ model User {
   updatedAt   DateTime  @updatedAt
 
   // Relations
-  assignedTasks Task[]        @relation("AssignedTo")
-  createdTasks  Task[]        @relation("CreatedBy")
-  taskComments  TaskComment[] @relation("TaskComments")
-  auditLogs     AuditLog[]
-  photos        Photo[]
-  siteAccess    UserSiteAccess[]
+  assignedTasks  Task[]          @relation("AssignedTo")
+  createdTasks   Task[]          @relation("CreatedBy")
+  taskComments   TaskComment[]   @relation("TaskComments")
+  auditLogs      AuditLog[]
+  photos         Photo[]
+  siteAccess     UserSiteAccess[]
+  assetMovements AssetMovement[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -196,13 +197,15 @@ model Site {
   updatedAt DateTime @updatedAt
 
   // Relations
-  assets       Asset[]
-  racks        Rack[]
-  floorPlans   FloorPlan[]
-  tasks        Task[]
-  externalRefs ExternalRef[]
-  photos       Photo[]
-  userAccess   UserSiteAccess[]
+  assets              Asset[]
+  racks               Rack[]
+  floorPlans          FloorPlan[]
+  tasks               Task[]
+  externalRefs        ExternalRef[]
+  photos              Photo[]
+  userAccess          UserSiteAccess[]
+  movementsFrom       AssetMovement[] @relation("movementFromSite")
+  movementsTo         AssetMovement[] @relation("movementToSite")
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -290,6 +293,7 @@ model Asset {
   tasks        Task[]
   externalRefs ExternalRef[]
   photos       Photo[]
+  movements    AssetMovement[]
 
   @@unique([tenantId, serialNumber])
   @@index([tenantId])
@@ -298,6 +302,56 @@ model Asset {
   @@index([tenantId, status])
   @@index([rackId])
   @@map("assets")
+}
+
+// ============================================================================
+// ASSET MOVEMENT HISTORY
+// ============================================================================
+
+enum AssetMovementType {
+  SITE_CHANGE        // Changed site
+  RACK_MOUNT         // Mounted in rack
+  RACK_UNMOUNT       // Unmounted from rack
+  RACK_MOVE          // Moved within rack (position change)
+  RACK_CHANGE        // Moved to different rack
+  STATUS_CHANGE      // Status changed
+  CREATED            // Asset created
+}
+
+model AssetMovement {
+  id        String            @id @default(cuid())
+  tenantId  String
+  assetId   String
+  asset     Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type      AssetMovementType
+
+  // Site change tracking
+  fromSiteId String?
+  fromSite   Site?  @relation("movementFromSite", fields: [fromSiteId], references: [id], onDelete: SetNull)
+  toSiteId   String?
+  toSite     Site?  @relation("movementToSite", fields: [toSiteId], references: [id], onDelete: SetNull)
+
+  // Rack change tracking
+  fromRackId      String?
+  fromRack        Rack?  @relation("movementFromRack", fields: [fromRackId], references: [id], onDelete: SetNull)
+  toRackId        String?
+  toRack          Rack?  @relation("movementToRack", fields: [toRackId], references: [id], onDelete: SetNull)
+  fromRackPositionU Int?
+  toRackPositionU   Int?
+
+  // Status change tracking
+  fromStatus String?
+  toStatus   String?
+
+  // Metadata
+  notes     String?   @db.Text
+  timestamp DateTime  @default(now())
+
+  @@index([tenantId, assetId])
+  @@index([assetId, timestamp])
+  @@map("asset_movements")
 }
 
 // ============================================================================
@@ -339,8 +393,10 @@ model Rack {
   updatedAt DateTime @updatedAt
 
   // Relations
-  assets Asset[]
-  pins   Pin[]
+  assets         Asset[]
+  pins           Pin[]
+  movementsFrom  AssetMovement[] @relation("movementFromRack")
+  movementsTo    AssetMovement[] @relation("movementToRack")
 
   @@unique([tenantId, siteId, name])
   @@index([tenantId])

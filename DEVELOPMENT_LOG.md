@@ -3593,3 +3593,24 @@ fix: filter resources by per-resource permissions, fix TECHNICIEN 403 errors, co
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-17
+
+**Date:** 2026-02-17 09:29:16
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix: hide write actions on detail pages when user has read-only permission
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

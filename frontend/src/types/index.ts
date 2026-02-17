@@ -322,6 +322,57 @@ export interface UpdateContactTypeDto extends Partial<CreateContactTypeDto> {
   isActive?: boolean;
 }
 
+// Asset Movement types
+export type AssetMovementType =
+  | 'SITE_CHANGE'
+  | 'RACK_MOUNT'
+  | 'RACK_UNMOUNT'
+  | 'RACK_MOVE'
+  | 'RACK_CHANGE'
+  | 'STATUS_CHANGE'
+  | 'CREATED';
+
+export interface AssetMovement {
+  id: string;
+  tenantId: string;
+  assetId: string;
+  userId?: string;
+  type: AssetMovementType;
+  fromSiteId?: string;
+  toSiteId?: string;
+  fromRackId?: string;
+  toRackId?: string;
+  fromRackPositionU?: number;
+  toRackPositionU?: number;
+  fromStatus?: string;
+  toStatus?: string;
+  notes?: string;
+  timestamp: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  fromSite?: {
+    id: string;
+    code: string;
+    name: string;
+  };
+  toSite?: {
+    id: string;
+    code: string;
+    name: string;
+  };
+  fromRack?: {
+    id: string;
+    name: string;
+  };
+  toRack?: {
+    id: string;
+    name: string;
+  };
+}
+
 // Integration types
 export interface IntegrationMapping {
   id: string;

@@ -34,10 +34,19 @@ import {
   Clock,
   XCircle,
   AlertTriangle,
+  History,
+  Building2,
+  Server,
+  ArrowRight,
+  ArrowUpDown,
+  Power,
+  UserCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import type { Asset, AssetType, AssetStatus } from '@/types';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import type { Asset, AssetType, AssetStatus, AssetMovement, AssetMovementType } from '@/types';
 
 const assetTypeLabels: Record<AssetType, string> = {
   PRINTER: 'Imprimante',
@@ -108,6 +117,13 @@ export default function AssetDetailPage({
   const { data: assetAttachments = [] } = useQuery<any[]>({
     queryKey: ['assets', id, 'attachments'],
     queryFn: () => assetsApi.listAttachments(id),
+    enabled: !!id,
+  });
+
+  // Load movement history
+  const { data: movements = [] } = useQuery<AssetMovement[]>({
+    queryKey: ['assets', id, 'movements'],
+    queryFn: () => assetsApi.getMovements(id),
     enabled: !!id,
   });
 
@@ -183,17 +199,15 @@ export default function AssetDetailPage({
           </Badge>
         </div>
         <div className="flex gap-2">
-          {canUpdate('assets', asset?.siteId) && (
-            <Button
-              variant="outline"
-              data-testid="generate-qr-btn"
-              onClick={() => generateQRMutation.mutate()}
-              disabled={generateQRMutation.isPending}
-            >
-              <QrCode className="mr-2 h-4 w-4" />
-              {generateQRMutation.isPending ? 'Génération...' : 'Générer QR Code'}
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            data-testid="generate-qr-btn"
+            onClick={() => generateQRMutation.mutate()}
+            disabled={generateQRMutation.isPending}
+          >
+            <QrCode className="mr-2 h-4 w-4" />
+            {generateQRMutation.isPending ? 'Génération...' : 'Générer QR Code'}
+          </Button>
           {canUpdate('assets', asset?.siteId) && (
             <Button variant="outline" asChild data-testid="edit-asset-btn">
               <Link href={`/dashboard/assets/${id}/edit`}>
@@ -220,7 +234,9 @@ export default function AssetDetailPage({
           </TabsTrigger>
           <TabsTrigger value="documents">Documents ({assetAttachments.length})</TabsTrigger>
           <TabsTrigger value="qr">QR Code</TabsTrigger>
-          <TabsTrigger value="history">Historique</TabsTrigger>
+          <TabsTrigger value="history">
+            Historique{movements.length > 0 && ` (${movements.length})`}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="space-y-6">
@@ -498,14 +514,16 @@ export default function AssetDetailPage({
                         <Download className="mr-2 h-4 w-4" />
                         Télécharger
                       </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => generateQRMutation.mutate()}
-                        disabled={generateQRMutation.isPending}
-                      >
-                        <QrCode className="mr-2 h-4 w-4" />
-                        {generateQRMutation.isPending ? 'Régénération...' : 'Régénérer'}
-                      </Button>
+                      {canUpdate('assets', asset?.siteId) && (
+                        <Button
+                          variant="outline"
+                          onClick={() => generateQRMutation.mutate()}
+                          disabled={generateQRMutation.isPending}
+                        >
+                          <QrCode className="mr-2 h-4 w-4" />
+                          {generateQRMutation.isPending ? 'Régénération...' : 'Régénérer'}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -527,8 +545,32 @@ export default function AssetDetailPage({
 
         <TabsContent value="history">
           <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">Historique à venir</p>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5" />
+                Historique des mouvements
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {movements.length > 0 ? (
+                <div className="relative">
+                  {/* Timeline line */}
+                  <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+                  <div className="space-y-6">
+                    {movements.map((movement) => (
+                      <MovementTimelineItem key={movement.id} movement={movement} />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <History className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground">Aucun mouvement enregistré</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    L'historique des déplacements et changements de statut apparaîtra ici
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -558,6 +600,183 @@ export default function AssetDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ============================================================================
+// Movement Timeline Item Component
+// ============================================================================
+
+const movementTypeConfig: Record<AssetMovementType, {
+  label: string;
+  icon: typeof Building2;
+  color: string;
+  bgColor: string;
+}> = {
+  CREATED: {
+    label: 'Création',
+    icon: Plus,
+    color: 'text-green-600',
+    bgColor: 'bg-green-100 dark:bg-green-900',
+  },
+  SITE_CHANGE: {
+    label: 'Changement de chantier',
+    icon: Building2,
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-100 dark:bg-blue-900',
+  },
+  RACK_MOUNT: {
+    label: 'Monté en baie',
+    icon: Server,
+    color: 'text-purple-600',
+    bgColor: 'bg-purple-100 dark:bg-purple-900',
+  },
+  RACK_UNMOUNT: {
+    label: 'Démonté de la baie',
+    icon: Server,
+    color: 'text-orange-600',
+    bgColor: 'bg-orange-100 dark:bg-orange-900',
+  },
+  RACK_MOVE: {
+    label: 'Déplacé dans la baie',
+    icon: ArrowUpDown,
+    color: 'text-indigo-600',
+    bgColor: 'bg-indigo-100 dark:bg-indigo-900',
+  },
+  RACK_CHANGE: {
+    label: 'Changement de baie',
+    icon: ArrowRight,
+    color: 'text-cyan-600',
+    bgColor: 'bg-cyan-100 dark:bg-cyan-900',
+  },
+  STATUS_CHANGE: {
+    label: 'Changement de statut',
+    icon: Power,
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-100 dark:bg-amber-900',
+  },
+};
+
+const statusLabels: Record<string, string> = {
+  IN_SERVICE: 'En service',
+  OUT_OF_SERVICE: 'Hors service',
+  IN_TRANSIT: 'En transit',
+  STOCK: 'En stock',
+  RETIRED: 'Retiré',
+};
+
+function MovementTimelineItem({ movement }: { movement: AssetMovement }) {
+  const config = movementTypeConfig[movement.type];
+  const Icon = config.icon;
+
+  const renderDetails = () => {
+    switch (movement.type) {
+      case 'CREATED':
+        return (
+          <div className="text-sm text-muted-foreground">
+            {movement.toSite && (
+              <span>Chantier : <strong>{movement.toSite.name}</strong></span>
+            )}
+            {movement.toRack && (
+              <span className="ml-2">• Baie : <strong>{movement.toRack.name}</strong></span>
+            )}
+            {movement.toStatus && (
+              <span className="ml-2">• Statut : <strong>{statusLabels[movement.toStatus] || movement.toStatus}</strong></span>
+            )}
+          </div>
+        );
+
+      case 'SITE_CHANGE':
+        return (
+          <div className="text-sm text-muted-foreground flex items-center gap-1 flex-wrap">
+            <span>{movement.fromSite?.name || 'Non assigné'}</span>
+            <ArrowRight className="h-3 w-3" />
+            <span className="font-medium text-foreground">{movement.toSite?.name || 'Non assigné'}</span>
+          </div>
+        );
+
+      case 'RACK_MOUNT':
+        return (
+          <div className="text-sm text-muted-foreground">
+            Baie <strong>{movement.toRack?.name}</strong>
+            {movement.toRackPositionU && ` — Position U${movement.toRackPositionU}`}
+          </div>
+        );
+
+      case 'RACK_UNMOUNT':
+        return (
+          <div className="text-sm text-muted-foreground">
+            Baie <strong>{movement.fromRack?.name}</strong>
+            {movement.fromRackPositionU && ` — Position U${movement.fromRackPositionU}`}
+          </div>
+        );
+
+      case 'RACK_MOVE':
+        return (
+          <div className="text-sm text-muted-foreground flex items-center gap-1">
+            <span>U{movement.fromRackPositionU}</span>
+            <ArrowRight className="h-3 w-3" />
+            <span className="font-medium text-foreground">U{movement.toRackPositionU}</span>
+            <span className="ml-1">dans {movement.toRack?.name}</span>
+          </div>
+        );
+
+      case 'RACK_CHANGE':
+        return (
+          <div className="text-sm text-muted-foreground flex items-center gap-1 flex-wrap">
+            <span>{movement.fromRack?.name}{movement.fromRackPositionU ? ` (U${movement.fromRackPositionU})` : ''}</span>
+            <ArrowRight className="h-3 w-3" />
+            <span className="font-medium text-foreground">
+              {movement.toRack?.name}{movement.toRackPositionU ? ` (U${movement.toRackPositionU})` : ''}
+            </span>
+          </div>
+        );
+
+      case 'STATUS_CHANGE':
+        return (
+          <div className="text-sm text-muted-foreground flex items-center gap-1">
+            <span>{statusLabels[movement.fromStatus || ''] || movement.fromStatus}</span>
+            <ArrowRight className="h-3 w-3" />
+            <span className="font-medium text-foreground">
+              {statusLabels[movement.toStatus || ''] || movement.toStatus}
+            </span>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="relative pl-10">
+      {/* Timeline dot */}
+      <div className={`absolute left-0 top-0.5 w-8 h-8 rounded-full ${config.bgColor} flex items-center justify-center z-10`}>
+        <Icon className={`h-4 w-4 ${config.color}`} />
+      </div>
+
+      <div className="pb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-sm">{config.label}</span>
+          <span className="text-xs text-muted-foreground">
+            {format(new Date(movement.timestamp), "dd MMM yyyy 'à' HH:mm", { locale: fr })}
+          </span>
+        </div>
+
+        {renderDetails()}
+
+        {movement.user && (
+          <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+            <UserCircle className="h-3 w-3" />
+            {movement.user.name}
+          </div>
+        )}
+
+        {movement.notes && (
+          <p className="text-sm text-muted-foreground mt-1 italic">{movement.notes}</p>
+        )}
+      </div>
     </div>
   );
 }
