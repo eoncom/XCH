@@ -262,14 +262,16 @@ export default function RackDetailPage({
           <Card>
             <CardHeader>
               <CardTitle>Visualisation 2D</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Cliquez sur une unité pour monter un équipement
-              </p>
+              {canUpdate('racks', rack?.siteId) && (
+                <p className="text-sm text-muted-foreground">
+                  Cliquez sur une unité pour monter un équipement
+                </p>
+              )}
             </CardHeader>
             <CardContent>
               <RackVisualization
                 rack={rack}
-                onUnitClick={handleUnitClick}
+                onUnitClick={canUpdate('racks', rack?.siteId) ? handleUnitClick : undefined}
                 selectedUnit={selectedUnit}
               />
             </CardContent>
@@ -359,6 +361,7 @@ export default function RackDetailPage({
                           </p>
                         </div>
                       </div>
+                      {canUpdate('racks', rack?.siteId) && (
                       <div className="flex gap-1">
                         {asset.rackNotes && editingNoteAssetId !== asset.id ? (
                           <Tooltip>
@@ -403,6 +406,7 @@ export default function RackDetailPage({
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
+                      )}
                     </div>
                     {/* Inline note editing */}
                     {editingNoteAssetId === asset.id && (

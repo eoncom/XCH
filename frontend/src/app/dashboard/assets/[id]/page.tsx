@@ -183,15 +183,17 @@ export default function AssetDetailPage({
           </Badge>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            data-testid="generate-qr-btn"
-            onClick={() => generateQRMutation.mutate()}
-            disabled={generateQRMutation.isPending}
-          >
-            <QrCode className="mr-2 h-4 w-4" />
-            {generateQRMutation.isPending ? 'Génération...' : 'Générer QR Code'}
-          </Button>
+          {canUpdate('assets', asset?.siteId) && (
+            <Button
+              variant="outline"
+              data-testid="generate-qr-btn"
+              onClick={() => generateQRMutation.mutate()}
+              disabled={generateQRMutation.isPending}
+            >
+              <QrCode className="mr-2 h-4 w-4" />
+              {generateQRMutation.isPending ? 'Génération...' : 'Générer QR Code'}
+            </Button>
+          )}
           {canUpdate('assets', asset?.siteId) && (
             <Button variant="outline" asChild data-testid="edit-asset-btn">
               <Link href={`/dashboard/assets/${id}/edit`}>
@@ -364,12 +366,14 @@ export default function AssetDetailPage({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Tâches ({(asset as any).tasks?.length || 0})</CardTitle>
-              <Button asChild size="sm">
-                <Link href={`/dashboard/tasks/new?assetId=${id}${asset.siteId ? `&siteId=${asset.siteId}` : ''}`}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nouvelle tâche
-                </Link>
-              </Button>
+              {canUpdate('tasks', asset?.siteId) && (
+                <Button asChild size="sm">
+                  <Link href={`/dashboard/tasks/new?assetId=${id}${asset.siteId ? `&siteId=${asset.siteId}` : ''}`}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nouvelle tâche
+                  </Link>
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {(asset as any).tasks?.length > 0 ? (
@@ -437,12 +441,14 @@ export default function AssetDetailPage({
                   <p className="text-muted-foreground mb-4">
                     Aucune tâche liée à cet équipement
                   </p>
-                  <Button asChild variant="outline">
-                    <Link href={`/dashboard/tasks/new?assetId=${id}${asset.siteId ? `&siteId=${asset.siteId}` : ''}`}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Créer une tâche
-                    </Link>
-                  </Button>
+                  {canUpdate('tasks', asset?.siteId) && (
+                    <Button asChild variant="outline">
+                      <Link href={`/dashboard/tasks/new?assetId=${id}${asset.siteId ? `&siteId=${asset.siteId}` : ''}`}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Créer une tâche
+                      </Link>
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>

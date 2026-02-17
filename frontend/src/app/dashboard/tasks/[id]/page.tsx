@@ -384,7 +384,7 @@ export default function TaskDetailPage({
                   className="flex items-center gap-3 group"
                 >
                   <button
-                    onClick={() => toggleChecklistItem(item.id)}
+                    onClick={() => canUpdate('tasks', task?.siteId) && toggleChecklistItem(item.id)}
                     className="flex-shrink-0"
                     disabled={updateChecklistMutation.isPending}
                   >
@@ -401,51 +401,55 @@ export default function TaskDetailPage({
                   >
                     {item.text || 'Sans titre'}
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDeleteItemClick(item.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    disabled={updateChecklistMutation.isPending}
-                    data-testid="delete-checklist-item-btn"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {canUpdate('tasks', task?.siteId) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteItemClick(item.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      disabled={updateChecklistMutation.isPending}
+                      data-testid="delete-checklist-item-btn"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               ))}
 
               {/* Add new item */}
-              <div className="space-y-2 mt-4">
-                <div className="flex gap-2">
-                  <Input
-                    data-testid="checklist-input"
-                    placeholder="Ajouter un élément..."
-                    value={newChecklistItem}
-                    onChange={(e) => {
-                      setNewChecklistItem(e.target.value);
-                      setValidationError(null);
-                    }}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        addChecklistItem();
-                      }
-                    }}
-                    disabled={updateChecklistMutation.isPending}
-                    className={validationError ? 'border-red-500' : ''}
-                  />
-                  <Button
-                    onClick={addChecklistItem}
-                    size="icon"
-                    data-testid="add-checklist-btn"
-                    disabled={updateChecklistMutation.isPending}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
+              {canUpdate('tasks', task?.siteId) && (
+                <div className="space-y-2 mt-4">
+                  <div className="flex gap-2">
+                    <Input
+                      data-testid="checklist-input"
+                      placeholder="Ajouter un élément..."
+                      value={newChecklistItem}
+                      onChange={(e) => {
+                        setNewChecklistItem(e.target.value);
+                        setValidationError(null);
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          addChecklistItem();
+                        }
+                      }}
+                      disabled={updateChecklistMutation.isPending}
+                      className={validationError ? 'border-red-500' : ''}
+                    />
+                    <Button
+                      onClick={addChecklistItem}
+                      size="icon"
+                      data-testid="add-checklist-btn"
+                      disabled={updateChecklistMutation.isPending}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {validationError && (
+                    <p className="text-sm text-red-600">{validationError}</p>
+                  )}
                 </div>
-                {validationError && (
-                  <p className="text-sm text-red-600">{validationError}</p>
-                )}
-              </div>
+              )}
             </CardContent>
           </Card>
 

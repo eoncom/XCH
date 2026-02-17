@@ -386,10 +386,12 @@ export default function FloorPlanDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowNewVersionDialog(true)}>
-            <Copy className="mr-2 h-4 w-4" />
-            Nouvelle version
-          </Button>
+          {canUpdate('floor-plans', floorPlan?.siteId) && (
+            <Button variant="outline" onClick={() => setShowNewVersionDialog(true)}>
+              <Copy className="mr-2 h-4 w-4" />
+              Nouvelle version
+            </Button>
+          )}
           <Button variant="outline" onClick={handleDownload} data-testid="download-plan-btn">
             <Download className="mr-2 h-4 w-4" />
             Télécharger PDF
@@ -418,28 +420,32 @@ export default function FloorPlanDetailPage({
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Plan interactif</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  data-testid="add-pin-btn"
-                  onClick={() => setShowAddPinDialog(true)}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Ajouter un repère
-                </Button>
+                {canUpdate('floor-plans', floorPlan?.siteId) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid="add-pin-btn"
+                    onClick={() => setShowAddPinDialog(true)}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Ajouter un repère
+                  </Button>
+                )}
               </div>
-              <p className="text-sm text-muted-foreground">
-                Cliquez sur le plan pour ajouter un repère
-              </p>
+              {canUpdate('floor-plans', floorPlan?.siteId) && (
+                <p className="text-sm text-muted-foreground">
+                  Cliquez sur le plan pour ajouter un repère
+                </p>
+              )}
             </CardHeader>
             <CardContent>
               <FloorPlanViewer
                 floorPlan={floorPlan}
                 pins={floorPlan.pins || []}
                 onPinClick={handlePinClick}
-                onStageClick={handleStageClick}
-                onPinDragEnd={handlePinDragEnd}
-                editable={true}
+                onStageClick={canUpdate('floor-plans', floorPlan?.siteId) ? handleStageClick : undefined}
+                onPinDragEnd={canUpdate('floor-plans', floorPlan?.siteId) ? handlePinDragEnd : undefined}
+                editable={canUpdate('floor-plans', floorPlan?.siteId)}
                 onExportReady={handleExportReady}
               />
             </CardContent>
@@ -547,7 +553,7 @@ export default function FloorPlanDetailPage({
                       </p>
                     </Link>
                     {/* Delete version button (only if more than 1 version) */}
-                    {versionHistory.length > 1 && (
+                    {versionHistory.length > 1 && canDelete('floor-plans', floorPlan?.siteId) && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -619,14 +625,16 @@ export default function FloorPlanDetailPage({
                           </p>
                         )}
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => { e.stopPropagation(); deletePinMutation.mutate(pin.id); }}
-                        disabled={deletePinMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {canUpdate('floor-plans', floorPlan?.siteId) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); deletePinMutation.mutate(pin.id); }}
+                          disabled={deletePinMutation.isPending}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   );
                 })
@@ -911,7 +919,7 @@ export default function FloorPlanDetailPage({
             <Button variant="outline" onClick={() => setShowPinInfoDialog(false)}>
               Fermer
             </Button>
-            {selectedPin && (
+            {selectedPin && canUpdate('floor-plans', floorPlan?.siteId) && (
               <Button onClick={() => handleEditPin(selectedPin)}>
                 <Edit className="h-4 w-4 mr-2" />
                 Éditer

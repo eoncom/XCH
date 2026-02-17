@@ -3572,3 +3572,24 @@ fix: QR code persistence, remove access text, reorder site edit form
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-17
+
+**Date:** 2026-02-17 09:14:15
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 4
+
+**Commit message:**
+```
+fix: filter resources by per-resource permissions, fix TECHNICIEN 403 errors, contacts read-only
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
