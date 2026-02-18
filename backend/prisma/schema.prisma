@@ -445,6 +445,13 @@ enum PinType {
   PATCH_PANEL
   RJ45
   NRO
+  ROUTER
+  TEAMS_ROOM
+  WEBCAM
+  DISPLAY
+  SERVER
+  PDU
+  BOX_5G
   OTHER
 }
 

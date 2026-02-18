@@ -70,6 +70,13 @@ const pinTypeLabels: Record<PinType, string> = {
   PATCH_PANEL: 'Panneau de brassage',
   RJ45: 'Prise RJ-45',
   NRO: 'Arrivée Fibre NRO',
+  ROUTER: 'Routeur',
+  TEAMS_ROOM: 'Teams Room',
+  WEBCAM: 'Webcam',
+  DISPLAY: 'Écran',
+  SERVER: 'Serveur',
+  PDU: 'PDU',
+  BOX_5G: 'Box 5G',
   OTHER: 'Autre',
 };
 

@@ -56,6 +56,13 @@ const PIN_COLORS: Record<PinType, string> = {
   PATCH_PANEL: '#06b6d4',  // cyan
   RJ45: '#14b8a6',         // teal
   NRO: '#a855f7',          // purple-light
+  ROUTER: '#f97316',       // orange
+  TEAMS_ROOM: '#0ea5e9',   // sky blue
+  WEBCAM: '#ec4899',       // pink
+  DISPLAY: '#84cc16',      // lime
+  SERVER: '#475569',       // slate
+  PDU: '#d97706',          // amber-dark
+  BOX_5G: '#e11d48',       // rose
   OTHER: '#6b7280',        // gray
 };
 
@@ -69,6 +76,13 @@ const PIN_LABELS: Record<PinType, string> = {
   PATCH_PANEL: 'PP',
   RJ45: 'RJ',
   NRO: 'NRO',
+  ROUTER: 'RT',
+  TEAMS_ROOM: 'TR',
+  WEBCAM: 'WC',
+  DISPLAY: 'EC',
+  SERVER: 'SV',
+  PDU: 'PDU',
+  BOX_5G: '5G',
   OTHER: '?',
 };
 
@@ -82,6 +96,13 @@ const PIN_TYPE_NAMES: Record<PinType, string> = {
   PATCH_PANEL: 'Panneau brassage',
   RJ45: 'Prise RJ-45',
   NRO: 'Arrivée Fibre NRO',
+  ROUTER: 'Routeur',
+  TEAMS_ROOM: 'Teams Room',
+  WEBCAM: 'Webcam',
+  DISPLAY: 'Écran',
+  SERVER: 'Serveur',
+  PDU: 'PDU',
+  BOX_5G: 'Box 5G',
   OTHER: 'Autre',
 };
 
@@ -151,6 +172,49 @@ function drawPinShapeCanvas(ctx: CanvasRenderingContext2D, pinType: PinType, col
       break;
     case 'NRO': // pentagon
       drawRegularPolygon(ctx, 5, 14);
+      ctx.fill(); ctx.stroke();
+      break;
+    case 'ROUTER': // rounded rectangle with antenna
+      roundRect(ctx, -13, -10, 26, 20, 5);
+      ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(-4, -10); ctx.lineTo(-4, -15); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(4, -10); ctx.lineTo(4, -15); ctx.stroke();
+      break;
+    case 'TEAMS_ROOM': // rounded square (screen shape)
+      roundRect(ctx, -13, -11, 26, 22, 5);
+      ctx.fill(); ctx.stroke();
+      break;
+    case 'WEBCAM': // circle with lens
+      ctx.beginPath();
+      ctx.arc(0, 0, 13, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 6, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    case 'DISPLAY': // wide rectangle (screen)
+      roundRect(ctx, -15, -10, 30, 20, 3);
+      ctx.fill(); ctx.stroke();
+      break;
+    case 'SERVER': // tall rectangle with lines
+      roundRect(ctx, -10, -14, 20, 28, 2);
+      ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1;
+      [-7, 0, 7].forEach(y => {
+        ctx.beginPath(); ctx.moveTo(-6, y); ctx.lineTo(6, y); ctx.stroke();
+      });
+      break;
+    case 'PDU': // vertical rectangle
+      roundRect(ctx, -8, -14, 16, 28, 2);
+      ctx.fill(); ctx.stroke();
+      break;
+    case 'BOX_5G': // rounded rectangle with signal
+      roundRect(ctx, -13, -10, 26, 20, 5);
       ctx.fill(); ctx.stroke();
       break;
     case 'OTHER':
@@ -423,6 +487,120 @@ function PinShape({ pinType, color }: { pinType: PinType; color: string }) {
           fill={color}
           stroke="#581c87"
           strokeWidth={2}
+        />
+      );
+
+    // Router: rounded rectangle
+    case 'ROUTER':
+      return (
+        <Rect
+          x={-13}
+          y={-10}
+          width={26}
+          height={20}
+          fill={color}
+          stroke="#9a3412"
+          strokeWidth={2}
+          cornerRadius={5}
+        />
+      );
+
+    // Teams Room: rounded square
+    case 'TEAMS_ROOM':
+      return (
+        <Rect
+          x={-13}
+          y={-11}
+          width={26}
+          height={22}
+          fill={color}
+          stroke="#0369a1"
+          strokeWidth={2}
+          cornerRadius={5}
+        />
+      );
+
+    // Webcam: circle with lens
+    case 'WEBCAM':
+      return (
+        <>
+          <Circle
+            radius={13}
+            fill={color}
+            stroke="#9d174d"
+            strokeWidth={2}
+          />
+          <Circle
+            radius={6}
+            stroke="#ffffff"
+            strokeWidth={1.5}
+            opacity={0.6}
+          />
+        </>
+      );
+
+    // Display: wide rectangle (screen)
+    case 'DISPLAY':
+      return (
+        <Rect
+          x={-15}
+          y={-10}
+          width={30}
+          height={20}
+          fill={color}
+          stroke="#3f6212"
+          strokeWidth={2}
+          cornerRadius={3}
+        />
+      );
+
+    // Server: tall rectangle with lines
+    case 'SERVER':
+      return (
+        <>
+          <Rect
+            x={-10}
+            y={-14}
+            width={20}
+            height={28}
+            fill={color}
+            stroke="#1e293b"
+            strokeWidth={2}
+            cornerRadius={2}
+          />
+          <Line points={[-6, -7, 6, -7]} stroke="#ffffff" strokeWidth={1} opacity={0.5} />
+          <Line points={[-6, 0, 6, 0]} stroke="#ffffff" strokeWidth={1} opacity={0.5} />
+          <Line points={[-6, 7, 6, 7]} stroke="#ffffff" strokeWidth={1} opacity={0.5} />
+        </>
+      );
+
+    // PDU: vertical rectangle
+    case 'PDU':
+      return (
+        <Rect
+          x={-8}
+          y={-14}
+          width={16}
+          height={28}
+          fill={color}
+          stroke="#92400e"
+          strokeWidth={2}
+          cornerRadius={2}
+        />
+      );
+
+    // Box 5G: rounded rectangle
+    case 'BOX_5G':
+      return (
+        <Rect
+          x={-13}
+          y={-10}
+          width={26}
+          height={20}
+          fill={color}
+          stroke="#9f1239"
+          strokeWidth={2}
+          cornerRadius={5}
         />
       );
 
@@ -1132,6 +1310,41 @@ function getLegendShapeStyle(pinType: PinType, color: string): { className: stri
       return {
         className: 'w-5 h-5',
         style: { ...base, clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' },
+      };
+    case 'ROUTER':
+      return {
+        className: 'w-5 h-4 rounded-[5px]',
+        style: base,
+      };
+    case 'TEAMS_ROOM':
+      return {
+        className: 'w-5 h-4 rounded-[5px]',
+        style: base,
+      };
+    case 'WEBCAM':
+      return {
+        className: 'w-5 h-5 rounded-full',
+        style: base,
+      };
+    case 'DISPLAY':
+      return {
+        className: 'w-6 h-4 rounded-[3px]',
+        style: base,
+      };
+    case 'SERVER':
+      return {
+        className: 'w-4 h-5 rounded-[2px]',
+        style: base,
+      };
+    case 'PDU':
+      return {
+        className: 'w-3 h-5 rounded-[2px]',
+        style: base,
+      };
+    case 'BOX_5G':
+      return {
+        className: 'w-5 h-4 rounded-[5px]',
+        style: base,
       };
     case 'OTHER':
     default:
