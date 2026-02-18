@@ -10,9 +10,15 @@ import { readFileSync } from 'fs';
     {
       provide: 'CASBIN_ENFORCER',
       useFactory: async () => {
+        // Parse DATABASE_URL to avoid TypeORM URL parsing issues
+        const dbUrl = new URL(process.env.DATABASE_URL);
         const adapter = await TypeORMAdapter.newAdapter({
           type: 'postgres',
-          url: process.env.DATABASE_URL,
+          host: dbUrl.hostname,
+          port: parseInt(dbUrl.port) || 5432,
+          username: decodeURIComponent(dbUrl.username),
+          password: decodeURIComponent(dbUrl.password),
+          database: dbUrl.pathname.replace('/', ''),
         });
 
         const modelPath = join(__dirname, '../../../casbin/model.conf');
