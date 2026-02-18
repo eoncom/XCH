@@ -121,7 +121,7 @@ export class SeedService {
         ],
         connectivity: {
           primary: { type: 'Fibre optique dédiée', provider: 'Orange Business', ref: 'FTTO-DEF-001' },
-          backup: { type: 'SD-WAN 4G/5G', provider: 'Fortinet', ref: 'SDWAN-DEF-001' },
+          backup: { type: '4G/5G', provider: 'Bouygues Telecom', ref: '4G-DEF-001' },
           cutProcedure: 'Contacter NOC EONCOM au 01 XX XX XX XX puis basculer SD-WAN',
         },
         notes: 'Grand chantier Tour Alto - 8 étages, salle IT au RDC et étage 4. Accès badge NEXITY + escorte zone serveur.',
@@ -141,7 +141,7 @@ export class SeedService {
         ],
         connectivity: {
           primary: { type: 'Fibre optique', provider: 'SFR Business', ref: 'FTTH-SAC-001' },
-          backup: { type: 'SD-WAN 5G', provider: 'Fortinet', ref: 'SDWAN-SAC-001' },
+          backup: { type: '5G', provider: 'Bouygues Telecom', ref: '5G-SAC-001' },
         },
         notes: 'Campus universitaire - 3 bâtiments interconnectés. WiFi haute densité (amphithéâtres 500 places).',
       },
@@ -161,7 +161,7 @@ export class SeedService {
         ],
         connectivity: {
           primary: { type: 'Fibre optique', provider: 'Bouygues Telecom', ref: 'FTTH-VEL-001' },
-          backup: { type: 'SD-WAN 4G', provider: 'Fortinet', ref: 'SDWAN-VEL-001' },
+          backup: { type: '4G', provider: 'Convergence', ref: '4G-VEL-001' },
         },
         notes: 'Immeuble bureaux 5 étages. Warning: climatisation salle serveur en maintenance depuis 2 semaines.',
       },
@@ -181,7 +181,7 @@ export class SeedService {
         ],
         connectivity: {
           primary: { type: 'FTTH', provider: 'Orange', ref: 'FTTH-STC-001' },
-          backup: { type: '4G Backup', provider: 'Bouygues', ref: '4G-STC-001' },
+          backup: { type: '4G', provider: 'Bouygues Telecom', ref: '4G-STC-001' },
         },
         notes: 'Résidence en construction - 2 bâtiments. Salle technique au sous-sol bâtiment A.',
       },
@@ -200,7 +200,7 @@ export class SeedService {
         ],
         connectivity: {
           primary: { type: 'Fibre optique', provider: 'Free Pro', ref: 'FTTH-MAS-001' },
-          backup: { type: 'SD-WAN 4G', provider: 'Fortinet', ref: 'SDWAN-MAS-001' },
+          backup: { type: '4G', provider: 'Convergence', ref: '4G-MAS-001' },
         },
         notes: 'Pôle commercial et bureaux - 3 étages. Déploiement phase 2 en cours.',
       },
@@ -219,7 +219,7 @@ export class SeedService {
           { name: 'Élodie Garnier', phone: '+33 6 45 67 89 01', email: 'e.garnier@marcel.fr', role: 'Chef de projet', isPrimary: true },
         ],
         connectivity: {
-          primary: { type: 'Box 5G', provider: 'Bouygues', ref: '5G-BOU-001' },
+          primary: { type: '5G', provider: 'Bouygues Telecom', ref: '5G-BOU-001' },
         },
         notes: 'Petit showroom temporaire - installation prévue semaine prochaine. Pas de salle serveur, équipement sous bureau.',
       },
@@ -374,14 +374,14 @@ export class SeedService {
       // SD-WAN / Firewall Fortinet
       { siteId: defense.id, rackId: defR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 100F', serialNumber: 'FGT100F-DEF-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN principal - HA Active', networkInfo: { ip: '10.1.0.1', hostname: 'FW-DEF-01', vlan: '1' } },
       { siteId: defense.id, rackId: defR1.id, rackPositionU: 2, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 100F', serialNumber: 'FGT100F-DEF-002', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN secondaire - HA Passive', networkInfo: { ip: '10.1.0.2', hostname: 'FW-DEF-02', vlan: '1' } },
-      // Switches Cisco
-      { siteId: defense.id, rackId: defR1.id, rackPositionU: 5, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9300-48P', serialNumber: 'C9300-DEF-001', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur réseau - Stack Master', networkInfo: { ip: '10.1.1.1', hostname: 'SW-DEF-CORE-01', vlan: '1' } },
-      { siteId: defense.id, rackId: defR1.id, rackPositionU: 6, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9300-48P', serialNumber: 'C9300-DEF-002', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur réseau - Stack Member', networkInfo: { ip: '10.1.1.2', hostname: 'SW-DEF-CORE-02', vlan: '1' } },
-      { siteId: defense.id, rackId: defR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-48P', serialNumber: 'C9200-DEF-003', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 1-2', networkInfo: { ip: '10.1.2.1', hostname: 'SW-DEF-DIST-01' } },
-      { siteId: defense.id, rackId: defR2.id, rackPositionU: 2, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-48P', serialNumber: 'C9200-DEF-004', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 3-4', networkInfo: { ip: '10.1.2.2', hostname: 'SW-DEF-DIST-02' } },
-      { siteId: defense.id, rackId: defR3.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-48P', serialNumber: 'C9200-DEF-005', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 5-6', networkInfo: { ip: '10.1.3.1', hostname: 'SW-DEF-DIST-03' } },
-      { siteId: defense.id, rackId: defR3.id, rackPositionU: 2, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-24P', serialNumber: 'C9200-DEF-006', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 7-8', networkInfo: { ip: '10.1.3.2', hostname: 'SW-DEF-DIST-04' } },
-      { siteId: defense.id, rackId: defLT1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-24P', serialNumber: 'C9200-DEF-007', status: AssetStatus.IN_SERVICE, notes: 'Switch local technique étage 4' },
+      // Switches Fortinet
+      { siteId: defense.id, rackId: defR1.id, rackPositionU: 5, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-POE', serialNumber: 'FS148E-DEF-001', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur réseau - Stack Master', networkInfo: { ip: '10.1.1.1', hostname: 'SW-DEF-CORE-01', vlan: '1' } },
+      { siteId: defense.id, rackId: defR1.id, rackPositionU: 6, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-POE', serialNumber: 'FS148E-DEF-002', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur réseau - Stack Member', networkInfo: { ip: '10.1.1.2', hostname: 'SW-DEF-CORE-02', vlan: '1' } },
+      { siteId: defense.id, rackId: defR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-FPOE', serialNumber: 'FS148E-DEF-003', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 1-2', networkInfo: { ip: '10.1.2.1', hostname: 'SW-DEF-DIST-01' } },
+      { siteId: defense.id, rackId: defR2.id, rackPositionU: 2, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-FPOE', serialNumber: 'FS148E-DEF-004', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 3-4', networkInfo: { ip: '10.1.2.2', hostname: 'SW-DEF-DIST-02' } },
+      { siteId: defense.id, rackId: defR3.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 124E-POE', serialNumber: 'FS124E-DEF-005', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 5-6', networkInfo: { ip: '10.1.3.1', hostname: 'SW-DEF-DIST-03' } },
+      { siteId: defense.id, rackId: defR3.id, rackPositionU: 2, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 108E-POE', serialNumber: 'FS108E-DEF-006', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 7-8', networkInfo: { ip: '10.1.3.2', hostname: 'SW-DEF-DIST-04' } },
+      { siteId: defense.id, rackId: defLT1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 108E-POE', serialNumber: 'FS108E-DEF-007', status: AssetStatus.IN_SERVICE, notes: 'Switch local technique étage 4' },
       // Patch Panels
       { siteId: defense.id, rackId: defR1.id, rackPositionU: 8, rackHeightU: 1, type: AssetType.PATCH_PANEL, manufacturer: 'Legrand', model: 'Patch Panel 48 ports Cat6a', serialNumber: 'PP-DEF-001', status: AssetStatus.IN_SERVICE, notes: 'Panneau brassage cœur' },
       { siteId: defense.id, rackId: defR2.id, rackPositionU: 4, rackHeightU: 1, type: AssetType.PATCH_PANEL, manufacturer: 'Legrand', model: 'Patch Panel 48 ports Cat6a', serialNumber: 'PP-DEF-002', status: AssetStatus.IN_SERVICE, notes: 'Panneau brassage distribution 1' },
@@ -389,20 +389,20 @@ export class SeedService {
       // PDUs
       { siteId: defense.id, rackId: defR1.id, rackPositionU: 40, rackHeightU: 2, type: AssetType.PDU, manufacturer: 'APC', model: 'Rack PDU 2G Metered', serialNumber: 'PDU-DEF-001', status: AssetStatus.IN_SERVICE },
       { siteId: defense.id, rackId: defR2.id, rackPositionU: 22, rackHeightU: 2, type: AssetType.PDU, manufacturer: 'APC', model: 'Rack PDU 2G Metered', serialNumber: 'PDU-DEF-002', status: AssetStatus.IN_SERVICE },
-      // Access Points WiFi - Cisco Meraki
-      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-DEF-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Open Space', notes: 'AP WiFi 6', networkInfo: { ip: '10.1.10.11', hostname: 'AP-DEF-E1-01' } },
-      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-DEF-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 2 - Open Space', networkInfo: { ip: '10.1.10.12', hostname: 'AP-DEF-E2-01' } },
-      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-DEF-003', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Salle réunion', networkInfo: { ip: '10.1.10.13', hostname: 'AP-DEF-E3-01' } },
-      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-DEF-004', status: AssetStatus.IN_SERVICE, locationText: 'Étage 4 - Direction', networkInfo: { ip: '10.1.10.14', hostname: 'AP-DEF-E4-01' } },
-      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-DEF-005', status: AssetStatus.IN_SERVICE, locationText: 'Étage 5 - Open Space', networkInfo: { ip: '10.1.10.15', hostname: 'AP-DEF-E5-01' } },
-      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-DEF-006', status: AssetStatus.IN_SERVICE, locationText: 'Étage 6 - Open Space', networkInfo: { ip: '10.1.10.16', hostname: 'AP-DEF-E6-01' } },
-      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-DEF-007', status: AssetStatus.IN_SERVICE, locationText: 'Étage 7 - Salle formation', networkInfo: { ip: '10.1.10.17', hostname: 'AP-DEF-E7-01' } },
-      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-DEF-008', status: AssetStatus.IN_SERVICE, locationText: 'Étage 8 - Présidence', networkInfo: { ip: '10.1.10.18', hostname: 'AP-DEF-E8-01' } },
-      // Imprimantes
-      { siteId: defense.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'LaserJet Enterprise M507dn', serialNumber: 'HP-DEF-IMP-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Espace copie', networkInfo: { ip: '10.1.20.11', hostname: 'IMP-DEF-E1' } },
-      { siteId: defense.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'LaserJet Enterprise M507dn', serialNumber: 'HP-DEF-IMP-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Espace copie', networkInfo: { ip: '10.1.20.13', hostname: 'IMP-DEF-E3' } },
-      { siteId: defense.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'Color LaserJet Pro M479fdw', serialNumber: 'HP-DEF-IMP-003', status: AssetStatus.IN_SERVICE, locationText: 'Étage 5 - Espace copie', networkInfo: { ip: '10.1.20.15', hostname: 'IMP-DEF-E5' } },
-      { siteId: defense.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'Color LaserJet Pro M479fdw', serialNumber: 'HP-DEF-IMP-004', status: AssetStatus.IN_SERVICE, locationText: 'Étage 8 - Direction', networkInfo: { ip: '10.1.20.18', hostname: 'IMP-DEF-E8' } },
+      // Access Points WiFi - Fortinet FortiAP
+      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-DEF-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Open Space', notes: 'AP WiFi 6', networkInfo: { ip: '10.1.10.11', hostname: 'AP-DEF-E1-01' } },
+      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-DEF-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 2 - Open Space', networkInfo: { ip: '10.1.10.12', hostname: 'AP-DEF-E2-01' } },
+      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-DEF-003', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Salle réunion', networkInfo: { ip: '10.1.10.13', hostname: 'AP-DEF-E3-01' } },
+      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 431F', serialNumber: 'FAP431F-DEF-004', status: AssetStatus.IN_SERVICE, locationText: 'Étage 4 - Direction', notes: 'AP WiFi 6E haute densité', networkInfo: { ip: '10.1.10.14', hostname: 'AP-DEF-E4-01' } },
+      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-DEF-005', status: AssetStatus.IN_SERVICE, locationText: 'Étage 5 - Open Space', networkInfo: { ip: '10.1.10.15', hostname: 'AP-DEF-E5-01' } },
+      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-DEF-006', status: AssetStatus.IN_SERVICE, locationText: 'Étage 6 - Open Space', networkInfo: { ip: '10.1.10.16', hostname: 'AP-DEF-E6-01' } },
+      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-DEF-007', status: AssetStatus.IN_SERVICE, locationText: 'Étage 7 - Salle formation', networkInfo: { ip: '10.1.10.17', hostname: 'AP-DEF-E7-01' } },
+      { siteId: defense.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 431F', serialNumber: 'FAP431F-DEF-008', status: AssetStatus.IN_SERVICE, locationText: 'Étage 8 - Présidence', notes: 'AP WiFi 6E haute densité', networkInfo: { ip: '10.1.10.18', hostname: 'AP-DEF-E8-01' } },
+      // Imprimantes Canon
+      { siteId: defense.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-DEF-IMP-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Espace copie', networkInfo: { ip: '10.1.20.11', hostname: 'IMP-DEF-E1' } },
+      { siteId: defense.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-DEF-IMP-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Espace copie', networkInfo: { ip: '10.1.20.13', hostname: 'IMP-DEF-E3' } },
+      { siteId: defense.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-DEF-IMP-003', status: AssetStatus.IN_SERVICE, locationText: 'Étage 5 - Espace copie', networkInfo: { ip: '10.1.20.15', hostname: 'IMP-DEF-E5' } },
+      { siteId: defense.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-DEF-IMP-004', status: AssetStatus.IN_SERVICE, locationText: 'Étage 8 - Direction', networkInfo: { ip: '10.1.20.18', hostname: 'IMP-DEF-E8' } },
       // Teams Room Yealink
       { siteId: defense.id, type: AssetType.TEAMS_ROOM, manufacturer: 'Yealink', model: 'MeetingBoard 65', serialNumber: 'YLK-DEF-TR-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 4 - Salle Haussmann (12 places)', notes: 'Teams Room complète avec caméra UVC84 et micro VCM38' },
       { siteId: defense.id, type: AssetType.TEAMS_ROOM, manufacturer: 'Yealink', model: 'MeetingBar A30', serialNumber: 'YLK-DEF-TR-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 4 - Salle Rivoli (6 places)', notes: 'Teams Room pour moyenne salle' },
@@ -416,24 +416,24 @@ export class SeedService {
       // =====================================================================
       // SD-WAN Fortinet
       { siteId: saclay.id, rackId: sacR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 80F', serialNumber: 'FGT80F-SAC-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN campus', networkInfo: { ip: '10.2.0.1', hostname: 'FW-SAC-01' } },
-      // Switches
-      { siteId: saclay.id, rackId: sacR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9300-48P', serialNumber: 'C9300-SAC-001', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur campus', networkInfo: { ip: '10.2.1.1', hostname: 'SW-SAC-CORE-01' } },
-      { siteId: saclay.id, rackId: sacR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-48P', serialNumber: 'C9200-SAC-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution bâtiment B' },
-      { siteId: saclay.id, rackId: sacR2.id, rackPositionU: 2, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-48P', serialNumber: 'C9200-SAC-003', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution bâtiment C' },
-      { siteId: saclay.id, rackId: sacLT1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-24P', serialNumber: 'C9200-SAC-004', status: AssetStatus.IN_SERVICE, notes: 'Switch local technique bat B' },
+      // Switches Fortinet
+      { siteId: saclay.id, rackId: sacR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-POE', serialNumber: 'FS148E-SAC-001', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur campus', networkInfo: { ip: '10.2.1.1', hostname: 'SW-SAC-CORE-01' } },
+      { siteId: saclay.id, rackId: sacR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-FPOE', serialNumber: 'FS148E-SAC-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution bâtiment B' },
+      { siteId: saclay.id, rackId: sacR2.id, rackPositionU: 2, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-FPOE', serialNumber: 'FS148E-SAC-003', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution bâtiment C' },
+      { siteId: saclay.id, rackId: sacLT1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 108E-POE', serialNumber: 'FS108E-SAC-004', status: AssetStatus.IN_SERVICE, notes: 'Switch local technique bat B' },
       // Patch Panels
       { siteId: saclay.id, rackId: sacR1.id, rackPositionU: 5, rackHeightU: 1, type: AssetType.PATCH_PANEL, manufacturer: 'Legrand', model: 'Patch Panel 48 ports Cat6a', serialNumber: 'PP-SAC-001', status: AssetStatus.IN_SERVICE },
-      // AP WiFi
-      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR56', serialNumber: 'MR56-SAC-001', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - Amphithéâtre 1', notes: 'AP haute densité WiFi 6E', networkInfo: { ip: '10.2.10.1', hostname: 'AP-SAC-A-AMPHI1' } },
-      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR56', serialNumber: 'MR56-SAC-002', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - Amphithéâtre 2', networkInfo: { ip: '10.2.10.2', hostname: 'AP-SAC-A-AMPHI2' } },
-      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-SAC-003', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - RDC Accueil', networkInfo: { ip: '10.2.10.3', hostname: 'AP-SAC-B-RDC' } },
-      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-SAC-004', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - Étage 1', networkInfo: { ip: '10.2.10.4', hostname: 'AP-SAC-B-E1' } },
-      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-SAC-005', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment C - Cafétéria', networkInfo: { ip: '10.2.10.5', hostname: 'AP-SAC-C-CAF' } },
-      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-SAC-006', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment C - Bibliothèque', networkInfo: { ip: '10.2.10.6', hostname: 'AP-SAC-C-BIB' } },
-      // Imprimantes
-      { siteId: saclay.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'LaserJet Enterprise M507dn', serialNumber: 'HP-SAC-IMP-001', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - Secrétariat' },
-      { siteId: saclay.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'Color LaserJet Pro M479fdw', serialNumber: 'HP-SAC-IMP-002', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - Salle profs' },
-      { siteId: saclay.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'LaserJet Enterprise M507dn', serialNumber: 'HP-SAC-IMP-003', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment C - Administration' },
+      // AP WiFi Fortinet
+      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 431F', serialNumber: 'FAP431F-SAC-001', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - Amphithéâtre 1', notes: 'AP haute densité WiFi 6E', networkInfo: { ip: '10.2.10.1', hostname: 'AP-SAC-A-AMPHI1' } },
+      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 431F', serialNumber: 'FAP431F-SAC-002', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - Amphithéâtre 2', networkInfo: { ip: '10.2.10.2', hostname: 'AP-SAC-A-AMPHI2' } },
+      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-SAC-003', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - RDC Accueil', networkInfo: { ip: '10.2.10.3', hostname: 'AP-SAC-B-RDC' } },
+      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-SAC-004', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - Étage 1', networkInfo: { ip: '10.2.10.4', hostname: 'AP-SAC-B-E1' } },
+      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-SAC-005', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment C - Cafétéria', networkInfo: { ip: '10.2.10.5', hostname: 'AP-SAC-C-CAF' } },
+      { siteId: saclay.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-SAC-006', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment C - Bibliothèque', networkInfo: { ip: '10.2.10.6', hostname: 'AP-SAC-C-BIB' } },
+      // Imprimantes Canon
+      { siteId: saclay.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-SAC-IMP-001', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - Secrétariat' },
+      { siteId: saclay.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-SAC-IMP-002', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - Salle profs' },
+      { siteId: saclay.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-SAC-IMP-003', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment C - Administration' },
       // Teams Room
       { siteId: saclay.id, type: AssetType.TEAMS_ROOM, manufacturer: 'Yealink', model: 'MeetingBoard 65', serialNumber: 'YLK-SAC-TR-001', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - Salle Conseil', notes: 'Salle de conseil 20 places' },
       { siteId: saclay.id, type: AssetType.TEAMS_ROOM, manufacturer: 'Yealink', model: 'MeetingBar A30', serialNumber: 'YLK-SAC-TR-002', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - Salle réunion 1' },
@@ -443,19 +443,19 @@ export class SeedService {
       // =====================================================================
       // SD-WAN Fortinet
       { siteId: velizy.id, rackId: velR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 80F', serialNumber: 'FGT80F-VEL-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN principal', networkInfo: { ip: '10.3.0.1', hostname: 'FW-VEL-01' } },
-      // Switches
-      { siteId: velizy.id, rackId: velR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9300-48P', serialNumber: 'C9300-VEL-001', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur', networkInfo: { ip: '10.3.1.1', hostname: 'SW-VEL-CORE-01' } },
-      { siteId: velizy.id, rackId: velR1.id, rackPositionU: 4, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-48P', serialNumber: 'C9200-VEL-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 1-3' },
-      { siteId: velizy.id, rackId: velR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-48P', serialNumber: 'C9200-VEL-003', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 4-5' },
-      // AP WiFi
-      { siteId: velizy.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-VEL-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Open Space' },
-      { siteId: velizy.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-VEL-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 2 - Open Space' },
-      { siteId: velizy.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-VEL-003', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Salles réunion' },
-      { siteId: velizy.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-VEL-004', status: AssetStatus.IN_SERVICE, locationText: 'Étage 4 - Open Space' },
-      // Imprimantes
-      { siteId: velizy.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'LaserJet Enterprise M507dn', serialNumber: 'HP-VEL-IMP-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Zone copie' },
-      { siteId: velizy.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'Color LaserJet Pro M479fdw', serialNumber: 'HP-VEL-IMP-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Zone copie' },
-      { siteId: velizy.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'LaserJet Enterprise M507dn', serialNumber: 'HP-VEL-IMP-003', status: AssetStatus.OUT_OF_SERVICE, locationText: 'Étage 5 - Zone copie', notes: 'En panne - ticket support HP ouvert' },
+      // Switches Fortinet
+      { siteId: velizy.id, rackId: velR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-POE', serialNumber: 'FS148E-VEL-001', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur', networkInfo: { ip: '10.3.1.1', hostname: 'SW-VEL-CORE-01' } },
+      { siteId: velizy.id, rackId: velR1.id, rackPositionU: 4, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 124E-POE', serialNumber: 'FS124E-VEL-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 1-3' },
+      { siteId: velizy.id, rackId: velR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 124E-POE', serialNumber: 'FS124E-VEL-003', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 4-5' },
+      // AP WiFi Fortinet
+      { siteId: velizy.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-VEL-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Open Space' },
+      { siteId: velizy.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-VEL-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 2 - Open Space' },
+      { siteId: velizy.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-VEL-003', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Salles réunion' },
+      { siteId: velizy.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-VEL-004', status: AssetStatus.IN_SERVICE, locationText: 'Étage 4 - Open Space' },
+      // Imprimantes Canon
+      { siteId: velizy.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-VEL-IMP-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Zone copie' },
+      { siteId: velizy.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-VEL-IMP-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Zone copie' },
+      { siteId: velizy.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-VEL-IMP-003', status: AssetStatus.OUT_OF_SERVICE, locationText: 'Étage 5 - Zone copie', notes: 'En panne - ticket support Canon ouvert' },
       // Teams Room
       { siteId: velizy.id, type: AssetType.TEAMS_ROOM, manufacturer: 'Yealink', model: 'MeetingBar A30', serialNumber: 'YLK-VEL-TR-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 2 - Salle Concorde (8 places)' },
       { siteId: velizy.id, type: AssetType.TEAMS_ROOM, manufacturer: 'Yealink', model: 'MeetingBar A20', serialNumber: 'YLK-VEL-TR-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 4 - Salle Opéra (4 places)' },
@@ -465,17 +465,17 @@ export class SeedService {
       // =====================================================================
       // SD-WAN
       { siteId: stcloud.id, rackId: stcR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 60F', serialNumber: 'FGT60F-STC-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN', networkInfo: { ip: '10.4.0.1', hostname: 'FW-STC-01' } },
-      // Switches
-      { siteId: stcloud.id, rackId: stcR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-48P', serialNumber: 'C9200-STC-001', status: AssetStatus.IN_SERVICE, notes: 'Switch principal' },
-      { siteId: stcloud.id, rackId: stcR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-24P', serialNumber: 'C9200-STC-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution' },
-      // AP WiFi
-      { siteId: stcloud.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-STC-001', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - RDC Hall' },
-      { siteId: stcloud.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-STC-002', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - Étage 1' },
-      { siteId: stcloud.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-STC-003', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - RDC' },
-      { siteId: stcloud.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-STC-004', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - Étage 1' },
-      // Imprimantes
-      { siteId: stcloud.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'LaserJet Enterprise M507dn', serialNumber: 'HP-STC-IMP-001', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - RDC Accueil' },
-      { siteId: stcloud.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'Color LaserJet Pro M479fdw', serialNumber: 'HP-STC-IMP-002', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - Étage 1 Bureau' },
+      // Switches Fortinet
+      { siteId: stcloud.id, rackId: stcR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 124E-POE', serialNumber: 'FS124E-STC-001', status: AssetStatus.IN_SERVICE, notes: 'Switch principal' },
+      { siteId: stcloud.id, rackId: stcR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 108E-POE', serialNumber: 'FS108E-STC-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution' },
+      // AP WiFi Fortinet
+      { siteId: stcloud.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-STC-001', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - RDC Hall' },
+      { siteId: stcloud.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-STC-002', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - Étage 1' },
+      { siteId: stcloud.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-STC-003', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - RDC' },
+      { siteId: stcloud.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-STC-004', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - Étage 1' },
+      // Imprimantes Canon
+      { siteId: stcloud.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-STC-IMP-001', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - RDC Accueil' },
+      { siteId: stcloud.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-STC-IMP-002', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment B - Étage 1 Bureau' },
       // Teams Room
       { siteId: stcloud.id, type: AssetType.TEAMS_ROOM, manufacturer: 'Yealink', model: 'MeetingBar A20', serialNumber: 'YLK-STC-TR-001', status: AssetStatus.IN_SERVICE, locationText: 'Bâtiment A - Salle réunion (6 places)' },
 
@@ -484,25 +484,25 @@ export class SeedService {
       // =====================================================================
       // SD-WAN
       { siteId: massy.id, rackId: masR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 60F', serialNumber: 'FGT60F-MAS-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN', networkInfo: { ip: '10.5.0.1', hostname: 'FW-MAS-01' } },
-      // Switches
-      { siteId: massy.id, rackId: masR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-48P', serialNumber: 'C9200-MAS-001', status: AssetStatus.IN_SERVICE, notes: 'Switch principal' },
-      { siteId: massy.id, rackId: masR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Cisco', model: 'Catalyst 9200-24P', serialNumber: 'C9200-MAS-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution WiFi' },
-      // AP WiFi
-      { siteId: massy.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-MAS-001', status: AssetStatus.IN_SERVICE, locationText: 'RDC - Zone commerciale' },
-      { siteId: massy.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-MAS-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Bureaux' },
-      { siteId: massy.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-MAS-003', status: AssetStatus.IN_SERVICE, locationText: 'Étage 2 - Open Space' },
-      { siteId: massy.id, type: AssetType.WIFI_AP, manufacturer: 'Cisco Meraki', model: 'MR46', serialNumber: 'MR46-MAS-004', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Direction' },
-      // Imprimantes
-      { siteId: massy.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'LaserJet Enterprise M507dn', serialNumber: 'HP-MAS-IMP-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Zone copie' },
-      { siteId: massy.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'Color LaserJet Pro M479fdw', serialNumber: 'HP-MAS-IMP-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Direction' },
+      // Switches Fortinet
+      { siteId: massy.id, rackId: masR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 124E-POE', serialNumber: 'FS124E-MAS-001', status: AssetStatus.IN_SERVICE, notes: 'Switch principal' },
+      { siteId: massy.id, rackId: masR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 108E-POE', serialNumber: 'FS108E-MAS-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution WiFi' },
+      // AP WiFi Fortinet
+      { siteId: massy.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-MAS-001', status: AssetStatus.IN_SERVICE, locationText: 'RDC - Zone commerciale' },
+      { siteId: massy.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-MAS-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Bureaux' },
+      { siteId: massy.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-MAS-003', status: AssetStatus.IN_SERVICE, locationText: 'Étage 2 - Open Space' },
+      { siteId: massy.id, type: AssetType.WIFI_AP, manufacturer: 'Fortinet', model: 'FortiAP 231F', serialNumber: 'FAP231F-MAS-004', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Direction' },
+      // Imprimantes Canon
+      { siteId: massy.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-MAS-IMP-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 1 - Zone copie' },
+      { siteId: massy.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-MAS-IMP-002', status: AssetStatus.IN_SERVICE, locationText: 'Étage 3 - Direction' },
       // Teams Room
       { siteId: massy.id, type: AssetType.TEAMS_ROOM, manufacturer: 'Yealink', model: 'MeetingBar A30', serialNumber: 'YLK-MAS-TR-001', status: AssetStatus.IN_SERVICE, locationText: 'Étage 2 - Salle réunion (8 places)' },
 
       // =====================================================================
       // BOULOGNE - PETIT CHANTIER (pas de baie, équipement minimal)
       // =====================================================================
-      { siteId: boulogne.id, type: AssetType.ROUTER, manufacturer: 'Bouygues Telecom', model: 'Bbox 5G Pro', serialNumber: 'BBOX5G-BOU-001', status: AssetStatus.IN_SERVICE, locationText: 'Sous bureau accueil', notes: 'Box 5G principale - débit 300 Mbps' },
-      { siteId: boulogne.id, type: AssetType.PRINTER, manufacturer: 'HP', model: 'LaserJet Pro M404dn', serialNumber: 'HP-BOU-IMP-001', status: AssetStatus.STOCK, locationText: 'Réserve', notes: 'Pas encore installée' },
+      { siteId: boulogne.id, type: AssetType.ROUTER, manufacturer: 'TP-Link', model: 'Deco X80-5G', serialNumber: 'TPL5G-BOU-001', status: AssetStatus.IN_SERVICE, locationText: 'Sous bureau accueil', notes: 'Routeur 5G principal - débit 300 Mbps' },
+      { siteId: boulogne.id, type: AssetType.PRINTER, manufacturer: 'Canon', model: 'imagePRESS C5800', serialNumber: 'CAN-BOU-IMP-001', status: AssetStatus.STOCK, locationText: 'Réserve', notes: 'Pas encore installée' },
     ];
 
     const assets = [];
@@ -535,19 +535,19 @@ export class SeedService {
     const tech1 = users.find(u => u.name === 'Marc Leroy');
     const tech2 = users.find(u => u.name === 'Karim Benali');
 
-    const impVelHS = assets.find(a => a.serialNumber === 'HP-VEL-IMP-003');
-    const impBouStock = assets.find(a => a.serialNumber === 'HP-BOU-IMP-001');
+    const impVelHS = assets.find(a => a.serialNumber === 'CAN-VEL-IMP-003');
+    const impBouStock = assets.find(a => a.serialNumber === 'CAN-BOU-IMP-001');
 
     const tasksData = [
       // Défense
-      { siteId: defense.id, title: 'Remplacement switch étage 7', description: 'Le switch C9200-24P montre des erreurs CRC sur ports 1-8. Prévoir remplacement sous garantie Cisco TAC.', status: TaskStatus.IN_PROGRESS, priority: TaskPriority.HIGH, assignedTo: tech1?.id, createdBy: manager?.id || tech1?.id, dueDate: new Date(Date.now() + 3 * 24 * 3600000) },
+      { siteId: defense.id, title: 'Remplacement switch étage 7', description: 'Le FortiSwitch 108E-POE montre des erreurs CRC sur ports 1-8. Prévoir remplacement sous contrat Fortinet.', status: TaskStatus.IN_PROGRESS, priority: TaskPriority.HIGH, assignedTo: tech1?.id, createdBy: manager?.id || tech1?.id, dueDate: new Date(Date.now() + 3 * 24 * 3600000) },
       { siteId: defense.id, title: 'Mise à jour firmware FortiGate', description: 'Passer les 2 FortiGate 100F en FortiOS 7.4.3. Planifier fenêtre maintenance nuit.', status: TaskStatus.TODO, priority: TaskPriority.MEDIUM, assignedTo: tech1?.id, createdBy: manager?.id || tech1?.id, dueDate: new Date(Date.now() + 14 * 24 * 3600000) },
-      { siteId: defense.id, title: 'Ajout AP WiFi étage 2 - zone meeting', description: 'Couverture WiFi insuffisante dans la nouvelle zone meeting étage 2. Commander et installer 1 MR46 supplémentaire.', status: TaskStatus.TODO, priority: TaskPriority.LOW, assignedTo: tech2?.id, createdBy: manager?.id || tech2?.id },
+      { siteId: defense.id, title: 'Ajout AP WiFi étage 2 - zone meeting', description: 'Couverture WiFi insuffisante dans la nouvelle zone meeting étage 2. Commander et installer 1 FortiAP 231F supplémentaire.', status: TaskStatus.TODO, priority: TaskPriority.LOW, assignedTo: tech2?.id, createdBy: manager?.id || tech2?.id },
       // Saclay
-      { siteId: saclay.id, title: 'Optimisation WiFi amphithéâtres', description: 'Ajuster les canaux et puissance des MR56 dans les amphithéâtres. Pic de charge pendant les cours (500 utilisateurs).', status: TaskStatus.IN_PROGRESS, priority: TaskPriority.HIGH, assignedTo: tech2?.id, createdBy: manager?.id || tech2?.id, dueDate: new Date(Date.now() + 5 * 24 * 3600000) },
+      { siteId: saclay.id, title: 'Optimisation WiFi amphithéâtres', description: 'Ajuster les canaux et puissance des FortiAP 431F dans les amphithéâtres. Pic de charge pendant les cours (500 utilisateurs).', status: TaskStatus.IN_PROGRESS, priority: TaskPriority.HIGH, assignedTo: tech2?.id, createdBy: manager?.id || tech2?.id, dueDate: new Date(Date.now() + 5 * 24 * 3600000) },
       { siteId: saclay.id, title: 'Câblage réseau bâtiment C - étage 2', description: 'Tirer 24 prises RJ45 Cat6a pour le nouvel open space bâtiment C étage 2.', status: TaskStatus.TODO, priority: TaskPriority.MEDIUM, createdBy: manager?.id || tech1?.id, dueDate: new Date(Date.now() + 21 * 24 * 3600000) },
       // Vélizy
-      { siteId: velizy.id, title: 'Réparation imprimante étage 5', description: 'Imprimante HP M507dn en panne. Ticket HP #INC-2024-4521 ouvert. Attente pièce de rechange.', status: TaskStatus.BLOCKED, priority: TaskPriority.MEDIUM, assignedTo: tech1?.id, createdBy: manager?.id || tech1?.id, assetId: impVelHS?.id },
+      { siteId: velizy.id, title: 'Réparation imprimante étage 5', description: 'Imprimante Canon C5800 en panne. Ticket Canon #INC-2024-4521 ouvert. Attente pièce de rechange.', status: TaskStatus.BLOCKED, priority: TaskPriority.MEDIUM, assignedTo: tech1?.id, createdBy: manager?.id || tech1?.id, assetId: impVelHS?.id },
       { siteId: velizy.id, title: 'Vérification climatisation salle serveur', description: 'Alerte température salle serveur. Climatisation en maintenance depuis 2 semaines. Vérifier état et planifier intervention Dalkia.', status: TaskStatus.IN_PROGRESS, priority: TaskPriority.URGENT, assignedTo: tech1?.id, createdBy: manager?.id || tech1?.id, dueDate: new Date(Date.now() + 1 * 24 * 3600000) },
       // Saint-Cloud
       { siteId: stcloud.id, title: 'Test réseau bâtiment B', description: 'Valider le déploiement réseau complet bâtiment B : connectivité, WiFi, VLAN, QoS.', status: TaskStatus.TODO, priority: TaskPriority.HIGH, assignedTo: tech2?.id, createdBy: manager?.id || tech2?.id, dueDate: new Date(Date.now() + 7 * 24 * 3600000) },
@@ -557,7 +557,7 @@ export class SeedService {
       { siteId: boulogne.id, title: 'Installation complète showroom', description: 'Installer la box 5G, configurer le WiFi, brancher l\'imprimante, tester la connectivité. Prévoir 1 journée sur site.', status: TaskStatus.TODO, priority: TaskPriority.HIGH, assignedTo: tech1?.id, createdBy: manager?.id || tech1?.id, assetId: impBouStock?.id, dueDate: new Date(Date.now() + 5 * 24 * 3600000) },
       // Tâches terminées
       { siteId: defense.id, title: 'Installation Teams Room salle Haussmann', description: 'Installation et configuration du MeetingBoard 65 Yealink dans la salle Haussmann étage 4.', status: TaskStatus.DONE, priority: TaskPriority.HIGH, assignedTo: tech1?.id, createdBy: manager?.id || tech1?.id, completedAt: new Date(Date.now() - 5 * 24 * 3600000) },
-      { siteId: saclay.id, title: 'Déploiement AP WiFi bibliothèque', description: 'Installation du MR46 dans la bibliothèque bâtiment C. Configuration SSID et profil de sécurité.', status: TaskStatus.DONE, priority: TaskPriority.MEDIUM, assignedTo: tech2?.id, createdBy: manager?.id || tech2?.id, completedAt: new Date(Date.now() - 3 * 24 * 3600000) },
+      { siteId: saclay.id, title: 'Déploiement AP WiFi bibliothèque', description: 'Installation du FortiAP 231F dans la bibliothèque bâtiment C. Configuration SSID et profil de sécurité FortiGate.', status: TaskStatus.DONE, priority: TaskPriority.MEDIUM, assignedTo: tech2?.id, createdBy: manager?.id || tech2?.id, completedAt: new Date(Date.now() - 3 * 24 * 3600000) },
     ];
 
     const tasks = [];
@@ -636,11 +636,11 @@ export class SeedService {
 
     const contactData = [
       { name: 'Orange Business Services', typeId: telecom.id, email: 'support@orange-business.com', phone: '3900', company: 'Orange', role: 'Opérateur fibre & MPLS', notes: 'Contrat cadre liaisons FTTH/FTTO. Ref contrat: OBS-2024-FR-1234' },
-      { name: 'SFR Business', typeId: telecom.id, email: 'pro@sfr.fr', phone: '1023', company: 'SFR', role: 'Opérateur backup', notes: 'Liaisons fibre Saclay' },
-      { name: 'Fortinet France', typeId: securite.id, email: 'support-fr@fortinet.com', phone: '+33 1 72 52 40 00', company: 'Fortinet', role: 'Support SD-WAN & Sécurité', notes: 'Contrat FortiCare Premium sur tous les FortiGate. TAC 24/7.' },
-      { name: 'Cisco TAC France', typeId: reseau.id, email: 'tac@cisco.com', phone: '+33 1 58 04 60 00', company: 'Cisco', role: 'Support réseau', notes: 'SmartNet sur switches Catalyst 9200/9300. RMA J+1.' },
-      { name: 'Cisco Meraki Support', typeId: internet.id, email: 'support@meraki.com', phone: '+33 1 70 39 17 05', company: 'Cisco Meraki', role: 'Support WiFi Cloud', notes: 'Licence Enterprise sur tous les AP MR46/MR56' },
-      { name: 'HP Support Pro', typeId: maintenance.id, email: 'support-fr@hp.com', phone: '01 57 32 32 32', company: 'HP Inc.', role: 'Support imprimantes', notes: 'Contrat Care Pack Next Business Day sur imprimantes Enterprise' },
+      { name: 'SFR Business', typeId: telecom.id, email: 'pro@sfr.fr', phone: '1023', company: 'SFR', role: 'Opérateur fibre', notes: 'Liaisons fibre Saclay' },
+      { name: 'Bouygues Telecom Entreprises', typeId: telecom.id, email: 'pro@bouyguestelecom.fr', phone: '1064', company: 'Bouygues Telecom', role: 'Opérateur mobile & fibre', notes: 'Liaisons 4G/5G backup. Contrat Bouygues Entreprises multi-sites.' },
+      { name: 'Convergence', typeId: internet.id, email: 'support@convergence-groupe.com', phone: '+33 1 55 17 00 00', company: 'Convergence', role: 'Opérateur télécom & réseau', notes: 'Liaisons 4G backup sites Vélizy et Massy. Support 24/7.' },
+      { name: 'Fortinet France', typeId: securite.id, email: 'support-fr@fortinet.com', phone: '+33 1 72 52 40 00', company: 'Fortinet', role: 'Support SD-WAN, Switches, WiFi & Sécurité', notes: 'Contrat FortiCare Premium sur tous les FortiGate, FortiSwitch et FortiAP. TAC 24/7.' },
+      { name: 'Canon France', typeId: maintenance.id, email: 'support@canon.fr', phone: '01 70 48 05 00', company: 'Canon', role: 'Support imprimantes', notes: 'Contrat maintenance imagePRESS C5800 sur tous les sites. Intervention J+1.' },
       { name: 'Yealink France', typeId: reseau.id, email: 'support-fr@yealink.com', phone: '+33 1 84 88 40 00', company: 'Yealink', role: 'Support Teams Room', notes: 'Support technique sur MeetingBoard et MeetingBar' },
       { name: 'OVHcloud', typeId: cloud.id, email: 'support@ovhcloud.com', phone: '+33 9 72 10 10 07', company: 'OVH', role: 'Hébergement cloud', notes: 'Hébergement cloud et serveurs dédiés' },
       { name: 'Engie Solutions', typeId: energie.id, email: 'contact@engie.com', phone: '09 69 39 99 93', company: 'Engie', role: 'Fournisseur énergie', notes: 'Fourniture électrique et groupes électrogènes' },

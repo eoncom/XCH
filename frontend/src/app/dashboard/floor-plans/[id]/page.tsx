@@ -63,13 +63,13 @@ const FloorPlanViewer = dynamic(
 const pinTypeLabels: Record<PinType, string> = {
   SWITCH: 'Switch',
   FIREWALL: 'Firewall',
-  ACCESS_POINT: 'Point d\'accès',
+  ACCESS_POINT: 'AP WiFi',
   PRINTER: 'Imprimante',
   RACK: 'Baie',
   CAMERA: 'Caméra',
   PATCH_PANEL: 'Panneau de brassage',
-  RJ45: 'Prise RJ45',
-  NRO: 'NRO (Arrivée fibre)',
+  RJ45: 'Prise RJ-45',
+  NRO: 'Arrivée Fibre NRO',
   OTHER: 'Autre',
 };
 

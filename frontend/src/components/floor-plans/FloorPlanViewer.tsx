@@ -75,13 +75,13 @@ const PIN_LABELS: Record<PinType, string> = {
 const PIN_TYPE_NAMES: Record<PinType, string> = {
   SWITCH: 'Switch',
   FIREWALL: 'Firewall',
-  ACCESS_POINT: 'Point d\'accès',
+  ACCESS_POINT: 'AP WiFi',
   PRINTER: 'Imprimante',
   RACK: 'Baie',
   CAMERA: 'Caméra',
   PATCH_PANEL: 'Panneau brassage',
-  RJ45: 'Prise RJ45',
-  NRO: 'NRO',
+  RJ45: 'Prise RJ-45',
+  NRO: 'Arrivée Fibre NRO',
   OTHER: 'Autre',
 };
 

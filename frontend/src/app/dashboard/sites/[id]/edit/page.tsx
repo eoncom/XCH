@@ -540,7 +540,7 @@ function EditSitePage({
                       <Label htmlFor="connectivity.primary.type">Type</Label>
                       <Select
                         value={watch('connectivity.primary.type') || ''}
-                        onValueChange={(value) => setValue('connectivity.primary.type', value)}
+                        onValueChange={(value) => setValue('connectivity.primary.type', value, { shouldDirty: true })}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Sélectionner un type" />
@@ -555,21 +555,13 @@ function EditSitePage({
 
                     <div className="space-y-2">
                       <Label htmlFor="connectivity.primary.provider">Opérateur</Label>
-                      <Select
-                        value={watch('connectivity.primary.provider') || ''}
-                        onValueChange={(value) => setValue('connectivity.primary.provider', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Sélectionner un opérateur" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(providerContacts || []).map((contact) => (
-                            <SelectItem key={contact.id} value={contact.name}>
-                              {contact.name}{contact.company ? ` (${contact.company})` : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Input
+                        id="connectivity.primary.provider"
+                        {...register('connectivity.primary.provider')}
+                        placeholder="Ex: Orange Business, Bouygues Telecom..."
+                        maxLength={100}
+                        list="provider-suggestions"
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -597,7 +589,7 @@ function EditSitePage({
                       <Label htmlFor="connectivity.backup.type">Type</Label>
                       <Select
                         value={watch('connectivity.backup.type') || ''}
-                        onValueChange={(value) => setValue('connectivity.backup.type', value)}
+                        onValueChange={(value) => setValue('connectivity.backup.type', value, { shouldDirty: true })}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Sélectionner un type" />
@@ -617,21 +609,13 @@ function EditSitePage({
 
                     <div className="space-y-2">
                       <Label htmlFor="connectivity.backup.provider">Opérateur</Label>
-                      <Select
-                        value={watch('connectivity.backup.provider') || ''}
-                        onValueChange={(value) => setValue('connectivity.backup.provider', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Sélectionner un opérateur" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(providerContacts || []).map((contact) => (
-                            <SelectItem key={contact.id} value={contact.name}>
-                              {contact.name}{contact.company ? ` (${contact.company})` : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Input
+                        id="connectivity.backup.provider"
+                        {...register('connectivity.backup.provider')}
+                        placeholder="Ex: Bouygues Telecom, Convergence..."
+                        maxLength={100}
+                        list="provider-suggestions"
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -650,6 +634,15 @@ function EditSitePage({
                     </div>
                   </div>
                 </div>
+
+                {/* Provider suggestions datalist */}
+                <datalist id="provider-suggestions">
+                  {(providerContacts || []).map((contact) => (
+                    <option key={contact.id} value={contact.name}>
+                      {contact.company ? `${contact.company}` : ''}
+                    </option>
+                  ))}
+                </datalist>
 
                 {/* Cut Procedure */}
                 <div className="space-y-2">
