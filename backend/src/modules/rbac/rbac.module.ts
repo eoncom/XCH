@@ -11,7 +11,7 @@ import { readFileSync } from 'fs';
       provide: 'CASBIN_ENFORCER',
       useFactory: async () => {
         // Parse DATABASE_URL to avoid TypeORM URL parsing issues
-        const dbUrl = new URL(process.env.DATABASE_URL);
+        const dbUrl = new URL(process.env.DATABASE_URL!);
         const adapter = await TypeORMAdapter.newAdapter({
           type: 'postgres',
           host: dbUrl.hostname,
