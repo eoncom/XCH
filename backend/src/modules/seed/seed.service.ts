@@ -60,7 +60,18 @@ export class SeedService {
       await this.prisma.pin.deleteMany({ where: { floorPlan: { site: { tenantId } } } });
       await this.prisma.floorPlan.deleteMany({ where: { site: { tenantId } } });
       await this.prisma.attachment.deleteMany({ where: { tenantId } });
-      await this.prisma.externalRef.deleteMany({ where: { tenantId } });
+      // ExternalRef has no tenantId — delete via entity IDs from tenant's data
+      const tenantSites = await this.prisma.site.findMany({ where: { tenantId }, select: { id: true } });
+      const tenantAssets = await this.prisma.asset.findMany({ where: { tenantId }, select: { id: true } });
+      const tenantContacts = await this.prisma.contact.findMany({ where: { tenantId }, select: { id: true } });
+      const allEntityIds = [
+        ...tenantSites.map(s => s.id),
+        ...tenantAssets.map(a => a.id),
+        ...tenantContacts.map(c => c.id),
+      ];
+      if (allEntityIds.length > 0) {
+        await this.prisma.externalRef.deleteMany({ where: { entityId: { in: allEntityIds } } });
+      }
       await this.prisma.task.deleteMany({ where: { tenantId } });
       await this.prisma.asset.deleteMany({ where: { tenantId } });
       await this.prisma.rack.deleteMany({ where: { tenantId } });
