@@ -17,5 +17,9 @@ $do$;
 -- Grant privileges
 GRANT ALL PRIVILEGES ON DATABASE xch_dev TO xch_user;
 
+-- Create a database matching the username (TypeORM adapter default health check connects to it)
+SELECT 'CREATE DATABASE xch_user OWNER xch_user'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'xch_user')\gexec
+
 -- Set default search path to include PostGIS
 ALTER DATABASE xch_dev SET search_path TO public, postgis;
