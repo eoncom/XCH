@@ -1409,11 +1409,6 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                   </div>
                 )}
               </div>
-              {site.notes && (
-                <div className="mt-3 pt-3 border-t">
-                  <p className="text-xs text-muted-foreground">{site.notes}</p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
