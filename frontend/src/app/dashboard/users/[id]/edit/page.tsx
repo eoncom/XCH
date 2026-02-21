@@ -1,6 +1,7 @@
 // @ts-nocheck - Temporary fix for Radix UI + React 19 type incompatibility
 'use client';
 
+import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -96,6 +97,13 @@ export default function EditUserPage() {
 
   const role = watch('role');
 
+  // Force sync role when user data loads (fixes Select not showing current value)
+  useEffect(() => {
+    if (user?.role) {
+      setValue('role', user.role);
+    }
+  }, [user, setValue]);
+
   if (isLoading) {
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
   }
@@ -140,8 +148,8 @@ export default function EditUserPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="role">Rôle <span className="text-red-500">*</span></Label>
-                <Select value={role} onValueChange={(value) => setValue('role', value as UserRole)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select value={role || ''} onValueChange={(value) => setValue('role', value as UserRole, { shouldDirty: true })}>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner un rôle" /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(userRoleLabels).map(([value, label]) => (
                       <SelectItem key={value} value={value}>{label}</SelectItem>
