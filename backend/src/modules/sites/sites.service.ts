@@ -4,6 +4,7 @@ import { CreateSiteDto } from './dto/create-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
 import { FilterSiteDto } from './dto/filter-site.dto';
 import { StorageService } from '../../common/services/storage.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { createId } from '@paralleldrive/cuid2';
 
@@ -12,9 +13,10 @@ export class SitesService {
   constructor(
     private prisma: PrismaClient,
     private storageService: StorageService,
+    private auditLogService: AuditLogService,
   ) {}
 
-  async create(tenantId: string, createSiteDto: CreateSiteDto) {
+  async create(tenantId: string, createSiteDto: CreateSiteDto, userId?: string) {
     const existing = await this.prisma.site.findFirst({
       where: {
         tenantId,
@@ -49,7 +51,19 @@ export class SitesService {
       siteData.healthStatus || 'UNKNOWN',
     );
 
-    return this.findOne(result[0].id, tenantId);
+    const site = await this.findOne(result[0].id, tenantId);
+
+    // Audit log
+    await this.auditLogService.log({
+      tenantId,
+      userId,
+      action: 'CREATE',
+      entityType: 'site',
+      entityId: site.id,
+      changes: { after: { code: site.code, name: site.name, status: site.status, address: site.address, city: site.city } },
+    });
+
+    return site;
   }
 
   async findAll(tenantId: string, filter?: FilterSiteDto, accessibleSiteIds?: string[] | null) {
@@ -180,8 +194,9 @@ export class SitesService {
     };
   }
 
-  async update(id: string, tenantId: string, updateSiteDto: UpdateSiteDto) {
-    await this.findOne(id, tenantId);
+  async update(id: string, tenantId: string, updateSiteDto: UpdateSiteDto, userId?: string) {
+    // Get current state for diff
+    const before = await this.prisma.site.findUnique({ where: { id } });
 
     const { latitude, longitude, ...siteData } = updateSiteDto;
 
@@ -192,17 +207,47 @@ export class SitesService {
       );
     }
 
-    return this.prisma.site.update({
+    const updated = await this.prisma.site.update({
       where: { id },
       data: siteData,
     });
+
+    // Audit log with diff
+    if (before) {
+      const changes = this.auditLogService.diffChanges(
+        before as Record<string, any>,
+        { ...siteData, ...(latitude !== undefined ? { latitude, longitude } : {}) },
+      );
+      if (changes) {
+        await this.auditLogService.log({
+          tenantId,
+          userId,
+          action: 'UPDATE',
+          entityType: 'site',
+          entityId: id,
+          changes,
+        });
+      }
+    }
+
+    return updated;
   }
 
-  async remove(id: string, tenantId: string) {
-    await this.findOne(id, tenantId);
+  async remove(id: string, tenantId: string, userId?: string) {
+    const site = await this.findOne(id, tenantId);
 
     await this.prisma.site.delete({
       where: { id },
+    });
+
+    // Audit log
+    await this.auditLogService.log({
+      tenantId,
+      userId,
+      action: 'DELETE',
+      entityType: 'site',
+      entityId: id,
+      changes: { before: { code: site.code, name: site.name, status: site.status } },
     });
 
     return { message: 'Site deleted successfully' };
@@ -220,6 +265,15 @@ export class SitesService {
     `, longitude, latitude, tenantId, radiusKm * 1000);
 
     return sites;
+  }
+
+  // ============================================================================
+  // AUDIT HISTORY
+  // ============================================================================
+
+  async getAuditHistory(siteId: string, tenantId: string) {
+    await this.findOne(siteId, tenantId);
+    return this.auditLogService.findByEntity(tenantId, 'site', siteId);
   }
 
   // ============================================================================

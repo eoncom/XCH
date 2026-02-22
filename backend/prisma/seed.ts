@@ -139,7 +139,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       code: 'PAR-001',
-      name: 'Chantier Paris La Défense',
+      name: 'Site Paris La Défense',
       status: SiteStatus.ACTIVE,
       address: '1 Parvis de la Défense',
       city: 'Paris La Défense',
@@ -150,7 +150,7 @@ async function main() {
           name: 'Jean Dupont',
           phone: '+33 6 11 22 33 44',
           email: 'jean.dupont@defense.fr',
-          role: 'Chef de chantier',
+          role: 'Chef de site',
           isPrimary: true
         },
         {
@@ -171,7 +171,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       code: 'LYN-002',
-      name: 'Chantier Lyon Part-Dieu',
+      name: 'Site Lyon Part-Dieu',
       status: SiteStatus.ACTIVE,
       address: '129 Rue Servient',
       city: 'Lyon',
@@ -196,7 +196,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       code: 'MRS-003',
-      name: 'Chantier Marseille Vieux-Port',
+      name: 'Site Marseille Vieux-Port',
       status: SiteStatus.PREPARATION,
       address: '7 Quai du Port',
       city: 'Marseille',
@@ -1516,7 +1516,7 @@ async function main() {
   const contactsData = [
     { name: 'Orange Business Services', typeId: telecomType.id, email: 'contact@orange-business.com', phone: '3900', company: 'Orange', role: 'Opérateur principal', notes: 'Opérateur principal pour les liaisons FTTH et 4G backup' },
     { name: 'OVHcloud', typeId: cloudType.id, email: 'support@ovhcloud.com', phone: '+33 9 72 10 10 07', company: 'OVH', role: 'Hébergement cloud', notes: 'Hébergement cloud et serveurs dédiés' },
-    { name: 'Prosegur', typeId: securiteType.id, email: 'contact@prosegur.fr', phone: '0 800 20 22 23', company: 'Prosegur', role: 'Sécurité physique', notes: 'Sécurité physique et vidéosurveillance chantiers' },
+    { name: 'Prosegur', typeId: securiteType.id, email: 'contact@prosegur.fr', phone: '0 800 20 22 23', company: 'Prosegur', role: 'Sécurité physique', notes: 'Sécurité physique et vidéosurveillance sites' },
     { name: 'Cisco TAC France', typeId: reseauType.id, email: 'tac@cisco.com', phone: '+33 1 58 04 60 00', company: 'Cisco', role: 'Support technique', notes: 'Équipements réseau (switches, routeurs, access points)' },
     { name: 'Engie Solutions', typeId: energieType.id, email: 'contact@engie.com', phone: '09 69 39 99 93', company: 'Engie', role: 'Fournisseur énergie', notes: 'Fourniture électrique et groupes électrogènes' },
     { name: 'Dalkia CVC', typeId: climatisationType.id, email: 'support@dalkia.fr', phone: '01 55 60 29 29', company: 'Dalkia', role: 'Maintenance CVC', notes: 'Maintenance CVC (chauffage, ventilation, climatisation)' },

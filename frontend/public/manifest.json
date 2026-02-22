@@ -1,7 +1,7 @@
 {
-  "name": "XCH - Gestion IT Chantiers",
+  "name": "XCH - Gestion IT Sites",
   "short_name": "XCH",
-  "description": "Application de gestion IT pour chantiers temporaires",
+  "description": "Application de gestion IT pour sites temporaires",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -25,9 +25,9 @@
   "screenshots": [],
   "shortcuts": [
     {
-      "name": "Nouveau chantier",
+      "name": "Nouveau site",
       "short_name": "Nouveau site",
-      "description": "Créer un nouveau chantier",
+      "description": "Créer un nouveau site",
       "url": "/dashboard/sites/new",
       "icons": [
         {

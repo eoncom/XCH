@@ -63,7 +63,7 @@ export default function SettingsPage() {
   const [logoUrl, setLogoUrl] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#0070f3');
   const [securityReminders, setSecurityReminders] = useState<SecurityReminder[]>([
-    { id: '1', text: "Badge d'accès obligatoire sur tous les chantiers" },
+    { id: '1', text: "Badge d'accès obligatoire sur tous les sites" },
     { id: '2', text: 'Carte BTP à jour requise' },
     { id: '3', text: 'EPI obligatoires (casque, gilet, chaussures)' },
     { id: '4', text: 'Respecter les consignes affichées sur site' },
@@ -557,20 +557,20 @@ export default function SettingsPage() {
                   <div className="border-t pt-4 space-y-3">
                     <Label className="flex items-center gap-2">
                       <ShieldAlert className="h-4 w-4" />
-                      Rappels de sécurité chantier
+                      Rappels de sécurité site
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p className="text-xs">Affichés dans les info-bulles de sécurité sur les pages chantier.</p>
+                            <p className="text-xs">Affichés dans les info-bulles de sécurité sur les pages site.</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      Ces rappels apparaissent dans l'info-bulle de sécurité près des "Informations d'accès" sur chaque chantier.
+                      Ces rappels apparaissent dans l'info-bulle de sécurité près des "Informations d'accès" sur chaque site.
                     </p>
                     <div className="space-y-2">
                       {securityReminders.map((reminder, idx) => (

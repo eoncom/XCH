@@ -119,7 +119,7 @@ export function exportToPDF(options: ExportOptions): void {
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     doc.text(
-      `XCH - Gestion IT Chantiers | Page ${i}/${pageCount}`,
+      `XCH - Gestion IT Sites | Page ${i}/${pageCount}`,
       doc.internal.pageSize.width / 2,
       doc.internal.pageSize.height - 10,
       { align: 'center' }
@@ -218,8 +218,8 @@ export function exportToCSV(options: ExportOptions): void {
 export function exportSites(sites: SiteExportData[], format: 'pdf' | 'excel' | 'csv' = 'excel'): void {
   const options: ExportOptions = {
     filename: `xch-sites-${new Date().toISOString().split('T')[0]}`,
-    title: 'Liste des Chantiers',
-    subtitle: `${sites.length} chantier(s)`,
+    title: 'Liste des Sites',
+    subtitle: `${sites.length} site(s)`,
     columns: [
       { header: 'Nom', key: 'name', width: 30 },
       { header: 'Code', key: 'code', width: 15 },
@@ -260,7 +260,7 @@ export function exportAssets(assets: AssetExportData[], format: 'pdf' | 'excel' 
       { header: 'Modèle', key: 'model', width: 25 },
       { header: 'N° Série', key: 'serialNumber', width: 20 },
       { header: 'Statut', key: 'status', width: 12 },
-      { header: 'Chantier', key: 'siteName', width: 25 },
+      { header: 'Site', key: 'siteName', width: 25 },
     ],
     data: assets,
   };
@@ -300,7 +300,7 @@ export function exportSiteReport(
 
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
-  doc.text('Gestion IT Chantiers', 14, 26);
+  doc.text('Gestion IT Sites', 14, 26);
 
   // Title
   doc.setFontSize(18);
@@ -423,7 +423,7 @@ export function exportRackDiagram(
   // Footer
   doc.setFontSize(8);
   doc.setTextColor(150, 150, 150);
-  doc.text('XCH - Gestion IT Chantiers', doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, {
+  doc.text('XCH - Gestion IT Sites', doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, {
     align: 'center',
   });
 

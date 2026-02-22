@@ -119,3 +119,4 @@ SECRET_*.md
 # GITHUB_TOKEN_SETUP.md - Instructions only
 # scripts/setup-git-credentials.sh - Script with placeholders
 # backend/src/**/*token*.ts - Code files (DTOs, services)
+nul

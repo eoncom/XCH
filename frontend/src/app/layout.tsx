@@ -7,8 +7,8 @@ import { Toaster } from 'react-hot-toast';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'XCH - Gestion IT Chantiers',
-  description: 'Application de gestion IT pour chantiers temporaires',
+  title: 'XCH - Gestion IT Sites',
+  description: 'Application de gestion IT pour sites temporaires',
   manifest: '/manifest.json',
   themeColor: '#3b82f6',
   viewport: {

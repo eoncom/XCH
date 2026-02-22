@@ -99,7 +99,7 @@ export class SeedService {
   }
 
   // ============================================================================
-  // SITES - 6 chantiers réalistes (3 grands, 2 moyens, 1 petit)
+  // SITES - 6 sites réalistes (3 grands, 2 moyens, 1 petit)
   // ============================================================================
 
   private async createSites(tenantId: string) {
@@ -116,15 +116,15 @@ export class SeedService {
         postalCode: '92800',
         country: 'France',
         contacts: [
-          { name: 'Pierre Durand', phone: '+33 1 41 26 00 00', email: 'p.durand@alto.fr', role: 'Responsable IT chantier', isPrimary: true },
-          { name: 'Marie Lefebvre', phone: '+33 6 12 34 56 78', email: 'm.lefebvre@alto.fr', role: 'Chef de chantier' },
+          { name: 'Pierre Durand', phone: '+33 1 41 26 00 00', email: 'p.durand@alto.fr', role: 'Responsable IT site', isPrimary: true },
+          { name: 'Marie Lefebvre', phone: '+33 6 12 34 56 78', email: 'm.lefebvre@alto.fr', role: 'Chef de site' },
         ],
         connectivity: {
           primary: { type: 'Fibre optique dédiée', provider: 'Orange Business', ref: 'FTTO-DEF-001' },
           backup: { type: '4G/5G', provider: 'Bouygues Telecom', ref: '4G-DEF-001' },
           cutProcedure: 'Contacter NOC EONCOM au 01 XX XX XX XX puis basculer SD-WAN',
         },
-        notes: 'Grand chantier Tour Alto - 8 étages, salle IT au RDC et étage 4. Accès badge NEXITY + escorte zone serveur.',
+        notes: 'Grand site Tour Alto - 8 étages, salle IT au RDC et étage 4. Accès badge NEXITY + escorte zone serveur.',
       },
       {
         id: `demo-site-saclay-${tenantId}`,
@@ -177,7 +177,7 @@ export class SeedService {
         postalCode: '92210',
         country: 'France',
         contacts: [
-          { name: 'François Dubois', phone: '+33 1 46 02 00 00', email: 'f.dubois@residenceparc.fr', role: 'Responsable chantier', isPrimary: true },
+          { name: 'François Dubois', phone: '+33 1 46 02 00 00', email: 'f.dubois@residenceparc.fr', role: 'Responsable site', isPrimary: true },
         ],
         connectivity: {
           primary: { type: 'FTTH', provider: 'Orange', ref: 'FTTH-STC-001' },

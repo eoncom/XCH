@@ -3677,3 +3677,24 @@ fix: auto-select role in user edit + dark mode users list
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-22
+
+**Date:** 2026-02-22 12:15:12
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 8
+- Frontend files modified: 23
+
+**Commit message:**
+```
+fix: improve site form layout + auto-clear site on asset status change
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

@@ -587,7 +587,7 @@ model TaskComment {
 
 enum ContactCategory {
   PROVIDER       // Fournisseurs externes (télécom, cloud, énergie...)
-  INTERNAL       // Équipes internes (responsable chantier, gardien...)
+  INTERNAL       // Équipes internes (responsable site, gardien...)
   PARTNER        // Partenaires IT externes (intégrateurs, sous-traitants)
   TECHNICAL      // Support technique (NetBox, monitoring)
   EMERGENCY      // Contacts urgence

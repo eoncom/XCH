@@ -43,7 +43,7 @@ export async function exportSiteZip(
   const dateStr = now.toISOString().split('T')[0];
 
   // Step 1: Fetch site data
-  onProgress?.({ step: 'Chargement des informations du chantier...', percent: 5 });
+  onProgress?.({ step: 'Chargement des informations du site...', percent: 5 });
   const site = await sitesApi.getById(siteId);
 
   // Step 2: Fetch related data in parallel
@@ -64,7 +64,7 @@ export async function exportSiteZip(
   const manifest = {
     version: '1.0',
     exportDate: now.toISOString(),
-    exportedBy: 'XCH - Gestion IT Chantiers',
+    exportedBy: 'XCH - Gestion IT Sites',
     site: {
       id: site.id,
       code: site.code,
@@ -162,7 +162,7 @@ export async function exportSiteZip(
   const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
 
   onProgress?.({ step: 'T\él\échargement...', percent: 100 });
-  saveAs(zipBlob, `chantier-${site.code}-${dateStr}.zip`);
+  saveAs(zipBlob, `site-${site.code}-${dateStr}.zip`);
 }
 
 // ==================== PDF Report ====================
@@ -186,7 +186,7 @@ function generateSiteReportPdf(
   doc.text('XCH', margin, y);
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
-  doc.text('Gestion IT Chantiers', margin + 25, y);
+  doc.text('Gestion IT Sites', margin + 25, y);
   y += 15;
 
   // === Title ===

@@ -1,6 +1,6 @@
 # XCH Frontend
 
-Application Next.js 15 pour la gestion IT de chantiers temporaires.
+Application Next.js 15 pour la gestion IT de sites temporaires.
 
 ## 🚀 Stack Technique
 
@@ -51,7 +51,7 @@ frontend/
 │   │   └── dashboard/          # Dashboard (protégé)
 │   │       ├── layout.tsx      # Layout avec sidebar
 │   │       ├── page.tsx        # Dashboard principal
-│   │       └── sites/          # Module Chantiers
+│   │       └── sites/          # Module Sites
 │   │
 │   ├── components/             # Composants React
 │   │   └── ui/                 # Composants shadcn/ui

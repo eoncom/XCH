@@ -165,7 +165,7 @@ export default function NewSitePage() {
       router.push('/dashboard/sites');
     },
     onError: (error) => {
-      console.error('Erreur création chantier:', error);
+      console.error('Erreur création site:', error);
       alert(`Erreur lors de la création: ${error.message}`);
     },
   });
@@ -311,7 +311,7 @@ export default function NewSitePage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
-        <h1 className="text-3xl font-bold">Nouveau chantier</h1>
+        <h1 className="text-3xl font-bold">Nouveau site</h1>
       </div>
 
       {/* Steps indicator — cliquable, navigation libre */}
@@ -384,7 +384,7 @@ export default function NewSitePage() {
                     <Input
                       id="name"
                       {...register('name')}
-                      placeholder="Chantier Exemple"
+                      placeholder="Site Exemple"
                     />
                     {errors.name && (
                       <p className="text-sm text-red-600">{errors.name.message}</p>
@@ -716,7 +716,7 @@ export default function NewSitePage() {
                       <div className="text-center py-8 border-2 border-dashed rounded-lg">
                         <Users className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
                         <p className="text-sm text-muted-foreground mb-2">
-                          Aucun contact associé à ce chantier
+                          Aucun contact associé à ce site
                         </p>
                         <Button
                           type="button"
@@ -1086,7 +1086,7 @@ export default function NewSitePage() {
                     }}
                     disabled={createMutation.isPending}
                   >
-                    {createMutation.isPending ? 'Création...' : 'Créer le chantier'}
+                    {createMutation.isPending ? 'Création...' : 'Créer le site'}
                   </Button>
                 )}
               </div>

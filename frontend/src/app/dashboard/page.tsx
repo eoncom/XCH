@@ -173,7 +173,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Vue d'ensemble de vos chantiers</p>
+        <p className="text-muted-foreground">Vue d'ensemble de vos sites</p>
       </div>
 
       {/* Stats Cards */}
@@ -181,7 +181,7 @@ export default function DashboardPage() {
         <Link href="/dashboard/sites">
           <Card data-testid="stats-card-sites" className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Chantiers</CardTitle>
+              <CardTitle className="text-sm font-medium">Sites</CardTitle>
               <MapPin className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -360,7 +360,7 @@ export default function DashboardPage() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <MapIcon className="h-5 w-5" />
-              Carte des chantiers
+              Carte des sites
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -372,7 +372,7 @@ export default function DashboardPage() {
               />
             ) : (
               <div className="h-[400px] flex items-center justify-center rounded-md border bg-gray-50 text-sm text-muted-foreground">
-                Aucun chantier avec coordonnées GPS disponible
+                Aucun site avec coordonnées GPS disponible
               </div>
             )}
           </CardContent>

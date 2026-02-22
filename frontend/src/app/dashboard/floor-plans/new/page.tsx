@@ -149,10 +149,10 @@ export default function NewFloorPlanPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="siteId">Chantier <span className="text-red-600">*</span></Label>
+                  <Label htmlFor="siteId">Site <span className="text-red-600">*</span></Label>
                   <Select value={siteId} onValueChange={(value) => setValue('siteId', value)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un chantier" />
+                      <SelectValue placeholder="Sélectionner un site" />
                     </SelectTrigger>
                     <SelectContent>
                       {sites?.map((site) => (

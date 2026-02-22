@@ -91,7 +91,7 @@ export default function RacksPage() {
         { header: 'Nom', key: 'name', width: 20 },
         { header: 'Taille', key: 'heightU', width: 10 },
         { header: 'Statut', key: 'status', width: 15 },
-        { header: 'Chantier', key: 'site', width: 25 },
+        { header: 'Site', key: 'site', width: 25 },
         { header: 'Emplacement', key: 'location', width: 20 },
         { header: 'Occupé (U)', key: 'occupiedU', width: 12 },
         { header: 'Dispo (U)', key: 'availableU', width: 12 },

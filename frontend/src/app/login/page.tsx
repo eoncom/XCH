@@ -55,7 +55,7 @@ export default function LoginPage() {
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-3xl font-bold text-primary">XCH</CardTitle>
           <CardDescription className="text-muted-foreground">
-            Gestion IT Chantiers
+            Gestion IT Sites
           </CardDescription>
         </CardHeader>
         <CardContent>

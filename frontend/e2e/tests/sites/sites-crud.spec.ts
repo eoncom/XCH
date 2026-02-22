@@ -25,7 +25,7 @@ test.describe('Sites - CRUD', () => {
 
   test('devrait afficher la liste des sites', async ({ page }) => {
     // Vérifier éléments de la page
-    await expect(page.locator('h1, h2').last()).toContainText(/Sites|Chantiers/i);
+    await expect(page.locator('h1, h2').last()).toContainText(/Sites/i);
 
     // Bouton "Nouveau"
     await expect(page.locator('button:has-text("Nouveau"), a:has-text("Nouveau")')).toBeVisible();

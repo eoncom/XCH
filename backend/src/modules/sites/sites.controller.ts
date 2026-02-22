@@ -26,7 +26,7 @@ export class SitesController {
   @Resource('sites') @Action('create')
   @ApiOperation({ summary: 'Create new site' })
   create(@Body() createSiteDto: CreateSiteDto, @Request() req: AuthRequest) {
-    return this.sitesService.create(req.user.tenantId, createSiteDto);
+    return this.sitesService.create(req.user.tenantId, createSiteDto, req.user.userId);
   }
 
   @Get()
@@ -65,14 +65,25 @@ export class SitesController {
   @Resource('sites') @Action('update')
   @ApiOperation({ summary: 'Update site' })
   update(@Param('id') id: string, @Body() updateSiteDto: UpdateSiteDto, @Request() req: AuthRequest) {
-    return this.sitesService.update(id, req.user.tenantId, updateSiteDto);
+    return this.sitesService.update(id, req.user.tenantId, updateSiteDto, req.user.userId);
   }
 
   @Delete(':id')
   @Resource('sites') @Action('delete')
   @ApiOperation({ summary: 'Delete site' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.sitesService.remove(id, req.user.tenantId);
+    return this.sitesService.remove(id, req.user.tenantId, req.user.userId);
+  }
+
+  // ============================================================================
+  // AUDIT HISTORY
+  // ============================================================================
+
+  @Get(':id/history')
+  @Resource('sites') @Action('read')
+  @ApiOperation({ summary: 'Get modification history for a site' })
+  getAuditHistory(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.sitesService.getAuditHistory(id, req.user.tenantId);
   }
 
   // ============================================================================

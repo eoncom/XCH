@@ -199,13 +199,13 @@ export default function EditUserPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
-            Chantiers accessibles
+            Sites accessibles
           </CardTitle>
         </CardHeader>
         <CardContent>
           {user?.role === 'ADMIN' || user?.role === 'MANAGER' ? (
             <p className="text-sm text-muted-foreground">
-              Les {userRoleLabels[user?.role || 'ADMIN'].toLowerCase()}s ont accès à tous les chantiers par défaut.
+              Les {userRoleLabels[user?.role || 'ADMIN'].toLowerCase()}s ont accès à tous les sites par défaut.
             </p>
           ) : userSiteAccess.length > 0 ? (
             <div className="space-y-2">
@@ -232,7 +232,7 @@ export default function EditUserPage() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Aucun accès spécifique configuré. Allez sur la page d'un chantier pour accorder l'accès.
+              Aucun accès spécifique configuré. Allez sur la page d'un site pour accorder l'accès.
             </p>
           )}
         </CardContent>

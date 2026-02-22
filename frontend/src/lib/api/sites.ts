@@ -48,4 +48,25 @@ export const sitesApi = {
   // Aggregated documents (site + assets + racks + tasks)
   listAllDocuments: (id: string) =>
     apiClient.get(`/api/sites/${id}/documents`),
+
+  // Audit history
+  getHistory: (id: string) =>
+    apiClient.get<AuditLogEntry[]>(`/api/sites/${id}/history`),
 };
+
+export interface AuditLogEntry {
+  id: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+  entityType: string;
+  entityId: string;
+  changes: {
+    before?: Record<string, any>;
+    after?: Record<string, any>;
+  } | null;
+  timestamp: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}

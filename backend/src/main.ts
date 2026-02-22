@@ -66,7 +66,7 @@ async function bootstrap() {
   if (configService.get('NODE_ENV') !== 'production') {
     const config = new DocumentBuilder()
       .setTitle('XCH API')
-      .setDescription('API de gestion IT pour chantiers temporaires')
+      .setDescription('API de gestion IT pour sites temporaires')
       .setVersion('1.0')
       .addBearerAuth()
       .build();

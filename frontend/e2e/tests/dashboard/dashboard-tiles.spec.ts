@@ -35,7 +35,7 @@ test.describe('Dashboard - Tiles Navigation', () => {
 
     // Vérifier navigation
     await expect(page).toHaveURL('/dashboard/sites');
-    await expect(page.locator('h1').last()).toContainText('Chantiers');
+    await expect(page.locator('h1').last()).toContainText('Sites');
   });
 
   test('should navigate to Assets when clicking Assets tile', async ({ page }) => {

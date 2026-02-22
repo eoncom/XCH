@@ -621,7 +621,7 @@ const movementTypeConfig: Record<AssetMovementType, {
     bgColor: 'bg-green-100 dark:bg-green-900',
   },
   SITE_CHANGE: {
-    label: 'Changement de chantier',
+    label: 'Changement de site',
     icon: Building2,
     color: 'text-blue-600',
     bgColor: 'bg-blue-100 dark:bg-blue-900',
@@ -676,7 +676,7 @@ function MovementTimelineItem({ movement }: { movement: AssetMovement }) {
         return (
           <div className="text-sm text-muted-foreground">
             {movement.toSite && (
-              <span>Chantier : <strong>{movement.toSite.name}</strong></span>
+              <span>Site : <strong>{movement.toSite.name}</strong></span>
             )}
             {movement.toRack && (
               <span className="ml-2">• Baie : <strong>{movement.toRack.name}</strong></span>

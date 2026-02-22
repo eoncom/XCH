@@ -22,7 +22,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { sitesApi } from '@/lib/api/sites';
+import { sitesApi, type AuditLogEntry } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
@@ -42,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X, Copy, Check, ChevronDown, ChevronRight, Settings } from 'lucide-react';
+import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X, Copy, Check, ChevronDown, ChevronRight, Settings, History } from 'lucide-react';
 import Link from 'next/link';
 import type { Site, Asset, Rack, Task, FloorPlan, User as UserType } from '@/types';
 
@@ -152,7 +152,7 @@ function AggregatedDocuments({ siteId }: { siteId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
-          Tous les documents du chantier ({docs.length})
+          Tous les documents du site ({docs.length})
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           Agrège les documents du site, des équipements, des baies et des tâches
@@ -204,7 +204,7 @@ function AggregatedDocuments({ siteId }: { siteId: string }) {
 }
 
 const RESOURCE_LABELS: Record<string, string> = {
-  sites: 'Chantier',
+  sites: 'Site',
   assets: 'Équipements',
   racks: 'Baies',
   tasks: 'Tâches',
@@ -337,7 +337,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
               Droits d&apos;accès ({accessList.length})
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Les administrateurs et managers ont accès à tous les chantiers. Les techniciens et observateurs nécessitent un accès explicite.
+              Les administrateurs et managers ont accès à tous les sites. Les techniciens et observateurs nécessitent un accès explicite.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -498,7 +498,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
               <Shield className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
               <p className="text-muted-foreground mb-2">Aucun accès spécifique configuré</p>
               <p className="text-xs text-muted-foreground">
-                Les administrateurs et managers ont accès à tous les chantiers par défaut.
+                Les administrateurs et managers ont accès à tous les sites par défaut.
                 Ajoutez des accès pour les techniciens et observateurs.
               </p>
             </div>
@@ -510,7 +510,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ajouter un accès au chantier</DialogTitle>
+            <DialogTitle>Ajouter un accès au site</DialogTitle>
             <DialogDescription>
               Sélectionnez un utilisateur et le niveau d&apos;accès à accorder.
             </DialogDescription>
@@ -548,12 +548,12 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
                 <SelectContent>
                   <SelectItem value="READ">
                     <span className="flex items-center gap-2">
-                      <Lock className="h-3 w-3" /> Lecture seule — peut consulter le chantier
+                      <Lock className="h-3 w-3" /> Lecture seule — peut consulter le site
                     </span>
                   </SelectItem>
                   <SelectItem value="WRITE">
                     <span className="flex items-center gap-2">
-                      <Unlock className="h-3 w-3" /> Lecture/Écriture — peut modifier le chantier
+                      <Unlock className="h-3 w-3" /> Lecture/Écriture — peut modifier le site
                     </span>
                   </SelectItem>
                 </SelectContent>
@@ -717,7 +717,7 @@ function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: strin
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Users className="h-5 w-5" />
-                    Contacts internes du chantier
+                    Contacts internes du site
                   </CardTitle>
                   <Button variant="ghost" size="sm" asChild>
                     <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
@@ -944,7 +944,7 @@ function SiteAccessInfoSection({ accessNotes, securityReminders, siteId }: { acc
                 <Info className="h-3.5 w-3.5 text-amber-500 cursor-help flex-shrink-0" />
               </TooltipTrigger>
               <TooltipContent side="right" className="max-w-xs">
-                <p className="font-medium mb-1">Rappel sécurité chantier</p>
+                <p className="font-medium mb-1">Rappel sécurité site</p>
                 <ul className="text-xs space-y-1">
                   {securityReminders.map((reminder) => (
                     <li key={reminder.id}>• {reminder.text}</li>
@@ -1036,7 +1036,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
       });
       showToast.success('Export téléchargé avec succès');
     } catch (error) {
-      showToast.error("Erreur lors de l'export du chantier");
+      showToast.error("Erreur lors de l'export du site");
     } finally {
       setIsExporting(false);
       setExportProgress('');
@@ -1098,6 +1098,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     enabled: !!id,
   });
 
+  // Audit history (lazy-loaded when tab is active)
+  const { data: auditHistory = [] } = useQuery<AuditLogEntry[]>({
+    queryKey: ['sites', id, 'history'],
+    queryFn: () => sitesApi.getHistory(id),
+    enabled: !!id && activeTab === 'history',
+  });
+
   // Load tenant config for dynamic security reminders
   const { data: tenantConfig } = useQuery<{ config?: { securityReminders?: { id: string; text: string }[] } }>({
     queryKey: ['tenant-config'],
@@ -1106,7 +1113,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   });
 
   const securityReminders = tenantConfig?.config?.securityReminders ?? [
-    { id: '1', text: "Badge d'accès obligatoire sur tous les chantiers" },
+    { id: '1', text: "Badge d'accès obligatoire sur tous les sites" },
     { id: '2', text: 'Carte BTP à jour requise' },
     { id: '3', text: 'EPI obligatoires (casque, gilet, chaussures)' },
     { id: '4', text: 'Respecter les consignes affichées sur site' },
@@ -1130,7 +1137,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   if (!site) {
-    return <div className="text-center py-12">Chantier non trouvé</div>;
+    return <div className="text-center py-12">Site non trouvé</div>;
   }
 
   // Déterminer si on a du contenu pour l'onglet Infos pratiques
@@ -1247,6 +1254,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           <TabsTrigger value="access">
             <Lock className="mr-1 h-3 w-3" />
             Accès
+          </TabsTrigger>
+          <TabsTrigger value="history">
+            <History className="mr-1 h-3 w-3" />
+            Historique
           </TabsTrigger>
         </TabsList>
 
@@ -1367,7 +1378,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                       <Clock className="h-4 w-4 text-amber-600" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">Horaires chantier</p>
+                      <p className="text-xs text-muted-foreground">Horaires site</p>
                       <p className="text-sm font-semibold">{schedules}</p>
                     </div>
                   </div>
@@ -1765,7 +1776,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               ) : (
                 <div className="text-center py-12">
                   <Server className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground mb-4">Aucune baie sur ce chantier</p>
+                  <p className="text-muted-foreground mb-4">Aucune baie sur ce site</p>
                   <Button asChild variant="outline">
                     <Link href={`/dashboard/racks/new?siteId=${id}`}>
                       <Plus className="mr-2 h-4 w-4" />
@@ -1849,13 +1860,133 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               ) : (
                 <div className="text-center py-12">
                   <Map className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-                  <p className="text-muted-foreground mb-4">Aucun plan d&apos;étage pour ce chantier</p>
+                  <p className="text-muted-foreground mb-4">Aucun plan d&apos;étage pour ce site</p>
                   <Button asChild variant="outline">
                     <Link href={`/dashboard/floor-plans/new?siteId=${id}`}>
                       <Plus className="mr-2 h-4 w-4" />
                       Ajouter un plan
                     </Link>
                   </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ============================== */}
+        {/* TAB: HISTORIQUE                 */}
+        {/* ============================== */}
+        <TabsContent value="history" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5" />
+                Historique des modifications
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {auditHistory.length === 0 ? (
+                <div className="text-center py-12">
+                  <History className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <p className="text-muted-foreground">Aucune modification enregistrée</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {auditHistory.map((entry) => {
+                    const actionLabels: Record<string, { label: string; color: string }> = {
+                      CREATE: { label: 'Création', color: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' },
+                      UPDATE: { label: 'Modification', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300' },
+                      DELETE: { label: 'Suppression', color: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300' },
+                    };
+                    const actionInfo = actionLabels[entry.action] || { label: entry.action, color: 'bg-gray-100 text-gray-800' };
+
+                    const fieldLabels: Record<string, string> = {
+                      name: 'Nom',
+                      code: 'Code',
+                      status: 'Statut',
+                      address: 'Adresse',
+                      city: 'Ville',
+                      postalCode: 'Code postal',
+                      country: 'Pays',
+                      contacts: 'Contacts',
+                      accessNotes: "Notes d'accès",
+                      connectivity: 'Connectivité',
+                      emplacements: 'Emplacements',
+                      notes: 'Notes',
+                      healthStatus: 'État de santé',
+                      latitude: 'Latitude',
+                      longitude: 'Longitude',
+                      governanceDocsRef: 'Réf. documents',
+                      metadata: 'Métadonnées',
+                    };
+
+                    const changedFields = entry.changes?.after ? Object.keys(entry.changes.after) : [];
+
+                    return (
+                      <div key={entry.id} className="flex gap-4 border-l-2 border-muted pl-4 pb-4 relative">
+                        <div className="absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-muted-foreground" />
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge className={actionInfo.color}>{actionInfo.label}</Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {new Date(entry.timestamp).toLocaleDateString('fr-FR', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                            {entry.user && (
+                              <span className="text-sm text-muted-foreground">
+                                par <strong>{entry.user.name}</strong>
+                              </span>
+                            )}
+                          </div>
+
+                          {entry.action === 'UPDATE' && changedFields.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {changedFields.map((field) => {
+                                const before = entry.changes?.before?.[field];
+                                const after = entry.changes?.after?.[field];
+                                const label = fieldLabels[field] || field;
+
+                                // Skip complex objects (just show the field name)
+                                if (typeof after === 'object' && after !== null) {
+                                  return (
+                                    <div key={field} className="text-xs text-muted-foreground">
+                                      <span className="font-medium">{label}</span> modifié
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div key={field} className="text-xs text-muted-foreground">
+                                    <span className="font-medium">{label}</span> :{' '}
+                                    {before !== undefined && (
+                                      <>
+                                        <span className="line-through text-red-500/70">{String(before || '—')}</span>
+                                        {' → '}
+                                      </>
+                                    )}
+                                    <span className="text-foreground">{String(after || '—')}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {entry.action === 'CREATE' && (
+                            <p className="text-xs text-muted-foreground">Site créé</p>
+                          )}
+
+                          {entry.action === 'DELETE' && (
+                            <p className="text-xs text-muted-foreground">Site supprimé</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -1869,7 +2000,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           <DialogHeader>
             <DialogTitle>Confirmer la suppression</DialogTitle>
             <DialogDescription>
-              Êtes-vous sûr de vouloir supprimer le chantier &quot;{site.name}&quot; ?
+              Êtes-vous sûr de vouloir supprimer le site &quot;{site.name}&quot; ?
               Cette action est irréversible.
             </DialogDescription>
           </DialogHeader>

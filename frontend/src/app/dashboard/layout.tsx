@@ -29,7 +29,7 @@ import { useBranding } from '@/components/BrandingProvider';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Chantiers', href: '/dashboard/sites', icon: MapPin },
+  { name: 'Sites', href: '/dashboard/sites', icon: MapPin },
   { name: 'Équipements', href: '/dashboard/assets', icon: Package },
   { name: 'Baies', href: '/dashboard/racks', icon: Server },
   { name: 'Tâches', href: '/dashboard/tasks', icon: CheckSquare },

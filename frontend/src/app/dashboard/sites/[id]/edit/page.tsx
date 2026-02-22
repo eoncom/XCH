@@ -204,7 +204,7 @@ function EditSitePage({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['site', id] });
       queryClient.invalidateQueries({ queryKey: ['sites'] });
-      toast.success('Chantier mis à jour avec succès');
+      toast.success('Site mis à jour avec succès');
       router.push(`/dashboard/sites/${id}`);
     },
     onError: (error: Error) => {
@@ -350,7 +350,7 @@ function EditSitePage({
   }
 
   if (!site) {
-    toast.error('Chantier non trouvé');
+    toast.error('Site non trouvé');
     router.push('/dashboard/sites');
     return null;
   }
@@ -427,7 +427,7 @@ function EditSitePage({
                     <Input
                       id="name"
                       {...register('name')}
-                      placeholder="Chantier Exemple"
+                      placeholder="Site Exemple"
                     />
                     {errors.name && (
                       <p className="text-sm text-red-600">{errors.name.message}</p>
@@ -766,7 +766,7 @@ function EditSitePage({
                       <div className="text-center py-8 border-2 border-dashed rounded-lg">
                         <Users className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
                         <p className="text-sm text-muted-foreground mb-2">
-                          Aucun contact associé à ce chantier
+                          Aucun contact associé à ce site
                         </p>
                         <Button
                           type="button"

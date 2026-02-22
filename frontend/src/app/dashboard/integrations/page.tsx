@@ -207,7 +207,7 @@ export default function IntegrationsPage() {
           <CardContent>
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Surveillez l'etat de vos liens Internet et SDWAN par chantier.
+                Surveillez l'etat de vos liens Internet et SDWAN par site.
                 Compatible avec plusieurs solutions de monitoring.
               </p>
               <div className="flex flex-wrap gap-2">

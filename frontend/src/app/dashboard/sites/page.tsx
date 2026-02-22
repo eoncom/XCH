@@ -67,14 +67,14 @@ export default function SitesPage() {
   };
 
   if (isLoading) {
-    return <div className="text-center">Chargement des chantiers...</div>;
+    return <div className="text-center">Chargement des sites...</div>;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Chantiers</h1>
+          <h1 className="text-3xl font-bold">Sites</h1>
           <p className="text-muted-foreground">Gérez vos sites de déploiement</p>
         </div>
         <div className="flex items-center gap-4">
@@ -87,7 +87,7 @@ export default function SitesPage() {
             <Button asChild data-testid="create-site-btn">
               <Link href="/dashboard/sites/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Nouveau chantier
+                Nouveau site
               </Link>
             </Button>
           )}
@@ -98,7 +98,7 @@ export default function SitesPage() {
       <div className="relative">
         <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Rechercher un chantier..."
+          placeholder="Rechercher un site..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-10"
@@ -164,7 +164,7 @@ export default function SitesPage() {
 
           {filteredSites?.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">Aucun chantier trouvé</p>
+              <p className="text-muted-foreground">Aucun site trouvé</p>
             </div>
           )}
         </TabsContent>
