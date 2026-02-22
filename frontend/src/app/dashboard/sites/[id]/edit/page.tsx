@@ -986,7 +986,7 @@ function EditSitePage({
                 {/* Serveurs & Données de production */}
                 <div className="border-t pt-6">
                   <h3 className="text-lg font-semibold mb-4">Serveurs & Données de production</h3>
-                  <div className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="serverInfo.smbPath" className="flex items-center gap-2">
                         <FolderOpen className="h-4 w-4 text-muted-foreground" />
@@ -1035,7 +1035,7 @@ function EditSitePage({
                         onChange={(e) => setServerInfo({...serverInfo, accessRightsUrl: e.target.value})}
                       />
                     </div>
-                    <div className="space-y-2">
+                    <div className="md:col-span-2 space-y-2">
                       <Label htmlFor="serverInfo.notes" className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground" />
                         Notes serveur
@@ -1043,7 +1043,7 @@ function EditSitePage({
                       <Textarea
                         id="serverInfo.notes"
                         placeholder="Informations complémentaires..."
-                        rows={3}
+                        rows={2}
                         value={serverInfo.notes}
                         onChange={(e) => setServerInfo({...serverInfo, notes: e.target.value})}
                       />
@@ -1054,7 +1054,7 @@ function EditSitePage({
                 {/* Access Notes */}
                 <div className="border-t pt-6">
                   <h3 className="text-lg font-semibold mb-4">Notes d'Accès</h3>
-                  <div className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Horaires d'accès</Label>
                       <Textarea
@@ -1077,7 +1077,7 @@ function EditSitePage({
                       <Label>Procédures d'entrée</Label>
                       <Textarea
                         placeholder="1. S'enregistrer à l'accueil&#10;2. Récupérer badge..."
-                        rows={3}
+                        rows={2}
                         value={accessNotes.procedures}
                         onChange={(e) => setAccessNotes({...accessNotes, procedures: e.target.value})}
                       />
@@ -1086,7 +1086,7 @@ function EditSitePage({
                       <Label>Consignes de sécurité</Label>
                       <Textarea
                         placeholder="Port du casque obligatoire, EPI requis..."
-                        rows={3}
+                        rows={2}
                         value={accessNotes.safety}
                         onChange={(e) => setAccessNotes({...accessNotes, safety: e.target.value})}
                       />

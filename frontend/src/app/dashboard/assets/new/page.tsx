@@ -1,6 +1,7 @@
 // @ts-nocheck - Temporary fix for Radix UI + React 19 type incompatibility
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -140,6 +141,13 @@ export default function NewAssetPage() {
   const status = watch('status');
   const siteId = watch('siteId');
 
+  // Auto-clear site when status changes to RETIRED or STOCK
+  useEffect(() => {
+    if (status === 'RETIRED' || status === 'STOCK') {
+      setValue('siteId', 'none');
+    }
+  }, [status, setValue]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -270,7 +278,7 @@ export default function NewAssetPage() {
                     <SelectValue placeholder="Sélectionner un site" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Aucun (en stock)</SelectItem>
+                    <SelectItem value="none">Aucun</SelectItem>
                     {sites?.map((site) => (
                       <SelectItem key={site.id} value={site.id}>
                         {site.name}
