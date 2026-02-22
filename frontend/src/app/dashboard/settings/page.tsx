@@ -116,9 +116,9 @@ function ModulesTabContent() {
 }
 
 const ENUM_TYPE_LABELS: Record<string, string> = {
-  AssetType: "Types d'\u00e9quipement",
-  AssetStatus: "Statuts d'\u00e9quipement",
-  PinType: 'Types de rep\u00e8res (plans)',
+  AssetType: "Types d'équipement",
+  AssetStatus: "Statuts d'équipement",
+  PinType: 'Types de repères (plans)',
 };
 
 function EnumLabelsTabContent() {
@@ -151,15 +151,15 @@ function EnumLabelsTabContent() {
       { enumType: activeType, enumValue, label: editLabel, color: editColor },
       { onSuccess: () => {
         setEditingItem(null);
-        toast.success('Label mis \u00e0 jour');
+        toast.success('Label mis à jour');
       }},
     );
   };
 
   const handleReset = () => {
-    if (confirm(`R\u00e9initialiser tous les labels "${ENUM_TYPE_LABELS[activeType]}" aux valeurs par d\u00e9faut ?`)) {
+    if (confirm(`Réinitialiser tous les labels "${ENUM_TYPE_LABELS[activeType]}" aux valeurs par défaut ?`)) {
       resetLabels(activeType, {
-        onSuccess: () => toast.success('Labels r\u00e9initialis\u00e9s'),
+        onSuccess: () => toast.success('Labels réinitialisés'),
       });
     }
   };
@@ -172,7 +172,7 @@ function EnumLabelsTabContent() {
           Personnalisation des types
         </CardTitle>
         <CardDescription>
-          Personnalisez les labels et couleurs des types d'\u00e9quipement, statuts et rep\u00e8res.
+          Personnalisez les labels et couleurs des types d'équipement, statuts et repères.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -196,7 +196,7 @@ function EnumLabelsTabContent() {
             className="ml-auto text-muted-foreground"
           >
             <RotateCcw className="mr-1 h-3 w-3" />
-            R\u00e9initialiser
+            Réinitialiser
           </Button>
         </div>
 
@@ -255,7 +255,7 @@ function EnumLabelsTabContent() {
                   <span className="flex-1 text-sm font-medium">{item.label}</span>
                   <span className="text-xs text-muted-foreground font-mono">{item.enumValue}</span>
                   {item.isCustom && (
-                    <Badge variant="outline" className="text-xs">Personnalis\u00e9</Badge>
+                    <Badge variant="outline" className="text-xs">Personnalisé</Badge>
                   )}
                   <Button
                     size="sm"
@@ -274,7 +274,7 @@ function EnumLabelsTabContent() {
         <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
           <p className="flex items-center gap-2">
             <Info className="h-4 w-4 shrink-0" />
-            Les labels personnalis\u00e9s s'affichent partout dans l'application. Les valeurs internes (code) ne changent pas.
+            Les labels personnalisés s'affichent partout dans l'application. Les valeurs internes (code) ne changent pas.
           </p>
         </div>
       </CardContent>
@@ -342,7 +342,7 @@ function SsoConfigSection() {
       const updated = await tenantsApi.updateSsoConfig(data);
       setSsoConfig(updated);
       setClientSecret(''); // Clear after save
-      toast.success('Configuration SSO enregistr\u00e9e');
+      toast.success('Configuration SSO enregistrée');
     } catch (error) {
       console.error('Failed to save SSO config:', error);
       toast.error('Erreur lors de la sauvegarde SSO');
@@ -388,7 +388,7 @@ function SsoConfigSection() {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={ssoEnabled ? 'default' : 'secondary'} className="text-xs">
-            {ssoEnabled ? 'Activ\u00e9' : 'D\u00e9sactiv\u00e9'}
+            {ssoEnabled ? 'Activé' : 'Désactivé'}
           </Badge>
           <Switch
             checked={ssoEnabled}
@@ -409,7 +409,7 @@ function SsoConfigSection() {
                 onChange={(e) => setIssuer(e.target.value)}
                 placeholder="https://login.microsoftonline.com/tenant-id/v2.0"
               />
-              <p className="text-xs text-muted-foreground">L'URL de d\u00e9couverte de votre fournisseur d'identit\u00e9</p>
+              <p className="text-xs text-muted-foreground">L'URL de découverte de votre fournisseur d'identité</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="ssoCallbackUrl">Callback URL</Label>
@@ -419,7 +419,7 @@ function SsoConfigSection() {
                 onChange={(e) => setCallbackUrl(e.target.value)}
                 placeholder="https://xch.example.com/api/auth/oidc/callback"
               />
-              <p className="text-xs text-muted-foreground">\u00c0 configurer dans votre IdP comme &quot;Redirect URI&quot;</p>
+              <p className="text-xs text-muted-foreground">À configurer dans votre IdP comme &quot;Redirect URI&quot;</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="ssoClientId">Client ID</Label>
@@ -437,7 +437,7 @@ function SsoConfigSection() {
                 type="password"
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}
-                placeholder={ssoConfig?.clientSecretSet ? `D\u00e9j\u00e0 configur\u00e9 (${ssoConfig.clientSecretHint})` : 'Entrez le secret client'}
+                placeholder={ssoConfig?.clientSecretSet ? `Déjà configuré (${ssoConfig.clientSecretHint})` : 'Entrez le secret client'}
               />
               {ssoConfig?.clientSecretSet && (
                 <p className="text-xs text-muted-foreground">Laissez vide pour garder le secret actuel</p>
@@ -448,9 +448,9 @@ function SsoConfigSection() {
           {/* Role mapping */}
           <div className="border-t pt-4 space-y-3">
             <div>
-              <h4 className="font-medium text-sm">Mapping des r\u00f4les</h4>
+              <h4 className="font-medium text-sm">Mapping des rôles</h4>
               <p className="text-xs text-muted-foreground">
-                Associez les groupes/claims de votre IdP aux r\u00f4les XCH. Le r\u00f4le &quot;default&quot; est utilis\u00e9 si aucun groupe ne correspond.
+                Associez les groupes/claims de votre IdP aux rôles XCH. Le rôle &quot;default&quot; est utilisé si aucun groupe ne correspond.
               </p>
             </div>
 
@@ -462,7 +462,7 @@ function SsoConfigSection() {
                     disabled
                     className="flex-1 h-8 text-sm font-mono bg-muted/50"
                   />
-                  <span className="text-xs text-muted-foreground">\u2192</span>
+                  <span className="text-xs text-muted-foreground">→</span>
                   <select
                     value={xchRole}
                     onChange={(e) => setRoleMapping({ ...roleMapping, [groupKey]: e.target.value })}
@@ -495,7 +495,7 @@ function SsoConfigSection() {
                 className="flex-1 h-8 text-sm"
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddMapping(); }}
               />
-              <span className="text-xs text-muted-foreground">\u2192</span>
+              <span className="text-xs text-muted-foreground">→</span>
               <select
                 value={newMappingRole}
                 onChange={(e) => setNewMappingRole(e.target.value)}
@@ -520,7 +520,7 @@ function SsoConfigSection() {
           <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
             <p className="flex items-center gap-2">
               <Info className="h-4 w-4 shrink-0" />
-              La connexion locale (email/mot de passe) reste toujours disponible, m\u00eame avec SSO activ\u00e9. Au moins un compte admin local est recommand\u00e9.
+              La connexion locale (email/mot de passe) reste toujours disponible, même avec SSO activé. Au moins un compte admin local est recommandé.
             </p>
           </div>
         </>
