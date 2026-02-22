@@ -23,39 +23,39 @@ export class AuthController {
 
   /**
    * Get cookie options based on environment
-   * - Production behind nginx (same-origin): secure + sameSite=lax (no domain needed)
-   * - Production cross-origin: secure + sameSite=none + explicit domain
-   * - Development: HTTP-compatible (no secure, sameSite=lax)
+   *
+   * Cookie secure flag logic:
+   * - COOKIE_SECURE=true  → force secure (HTTPS required)
+   * - COOKIE_SECURE=false → force non-secure (HTTP OK, for testing)
+   * - Not set → auto-detect based on NODE_ENV (production=secure, dev=non-secure)
    */
   private getCookieOptions(path: string = '/', maxAge: number = 15 * 60 * 1000) {
     const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
     const cookieDomain = this.configService.get<string>('COOKIE_DOMAIN');
+    const cookieSecureEnv = this.configService.get<string>('COOKIE_SECURE');
 
-    if (isProduction) {
-      const options: Record<string, any> = {
-        httpOnly: true,
-        secure: true,
-        sameSite: cookieDomain ? 'none' as const : 'lax' as const,
-        maxAge,
-        path,
-      };
-      // Only set domain for cross-origin deployments (e.g., .yourdomain.com)
-      // When behind nginx (same-origin), omit domain for automatic scoping
-      if (cookieDomain) {
-        options.domain = cookieDomain;
-      }
-      return options;
+    // Determine secure flag: explicit env var overrides auto-detection
+    let isSecure: boolean;
+    if (cookieSecureEnv !== undefined && cookieSecureEnv !== '') {
+      isSecure = cookieSecureEnv === 'true';
+    } else {
+      isSecure = isProduction;
     }
 
-    // Development/Test: localhost-compatible
-    return {
+    const options: Record<string, any> = {
       httpOnly: true,
-      secure: false, // Allow HTTP in dev
-      sameSite: 'lax' as const,
-      // No domain for localhost
+      secure: isSecure,
+      sameSite: (isSecure && cookieDomain) ? 'none' as const : 'lax' as const,
       maxAge,
       path,
     };
+
+    // Only set domain for cross-origin deployments (e.g., .yourdomain.com)
+    if (cookieDomain) {
+      options.domain = cookieDomain;
+    }
+
+    return options;
   }
 
   @Post('login')
