@@ -51,8 +51,12 @@ COPY --from=builder /app/dist ./dist
 # Copy Casbin configuration
 COPY --from=builder /app/casbin /casbin
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 # Expose port (internal Docker port; nginx proxies to this)
 EXPOSE 3000
 
-# Start application
-CMD ["npm", "run", "start:prod"]
+# Start: run migrations then launch app
+ENTRYPOINT ["/docker-entrypoint.sh"]
