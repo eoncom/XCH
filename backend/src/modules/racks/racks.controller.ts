@@ -8,14 +8,17 @@ import { MountEquipmentDto } from './dto/mount-equipment.dto';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
+import { ModuleGuard } from '../../common/guards/module.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { SiteAccessService } from '../site-access/site-access.service';
 import { ResourcePermissionLevel } from '../site-access/dto/grant-site-access.dto';
 
+@RequireModule('racks')
 @ApiTags('racks')
 @Controller('racks')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@UseGuards(JwtAuthGuard, CasbinGuard, ModuleGuard)
 @ApiBearerAuth()
 export class RacksController {
   constructor(

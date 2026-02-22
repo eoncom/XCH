@@ -10,12 +10,15 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../../../common/guards/module.guard';
+import { RequireModule } from '../../../common/decorators/require-module.decorator';
 import { NetboxService } from './netbox.service';
 import { NetboxSyncService } from './netbox-sync.service';
 
+@RequireModule('integrations_netbox')
 @ApiTags('Integrations - NetBox')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard)
 @Controller('integrations/netbox')
 export class NetboxController {
   constructor(

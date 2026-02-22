@@ -26,15 +26,18 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { DashboardSkeleton } from '@/components/ui/skeleton';
 import { useBranding } from '@/components/BrandingProvider';
+import { useMemo } from 'react';
+import { useTenantModules } from '@/hooks/useTenantModules';
 
+// Navigation items with optional moduleKey for feature-flag filtering
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Sites', href: '/dashboard/sites', icon: MapPin },
-  { name: 'Équipements', href: '/dashboard/assets', icon: Package },
-  { name: 'Baies', href: '/dashboard/racks', icon: Server },
-  { name: 'Tâches', href: '/dashboard/tasks', icon: CheckSquare },
-  { name: 'Plans', href: '/dashboard/floor-plans', icon: LayoutTemplate },
-  { name: 'Contacts', href: '/dashboard/contacts', icon: Contact2 },
+  { name: 'Sites', href: '/dashboard/sites', icon: MapPin, moduleKey: 'sites' },
+  { name: 'Équipements', href: '/dashboard/assets', icon: Package, moduleKey: 'assets' },
+  { name: 'Baies', href: '/dashboard/racks', icon: Server, moduleKey: 'racks' },
+  { name: 'Tâches', href: '/dashboard/tasks', icon: CheckSquare, moduleKey: 'tasks' },
+  { name: 'Plans', href: '/dashboard/floor-plans', icon: LayoutTemplate, moduleKey: 'floor_plans' },
+  { name: 'Contacts', href: '/dashboard/contacts', icon: Contact2, moduleKey: 'contacts' },
 ];
 
 const adminNavigation = [
@@ -50,6 +53,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const { logoUrl, orgName } = useBranding();
+  const { isModuleEnabled } = useTenantModules();
+
+  // Filter navigation based on enabled modules
+  const filteredNavigation = useMemo(
+    () => navigation.filter((item) => !item.moduleKey || isModuleEnabled(item.moduleKey)),
+    [isModuleEnabled],
+  );
 
   // Check session on mount (verify HTTP-only cookie is valid)
   useEffect(() => {
@@ -138,7 +148,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
-          {navigation.map((item) => {
+          {filteredNavigation.map((item) => {
             const isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href);
             return (
               <Link

@@ -3719,3 +3719,24 @@ feat: rename Chantiers → Sites + add site audit history
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-22
+
+**Date:** 2026-02-22 13:40:48
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 10
+- Frontend files modified: 6
+
+**Commit message:**
+```
+feat: single-endpoint deployment via nginx reverse proxy
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

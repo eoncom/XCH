@@ -23,16 +23,19 @@ import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
+import { ModuleGuard } from '../../common/guards/module.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { Resource } from '../../common/decorators/permissions.decorator';
 import { Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { SiteAccessService } from '../site-access/site-access.service';
 import { ResourcePermissionLevel } from '../site-access/dto/grant-site-access.dto';
 
+@RequireModule('floor_plans')
 @ApiTags('floor-plans')
 @ApiBearerAuth()
 @Controller('floor-plans')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@UseGuards(JwtAuthGuard, CasbinGuard, ModuleGuard)
 export class FloorPlansController {
   constructor(
     private readonly floorPlansService: FloorPlansService,

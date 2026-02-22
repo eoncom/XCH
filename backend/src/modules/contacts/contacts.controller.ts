@@ -22,12 +22,15 @@ import { UpdateContactDto } from './dto/update-contact.dto';
 import { QueryContactDto } from './dto/query-contact.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
+import { ModuleGuard } from '../../common/guards/module.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
 
+@RequireModule('contacts')
 @ApiTags('contacts')
 @Controller('contacts')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@UseGuards(JwtAuthGuard, CasbinGuard, ModuleGuard)
 @ApiBearerAuth()
 export class ContactsController {
   constructor(private readonly contactsService: ContactsService) {}

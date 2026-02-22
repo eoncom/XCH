@@ -15,11 +15,13 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2 } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
+import { useTenantModules } from '@/hooks/useTenantModules';
 
 interface SecurityReminder {
   id: string;
@@ -37,6 +39,78 @@ interface TenantConfig {
     language?: string;
     securityReminders?: SecurityReminder[];
   };
+}
+
+function ModulesTabContent() {
+  const { modules, isLoading, updateModules, isUpdating } = useTenantModules();
+
+  const handleToggle = (key: string, enabled: boolean) => {
+    updateModules({ [key]: enabled });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <p className="text-center text-muted-foreground">Chargement des modules...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Blocks className="h-5 w-5" />
+          Modules applicatifs
+        </CardTitle>
+        <CardDescription>
+          Activez ou désactivez les modules de l'application. Les modules désactivés sont masqués de la navigation et leurs API retournent une erreur 403.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-1">
+          {modules.map((mod) => (
+            <div
+              key={mod.key}
+              className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center gap-4">
+                <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
+                  mod.enabled
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-muted text-muted-foreground'
+                }`}>
+                  <ToggleLeft className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-medium">{mod.label}</p>
+                  <p className="text-sm text-muted-foreground">{mod.description}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge variant={mod.enabled ? 'default' : 'secondary'} className="text-xs">
+                  {mod.enabled ? 'Actif' : 'Inactif'}
+                </Badge>
+                <Switch
+                  checked={mod.enabled}
+                  onCheckedChange={(checked) => handleToggle(mod.key, checked)}
+                  disabled={isUpdating || mod.key === 'sites'}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+          <p className="flex items-center gap-2">
+            <Info className="h-4 w-4 shrink-0" />
+            Le module &quot;Sites&quot; est obligatoire et ne peut pas être désactivé. Les modifications sont appliquées immédiatement.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function SettingsPage() {
@@ -203,6 +277,12 @@ export default function SettingsPage() {
             <TabsTrigger value="integrations">
               <Plug className="mr-2 h-4 w-4" />
               Intégrations
+            </TabsTrigger>
+          )}
+          {user?.role === 'ADMIN' && (
+            <TabsTrigger value="modules">
+              <Blocks className="mr-2 h-4 w-4" />
+              Modules
             </TabsTrigger>
           )}
         </TabsList>
@@ -742,6 +822,11 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* Modules Tab */}
+        <TabsContent value="modules" className="space-y-6">
+          <ModulesTabContent />
         </TabsContent>
 
         {/* Integrations Tab — consolidated NetBox + Monitoring */}

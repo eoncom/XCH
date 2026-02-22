@@ -2,6 +2,7 @@ import { Controller, Get, Patch, Body, UseGuards, Request } from '@nestjs/common
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { UpdateModulesDto } from './dto/update-modules.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
@@ -33,5 +34,26 @@ export class TenantsController {
   @ApiOperation({ summary: 'Update current tenant' })
   update(@Body() updateTenantDto: UpdateTenantDto, @Request() req: AuthRequest) {
     return this.tenantsService.update(req.user.tenantId, updateTenantDto);
+  }
+
+  // ============================================================================
+  // MODULES
+  // ============================================================================
+
+  @Get('modules')
+  @Resource('tenants') @Action('read')
+  @ApiOperation({ summary: 'Get all modules with enabled/disabled status' })
+  getModules(@Request() req: AuthRequest) {
+    return this.tenantsService.getModules(req.user.tenantId);
+  }
+
+  @Patch('modules')
+  @Resource('tenants') @Action('update')
+  @ApiOperation({ summary: 'Update module enabled/disabled states (ADMIN only)' })
+  updateModules(
+    @Body() updateModulesDto: UpdateModulesDto,
+    @Request() req: AuthRequest,
+  ) {
+    return this.tenantsService.updateModules(req.user.tenantId, updateModulesDto.modules);
   }
 }

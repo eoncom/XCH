@@ -10,14 +10,17 @@ import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
+import { ModuleGuard } from '../../common/guards/module.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { SiteAccessService } from '../site-access/site-access.service';
 import { ResourcePermissionLevel } from '../site-access/dto/grant-site-access.dto';
 
+@RequireModule('tasks')
 @ApiTags('tasks')
 @Controller('tasks')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@UseGuards(JwtAuthGuard, CasbinGuard, ModuleGuard)
 @ApiBearerAuth()
 export class TasksController {
   constructor(
