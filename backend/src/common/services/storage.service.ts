@@ -151,7 +151,7 @@ export class StorageService {
    * Get file URL
    *
    * When MINIO_PUBLIC_URL is set:
-   *   - Uses that URL directly (e.g., https://xch.eoncom.io/storage)
+   *   - Uses that URL directly (e.g., https://xch.example.com/storage)
    * When behind nginx proxy (default):
    *   - Returns /storage/{bucket}/{path} (relative URL, routed by nginx)
    * Fallback (dev without nginx):

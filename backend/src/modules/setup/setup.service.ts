@@ -75,7 +75,7 @@ export class SetupService {
         config: {
           domain: dto.subdomain,
           timezone: dto.timezone || 'Europe/Paris',
-          language: dto.language || 'Fran\u00e7ais',
+          language: dto.language || 'Français',
           modules: {
             sites: true,
             assets: true,

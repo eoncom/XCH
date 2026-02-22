@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// ✅ RE-ENABLED (Session 18): Cookies with domain='.eoncom.io' now work correctly
-// Backend sets cookies with domain='.eoncom.io' (Session 14), allowing middleware to read them
+// Middleware checks accessToken cookie to protect authenticated routes
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

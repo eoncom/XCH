@@ -47,7 +47,7 @@ export default function SetupPage() {
     organizationName: '',
     subdomain: '',
     timezone: 'Europe/Paris',
-    language: 'Fran\u00e7ais',
+    language: 'Français',
     primaryColor: '#0070f3',
     adminName: '',
     adminEmail: '',
@@ -115,7 +115,7 @@ export default function SetupPage() {
       if (!formData.adminPassword) {
         newErrors.adminPassword = 'Le mot de passe est requis';
       } else if (formData.adminPassword.length < 8) {
-        newErrors.adminPassword = 'Minimum 8 caract\u00e8res';
+        newErrors.adminPassword = 'Minimum 8 caractères';
       }
     }
 
@@ -153,7 +153,7 @@ export default function SetupPage() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-          <p className="text-muted-foreground">V\u00e9rification du statut...</p>
+          <p className="text-muted-foreground">Vérification du statut...</p>
         </div>
       </div>
     );
@@ -211,7 +211,7 @@ export default function SetupPage() {
         })}
       </div>
       <p className="text-center text-sm text-muted-foreground">
-        \u00c9tape {currentStep + 1}/{STEPS.length} — {STEPS[currentStep].title}
+        Étape {currentStep + 1}/{STEPS.length} — {STEPS[currentStep].title}
       </p>
 
       {/* Step content */}
@@ -222,12 +222,12 @@ export default function SetupPage() {
             <CardHeader>
               <CardTitle>Bienvenue sur XCH</CardTitle>
               <CardDescription>
-                Cet assistant va configurer votre instance en quelques \u00e9tapes simples.
+                Cet assistant va configurer votre instance en quelques étapes simples.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-3">
-                <h4 className="font-medium text-sm">Services d\u00e9tect\u00e9s :</h4>
+                <h4 className="font-medium text-sm">Services détectés :</h4>
                 {status?.services.map((svc) => (
                   <div key={svc.name} className="flex items-center gap-3 p-3 rounded-lg border">
                     {svc.status === 'ok' ? (
@@ -242,13 +242,13 @@ export default function SetupPage() {
                       )}
                     </div>
                     <Badge variant={svc.status === 'ok' ? 'default' : 'destructive'} className="ml-auto text-xs">
-                      {svc.status === 'ok' ? 'Connect\u00e9' : 'Erreur'}
+                      {svc.status === 'ok' ? 'Connecté' : 'Erreur'}
                     </Badge>
                   </div>
                 ))}
               </div>
               <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-sm text-blue-700 dark:text-blue-300">
-                Aucun tenant n'est configur\u00e9. Cliquez sur &quot;Commencer&quot; pour cr\u00e9er votre organisation.
+                Aucun tenant n'est configuré. Cliquez sur &quot;Commencer&quot; pour créer votre organisation.
               </div>
             </CardContent>
           </>
@@ -270,7 +270,7 @@ export default function SetupPage() {
                   id="orgName"
                   value={formData.organizationName}
                   onChange={(e) => updateField('organizationName', e.target.value)}
-                  placeholder="EonCom IT Management"
+                  placeholder="Mon Organisation"
                 />
                 {errors.organizationName && (
                   <p className="text-sm text-red-500">{errors.organizationName}</p>
@@ -283,7 +283,7 @@ export default function SetupPage() {
                   id="subdomain"
                   value={formData.subdomain}
                   onChange={(e) => updateField('subdomain', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                  placeholder="eoncom"
+                  placeholder="mon-organisation"
                 />
                 <p className="text-xs text-muted-foreground">
                   Lettres minuscules, chiffres et tirets uniquement.
@@ -309,7 +309,7 @@ export default function SetupPage() {
                     id="language"
                     value={formData.language}
                     onChange={(e) => updateField('language', e.target.value)}
-                    placeholder="Fran\u00e7ais"
+                    placeholder="Français"
                   />
                 </div>
               </div>
@@ -347,7 +347,7 @@ export default function SetupPage() {
             <CardHeader>
               <CardTitle>Compte administrateur</CardTitle>
               <CardDescription>
-                Ce sera le premier compte avec un acc\u00e8s total \u00e0 l'application.
+                Ce sera le premier compte avec un accès total à l'application.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -371,7 +371,7 @@ export default function SetupPage() {
                   type="email"
                   value={formData.adminEmail}
                   onChange={(e) => updateField('adminEmail', e.target.value)}
-                  placeholder="admin@eoncom.io"
+                  placeholder="admin@example.com"
                 />
                 {errors.adminEmail && (
                   <p className="text-sm text-red-500">{errors.adminEmail}</p>
@@ -386,7 +386,7 @@ export default function SetupPage() {
                     type={showPassword ? 'text' : 'password'}
                     value={formData.adminPassword}
                     onChange={(e) => updateField('adminPassword', e.target.value)}
-                    placeholder="Minimum 8 caract\u00e8res"
+                    placeholder="Minimum 8 caractères"
                   />
                   <button
                     type="button"
@@ -416,7 +416,7 @@ export default function SetupPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="adminPhone">T\u00e9l\u00e9phone (optionnel)</Label>
+                <Label htmlFor="adminPhone">Téléphone (optionnel)</Label>
                 <Input
                   id="adminPhone"
                   type="tel"
@@ -427,7 +427,7 @@ export default function SetupPage() {
               </div>
 
               <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-sm text-amber-700 dark:text-amber-300">
-                Ce compte sera le seul administrateur initial. Vous pourrez en ajouter d'autres apr\u00e8s la configuration.
+                Ce compte sera le seul administrateur initial. Vous pourrez en ajouter d'autres après la configuration.
               </div>
             </CardContent>
           </>
@@ -451,24 +451,24 @@ export default function SetupPage() {
                 />
                 <div className="space-y-1">
                   <Label htmlFor="loadDemo" className="font-medium cursor-pointer">
-                    Charger les donn\u00e9es de d\u00e9monstration
+                    Charger les données de démonstration
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Cr\u00e9e 6 sites, 100+ \u00e9quipements, des t\u00e2ches et contacts pour d\u00e9couvrir l'application.
-                    Supprimable \u00e0 tout moment depuis les param\u00e8tres.
+                    Crée 6 sites, 100+ équipements, des tâches et contacts pour découvrir l'application.
+                    Supprimable à tout moment depuis les paramètres.
                   </p>
                 </div>
               </div>
 
               <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-                <p className="font-medium mb-1">Modules activ\u00e9s par d\u00e9faut :</p>
+                <p className="font-medium mb-1">Modules activés par défaut :</p>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {['Sites', '\u00c9quipements', 'Baies', 'T\u00e2ches', 'Plans', 'Contacts', 'QR Codes'].map((mod) => (
+                  {['Sites', 'Équipements', 'Baies', 'Tâches', 'Plans', 'Contacts', 'QR Codes'].map((mod) => (
                     <Badge key={mod} variant="secondary" className="text-xs">{mod}</Badge>
                   ))}
                 </div>
                 <p className="mt-2 text-xs">
-                  Vous pourrez activer/d\u00e9sactiver les modules depuis Param\u00e8tres &gt; Modules.
+                  Vous pourrez activer/désactiver les modules depuis Paramètres &gt; Modules.
                 </p>
               </div>
             </CardContent>
@@ -479,9 +479,9 @@ export default function SetupPage() {
         {currentStep === 4 && !setupComplete && (
           <>
             <CardHeader>
-              <CardTitle>R\u00e9capitulatif</CardTitle>
+              <CardTitle>Récapitulatif</CardTitle>
               <CardDescription>
-                V\u00e9rifiez les informations avant de lancer la configuration.
+                Vérifiez les informations avant de lancer la configuration.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -503,7 +503,7 @@ export default function SetupPage() {
                   <span className="text-sm">{formData.adminName} ({formData.adminEmail})</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b">
-                  <span className="text-sm text-muted-foreground">Donn\u00e9es d\u00e9mo</span>
+                  <span className="text-sm text-muted-foreground">Données démo</span>
                   <Badge variant={formData.loadDemoData ? 'default' : 'secondary'}>
                     {formData.loadDemoData ? 'Oui' : 'Non'}
                   </Badge>
@@ -533,29 +533,29 @@ export default function SetupPage() {
               <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-4">
                 <CheckCircle2 className="h-8 w-8 text-green-500" />
               </div>
-              <CardTitle>Configuration termin\u00e9e !</CardTitle>
+              <CardTitle>Configuration terminée !</CardTitle>
               <CardDescription>
-                Votre instance XCH est pr\u00eate \u00e0 l'emploi.
+                Votre instance XCH est prête à l'emploi.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950/30 space-y-2 text-sm">
                 <p className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                  <CheckCircle2 className="h-4 w-4" /> Organisation &quot;{formData.organizationName}&quot; cr\u00e9\u00e9e
+                  <CheckCircle2 className="h-4 w-4" /> Organisation &quot;{formData.organizationName}&quot; créée
                 </p>
                 <p className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                  <CheckCircle2 className="h-4 w-4" /> Administrateur {formData.adminEmail} cr\u00e9\u00e9
+                  <CheckCircle2 className="h-4 w-4" /> Administrateur {formData.adminEmail} créé
                 </p>
                 {formData.loadDemoData && (
                   <p className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                    <CheckCircle2 className="h-4 w-4" /> Donn\u00e9es de d\u00e9monstration charg\u00e9es
+                    <CheckCircle2 className="h-4 w-4" /> Données de démonstration chargées
                   </p>
                 )}
               </div>
 
               <div className="text-center">
                 <Button size="lg" onClick={() => router.push('/login')} className="mt-4">
-                  Acc\u00e9der \u00e0 XCH
+                  Accéder à XCH
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>

@@ -3,12 +3,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SetupDto {
   // Organization
-  @ApiProperty({ example: 'EonCom IT Management' })
+  @ApiProperty({ example: 'Mon Organisation' })
   @IsString()
   @IsNotEmpty()
   organizationName: string;
 
-  @ApiProperty({ example: 'eoncom' })
+  @ApiProperty({ example: 'mon-organisation' })
   @IsString()
   @IsNotEmpty()
   subdomain: string;
@@ -18,7 +18,7 @@ export class SetupDto {
   @IsOptional()
   timezone?: string;
 
-  @ApiPropertyOptional({ example: 'Fran\u00e7ais' })
+  @ApiPropertyOptional({ example: 'Français' })
   @IsString()
   @IsOptional()
   language?: string;
@@ -39,7 +39,7 @@ export class SetupDto {
   @IsNotEmpty()
   adminName: string;
 
-  @ApiProperty({ example: 'admin@eoncom.io' })
+  @ApiProperty({ example: 'admin@example.com' })
   @IsEmail()
   adminEmail: string;
 

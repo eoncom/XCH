@@ -13,18 +13,7 @@ export class SeedService {
   async loadDemo(tenantId: string) {
     this.logger.log(`Loading demo data for tenant ${tenantId}`);
 
-    // Update tenant with realistic org name and config
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: {
-        name: 'EONCOM - Délégation Île-de-France',
-        config: {
-          domain: 'eoncom.io',
-          timezone: 'Europe/Paris',
-          language: 'Français',
-        },
-      },
-    });
+    // NOTE: Do NOT overwrite tenant name/config here — the user sets those in the setup wizard.
 
     const sites = await this.createSites(tenantId);
     const users = await this.createUsers(tenantId);
@@ -122,7 +111,7 @@ export class SeedService {
         connectivity: {
           primary: { type: 'Fibre optique dédiée', provider: 'Orange Business', ref: 'FTTO-DEF-001' },
           backup: { type: '4G/5G', provider: 'Bouygues Telecom', ref: '4G-DEF-001' },
-          cutProcedure: 'Contacter NOC EONCOM au 01 XX XX XX XX puis basculer SD-WAN',
+          cutProcedure: 'Contacter le NOC au 01 XX XX XX XX puis basculer SD-WAN',
         },
         notes: 'Grand site Tour Alto - 8 étages, salle IT au RDC et étage 4. Accès badge NEXITY + escorte zone serveur.',
       },
