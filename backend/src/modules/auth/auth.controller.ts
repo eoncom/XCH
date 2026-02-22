@@ -1,6 +1,8 @@
 import { Controller, Post, Body, UseGuards, Request, Get, Res, UnauthorizedException, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
+import { PrismaClient } from '@prisma/client';
 import { Response, Request as ExpressRequest } from 'express';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -16,6 +18,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private configService: ConfigService,
+    private prisma: PrismaClient,
   ) {}
 
   /**
@@ -137,5 +140,60 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile' })
   getProfile(@Request() req: AuthRequest) {
     return req.user;
+  }
+
+  // ===== SSO / OIDC Endpoints =====
+
+  @Get('sso-config')
+  @ApiOperation({ summary: 'Get SSO configuration status (public — for login page)' })
+  @ApiResponse({ status: 200, description: 'SSO enabled status' })
+  async getSsoConfig() {
+    const oidcEnabled = this.configService.get('OIDC_ENABLED') === 'true';
+
+    // Also check if there's a tenant-level SSO config
+    let tenantSsoEnabled = false;
+    try {
+      const tenant = await this.prisma.tenant.findFirst({
+        where: { status: 'ACTIVE' },
+        select: { config: true },
+      });
+      const config = tenant?.config as Record<string, any> | null;
+      tenantSsoEnabled = config?.sso?.enabled === true;
+    } catch {
+      // Ignore — no tenant configured yet
+    }
+
+    return {
+      ssoEnabled: oidcEnabled || tenantSsoEnabled,
+      provider: oidcEnabled ? 'oidc' : tenantSsoEnabled ? 'oidc' : null,
+    };
+  }
+
+  @Get('oidc')
+  @UseGuards(AuthGuard('oidc'))
+  @ApiOperation({ summary: 'Initiate OIDC login flow (redirects to IdP)' })
+  async oidcLogin() {
+    // Passport handles the redirect automatically
+  }
+
+  @Get('oidc/callback')
+  @UseGuards(AuthGuard('oidc'))
+  @ApiOperation({ summary: 'OIDC callback handler (receives code from IdP)' })
+  async oidcCallback(
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    // The user is already authenticated via passport strategy
+    const result = req.user;
+
+    if (result?.accessToken) {
+      // Set HTTP-only cookies
+      res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', 15 * 60 * 1000));
+      res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', 7 * 24 * 60 * 60 * 1000));
+    }
+
+    // Redirect to frontend dashboard
+    const frontendUrl = this.configService.get('FRONTEND_URL') || '';
+    res.redirect(frontendUrl ? `${frontendUrl}/dashboard` : '/dashboard');
   }
 }

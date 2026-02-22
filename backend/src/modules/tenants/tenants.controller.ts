@@ -56,4 +56,25 @@ export class TenantsController {
   ) {
     return this.tenantsService.updateModules(req.user.tenantId, updateModulesDto.modules);
   }
+
+  // ============================================================================
+  // SSO CONFIGURATION
+  // ============================================================================
+
+  @Get('sso-config')
+  @Resource('tenants') @Action('read')
+  @ApiOperation({ summary: 'Get SSO configuration for current tenant' })
+  getSsoConfig(@Request() req: AuthRequest) {
+    return this.tenantsService.getSsoConfig(req.user.tenantId);
+  }
+
+  @Patch('sso-config')
+  @Resource('tenants') @Action('update')
+  @ApiOperation({ summary: 'Update SSO configuration (ADMIN only)' })
+  updateSsoConfig(
+    @Body() ssoConfig: Record<string, any>,
+    @Request() req: AuthRequest,
+  ) {
+    return this.tenantsService.updateSsoConfig(req.user.tenantId, ssoConfig);
+  }
 }

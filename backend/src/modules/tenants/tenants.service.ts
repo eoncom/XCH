@@ -118,4 +118,75 @@ export class TenantsService {
 
     return this.getModules(tenantId);
   }
+
+  // ============================================================================
+  // SSO CONFIGURATION
+  // ============================================================================
+
+  /**
+   * Get SSO configuration for a tenant.
+   * Masks the client secret for display (returns only last 4 chars).
+   */
+  async getSsoConfig(tenantId: string) {
+    const tenant = await this.findOne(tenantId);
+    const config = tenant.config as Record<string, any> | null;
+    const sso = config?.sso || {};
+
+    return {
+      enabled: sso.enabled || false,
+      provider: sso.provider || 'oidc',
+      issuer: sso.issuer || '',
+      clientId: sso.clientId || '',
+      clientSecretSet: !!sso.clientSecret,
+      clientSecretHint: sso.clientSecret
+        ? `****${sso.clientSecret.slice(-4)}`
+        : '',
+      callbackUrl: sso.callbackUrl || '',
+      roleMapping: sso.roleMapping || {
+        admin: 'ADMIN',
+        manager: 'MANAGER',
+        technician: 'TECHNICIEN',
+        default: 'VIEWER',
+      },
+    };
+  }
+
+  /**
+   * Update SSO configuration for a tenant.
+   * Stores the full config in Tenant.config.sso.
+   * If clientSecret is empty/undefined, keeps the existing one.
+   */
+  async updateSsoConfig(tenantId: string, ssoConfig: Record<string, any>) {
+    const tenant = await this.findOne(tenantId);
+    const config = (tenant.config as Record<string, any>) || {};
+    const existingSso = config.sso || {};
+
+    const updatedSso = {
+      enabled: ssoConfig.enabled ?? existingSso.enabled ?? false,
+      provider: ssoConfig.provider || existingSso.provider || 'oidc',
+      issuer: ssoConfig.issuer ?? existingSso.issuer ?? '',
+      clientId: ssoConfig.clientId ?? existingSso.clientId ?? '',
+      // Only update secret if a non-empty value is provided
+      clientSecret: ssoConfig.clientSecret || existingSso.clientSecret || '',
+      callbackUrl: ssoConfig.callbackUrl ?? existingSso.callbackUrl ?? '',
+      roleMapping: ssoConfig.roleMapping ?? existingSso.roleMapping ?? {
+        admin: 'ADMIN',
+        manager: 'MANAGER',
+        technician: 'TECHNICIEN',
+        default: 'VIEWER',
+      },
+    };
+
+    const updatedConfig = {
+      ...config,
+      sso: updatedSso,
+    };
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { config: updatedConfig },
+    });
+
+    return this.getSsoConfig(tenantId);
+  }
 }

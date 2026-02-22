@@ -23,6 +23,7 @@ import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 import { useTenantModules } from '@/hooks/useTenantModules';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
+import { tenantsApi, type SsoConfig } from '@/lib/api/tenants';
 
 interface SecurityReminder {
   id: string;
@@ -278,6 +279,268 @@ function EnumLabelsTabContent() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+const XCH_ROLES = ['ADMIN', 'MANAGER', 'TECHNICIEN', 'VIEWER'] as const;
+
+function SsoConfigSection() {
+  const [ssoConfig, setSsoConfig] = useState<SsoConfig | null>(null);
+  const [isLoadingSso, setIsLoadingSso] = useState(true);
+  const [isSavingSso, setIsSavingSso] = useState(false);
+
+  // Form state
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [issuer, setIssuer] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [callbackUrl, setCallbackUrl] = useState('');
+  const [roleMapping, setRoleMapping] = useState<Record<string, string>>({
+    admin: 'ADMIN',
+    manager: 'MANAGER',
+    technician: 'TECHNICIEN',
+    default: 'VIEWER',
+  });
+  const [newMappingKey, setNewMappingKey] = useState('');
+  const [newMappingRole, setNewMappingRole] = useState('VIEWER');
+
+  useEffect(() => {
+    const loadSsoConfig = async () => {
+      try {
+        const config = await tenantsApi.getSsoConfig();
+        setSsoConfig(config);
+        setSsoEnabled(config.enabled);
+        setIssuer(config.issuer);
+        setClientId(config.clientId);
+        setCallbackUrl(config.callbackUrl || `${window.location.origin}/api/auth/oidc/callback`);
+        setRoleMapping(config.roleMapping || { default: 'VIEWER' });
+      } catch {
+        // Not available — use defaults
+        setCallbackUrl(`${window.location.origin}/api/auth/oidc/callback`);
+      } finally {
+        setIsLoadingSso(false);
+      }
+    };
+    loadSsoConfig();
+  }, []);
+
+  const handleSaveSso = async () => {
+    setIsSavingSso(true);
+    try {
+      const data: Record<string, any> = {
+        enabled: ssoEnabled,
+        provider: 'oidc',
+        issuer,
+        clientId,
+        callbackUrl,
+        roleMapping,
+      };
+      // Only send secret if user typed a new one
+      if (clientSecret) {
+        data.clientSecret = clientSecret;
+      }
+      const updated = await tenantsApi.updateSsoConfig(data);
+      setSsoConfig(updated);
+      setClientSecret(''); // Clear after save
+      toast.success('Configuration SSO enregistr\u00e9e');
+    } catch (error) {
+      console.error('Failed to save SSO config:', error);
+      toast.error('Erreur lors de la sauvegarde SSO');
+    } finally {
+      setIsSavingSso(false);
+    }
+  };
+
+  const handleAddMapping = () => {
+    if (newMappingKey.trim()) {
+      setRoleMapping({ ...roleMapping, [newMappingKey.trim()]: newMappingRole });
+      setNewMappingKey('');
+      setNewMappingRole('VIEWER');
+    }
+  };
+
+  const handleRemoveMapping = (key: string) => {
+    if (key === 'default') return; // Cannot remove default
+    const updated = { ...roleMapping };
+    delete updated[key];
+    setRoleMapping(updated);
+  };
+
+  if (isLoadingSso) {
+    return (
+      <div className="border rounded-lg p-4">
+        <p className="text-sm text-muted-foreground text-center py-4">Chargement de la configuration SSO...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+            <Key className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+          </div>
+          <div>
+            <h4 className="font-medium">SSO (Single Sign-On)</h4>
+            <p className="text-sm text-muted-foreground">OpenID Connect — Azure AD, Keycloak, Okta, Google</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant={ssoEnabled ? 'default' : 'secondary'} className="text-xs">
+            {ssoEnabled ? 'Activ\u00e9' : 'D\u00e9sactiv\u00e9'}
+          </Badge>
+          <Switch
+            checked={ssoEnabled}
+            onCheckedChange={setSsoEnabled}
+          />
+        </div>
+      </div>
+
+      {ssoEnabled && (
+        <>
+          {/* Provider settings */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="ssoIssuer">Issuer URL</Label>
+              <Input
+                id="ssoIssuer"
+                value={issuer}
+                onChange={(e) => setIssuer(e.target.value)}
+                placeholder="https://login.microsoftonline.com/tenant-id/v2.0"
+              />
+              <p className="text-xs text-muted-foreground">L'URL de d\u00e9couverte de votre fournisseur d'identit\u00e9</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ssoCallbackUrl">Callback URL</Label>
+              <Input
+                id="ssoCallbackUrl"
+                value={callbackUrl}
+                onChange={(e) => setCallbackUrl(e.target.value)}
+                placeholder="https://xch.example.com/api/auth/oidc/callback"
+              />
+              <p className="text-xs text-muted-foreground">\u00c0 configurer dans votre IdP comme &quot;Redirect URI&quot;</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ssoClientId">Client ID</Label>
+              <Input
+                id="ssoClientId"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                placeholder="application-client-id"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ssoClientSecret">Client Secret</Label>
+              <Input
+                id="ssoClientSecret"
+                type="password"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                placeholder={ssoConfig?.clientSecretSet ? `D\u00e9j\u00e0 configur\u00e9 (${ssoConfig.clientSecretHint})` : 'Entrez le secret client'}
+              />
+              {ssoConfig?.clientSecretSet && (
+                <p className="text-xs text-muted-foreground">Laissez vide pour garder le secret actuel</p>
+              )}
+            </div>
+          </div>
+
+          {/* Role mapping */}
+          <div className="border-t pt-4 space-y-3">
+            <div>
+              <h4 className="font-medium text-sm">Mapping des r\u00f4les</h4>
+              <p className="text-xs text-muted-foreground">
+                Associez les groupes/claims de votre IdP aux r\u00f4les XCH. Le r\u00f4le &quot;default&quot; est utilis\u00e9 si aucun groupe ne correspond.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {Object.entries(roleMapping).map(([groupKey, xchRole]) => (
+                <div key={groupKey} className="flex items-center gap-2">
+                  <Input
+                    value={groupKey}
+                    disabled
+                    className="flex-1 h-8 text-sm font-mono bg-muted/50"
+                  />
+                  <span className="text-xs text-muted-foreground">\u2192</span>
+                  <select
+                    value={xchRole}
+                    onChange={(e) => setRoleMapping({ ...roleMapping, [groupKey]: e.target.value })}
+                    className="h-8 px-2 rounded-md border bg-background text-sm"
+                  >
+                    {XCH_ROLES.map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
+                  {groupKey !== 'default' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:text-red-700"
+                      onClick={() => handleRemoveMapping(groupKey)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add new mapping */}
+            <div className="flex items-center gap-2">
+              <Input
+                value={newMappingKey}
+                onChange={(e) => setNewMappingKey(e.target.value)}
+                placeholder="Nom du groupe IdP..."
+                className="flex-1 h-8 text-sm"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddMapping(); }}
+              />
+              <span className="text-xs text-muted-foreground">\u2192</span>
+              <select
+                value={newMappingRole}
+                onChange={(e) => setNewMappingRole(e.target.value)}
+                className="h-8 px-2 rounded-md border bg-background text-sm"
+              >
+                {XCH_ROLES.map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={handleAddMapping}
+                disabled={!newMappingKey.trim()}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+            <p className="flex items-center gap-2">
+              <Info className="h-4 w-4 shrink-0" />
+              La connexion locale (email/mot de passe) reste toujours disponible, m\u00eame avec SSO activ\u00e9. Au moins un compte admin local est recommand\u00e9.
+            </p>
+          </div>
+        </>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <Button
+          size="sm"
+          onClick={handleSaveSso}
+          disabled={isSavingSso}
+        >
+          {isSavingSso ? (
+            <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+          ) : (
+            <Save className="mr-2 h-3 w-3" />
+          )}
+          Enregistrer SSO
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -1137,27 +1400,7 @@ export default function SettingsPage() {
               </div>
 
               {/* SSO Configuration */}
-              <div className="border rounded-lg p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                      <Key className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium">SSO (Single Sign-On)</h4>
-                      <p className="text-sm text-muted-foreground">Authentification centralisée — SAML, OAuth2, OIDC</p>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="text-xs">Bientôt disponible</Badge>
-                </div>
-
-                <div className="p-4 bg-muted/30 rounded-lg text-center">
-                  <p className="text-sm text-muted-foreground">
-                    La configuration SSO sera disponible dans une prochaine version.
-                    Elle permettra l'intégration avec Active Directory, Azure AD, Okta et d'autres fournisseurs d'identité.
-                  </p>
-                </div>
-              </div>
+              <SsoConfigSection />
             </CardContent>
           </Card>
         </TabsContent>

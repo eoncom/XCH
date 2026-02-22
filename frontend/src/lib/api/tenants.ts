@@ -18,6 +18,27 @@ export interface TenantConfig {
   config: Record<string, any> | null;
 }
 
+export interface SsoConfig {
+  enabled: boolean;
+  provider: string;
+  issuer: string;
+  clientId: string;
+  clientSecretSet: boolean;
+  clientSecretHint: string;
+  callbackUrl: string;
+  roleMapping: Record<string, string>;
+}
+
+export interface UpdateSsoConfigData {
+  enabled?: boolean;
+  provider?: string;
+  issuer?: string;
+  clientId?: string;
+  clientSecret?: string;
+  callbackUrl?: string;
+  roleMapping?: Record<string, string>;
+}
+
 export const tenantsApi = {
   getCurrent: () =>
     apiClient.get('/api/tenants/current'),
@@ -34,4 +55,11 @@ export const tenantsApi = {
 
   updateModules: (modules: Record<string, boolean>) =>
     apiClient.patch<TenantModulesResponse>('/api/tenants/modules', { modules }),
+
+  // SSO Configuration
+  getSsoConfig: () =>
+    apiClient.get<SsoConfig>('/api/tenants/sso-config'),
+
+  updateSsoConfig: (data: UpdateSsoConfigData) =>
+    apiClient.patch<SsoConfig>('/api/tenants/sso-config', data),
 };

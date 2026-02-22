@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuthStore } from '@/stores/auth-store';
 import { showToast } from '@/lib/toast';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Key } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,8 +16,10 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [ssoChecked, setSsoChecked] = useState(false);
 
-  // Check setup status and auto-redirect
+  // Check setup status, SSO config, and auto-redirect
   useEffect(() => {
     const verifySession = async () => {
       // Check if setup is needed
@@ -33,6 +35,18 @@ export default function LoginPage() {
       } catch {
         // Setup endpoint not available — skip check
       }
+
+      // Check if SSO is enabled
+      try {
+        const ssoRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/auth/sso-config`);
+        if (ssoRes.ok) {
+          const ssoData = await ssoRes.json();
+          setSsoEnabled(ssoData.ssoEnabled === true);
+        }
+      } catch {
+        // SSO config not available — keep hidden
+      }
+      setSsoChecked(true);
 
       await checkSession();
       if (isAuthenticated) {
@@ -128,22 +142,27 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">Ou</span>
-            </div>
-          </div>
+          {ssoEnabled && ssoChecked && (
+            <>
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">Ou</span>
+                </div>
+              </div>
 
-          <Button
-            variant="outline"
-            className="w-full h-11"
-            onClick={() => (window.location.href = `${process.env.NEXT_PUBLIC_API_URL || ''}/api/auth/oidc`)}
-          >
-            Se connecter avec SSO
-          </Button>
+              <Button
+                variant="outline"
+                className="w-full h-11"
+                onClick={() => (window.location.href = `${process.env.NEXT_PUBLIC_API_URL || ''}/api/auth/oidc`)}
+              >
+                <Key className="mr-2 h-4 w-4" />
+                Se connecter avec SSO
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException, Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 
@@ -85,7 +85,9 @@ export class AuthService {
     return result;
   }
 
-  async oidcLogin(profile: any, tenantId: string) {
+  async oidcLogin(profile: any, tenantId: string, role?: string) {
+    const mappedRole = (role || 'VIEWER') as UserRole;
+
     let user = await this.prisma.user.findFirst({
       where: {
         tenantId,
@@ -95,6 +97,7 @@ export class AuthService {
     });
 
     if (!user) {
+      // First login — create user with mapped role
       user = await this.prisma.user.create({
         data: {
           email: profile.emails?.[0]?.value || profile.email,
@@ -102,10 +105,19 @@ export class AuthService {
           externalId: profile.id,
           authProvider: 'oidc',
           tenantId,
-          role: 'VIEWER',
+          role: mappedRole,
         },
         include: { tenant: true },
       });
+    } else {
+      // Subsequent login — update role if it changed (IdP is the source of truth)
+      if (user.role !== mappedRole) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { role: mappedRole },
+          include: { tenant: true },
+        });
+      }
     }
 
     return this.login(user);
