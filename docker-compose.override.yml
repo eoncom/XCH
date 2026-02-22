@@ -1,4 +1,4 @@
-# Development overrides — exposes direct ports for debugging
+# Development/test overrides — exposes direct ports for debugging
 # This file is auto-loaded by docker-compose alongside docker-compose.yml
 #
 # To use production mode WITHOUT these overrides:
@@ -26,12 +26,12 @@ services:
       - "${MINIO_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
 
-  # Expose backend directly (useful for Swagger at http://localhost:3002/api/docs)
+  # Expose backend directly (useful for Swagger at http://IP:BACKEND_PORT/api/docs)
   backend:
     ports:
-      - "3002:3000"
+      - "${BACKEND_PORT:-3002}:3000"
 
   # Expose frontend directly
   frontend:
     ports:
-      - "3001:3001"
+      - "${FRONTEND_PORT:-3001}:3001"
