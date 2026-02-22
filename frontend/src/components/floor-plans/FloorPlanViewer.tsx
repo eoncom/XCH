@@ -631,6 +631,8 @@ export default function FloorPlanViewer({
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const stageRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   // Refs to hold latest data for export (avoids re-render loops)
   const pinsRef = useRef(pins);
@@ -1040,21 +1042,36 @@ export default function FloorPlanViewer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onExportReady]); // Only re-run when callback identity changes - data is read from refs
 
-  // Use full container width
-  let stageWidth = 1200;
-  let stageHeight = 800;
+  // Responsive stage sizing via ResizeObserver
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-  if (image) {
-    const imageRatio = image.width / image.height;
+    const updateWidth = () => {
+      const width = container.clientWidth;
+      if (width > 0) setContainerWidth(width);
+    };
 
-    if (imageRatio > 1.5) {
-      stageWidth = 1200;
-      stageHeight = 1200 / imageRatio;
-    } else {
-      stageHeight = 800;
-      stageWidth = 800 * imageRatio;
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  // Calculate responsive stage dimensions
+  const { stageWidth, stageHeight } = useMemo(() => {
+    const maxWidth = containerWidth || 1200;
+
+    if (!image) {
+      return { stageWidth: maxWidth, stageHeight: Math.min(maxWidth * 0.67, 800) };
     }
-  }
+
+    const imageRatio = image.width / image.height;
+    const w = maxWidth;
+    const h = w / imageRatio;
+
+    return { stageWidth: w, stageHeight: h };
+  }, [containerWidth, image]);
 
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
@@ -1078,6 +1095,32 @@ export default function FloorPlanViewer({
       y: pointer.y - mousePointTo.y * limitedScale,
     });
   };
+
+  // Zoom helper functions for buttons
+  const handleZoomIn = useCallback(() => {
+    const oldScale = scale;
+    const newScale = Math.min(5, oldScale * 1.3);
+    const centerX = stageWidth / 2;
+    const centerY = stageHeight / 2;
+    const mousePointTo = { x: (centerX - position.x) / oldScale, y: (centerY - position.y) / oldScale };
+    setScale(newScale);
+    setPosition({ x: centerX - mousePointTo.x * newScale, y: centerY - mousePointTo.y * newScale });
+  }, [scale, position, stageWidth, stageHeight]);
+
+  const handleZoomOut = useCallback(() => {
+    const oldScale = scale;
+    const newScale = Math.max(0.3, oldScale / 1.3);
+    const centerX = stageWidth / 2;
+    const centerY = stageHeight / 2;
+    const mousePointTo = { x: (centerX - position.x) / oldScale, y: (centerY - position.y) / oldScale };
+    setScale(newScale);
+    setPosition({ x: centerX - mousePointTo.x * newScale, y: centerY - mousePointTo.y * newScale });
+  }, [scale, position, stageWidth, stageHeight]);
+
+  const handleResetZoom = useCallback(() => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  }, []);
 
   // Manual panning via refs to avoid re-render loops (React error #185)
   // We update the Konva stage position directly during drag, only sync to React state on dragEnd
@@ -1139,6 +1182,91 @@ export default function FloorPlanViewer({
     isPanningRef.current = false;
   }, []);
 
+  // Pinch-to-zoom support
+  const lastTouchDistRef = useRef(0);
+  const lastTouchCenterRef = useRef({ x: 0, y: 0 });
+  const isPinchingRef = useRef(false);
+
+  const getDistance = useCallback((p1: Touch, p2: Touch) => {
+    return Math.sqrt(Math.pow(p2.clientX - p1.clientX, 2) + Math.pow(p2.clientY - p1.clientY, 2));
+  }, []);
+
+  const getCenter = useCallback((p1: Touch, p2: Touch) => {
+    return { x: (p1.clientX + p2.clientX) / 2, y: (p1.clientY + p2.clientY) / 2 };
+  }, []);
+
+  const handleTouchStart = useCallback((e: any) => {
+    const touches = e.evt.touches;
+    if (touches.length === 2) {
+      e.evt.preventDefault();
+      isPinchingRef.current = true;
+      isPanningRef.current = false;
+      lastTouchDistRef.current = getDistance(touches[0], touches[1]);
+      lastTouchCenterRef.current = getCenter(touches[0], touches[1]);
+      return;
+    }
+    isPinchingRef.current = false;
+    handleMouseDown(e);
+  }, [handleMouseDown, getDistance, getCenter]);
+
+  const handleTouchMove = useCallback((e: any) => {
+    const touches = e.evt.touches;
+    if (touches.length === 2 && isPinchingRef.current) {
+      e.evt.preventDefault();
+      const stage = stageRef.current;
+      if (!stage) return;
+
+      const newDist = getDistance(touches[0], touches[1]);
+      const newCenter = getCenter(touches[0], touches[1]);
+
+      if (lastTouchDistRef.current === 0) {
+        lastTouchDistRef.current = newDist;
+        lastTouchCenterRef.current = newCenter;
+        return;
+      }
+
+      const ratio = newDist / lastTouchDistRef.current;
+      const oldScale = stage.scaleX();
+      const newScale = Math.max(0.3, Math.min(5, oldScale * ratio));
+
+      const rect = stage.container().getBoundingClientRect();
+      const centerX = newCenter.x - rect.left;
+      const centerY = newCenter.y - rect.top;
+
+      const mousePointTo = {
+        x: (centerX - stage.x()) / oldScale,
+        y: (centerY - stage.y()) / oldScale,
+      };
+
+      stage.scaleX(newScale);
+      stage.scaleY(newScale);
+      stage.x(centerX - mousePointTo.x * newScale);
+      stage.y(centerY - mousePointTo.y * newScale);
+      stage.batchDraw();
+
+      lastTouchDistRef.current = newDist;
+      lastTouchCenterRef.current = newCenter;
+      return;
+    }
+    if (!isPinchingRef.current) {
+      handleMouseMove(e);
+    }
+  }, [handleMouseMove, getDistance, getCenter]);
+
+  const handleTouchEnd = useCallback((e: any) => {
+    if (isPinchingRef.current) {
+      const stage = stageRef.current;
+      if (stage) {
+        setScale(stage.scaleX());
+        setPosition({ x: stage.x(), y: stage.y() });
+      }
+      isPinchingRef.current = false;
+      lastTouchDistRef.current = 0;
+      return;
+    }
+    handleMouseUp(e);
+  }, [handleMouseUp]);
+
   const handleStageClick = (e: any) => {
     // Ignore click if we were panning
     if (hasPannedRef.current) return;
@@ -1161,17 +1289,57 @@ export default function FloorPlanViewer({
     }
   };
 
-  // Set initial cursor style on stage container
+  // Set initial cursor and touch-action style on stage container
   useEffect(() => {
     const stage = stageRef.current;
     if (stage) {
       const container = stage.container();
-      container.style.cursor = 'grab';
+      container.style.cursor = editable ? 'crosshair' : 'grab';
+      container.style.touchAction = 'none'; // Prevent browser default touch (scroll/zoom)
     }
-  }, [image]);
+  }, [image, editable]);
 
   return (
-    <div className="border rounded-lg overflow-hidden bg-white">
+    <div ref={containerRef} className="border rounded-lg overflow-hidden bg-white dark:bg-gray-900 relative">
+      {/* Zoom Controls — floating buttons */}
+      <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
+        <button
+          onClick={handleZoomIn}
+          className="w-9 h-9 rounded-lg bg-white/90 dark:bg-gray-800/90 border shadow-sm hover:bg-white dark:hover:bg-gray-700 flex items-center justify-center text-lg font-bold transition-colors"
+          title="Zoom avant"
+        >
+          +
+        </button>
+        <button
+          onClick={handleZoomOut}
+          className="w-9 h-9 rounded-lg bg-white/90 dark:bg-gray-800/90 border shadow-sm hover:bg-white dark:hover:bg-gray-700 flex items-center justify-center text-lg font-bold transition-colors"
+          title="Zoom arrière"
+        >
+          −
+        </button>
+        <button
+          onClick={handleResetZoom}
+          className="w-9 h-9 rounded-lg bg-white/90 dark:bg-gray-800/90 border shadow-sm hover:bg-white dark:hover:bg-gray-700 flex items-center justify-center text-xs font-medium transition-colors"
+          title="Réinitialiser le zoom"
+        >
+          1:1
+        </button>
+      </div>
+
+      {/* Zoom percentage indicator */}
+      {scale !== 1 && (
+        <div className="absolute top-3 left-3 z-10 px-2 py-1 rounded bg-black/60 text-white text-xs font-mono">
+          {Math.round(scale * 100)}%
+        </div>
+      )}
+
+      {/* Edit mode indicator */}
+      {editable && (
+        <div className="absolute bottom-16 left-3 z-10 px-2 py-1 rounded bg-blue-600/90 text-white text-xs font-medium">
+          Mode édition — Cliquez pour ajouter un repère
+        </div>
+      )}
+
       <Stage
         ref={stageRef}
         width={stageWidth}
@@ -1185,9 +1353,9 @@ export default function FloorPlanViewer({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onTouchStart={handleMouseDown}
-        onTouchMove={handleMouseMove}
-        onTouchEnd={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <Layer>
           {image && <KonvaImage image={image} />}
@@ -1209,7 +1377,6 @@ export default function FloorPlanViewer({
       {/* HTML Legend (visible in viewer) */}
       <div className="p-3 bg-white dark:bg-gray-900 border-t flex items-center justify-between">
         <div className="flex items-center gap-3 text-xs flex-wrap">
-          {/* Show legend items with shapes */}
           <LegendItem pinType="SWITCH" />
           <LegendItem pinType="FIREWALL" />
           <LegendItem pinType="ACCESS_POINT" />
