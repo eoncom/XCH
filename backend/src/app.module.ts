@@ -18,6 +18,7 @@ import { ContactTypesModule } from './modules/contact-types/contact-types.module
 import { SiteAccessModule } from './modules/site-access/site-access.module';
 import { SeedModule } from './modules/seed/seed.module';
 import { SetupModule } from './modules/setup/setup.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { SetupModule } from './modules/setup/setup.module';
     SiteAccessModule,
     SeedModule,
     SetupModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

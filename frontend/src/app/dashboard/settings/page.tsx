@@ -15,13 +15,14 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 import { useTenantModules } from '@/hooks/useTenantModules';
+import { useEnumLabels } from '@/hooks/useEnumLabels';
 
 interface SecurityReminder {
   id: string;
@@ -106,6 +107,173 @@ function ModulesTabContent() {
           <p className="flex items-center gap-2">
             <Info className="h-4 w-4 shrink-0" />
             Le module &quot;Sites&quot; est obligatoire et ne peut pas être désactivé. Les modifications sont appliquées immédiatement.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const ENUM_TYPE_LABELS: Record<string, string> = {
+  AssetType: "Types d'\u00e9quipement",
+  AssetStatus: "Statuts d'\u00e9quipement",
+  PinType: 'Types de rep\u00e8res (plans)',
+};
+
+function EnumLabelsTabContent() {
+  const { labels, isLoading, updateLabel, isUpdating, resetLabels, isResetting } = useEnumLabels();
+  const [activeType, setActiveType] = useState('AssetType');
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editColor, setEditColor] = useState('');
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <p className="text-center text-muted-foreground">Chargement des types...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const currentItems = labels[activeType] || [];
+
+  const handleStartEdit = (enumValue: string, currentLabel: string, currentColor: string | null) => {
+    setEditingItem(enumValue);
+    setEditLabel(currentLabel);
+    setEditColor(currentColor || '#9ca3af');
+  };
+
+  const handleSaveEdit = (enumValue: string) => {
+    updateLabel(
+      { enumType: activeType, enumValue, label: editLabel, color: editColor },
+      { onSuccess: () => {
+        setEditingItem(null);
+        toast.success('Label mis \u00e0 jour');
+      }},
+    );
+  };
+
+  const handleReset = () => {
+    if (confirm(`R\u00e9initialiser tous les labels "${ENUM_TYPE_LABELS[activeType]}" aux valeurs par d\u00e9faut ?`)) {
+      resetLabels(activeType, {
+        onSuccess: () => toast.success('Labels r\u00e9initialis\u00e9s'),
+      });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Tags className="h-5 w-5" />
+          Personnalisation des types
+        </CardTitle>
+        <CardDescription>
+          Personnalisez les labels et couleurs des types d'\u00e9quipement, statuts et rep\u00e8res.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Type selector */}
+        <div className="flex gap-2 flex-wrap">
+          {Object.entries(ENUM_TYPE_LABELS).map(([key, label]) => (
+            <Button
+              key={key}
+              variant={activeType === key ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => { setActiveType(key); setEditingItem(null); }}
+            >
+              {label}
+            </Button>
+          ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleReset}
+            disabled={isResetting}
+            className="ml-auto text-muted-foreground"
+          >
+            <RotateCcw className="mr-1 h-3 w-3" />
+            R\u00e9initialiser
+          </Button>
+        </div>
+
+        {/* Items list */}
+        <div className="space-y-1">
+          {currentItems.map((item) => (
+            <div
+              key={item.enumValue}
+              className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors"
+            >
+              {/* Color indicator */}
+              <div
+                className="w-5 h-5 rounded shrink-0 border"
+                style={{ backgroundColor: item.color || '#9ca3af' }}
+              />
+
+              {editingItem === item.enumValue ? (
+                <>
+                  {/* Edit mode */}
+                  <Input
+                    value={editLabel}
+                    onChange={(e) => setEditLabel(e.target.value)}
+                    className="h-8 flex-1"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveEdit(item.enumValue);
+                      if (e.key === 'Escape') setEditingItem(null);
+                    }}
+                  />
+                  <input
+                    type="color"
+                    value={editColor}
+                    onChange={(e) => setEditColor(e.target.value)}
+                    className="w-8 h-8 rounded cursor-pointer border-0"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSaveEdit(item.enumValue)}
+                    disabled={isUpdating}
+                    className="h-8"
+                  >
+                    <Save className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditingItem(null)}
+                    className="h-8"
+                  >
+                    &times;
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {/* View mode */}
+                  <span className="flex-1 text-sm font-medium">{item.label}</span>
+                  <span className="text-xs text-muted-foreground font-mono">{item.enumValue}</span>
+                  {item.isCustom && (
+                    <Badge variant="outline" className="text-xs">Personnalis\u00e9</Badge>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 text-muted-foreground"
+                    onClick={() => handleStartEdit(item.enumValue, item.label, item.color)}
+                  >
+                    Modifier
+                  </Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+          <p className="flex items-center gap-2">
+            <Info className="h-4 w-4 shrink-0" />
+            Les labels personnalis\u00e9s s'affichent partout dans l'application. Les valeurs internes (code) ne changent pas.
           </p>
         </div>
       </CardContent>
@@ -283,6 +451,12 @@ export default function SettingsPage() {
             <TabsTrigger value="modules">
               <Blocks className="mr-2 h-4 w-4" />
               Modules
+            </TabsTrigger>
+          )}
+          {user?.role === 'ADMIN' && (
+            <TabsTrigger value="types">
+              <Tags className="mr-2 h-4 w-4" />
+              Types
             </TabsTrigger>
           )}
         </TabsList>
@@ -827,6 +1001,11 @@ export default function SettingsPage() {
         {/* Modules Tab */}
         <TabsContent value="modules" className="space-y-6">
           <ModulesTabContent />
+        </TabsContent>
+
+        {/* Types Tab */}
+        <TabsContent value="types" className="space-y-6">
+          <EnumLabelsTabContent />
         </TabsContent>
 
         {/* Integrations Tab — consolidated NetBox + Monitoring */}
