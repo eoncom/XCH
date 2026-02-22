@@ -32,7 +32,7 @@ export const tasksApi = {
 
   // Attachments
   uploadAttachment: async (id: string, formData: FormData) => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tasks/${id}/attachments`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/tasks/${id}/attachments`, {
       method: 'POST',
       credentials: 'include', // Send cookies for authentication
       body: formData,

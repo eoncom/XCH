@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// When empty or unset, API calls use relative URLs (same origin via nginx proxy)
+// Set NEXT_PUBLIC_API_URL only when backend is on a different origin
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export class ApiError extends Error {
   constructor(

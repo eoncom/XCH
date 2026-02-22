@@ -51,8 +51,8 @@ COPY --from=builder /app/dist ./dist
 # Copy Casbin configuration
 COPY --from=builder /app/casbin /casbin
 
-# Expose port
-EXPOSE 3002
+# Expose port (internal Docker port; nginx proxies to this)
+EXPOSE 3000
 
 # Start application
 CMD ["npm", "run", "start:prod"]

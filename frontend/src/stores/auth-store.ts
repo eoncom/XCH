@@ -12,7 +12,8 @@ interface AuthState {
   setUser: (user: User) => void;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// When empty, API calls use relative URLs (same origin via nginx proxy)
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export const useAuthStore = create<AuthState>()(
   persist(

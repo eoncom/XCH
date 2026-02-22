@@ -149,19 +149,29 @@ export class StorageService {
 
   /**
    * Get file URL
+   *
+   * When MINIO_PUBLIC_URL is set:
+   *   - Uses that URL directly (e.g., https://xch.eoncom.io/storage)
+   * When behind nginx proxy (default):
+   *   - Returns /storage/{bucket}/{path} (relative URL, routed by nginx)
+   * Fallback (dev without nginx):
+   *   - Returns http://localhost:9000/{bucket}/{path}
    */
   getFileUrl(filePath: string): string {
     if (this.storageType === 'minio') {
-      // Use MINIO_PUBLIC_URL for browser-accessible URL (e.g., https://xch.eoncom.io:9000)
-      // Falls back to internal URL if not set (for development)
       const minioPublicUrl = this.configService.get('MINIO_PUBLIC_URL');
-      const minioEndpoint = this.configService.get('MINIO_ENDPOINT', 'localhost');
-      const minioPort = this.configService.get('MINIO_PORT', '9000');
-      const minioUrl = minioPublicUrl || `http://${minioEndpoint}:${minioPort}`;
       const bucket = this.configService.get('MINIO_BUCKET', 'xch-storage');
-      return `${minioUrl}/${bucket}${filePath}`;
+
+      if (minioPublicUrl) {
+        // Explicit public URL (e.g., /storage or https://cdn.example.com)
+        return `${minioPublicUrl}/${bucket}${filePath}`;
+      }
+
+      // Default: relative URL through nginx /storage/ route
+      // nginx rewrites /storage/* → minio:9000/*
+      return `/storage/${bucket}${filePath}`;
     } else {
-      const baseUrl = this.configService.get('APP_URL', 'http://localhost:3000');
+      const baseUrl = this.configService.get('APP_URL', '');
       return `${baseUrl}/uploads${filePath}`;
     }
   }

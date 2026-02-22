@@ -36,7 +36,7 @@ export const racksApi = {
 
   // Attachments
   uploadAttachment: async (id: string, formData: FormData) => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/racks/${id}/attachments`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/racks/${id}/attachments`, {
       method: 'POST',
       credentials: 'include',
       body: formData,

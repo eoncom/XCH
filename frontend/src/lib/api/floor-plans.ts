@@ -10,7 +10,7 @@ export const floorPlansApi = {
   getById: (id: string) => apiClient.get<FloorPlan>(`/api/floor-plans/${id}`),
 
   create: async (data: FormData) => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/floor-plans`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/floor-plans`, {
       method: 'POST',
       credentials: 'include', // Send cookies for authentication
       body: data,
@@ -30,7 +30,7 @@ export const floorPlansApi = {
 
   createNewVersion: async (id: string, data: FormData) => {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/floor-plans/${id}/new-version`,
+      `${process.env.NEXT_PUBLIC_API_URL || ''}/api/floor-plans/${id}/new-version`,
       {
         method: 'POST',
         credentials: 'include',

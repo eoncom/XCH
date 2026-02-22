@@ -1,0 +1,37 @@
+# Development overrides — exposes direct ports for debugging
+# This file is auto-loaded by docker-compose alongside docker-compose.yml
+#
+# To use production mode WITHOUT these overrides:
+#   docker-compose -f docker-compose.yml up -d
+#
+# To use development mode WITH these overrides (default):
+#   docker-compose up -d
+
+version: '3.8'
+
+services:
+  # Expose DB directly for tools like Prisma Studio, pgAdmin
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+
+  # Expose Redis for debugging
+  redis:
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+
+  # Expose MinIO for direct access + console
+  minio:
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+
+  # Expose backend directly (useful for Swagger at http://localhost:3002/api/docs)
+  backend:
+    ports:
+      - "3002:3000"
+
+  # Expose frontend directly
+  frontend:
+    ports:
+      - "3001:3001"

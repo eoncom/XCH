@@ -30,7 +30,7 @@ export const sitesApi = {
 
   // Attachments
   uploadAttachment: async (id: string, formData: FormData) => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sites/${id}/attachments`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/sites/${id}/attachments`, {
       method: 'POST',
       credentials: 'include',
       body: formData,

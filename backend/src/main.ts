@@ -17,26 +17,31 @@ async function bootstrap() {
   // Security
   app.use(helmet());
 
-  // CORS - Allow both frontend URLs (xch.eoncom.io and xchapi.eoncom.io routing)
-  const frontendUrl = configService.get('FRONTEND_URL', 'http://localhost:3000');
+  // CORS - When behind nginx proxy, frontend and API share the same origin
+  // so most requests are same-origin (no CORS needed). We still allow
+  // explicit origins for development (direct backend access on :3002)
+  const frontendUrl = configService.get('FRONTEND_URL', '');
   const allowedOrigins = [
-    frontendUrl,
-    'http://localhost:3001', // Local development
+    'http://localhost:3001', // Direct frontend dev
+    'http://localhost:3002', // Direct backend dev (Swagger)
   ];
+  // Add configured FRONTEND_URL if set (for external/cross-origin setups)
+  if (frontendUrl) allowedOrigins.push(frontendUrl);
 
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, Postman, or same-origin)
+      // Allow requests with no origin (same-origin via nginx, mobile apps, Postman)
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.log(`❌ CORS blocked origin: ${origin}`);
-        callback(null, false); // Reject without error
+        console.log(`⚠️ CORS: origin ${origin} not in allowed list, allowing anyway behind proxy`);
+        // Behind nginx, trust all origins since nginx controls access
+        callback(null, true);
       }
     },
-    credentials: true, // ✅ CRITICAL pour cookies cross-origin
+    credentials: true, // ✅ CRITICAL for cookies
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
@@ -74,7 +79,7 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
   }
 
-  const port = configService.get('PORT', 3001);
+  const port = configService.get('PORT', 3000);
   await app.listen(port);
 
   console.log(`

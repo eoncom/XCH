@@ -126,7 +126,7 @@ export default function LoginPage() {
           <Button
             variant="outline"
             className="w-full h-11"
-            onClick={() => (window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/auth/oidc`)}
+            onClick={() => (window.location.href = `${process.env.NEXT_PUBLIC_API_URL || ''}/api/auth/oidc`)}
           >
             Se connecter avec SSO
           </Button>

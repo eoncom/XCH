@@ -20,29 +20,35 @@ export class AuthController {
 
   /**
    * Get cookie options based on environment
-   * - Production: secure cookies with domain .eoncom.io
-   * - Development/Test: localhost-compatible cookies
+   * - Production behind nginx (same-origin): secure + sameSite=lax (no domain needed)
+   * - Production cross-origin: secure + sameSite=none + explicit domain
+   * - Development: HTTP-compatible (no secure, sameSite=lax)
    */
   private getCookieOptions(path: string = '/', maxAge: number = 15 * 60 * 1000) {
     const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
-    const cookieDomain = this.configService.get<string>('COOKIE_DOMAIN') || '.eoncom.io';
+    const cookieDomain = this.configService.get<string>('COOKIE_DOMAIN');
 
     if (isProduction) {
-      return {
+      const options: Record<string, any> = {
         httpOnly: true,
         secure: true,
-        sameSite: 'none' as const,
-        domain: cookieDomain,
+        sameSite: cookieDomain ? 'none' as const : 'lax' as const,
         maxAge,
         path,
       };
+      // Only set domain for cross-origin deployments (e.g., .yourdomain.com)
+      // When behind nginx (same-origin), omit domain for automatic scoping
+      if (cookieDomain) {
+        options.domain = cookieDomain;
+      }
+      return options;
     }
 
     // Development/Test: localhost-compatible
     return {
       httpOnly: true,
       secure: false, // Allow HTTP in dev
-      sameSite: 'lax' as const, // Lax works for localhost
+      sameSite: 'lax' as const,
       // No domain for localhost
       maxAge,
       path,

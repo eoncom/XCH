@@ -3698,3 +3698,24 @@ fix: improve site form layout + auto-clear site on asset status change
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-22
+
+**Date:** 2026-02-22 12:23:31
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 6
+- Frontend files modified: 10
+
+**Commit message:**
+```
+feat: rename Chantiers → Sites + add site audit history
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
