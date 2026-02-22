@@ -17,6 +17,7 @@ import { ContactsModule } from './modules/contacts/contacts.module';
 import { ContactTypesModule } from './modules/contact-types/contact-types.module';
 import { SiteAccessModule } from './modules/site-access/site-access.module';
 import { SeedModule } from './modules/seed/seed.module';
+import { SetupModule } from './modules/setup/setup.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { SeedModule } from './modules/seed/seed.module';
     IntegrationsModule,
     SiteAccessModule,
     SeedModule,
+    SetupModule,
   ],
 })
 export class AppModule {}

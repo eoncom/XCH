@@ -17,9 +17,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  // Auto-redirect if already authenticated
+  // Check setup status and auto-redirect
   useEffect(() => {
     const verifySession = async () => {
+      // Check if setup is needed
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/setup/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.needsSetup) {
+            router.replace('/setup');
+            return;
+          }
+        }
+      } catch {
+        // Setup endpoint not available — skip check
+      }
+
       await checkSession();
       if (isAuthenticated) {
         router.push('/dashboard');
