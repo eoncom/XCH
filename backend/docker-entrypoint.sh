@@ -1,9 +1,12 @@
 #!/bin/sh
 set -e
 
-echo "🔄 Running Prisma migrations..."
+echo "🔄 Generating Prisma client..."
+npx prisma generate
+
+echo "🔄 Running database migrations..."
 npx prisma migrate deploy
 
-echo "✅ Migrations applied successfully"
+echo "✅ Database ready"
 echo "🚀 Starting XCH Backend..."
 exec node dist/main
