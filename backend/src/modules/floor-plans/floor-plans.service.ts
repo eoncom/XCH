@@ -5,6 +5,10 @@ import { UpdateFloorPlanDto } from './dto/update-floor-plan.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
 import { StorageService } from '../../common/services/storage.service';
+import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 @Injectable()
 export class FloorPlansService {
@@ -80,12 +84,105 @@ export class FloorPlansService {
   }
 
   /**
+   * Inspect a PDF file: get page count and thumbnails
+   */
+  async inspectPdf(file: Express.Multer.File): Promise<{ pageCount: number; pages: { page: number; thumbnail: string }[] }> {
+    if (file.mimetype !== 'application/pdf') {
+      throw new BadRequestException('File is not a PDF');
+    }
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xch-pdf-'));
+    const pdfPath = path.join(tmpDir, 'input.pdf');
+
+    try {
+      fs.writeFileSync(pdfPath, file.buffer);
+
+      // Get page count using pdfinfo
+      let pageCount = 1;
+      try {
+        const pdfInfoOutput = execSync(`pdfinfo "${pdfPath}" 2>/dev/null`, { encoding: 'utf-8' });
+        const pagesMatch = pdfInfoOutput.match(/Pages:\s+(\d+)/);
+        if (pagesMatch) {
+          pageCount = parseInt(pagesMatch[1], 10);
+        }
+      } catch {
+        this.logger.warn('pdfinfo failed, assuming 1 page');
+      }
+
+      // Generate thumbnails for each page (low-res for preview)
+      const pages: { page: number; thumbnail: string }[] = [];
+      for (let i = 1; i <= pageCount; i++) {
+        const thumbPrefix = path.join(tmpDir, `thumb-${i}`);
+        try {
+          execSync(
+            `pdftoppm -png -r 72 -f ${i} -l ${i} -singlefile "${pdfPath}" "${thumbPrefix}"`,
+            { timeout: 15000 },
+          );
+          const thumbPath = `${thumbPrefix}.png`;
+          if (fs.existsSync(thumbPath)) {
+            const thumbData = fs.readFileSync(thumbPath);
+            pages.push({
+              page: i,
+              thumbnail: `data:image/png;base64,${thumbData.toString('base64')}`,
+            });
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to generate thumbnail for page ${i}: ${err}`);
+        }
+      }
+
+      return { pageCount, pages };
+    } finally {
+      // Cleanup tmp files
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {}
+    }
+  }
+
+  /**
+   * Convert a PDF page to PNG buffer using pdftoppm
+   */
+  private convertPdfPageToPng(pdfBuffer: Buffer, page: number = 1): Buffer {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xch-pdf-'));
+    const pdfPath = path.join(tmpDir, 'input.pdf');
+    const outputPrefix = path.join(tmpDir, 'output');
+
+    try {
+      fs.writeFileSync(pdfPath, pdfBuffer);
+
+      // Convert specific page to PNG at 200 DPI (good quality for floor plans)
+      execSync(
+        `pdftoppm -png -r 200 -f ${page} -l ${page} -singlefile "${pdfPath}" "${outputPrefix}"`,
+        { timeout: 30000 },
+      );
+
+      const outputPath = `${outputPrefix}.png`;
+      if (!fs.existsSync(outputPath)) {
+        throw new BadRequestException('PDF conversion failed: no output generated');
+      }
+
+      return fs.readFileSync(outputPath);
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(`PDF conversion failed: ${err}`);
+      throw new BadRequestException('Failed to convert PDF to image. Please try uploading a PNG or JPG instead.');
+    } finally {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {}
+    }
+  }
+
+  /**
    * Upload floor plan file (PDF, PNG, JPG)
+   * PDFs are automatically converted to PNG at the selected page
    */
   async uploadFile(
     floorPlanId: string,
     tenantId: string,
     file: Express.Multer.File,
+    page?: number,
   ) {
     const floorPlan = await this.findOne(floorPlanId, tenantId);
 
@@ -101,6 +198,20 @@ export class FloorPlansService {
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       throw new BadRequestException('File size exceeds 10MB limit');
+    }
+
+    // Convert PDF to PNG if needed
+    if (file.mimetype === 'application/pdf') {
+      const selectedPage = page || 1;
+      this.logger.log(`Converting PDF page ${selectedPage} to PNG for plan ${floorPlanId}`);
+
+      const pngBuffer = this.convertPdfPageToPng(file.buffer, selectedPage);
+
+      // Replace file data with converted PNG
+      file.buffer = pngBuffer;
+      file.mimetype = 'image/png';
+      file.size = pngBuffer.length;
+      file.originalname = file.originalname.replace(/\.pdf$/i, '.png');
     }
 
     // Delete old file if exists
@@ -141,7 +252,7 @@ export class FloorPlansService {
     });
 
     this.logger.log(
-      `Floor plan file uploaded: ${floorPlanId} (${file.originalname}, ${file.size} bytes)`,
+      `Floor plan file uploaded: ${floorPlanId} (${file.originalname}, ${file.size} bytes, type: ${file.mimetype})`,
     );
 
     return updated;
@@ -278,6 +389,7 @@ export class FloorPlansService {
     tenantId: string,
     notes?: string,
     file?: Express.Multer.File,
+    page?: number,
   ) {
     const sourcePlan = await this.findOne(id, tenantId);
 
@@ -345,7 +457,7 @@ export class FloorPlansService {
 
     // Upload new file if provided (overrides inherited file)
     if (file) {
-      return await this.uploadFile(newPlan.id, tenantId, file);
+      return await this.uploadFile(newPlan.id, tenantId, file, page);
     }
 
     this.logger.log(

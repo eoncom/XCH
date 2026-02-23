@@ -373,6 +373,14 @@ export default function AssetDetailPage({
                     <p className="text-lg">{asset.rackHeightU}</p>
                   </div>
                 </div>
+                {asset.rackNotes && (
+                  <div className="mt-4 pt-4 border-t">
+                    <label className="text-sm font-medium text-muted-foreground">
+                      Notes de montage
+                    </label>
+                    <p className="text-sm mt-1 whitespace-pre-wrap">{asset.rackNotes}</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

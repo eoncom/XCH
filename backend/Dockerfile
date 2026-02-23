@@ -2,8 +2,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies (OpenSSL for Prisma + Python/build-tools for bcrypt)
-RUN apk add --no-cache openssl python3 make g++
+# Install build dependencies (OpenSSL for Prisma + Python/build-tools for bcrypt + poppler for PDF→PNG conversion)
+RUN apk add --no-cache openssl python3 make g++ poppler-utils
 
 # Copy package files
 COPY package*.json ./
@@ -29,8 +29,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install runtime dependencies (OpenSSL for Prisma + Python/build-tools for bcrypt)
-RUN apk add --no-cache openssl python3 make g++
+# Install runtime dependencies (OpenSSL for Prisma + Python/build-tools for bcrypt + poppler for PDF→PNG conversion)
+RUN apk add --no-cache openssl python3 make g++ poppler-utils
 
 # Copy package files
 COPY package*.json ./

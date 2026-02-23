@@ -42,6 +42,30 @@ export class FloorPlansController {
     private readonly siteAccessService: SiteAccessService,
   ) {}
 
+  @Post('inspect-pdf')
+  @Resource('floor-plans')
+  @Action('create')
+  @ApiOperation({ summary: 'Inspect a PDF file: get page count and thumbnails' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+      required: ['file'],
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async inspectPdf(
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return this.floorPlansService.inspectPdf(file);
+  }
+
   @Post()
   @Resource('floor-plans')
   @Action('create')
@@ -69,6 +93,7 @@ export class FloorPlansController {
     @Request() req: AuthRequest,
     @Body() createFloorPlanDto: CreateFloorPlanDto,
     @UploadedFile() file?: Express.Multer.File,
+    @Query('page') page?: string,
   ) {
     // Check per-resource permission
     if (createFloorPlanDto.siteId) {
@@ -82,9 +107,10 @@ export class FloorPlansController {
 
     const floorPlan = await this.floorPlansService.create(req.user.tenantId, createFloorPlanDto);
 
-    // If file is provided, upload it immediately
+    // If file is provided, upload it immediately (PDFs converted to PNG automatically)
     if (file) {
-      return this.floorPlansService.uploadFile(floorPlan.id, req.user.tenantId, file);
+      const pageNum = page ? parseInt(page, 10) : undefined;
+      return this.floorPlansService.uploadFile(floorPlan.id, req.user.tenantId, file, pageNum);
     }
 
     return floorPlan;
@@ -111,6 +137,7 @@ export class FloorPlansController {
     @Param('id') id: string,
     @Request() req: AuthRequest,
     @UploadedFile() file: Express.Multer.File,
+    @Query('page') page?: string,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
@@ -126,7 +153,8 @@ export class FloorPlansController {
       }
     }
 
-    return this.floorPlansService.uploadFile(id, req.user.tenantId, file);
+    const pageNum = page ? parseInt(page, 10) : undefined;
+    return this.floorPlansService.uploadFile(id, req.user.tenantId, file, pageNum);
   }
 
   @Get()
@@ -203,6 +231,7 @@ export class FloorPlansController {
     @Request() req: AuthRequest,
     @Body('notes') notes?: string,
     @UploadedFile() file?: Express.Multer.File,
+    @Query('page') page?: string,
   ) {
     const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
     if (floorPlan.siteId) {
@@ -213,11 +242,13 @@ export class FloorPlansController {
         throw new ForbiddenException('Insufficient permissions to create floor plan versions on this site');
       }
     }
+    const pageNum = page ? parseInt(page, 10) : undefined;
     return this.floorPlansService.createNewVersion(
       id,
       req.user.tenantId,
       notes,
       file,
+      pageNum,
     );
   }
 

@@ -20,9 +20,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { floorPlansApi } from '@/lib/api/floor-plans';
+import type { PdfInspectResult } from '@/lib/api/floor-plans';
 import { sitesApi } from '@/lib/api/sites';
 import { showToast } from '@/lib/toast';
-import { ArrowLeft, Upload, Info } from 'lucide-react';
+import { ArrowLeft, Upload, Info, FileText, Loader2, Check } from 'lucide-react';
 import Link from 'next/link';
 import type { Site } from '@/types';
 
@@ -42,6 +43,11 @@ export default function NewFloorPlanPage() {
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
 
+  // PDF multi-page state
+  const [pdfInfo, setPdfInfo] = useState<PdfInspectResult | null>(null);
+  const [selectedPage, setSelectedPage] = useState<number>(1);
+  const [inspectingPdf, setInspectingPdf] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -58,7 +64,8 @@ export default function NewFloorPlanPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (formData: FormData) => floorPlansApi.create(formData),
+    mutationFn: ({ formData, page }: { formData: FormData; page?: number }) =>
+      floorPlansApi.create(formData, page),
     onSuccess: (plan) => {
       queryClient.invalidateQueries({ queryKey: ['floor-plans'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
@@ -73,35 +80,56 @@ export default function NewFloorPlanPage() {
     },
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      // Validate file type
-      const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
-      if (!validTypes.includes(selectedFile.type)) {
-        showToast.error('Format de fichier invalide. Formats acceptés: PNG, JPG, PDF');
-        return;
-      }
+    if (!selectedFile) return;
 
-      // Validate file size (max 10MB)
-      const maxSize = 10 * 1024 * 1024;
-      if (selectedFile.size > maxSize) {
-        showToast.error('Fichier trop volumineux. Taille maximale: 10MB');
-        return;
-      }
+    // Validate file type
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
+    if (!validTypes.includes(selectedFile.type)) {
+      showToast.error('Format de fichier invalide. Formats acceptés: PNG, JPG, PDF');
+      return;
+    }
 
-      setFile(selectedFile);
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024;
+    if (selectedFile.size > maxSize) {
+      showToast.error('Fichier trop volumineux. Taille maximale: 10MB');
+      return;
+    }
 
-      // Create preview for images
-      if (selectedFile.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setFilePreview(reader.result as string);
-        };
-        reader.readAsDataURL(selectedFile);
-      } else {
-        setFilePreview(null);
+    setFile(selectedFile);
+    setPdfInfo(null);
+    setSelectedPage(1);
+
+    // Create preview for images
+    if (selectedFile.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFilePreview(reader.result as string);
+      };
+      reader.readAsDataURL(selectedFile);
+    } else if (selectedFile.type === 'application/pdf') {
+      setFilePreview(null);
+
+      // Inspect PDF to get page count and thumbnails
+      setInspectingPdf(true);
+      try {
+        const result = await floorPlansApi.inspectPdf(selectedFile);
+        setPdfInfo(result);
+        setSelectedPage(1);
+
+        // If single page, use thumbnail as preview
+        if (result.pageCount === 1 && result.pages.length > 0) {
+          setFilePreview(result.pages[0].thumbnail);
+        }
+      } catch (err) {
+        showToast.error('Impossible d\'analyser le PDF. Le fichier sera converti automatiquement.');
+      } finally {
+        setInspectingPdf(false);
       }
+    } else {
+      setFilePreview(null);
     }
   };
 
@@ -119,7 +147,9 @@ export default function NewFloorPlanPage() {
     if (data.building) formData.append('building', data.building);
     if (data.notes) formData.append('notes', data.notes);
 
-    createMutation.mutate(formData);
+    // Pass selected page for PDF files
+    const page = file.type === 'application/pdf' ? selectedPage : undefined;
+    createMutation.mutate({ formData, page });
   };
 
   const siteId = watch('siteId');
@@ -222,9 +252,61 @@ export default function NewFloorPlanPage() {
                     className="cursor-pointer"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Formats acceptés : PNG, JPG, PDF (max 10 MB)
+                    Formats acceptés : PNG, JPG, PDF (max 10 MB).
+                    Les PDF sont automatiquement convertis en image.
                   </p>
                 </div>
+
+                {/* PDF inspecting spinner */}
+                {inspectingPdf && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Analyse du PDF en cours...
+                  </div>
+                )}
+
+                {/* PDF multi-page selector */}
+                {pdfInfo && pdfInfo.pageCount > 1 && (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-blue-500" />
+                      <p className="text-sm font-medium">
+                        PDF de {pdfInfo.pageCount} pages — choisissez la page à utiliser
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 max-h-[300px] overflow-y-auto">
+                      {pdfInfo.pages.map((p) => (
+                        <button
+                          key={p.page}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPage(p.page);
+                            setFilePreview(p.thumbnail);
+                          }}
+                          className={`relative border-2 rounded-lg overflow-hidden transition-all hover:border-blue-400 ${
+                            selectedPage === p.page
+                              ? 'border-blue-500 ring-2 ring-blue-200'
+                              : 'border-muted'
+                          }`}
+                        >
+                          <img
+                            src={p.thumbnail}
+                            alt={`Page ${p.page}`}
+                            className="w-full h-auto"
+                          />
+                          <div className={`absolute bottom-0 left-0 right-0 text-center text-xs py-1 ${
+                            selectedPage === p.page
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-black/50 text-white'
+                          }`}>
+                            {selectedPage === p.page && <Check className="h-3 w-3 inline mr-1" />}
+                            Page {p.page}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -263,7 +345,7 @@ export default function NewFloorPlanPage() {
                 >
                   Annuler
                 </Button>
-                <Button type="submit" disabled={createMutation.isPending || !file}>
+                <Button type="submit" disabled={createMutation.isPending || !file || inspectingPdf}>
                   <Upload className="mr-2 h-4 w-4" />
                   {createMutation.isPending ? 'Upload...' : 'Créer le plan'}
                 </Button>
@@ -289,15 +371,30 @@ export default function NewFloorPlanPage() {
                     />
                   </div>
                   <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <p>Fichier : {file?.name}</p>
+                    <p>
+                      Fichier : {file?.name}
+                      {pdfInfo && pdfInfo.pageCount > 1 && ` (page ${selectedPage}/${pdfInfo.pageCount})`}
+                    </p>
                     <p>{((file?.size || 0) / 1024 / 1024).toFixed(2)} MB</p>
                   </div>
                 </div>
               ) : file ? (
                 <div className="flex flex-col items-center justify-center py-20">
-                  <Upload className="h-10 w-10 text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground font-medium">Fichier PDF sélectionné</p>
-                  <p className="text-sm text-muted-foreground mt-1">{file.name}</p>
+                  {inspectingPdf ? (
+                    <>
+                      <Loader2 className="h-10 w-10 text-muted-foreground mb-3 animate-spin" />
+                      <p className="text-muted-foreground font-medium">Analyse du PDF...</p>
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-10 w-10 text-muted-foreground mb-3" />
+                      <p className="text-muted-foreground font-medium">Fichier PDF sélectionné</p>
+                      <p className="text-sm text-muted-foreground mt-1">{file.name}</p>
+                      {pdfInfo && pdfInfo.pageCount === 1 && (
+                        <p className="text-xs text-green-600 mt-2">1 page — conversion automatique</p>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-20">
