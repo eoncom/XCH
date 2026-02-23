@@ -198,7 +198,7 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
    */
   async fetchMonitors(): Promise<ParsedMonitor[]> {
     if (!this.enabled) {
-      throw new Error('Uptime Kuma provider is disabled');
+      return [];
     }
 
     try {
@@ -225,7 +225,7 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
     identifier: string,
   ): Promise<{ status: 'up' | 'down' | 'unknown'; uptime: number; lastCheck: Date; responseTime: number } | null> {
     if (!this.enabled) {
-      throw new Error('Uptime Kuma provider is disabled');
+      return null;
     }
 
     try {

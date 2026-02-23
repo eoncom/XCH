@@ -81,7 +81,7 @@ export class NetBoxProviderService implements NetBoxProvider {
    */
   async fetchSites(): Promise<any[]> {
     if (!this.enabled) {
-      throw new Error('NetBox provider is disabled');
+      return [];
     }
 
     try {
@@ -103,7 +103,7 @@ export class NetBoxProviderService implements NetBoxProvider {
    */
   async fetchDevicesForSite(siteId: number): Promise<any[]> {
     if (!this.enabled) {
-      throw new Error('NetBox provider is disabled');
+      return [];
     }
 
     try {
@@ -130,7 +130,7 @@ export class NetBoxProviderService implements NetBoxProvider {
    */
   async searchDeviceBySerial(serialNumber: string): Promise<any | null> {
     if (!this.enabled) {
-      throw new Error('NetBox provider is disabled');
+      return null;
     }
 
     try {
@@ -169,7 +169,7 @@ export class NetBoxProviderService implements NetBoxProvider {
     group_id?: number;
   }): Promise<any> {
     if (!this.enabled) {
-      throw new Error('NetBox provider is disabled');
+      return { count: 0, results: [] };
     }
 
     try {
@@ -199,7 +199,7 @@ export class NetBoxProviderService implements NetBoxProvider {
     offset?: number;
   }): Promise<any> {
     if (!this.enabled) {
-      throw new Error('NetBox provider is disabled');
+      return { count: 0, results: [] };
     }
 
     try {
