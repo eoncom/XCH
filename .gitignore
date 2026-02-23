@@ -58,6 +58,7 @@ Thumbs.db
 
 # Docker
 docker/volumes/
+docker-compose.external.yml
 *.log
 
 # Prisma - Note: migration.sql files SHOULD be committed for proper migration tracking
