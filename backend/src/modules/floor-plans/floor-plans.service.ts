@@ -32,26 +32,17 @@ export class FloorPlansService {
       throw new NotFoundException('Site not found');
     }
 
-    // Auto-increment version based on planGroupId or siteId
+    // Version number:
+    // - If planGroupId is provided, auto-increment within that group
+    // - Otherwise this is a brand-new plan → always start at version 1
     let version = createFloorPlanDto.version || 1;
-    if (!createFloorPlanDto.version) {
-      if (createFloorPlanDto.planGroupId) {
-        // Version within same group
-        const lastPlan = await this.prisma.floorPlan.findFirst({
-          where: { planGroupId: createFloorPlanDto.planGroupId },
-          orderBy: { version: 'desc' },
-        });
-        if (lastPlan) {
-          version = lastPlan.version + 1;
-        }
-      } else {
-        const lastPlan = await this.prisma.floorPlan.findFirst({
-          where: { siteId: createFloorPlanDto.siteId },
-          orderBy: { version: 'desc' },
-        });
-        if (lastPlan) {
-          version = lastPlan.version + 1;
-        }
+    if (!createFloorPlanDto.version && createFloorPlanDto.planGroupId) {
+      const lastPlan = await this.prisma.floorPlan.findFirst({
+        where: { planGroupId: createFloorPlanDto.planGroupId },
+        orderBy: { version: 'desc' },
+      });
+      if (lastPlan) {
+        version = lastPlan.version + 1;
       }
     }
 

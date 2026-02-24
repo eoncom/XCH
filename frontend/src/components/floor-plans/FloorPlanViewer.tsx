@@ -6,30 +6,47 @@ import { jsPDF } from 'jspdf';
 import type { FloorPlan, Pin, PinType, Rack } from '@/types';
 
 // Custom hook to load image
+// Tries with crossOrigin='anonymous' first (needed for canvas export / PDF generation).
+// If CORS headers are missing the browser blocks the load, so we retry without crossOrigin.
 function useImage(url: string): [HTMLImageElement | undefined, 'loading' | 'loaded' | 'failed'] {
   const [image, setImage] = useState<HTMLImageElement>();
   const [status, setStatus] = useState<'loading' | 'loaded' | 'failed'>('loading');
 
   useEffect(() => {
-    if (!url) return;
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-
-    img.onload = () => {
-      setImage(img);
-      setStatus('loaded');
-    };
-
-    img.onerror = () => {
+    if (!url) {
       setStatus('failed');
+      return;
+    }
+
+    let cancelled = false;
+
+    const tryLoad = (useCors: boolean) => {
+      const img = new window.Image();
+      if (useCors) img.crossOrigin = 'anonymous';
+
+      img.onload = () => {
+        if (cancelled) return;
+        setImage(img);
+        setStatus('loaded');
+      };
+
+      img.onerror = () => {
+        if (cancelled) return;
+        if (useCors) {
+          // CORS blocked — retry without crossOrigin (canvas export will be limited)
+          tryLoad(false);
+        } else {
+          setStatus('failed');
+        }
+      };
+
+      img.src = url;
     };
 
-    img.src = url;
+    tryLoad(true);
 
     return () => {
-      img.onload = null;
-      img.onerror = null;
+      cancelled = true;
     };
   }, [url]);
 
