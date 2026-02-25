@@ -662,14 +662,19 @@ export default function FloorPlanDetailPage({
             <DialogTitle>Ajouter un repère</DialogTitle>
             <DialogDescription>
               {newPinPosition
-                ? `Position: (${Math.round(newPinPosition.x)}, ${Math.round(newPinPosition.y)})`
+                ? `Position: ${(newPinPosition.x * 100).toFixed(0)}%, ${(newPinPosition.y * 100).toFixed(0)}%`
                 : 'Cliquez sur le plan pour choisir la position'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={newPinType} onValueChange={(value) => setNewPinType(value as PinType)}>
+              <Select value={newPinType} onValueChange={(value) => {
+                setNewPinType(value as PinType);
+                if (!newPinLabel) {
+                  setNewPinLabel(pinTypeLabels[value as PinType] || '');
+                }
+              }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -705,7 +710,16 @@ export default function FloorPlanDetailPage({
             {newPinType === 'RACK' ? (
               <div className="space-y-2">
                 <Label>Baie associée (optionnel)</Label>
-                <Select value={newPinRackId || 'none'} onValueChange={(value) => setNewPinRackId(value === 'none' ? '' : value)}>
+                <Select value={newPinRackId || 'none'} onValueChange={(value) => {
+                  const rackId = value === 'none' ? '' : value;
+                  setNewPinRackId(rackId);
+                  if (rackId && racks) {
+                    const rack = racks.find(r => r.id === rackId);
+                    if (rack && !newPinLabel) {
+                      setNewPinLabel(rack.name);
+                    }
+                  }
+                }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Aucune baie" />
                   </SelectTrigger>
@@ -781,7 +795,16 @@ export default function FloorPlanDetailPage({
             ) : (
               <div className="space-y-2">
                 <Label>Équipement associé (optionnel)</Label>
-                <Select value={newPinAssetId || 'none'} onValueChange={(value) => setNewPinAssetId(value === 'none' ? '' : value)}>
+                <Select value={newPinAssetId || 'none'} onValueChange={(value) => {
+                  const assetId = value === 'none' ? '' : value;
+                  setNewPinAssetId(assetId);
+                  if (assetId && assets) {
+                    const asset = assets.find(a => a.id === assetId);
+                    if (asset && !newPinLabel) {
+                      setNewPinLabel(getAssetLabel(asset));
+                    }
+                  }
+                }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Aucun équipement" />
                   </SelectTrigger>

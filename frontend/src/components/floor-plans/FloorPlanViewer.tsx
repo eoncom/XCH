@@ -1176,7 +1176,7 @@ export default function FloorPlanViewer({
     const dx = pointer.x - panStartRef.current.x;
     const dy = pointer.y - panStartRef.current.y;
 
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
       hasPannedRef.current = true;
     }
 
@@ -1295,8 +1295,9 @@ export default function FloorPlanViewer({
         // Read position from stage directly (may differ from React state during panning)
         const stageX = stage.x();
         const stageY = stage.y();
-        const x = (pointerPosition.x - stageX) / scale;
-        const y = (pointerPosition.y - stageY) / scale;
+        const currentScale = stage.scaleX();
+        const x = (pointerPosition.x - stageX) / currentScale;
+        const y = (pointerPosition.y - stageY) / currentScale;
 
         const normalizedX = x / image.width;
         const normalizedY = y / image.height;
@@ -1367,6 +1368,7 @@ export default function FloorPlanViewer({
         y={position.y}
         onWheel={handleWheel}
         onClick={handleStageClick}
+        onTap={handleStageClick}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
