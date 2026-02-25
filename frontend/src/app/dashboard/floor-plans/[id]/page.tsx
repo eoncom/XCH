@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { floorPlansApi } from '@/lib/api/floor-plans';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useEnumLabels } from '@/hooks/useEnumLabels';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { showToast } from '@/lib/toast';
@@ -133,6 +134,7 @@ export default function FloorPlanDetailPage({
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const { canUpdate, canDelete } = usePermissions();
+  const { getLabelsForType, getLabel } = useEnumLabels();
   const [showAddPinDialog, setShowAddPinDialog] = useState(false);
   const [showPinInfoDialog, setShowPinInfoDialog] = useState(false);
   const [showEditPinDialog, setShowEditPinDialog] = useState(false);
@@ -607,7 +609,7 @@ export default function FloorPlanDetailPage({
                       <div className="flex-1">
                         <p className="text-sm font-medium">{pin.label || 'Sans nom'}</p>
                         <p className="text-xs text-muted-foreground">
-                          {pinTypeLabels[pin.pinType]}
+                          {getLabel('PinType', pin.pinType)}
                         </p>
                         {linkedRack && (
                           <p className="text-xs text-purple-600 mt-0.5">
@@ -672,16 +674,19 @@ export default function FloorPlanDetailPage({
               <Select value={newPinType} onValueChange={(value) => {
                 setNewPinType(value as PinType);
                 if (!newPinLabel) {
-                  setNewPinLabel(pinTypeLabels[value as PinType] || '');
+                  setNewPinLabel(getLabel('PinType', value) || pinTypeLabels[value as PinType] || value);
                 }
               }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(pinTypeLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
+                  {(getLabelsForType('PinType').length > 0
+                    ? getLabelsForType('PinType').filter(t => !t.isHidden).sort((a, b) => a.sortOrder - b.sortOrder)
+                    : Object.entries(pinTypeLabels).map(([v, l]) => ({ enumValue: v, label: l }))
+                  ).map((item) => (
+                    <SelectItem key={item.enumValue} value={item.enumValue}>
+                      {item.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -801,7 +806,7 @@ export default function FloorPlanDetailPage({
                   if (assetId && assets) {
                     const asset = assets.find(a => a.id === assetId);
                     if (asset && !newPinLabel) {
-                      setNewPinLabel(getAssetLabel(asset));
+                      setNewPinLabel(asset.name || getAssetLabel(asset));
                     }
                   }
                 }}>
@@ -856,7 +861,7 @@ export default function FloorPlanDetailPage({
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Type</p>
                 <Badge variant="secondary">
-                  {pinTypeLabels[selectedPin.pinType] || 'Inconnu'}
+                  {getLabel('PinType', selectedPin.pinType)}
                 </Badge>
               </div>
 
@@ -979,9 +984,12 @@ export default function FloorPlanDetailPage({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(pinTypeLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
+                  {(getLabelsForType('PinType').length > 0
+                    ? getLabelsForType('PinType').filter(t => !t.isHidden).sort((a, b) => a.sortOrder - b.sortOrder)
+                    : Object.entries(pinTypeLabels).map(([v, l]) => ({ enumValue: v, label: l }))
+                  ).map((item) => (
+                    <SelectItem key={item.enumValue} value={item.enumValue}>
+                      {item.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

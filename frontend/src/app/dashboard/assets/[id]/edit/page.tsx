@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { assetsApi } from '@/lib/api/assets';
 import { sitesApi } from '@/lib/api/sites';
+import { useEnumLabels } from '@/hooks/useEnumLabels';
 import { ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
 import type { Asset, AssetType, AssetStatus, Site, UpdateAssetDto } from '@/types';
@@ -91,6 +92,8 @@ export default function EditAssetPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const assetId = params.id as string;
+
+  const { getLabelsForType } = useEnumLabels();
 
   const { data: asset, isLoading } = useQuery<Asset>({
     queryKey: ['asset', assetId],
@@ -198,9 +201,12 @@ export default function EditAssetPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(assetTypeLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
+                    {(getLabelsForType('AssetType').length > 0
+                      ? getLabelsForType('AssetType').filter(t => !t.isHidden).sort((a, b) => a.sortOrder - b.sortOrder)
+                      : Object.entries(assetTypeLabels).map(([v, l]) => ({ enumValue: v, label: l }))
+                    ).map((item) => (
+                      <SelectItem key={item.enumValue} value={item.enumValue}>
+                        {item.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -217,9 +223,12 @@ export default function EditAssetPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(assetStatusLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
+                    {(getLabelsForType('AssetStatus').length > 0
+                      ? getLabelsForType('AssetStatus').filter(t => !t.isHidden).sort((a, b) => a.sortOrder - b.sortOrder)
+                      : Object.entries(assetStatusLabels).map(([v, l]) => ({ enumValue: v, label: l }))
+                    ).map((item) => (
+                      <SelectItem key={item.enumValue} value={item.enumValue}>
+                        {item.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
