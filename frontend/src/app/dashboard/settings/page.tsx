@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
@@ -24,6 +24,9 @@ import Link from 'next/link';
 import { useTenantModules } from '@/hooks/useTenantModules';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
 import { tenantsApi, type SsoConfig } from '@/lib/api/tenants';
+import { useQueryClient } from '@tanstack/react-query';
+import { THEME_PRESET_LIST, type ThemePreset } from '@/lib/themes';
+import { cn } from '@/lib/utils';
 
 interface SecurityReminder {
   id: string;
@@ -40,6 +43,8 @@ interface TenantConfig {
     timezone?: string;
     language?: string;
     securityReminders?: SecurityReminder[];
+    theme?: string;
+    [key: string]: any;
   };
 }
 
@@ -547,6 +552,7 @@ function SsoConfigSection() {
 export default function SettingsPage() {
   const { user } = useAuthStore();
   const { theme, setTheme } = useTheme();
+  const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
   const [tenantData, setTenantData] = useState<TenantConfig | null>(null);
   const [isLoadingTenant, setIsLoadingTenant] = useState(true);
@@ -575,6 +581,10 @@ export default function SettingsPage() {
   ]);
   const [newReminder, setNewReminder] = useState('');
 
+  // Theme preset state
+  const [selectedTheme, setSelectedTheme] = useState<string>('blue');
+  const [isSavingTheme, setIsSavingTheme] = useState(false);
+
   // Demo data management
   const [isLoadingDemo, setIsLoadingDemo] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -592,6 +602,7 @@ export default function SettingsPage() {
         setLanguage(tenant.config?.language || 'Français');
         setLogoUrl(tenant.logoUrl || '');
         setPrimaryColor(tenant.primaryColor || '#0070f3');
+        setSelectedTheme(tenant.config?.theme || 'blue');
         if (tenant.config?.securityReminders?.length > 0) {
           setSecurityReminders(tenant.config.securityReminders);
         }
@@ -631,12 +642,34 @@ export default function SettingsPage() {
           securityReminders,
         },
       });
+      queryClient.invalidateQueries({ queryKey: ['tenant-branding'] });
       toast.success('Organisation mise à jour avec succès');
     } catch (error) {
       console.error('Failed to update tenant:', error);
       toast.error('Erreur lors de la mise à jour');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSaveTheme = async () => {
+    if (user?.role !== 'ADMIN') return;
+    setIsSavingTheme(true);
+    try {
+      await apiClient.patch('/api/tenants/current', {
+        config: {
+          ...tenantData?.config,
+          theme: selectedTheme,
+        },
+      });
+      // Update local tenantData so subsequent saves preserve the theme key
+      setTenantData((prev) => prev ? { ...prev, config: { ...prev.config, theme: selectedTheme } } as any : prev);
+      queryClient.invalidateQueries({ queryKey: ['tenant-branding'] });
+      toast.success('Thème mis à jour');
+    } catch {
+      toast.error('Erreur lors de la mise à jour du thème');
+    } finally {
+      setIsSavingTheme(false);
     }
   };
 
@@ -864,59 +897,67 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Primary Color */}
+              {/* Theme Presets */}
               {user?.role === 'ADMIN' && (
                 <div className="border-t pt-4">
                   <h4 className="font-medium mb-2 flex items-center gap-2">
-                    <PaintBucket className="h-4 w-4" />
-                    Couleur principale
+                    <Palette className="h-4 w-4" />
+                    Palette de couleurs
                   </h4>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Définit la couleur d'accent utilisée dans les boutons, liens et éléments interactifs.
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Choisissez une palette de couleurs pour votre organisation. Tous les utilisateurs verront ce thème.
                   </p>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={primaryColor}
-                        onChange={(e) => setPrimaryColor(e.target.value)}
-                        className="w-10 h-10 rounded cursor-pointer border-0"
-                      />
-                      <Input
-                        value={primaryColor}
-                        onChange={(e) => setPrimaryColor(e.target.value)}
-                        placeholder="#0070f3"
-                        className="w-28 font-mono text-sm"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      {['#0070f3', '#7c3aed', '#059669', '#dc2626', '#ea580c', '#0891b2'].map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => setPrimaryColor(color)}
-                          className={`w-8 h-8 rounded-full border-2 transition-all ${
-                            primaryColor === color ? 'border-foreground scale-110' : 'border-transparent'
-                          }`}
-                          style={{ backgroundColor: color }}
-                          title={color}
-                        />
-                      ))}
-                    </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {THEME_PRESET_LIST.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => setSelectedTheme(preset.id)}
+                        className={cn(
+                          'relative flex flex-col rounded-lg border-2 p-3 transition-all text-left hover:shadow-md',
+                          selectedTheme === preset.id
+                            ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                            : 'border-muted hover:border-muted-foreground/30',
+                        )}
+                      >
+                        {/* Color preview strip */}
+                        <div className="flex gap-1 mb-3">
+                          <div
+                            className="h-8 flex-1 rounded-l-md"
+                            style={{ backgroundColor: preset.previewColor }}
+                          />
+                          <div
+                            className="h-8 w-8 rounded-r-md"
+                            style={{ backgroundColor: preset.previewColor, opacity: 0.3 }}
+                          />
+                        </div>
+
+                        {/* Label + description */}
+                        <span className="font-medium text-sm">{preset.label}</span>
+                        <span className="text-xs text-muted-foreground mt-0.5">{preset.description}</span>
+
+                        {/* Check indicator */}
+                        {selectedTheme === preset.id && (
+                          <div className="absolute top-2 right-2">
+                            <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            </div>
+                          </div>
+                        )}
+                      </button>
+                    ))}
                   </div>
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-4 flex justify-end">
                     <Button
                       size="sm"
-                      onClick={async () => {
-                        try {
-                          await apiClient.patch('/api/tenants/current', { primaryColor });
-                          toast.success('Couleur mise à jour');
-                        } catch {
-                          toast.error('Erreur lors de la mise à jour');
-                        }
-                      }}
+                      onClick={handleSaveTheme}
+                      disabled={isSavingTheme}
                     >
-                      <Save className="mr-2 h-3 w-3" />
-                      Appliquer la couleur
+                      {isSavingTheme ? (
+                        <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                      ) : (
+                        <Save className="mr-2 h-3 w-3" />
+                      )}
+                      Appliquer le thème
                     </Button>
                   </div>
                 </div>
@@ -924,20 +965,32 @@ export default function SettingsPage() {
 
               <div className="border-t pt-4">
                 <h4 className="font-medium mb-2">Prévisualisation</h4>
-                <div className="p-4 rounded-lg border bg-card">
-                  <div className="flex items-center gap-3 mb-3">
+                <div className="p-4 rounded-lg border bg-card space-y-3">
+                  <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center">
-                      <span className="text-primary-foreground font-bold">XCH</span>
+                      <span className="text-primary-foreground font-bold text-xs">XCH</span>
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">Exemple de carte</p>
+                      <p className="font-medium text-card-foreground">Exemple de carte</p>
                       <p className="text-sm text-muted-foreground">Texte secondaire</p>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm">Bouton primaire</Button>
-                    <Button size="sm" variant="outline">Secondaire</Button>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button size="sm">Primaire</Button>
+                    <Button size="sm" variant="secondary">Secondaire</Button>
+                    <Button size="sm" variant="outline">Outline</Button>
                     <Button size="sm" variant="ghost">Ghost</Button>
+                    <Button size="sm" variant="destructive">Danger</Button>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <Badge>Badge</Badge>
+                    <Badge variant="secondary">Secondaire</Badge>
+                    <Badge variant="outline">Outline</Badge>
+                  </div>
+                  <div className="p-3 rounded-md bg-muted">
+                    <p className="text-sm text-muted-foreground">
+                      Zone muted avec texte secondaire
+                    </p>
                   </div>
                 </div>
               </div>

@@ -1,20 +1,24 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth-store';
+import { getThemePreset } from '@/lib/themes';
 
 interface BrandingConfig {
   logoUrl: string | null;
   primaryColor: string;
   orgName: string;
+  themeId: string | null;
 }
 
 const BrandingContext = createContext<BrandingConfig>({
   logoUrl: null,
   primaryColor: '#0070f3',
   orgName: 'XCH',
+  themeId: null,
 });
 
 export function useBranding() {
@@ -87,7 +91,8 @@ interface TenantResponse {
 
 export function BrandingProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
-  const [applied, setApplied] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const appliedVarsRef = useRef<string[]>([]);
 
   const { data: tenant } = useQuery<TenantResponse>({
     queryKey: ['tenant-branding'],
@@ -96,31 +101,55 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     enabled: isAuthenticated,
   });
 
-  // Apply primary color as CSS custom property
+  const themeId = tenant?.config?.theme || null;
+
+  // Apply theme preset or legacy primaryColor as CSS custom properties
   useEffect(() => {
-    if (!tenant?.primaryColor) {
-      setApplied(true);
-      return;
+    // Cleanup previous overrides
+    appliedVarsRef.current.forEach((v) =>
+      document.documentElement.style.removeProperty(v),
+    );
+    appliedVarsRef.current = [];
+
+    const newVars: string[] = [];
+
+    if (themeId) {
+      // ── New: Full theme preset ──────────────────────────────────────
+      const preset = getThemePreset(themeId);
+      const mode = resolvedTheme === 'dark' ? 'dark' : 'light';
+      const vars = preset[mode];
+
+      Object.entries(vars).forEach(([prop, value]) => {
+        document.documentElement.style.setProperty(prop, value);
+        newVars.push(prop);
+      });
+    } else if (tenant?.primaryColor && tenant.primaryColor !== '#0070f3') {
+      // ── Legacy: primary-color-only (backward compat) ────────────────
+      const hsl = hexToHSL(tenant.primaryColor);
+      if (hsl) {
+        document.documentElement.style.setProperty('--primary', hsl);
+        document.documentElement.style.setProperty(
+          '--primary-foreground',
+          getForegroundHSL(tenant.primaryColor),
+        );
+        newVars.push('--primary', '--primary-foreground');
+      }
     }
 
-    const hsl = hexToHSL(tenant.primaryColor);
-    if (hsl) {
-      document.documentElement.style.setProperty('--primary', hsl);
-      document.documentElement.style.setProperty('--primary-foreground', getForegroundHSL(tenant.primaryColor));
-    }
-    setApplied(true);
+    appliedVarsRef.current = newVars;
 
     return () => {
-      // Cleanup: remove inline styles when component unmounts
-      document.documentElement.style.removeProperty('--primary');
-      document.documentElement.style.removeProperty('--primary-foreground');
+      newVars.forEach((v) =>
+        document.documentElement.style.removeProperty(v),
+      );
     };
-  }, [tenant?.primaryColor]);
+  }, [themeId, tenant?.primaryColor, resolvedTheme]);
 
   const branding: BrandingConfig = {
     logoUrl: tenant?.logoUrl || null,
     primaryColor: tenant?.primaryColor || '#0070f3',
     orgName: tenant?.name || 'XCH',
+    themeId,
   };
 
   return (
