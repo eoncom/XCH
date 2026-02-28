@@ -131,6 +131,17 @@ export const integrationsApi = {
 
     syncAllHealth: () =>
       apiClient.post('/api/integrations/uptime-kuma/sync/health-all'),
+
+    mapMonitorToSite: (siteId: string, monitorName: string | null) =>
+      apiClient.patch<{ siteId: string; monitorName: string | null; mapped: boolean }>(
+        '/api/integrations/uptime-kuma/map-monitor',
+        { siteId, monitorName }
+      ),
+
+    getMonitorMappings: () =>
+      apiClient.get<Record<string, { siteId: string; siteName: string }>>(
+        '/api/integrations/uptime-kuma/monitor-mappings'
+      ),
   },
 
   // Integration Mapping

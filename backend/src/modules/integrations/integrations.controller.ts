@@ -140,6 +140,29 @@ export class IntegrationsController {
     return this.integrationsService.getUptimeKumaMonitors();
   }
 
+  @Patch('uptime-kuma/map-monitor')
+  @Resource('integrations')
+  @Action('update')
+  @ApiOperation({ summary: 'Map an Uptime Kuma monitor to a site' })
+  mapMonitorToSite(
+    @Request() req: AuthRequest,
+    @Body() body: { siteId: string; monitorName: string | null },
+  ) {
+    return this.integrationsService.mapMonitorToSite(
+      body.siteId,
+      req.user.tenantId,
+      body.monitorName,
+    );
+  }
+
+  @Get('uptime-kuma/monitor-mappings')
+  @Resource('integrations')
+  @Action('read')
+  @ApiOperation({ summary: 'Get all monitor-to-site mappings' })
+  getMonitorMappings(@Request() req: AuthRequest) {
+    return this.integrationsService.getMonitorMappings(req.user.tenantId);
+  }
+
   @Post('uptime-kuma/sync/health/:siteId')
   @Resource('integrations')
   @Action('update')

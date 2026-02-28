@@ -67,6 +67,13 @@ export interface SiteConnectivity {
     ref?: string;
   };
   cutProcedure?: string;
+  monitoring?: {
+    source?: string;
+    monitor?: string;
+    lastCheck?: string;
+    uptime?: number;
+    responseTime?: number;
+  };
 }
 
 export interface SiteAccessNotes {

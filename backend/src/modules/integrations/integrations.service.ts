@@ -508,6 +508,72 @@ export class IntegrationsService {
   }
 
   /**
+   * Map an Uptime Kuma monitor to a site (or unmap)
+   * Stores the monitor name in site.connectivity.monitoring.monitor
+   */
+  async mapMonitorToSite(
+    siteId: string,
+    tenantId: string,
+    monitorName: string | null,
+  ) {
+    const site = await this.prisma.site.findFirst({
+      where: { id: siteId, tenantId },
+    });
+
+    if (!site) {
+      throw new NotFoundException('Site not found');
+    }
+
+    const connectivity = (site.connectivity as Record<string, any>) || {};
+
+    if (monitorName) {
+      // Assign monitor to site
+      connectivity.monitoring = {
+        ...(connectivity.monitoring || {}),
+        source: 'uptime_kuma',
+        monitor: monitorName,
+      };
+    } else {
+      // Unmap: remove monitoring
+      delete connectivity.monitoring;
+    }
+
+    await this.prisma.site.update({
+      where: { id: siteId },
+      data: { connectivity },
+    });
+
+    this.logger.log(
+      monitorName
+        ? `Monitor "${monitorName}" mapped to site ${siteId}`
+        : `Monitor unmapped from site ${siteId}`,
+    );
+
+    return { siteId, monitorName, mapped: !!monitorName };
+  }
+
+  /**
+   * Get all monitor-to-site mappings (reverse lookup)
+   */
+  async getMonitorMappings(tenantId: string) {
+    const sites = await this.prisma.site.findMany({
+      where: { tenantId },
+      select: { id: true, name: true, connectivity: true },
+    });
+
+    const mappings: Record<string, { siteId: string; siteName: string }> = {};
+
+    for (const site of sites) {
+      const monitorName = (site.connectivity as any)?.monitoring?.monitor;
+      if (monitorName) {
+        mappings[monitorName] = { siteId: site.id, siteName: site.name };
+      }
+    }
+
+    return mappings;
+  }
+
+  /**
    * Sync all sites health from Uptime Kuma
    * Assumes sites have metadata.monitoring.monitor identifier
    */

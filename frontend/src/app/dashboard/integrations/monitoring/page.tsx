@@ -8,6 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   ArrowLeft,
   Activity,
   AlertTriangle,
@@ -23,9 +30,14 @@ import {
   Shield,
   Zap,
   ExternalLink,
+  MapPin,
+  Link2,
+  Link2Off,
 } from 'lucide-react';
 import { integrationsApi } from '@/lib/api/integrations';
+import { sitesApi } from '@/lib/api/sites';
 import { showToast } from '@/lib/toast';
+import type { Site } from '@/types';
 
 interface Monitor {
   id: number;
@@ -67,19 +79,48 @@ export default function MonitoringPage() {
   const { data: monitors = [], isLoading, isError, error, dataUpdatedAt } = useQuery<Monitor[]>({
     queryKey: ['uptime-kuma-monitors'],
     queryFn: () => integrationsApi.uptimeKuma.getMonitors(),
-    refetchInterval: 60_000, // Refresh every 60s
+    refetchInterval: 60_000,
     retry: 1,
+  });
+
+  // Fetch sites for the mapping dropdown
+  const { data: sites = [] } = useQuery<Site[]>({
+    queryKey: ['sites'],
+    queryFn: () => sitesApi.getAll(),
+  });
+
+  // Fetch existing monitor-to-site mappings
+  const { data: monitorMappings = {} } = useQuery<Record<string, { siteId: string; siteName: string }>>({
+    queryKey: ['monitor-mappings'],
+    queryFn: () => integrationsApi.uptimeKuma.getMonitorMappings(),
   });
 
   const syncAllMutation = useMutation({
     mutationFn: () => integrationsApi.uptimeKuma.syncAllHealth(),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['uptime-kuma-monitors'] });
       queryClient.invalidateQueries({ queryKey: ['sites'] });
-      showToast.success('Synchronisation terminée');
+      showToast.success(`Synchronisation terminée — ${data?.updated || 0} site(s) mis à jour`);
     },
     onError: () => {
       showToast.error('Erreur lors de la synchronisation');
+    },
+  });
+
+  const mapMonitorMutation = useMutation({
+    mutationFn: ({ siteId, monitorName }: { siteId: string; monitorName: string | null }) =>
+      integrationsApi.uptimeKuma.mapMonitorToSite(siteId, monitorName),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['monitor-mappings'] });
+      queryClient.invalidateQueries({ queryKey: ['sites'] });
+      if (variables.monitorName) {
+        showToast.success('Moniteur associé au site');
+      } else {
+        showToast.success('Association supprimée');
+      }
+    },
+    onError: () => {
+      showToast.error('Erreur lors de l\'association');
     },
   });
 
@@ -94,10 +135,29 @@ export default function MonitoringPage() {
     ? Math.round(monitors.reduce((sum, m) => sum + m.responseTime, 0) / monitors.length)
     : 0;
   const certWarnings = monitors.filter((m) => m.certExpiry !== undefined && m.certExpiry < 30).length;
+  const mappedCount = Object.keys(monitorMappings).length;
 
   const lastUpdate = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : null;
+
+  // Helper: get the siteId mapped to a monitor name
+  const getMappedSiteId = (monitorName: string): string | undefined => {
+    return monitorMappings[monitorName]?.siteId;
+  };
+
+  // Helper: handle mapping change
+  const handleMapChange = (monitorName: string, siteId: string) => {
+    if (siteId === '__none__') {
+      // Find the current mapping's siteId to unmap
+      const currentSiteId = getMappedSiteId(monitorName);
+      if (currentSiteId) {
+        mapMonitorMutation.mutate({ siteId: currentSiteId, monitorName: null });
+      }
+    } else {
+      mapMonitorMutation.mutate({ siteId, monitorName });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -178,7 +238,7 @@ export default function MonitoringPage() {
       {!isLoading && !isError && (
         <>
           {/* Stats cards */}
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
             <Card>
               <CardContent className="pt-4 pb-4">
                 <div className="flex items-center gap-3">
@@ -244,6 +304,19 @@ export default function MonitoringPage() {
                 </div>
               </CardContent>
             </Card>
+            <Card>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-lg p-2 ${mappedCount > 0 ? 'bg-indigo-100 dark:bg-indigo-900/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                    <Link2 className={`h-5 w-5 ${mappedCount > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{mappedCount}</p>
+                    <p className="text-xs text-muted-foreground">Mappés</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Search */}
@@ -280,10 +353,14 @@ export default function MonitoringPage() {
                   {/* Table header */}
                   <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
                     <span className="col-span-1">Statut</span>
-                    <span className="col-span-5">Nom</span>
-                    <span className="col-span-2">Type</span>
-                    <span className="col-span-2">Latence</span>
+                    <span className="col-span-3">Nom</span>
+                    <span className="col-span-1">Type</span>
+                    <span className="col-span-1">Latence</span>
                     <span className="col-span-2">Certificat SSL</span>
+                    <span className="col-span-4 flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      Site associé
+                    </span>
                   </div>
 
                   {/* DOWN monitors first, then UP */}
@@ -297,6 +374,7 @@ export default function MonitoringPage() {
                       const StatusIcon = config.icon;
                       const certDanger = monitor.certExpiry !== undefined && monitor.certExpiry < 14;
                       const certWarning = monitor.certExpiry !== undefined && monitor.certExpiry < 30 && !certDanger;
+                      const mappedSiteId = getMappedSiteId(monitor.name);
 
                       return (
                         <div
@@ -314,13 +392,13 @@ export default function MonitoringPage() {
                               {config.label}
                             </Badge>
                           </div>
-                          <div className="col-span-5">
+                          <div className="col-span-3">
                             <p className="font-medium truncate">{monitor.name}</p>
                           </div>
-                          <div className="col-span-2">
+                          <div className="col-span-1">
                             <span className="text-xs text-muted-foreground uppercase">{monitor.type}</span>
                           </div>
-                          <div className="col-span-2">
+                          <div className="col-span-1">
                             <span className={`font-mono text-sm ${
                               monitor.responseTime > 1000 ? 'text-red-600' :
                               monitor.responseTime > 500 ? 'text-amber-600' :
@@ -342,6 +420,35 @@ export default function MonitoringPage() {
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
+                          </div>
+                          <div className="col-span-4">
+                            <Select
+                              value={mappedSiteId || '__none__'}
+                              onValueChange={(value) => handleMapChange(monitor.name, value)}
+                              disabled={mapMonitorMutation.isPending}
+                            >
+                              <SelectTrigger className={`h-8 text-xs ${mappedSiteId ? 'border-indigo-300 dark:border-indigo-700' : ''}`}>
+                                <SelectValue placeholder="— Aucun site —" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">
+                                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                                    <Link2Off className="h-3 w-3" />
+                                    Aucun site
+                                  </span>
+                                </SelectItem>
+                                {sites
+                                  .sort((a, b) => a.name.localeCompare(b.name))
+                                  .map((site) => (
+                                    <SelectItem key={site.id} value={site.id}>
+                                      <span className="flex items-center gap-1.5">
+                                        <MapPin className="h-3 w-3 text-indigo-500" />
+                                        {site.name}
+                                      </span>
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
                       );
