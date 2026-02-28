@@ -84,6 +84,11 @@ model User {
   externalId   String? // OIDC 'sub' or SAML nameID
   authProvider String  @default("local") // local, oidc, saml
 
+  // TOTP 2FA
+  totpSecret      String?
+  totpEnabled     Boolean   @default(false)
+  totpBackupCodes String[]
+
   // Metadata
   lastLoginAt DateTime?
   createdAt   DateTime  @default(now())

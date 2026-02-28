@@ -6,6 +6,7 @@ export interface AuthenticatedUser {
   tenantId: string;
   email: string;
   role: string;
+  totpEnabled?: boolean;
 }
 
 export interface AuthRequest extends Request {

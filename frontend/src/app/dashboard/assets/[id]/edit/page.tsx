@@ -183,6 +183,9 @@ export default function EditAssetPage() {
   const onSubmit = (data: AssetFormData) => {
     // Clean empty strings to undefined to avoid backend validation errors
     const cleaned: any = { ...data };
+    // Convert date-only strings to ISO 8601 format (backend expects DateTime)
+    cleaned.purchaseDate = data.purchaseDate ? new Date(data.purchaseDate).toISOString() : undefined;
+    cleaned.warrantyEnd = data.warrantyEnd ? new Date(data.warrantyEnd).toISOString() : undefined;
     if (!cleaned.purchaseDate) delete cleaned.purchaseDate;
     if (!cleaned.warrantyEnd) delete cleaned.warrantyEnd;
     if (!cleaned.name) delete cleaned.name;

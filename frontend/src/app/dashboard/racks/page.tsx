@@ -17,6 +17,7 @@ import {
 import { racksApi } from '@/lib/api/racks';
 import { sitesApi } from '@/lib/api/sites';
 import { Plus, Search, Server, MapPin } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Rack, RackStatus, Site } from '@/types';
@@ -253,10 +254,13 @@ export default function RacksPage() {
       </div>
 
       {filteredRacks?.length === 0 && (
-        <div className="text-center py-12">
-          <Server className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Aucune baie trouvée</p>
-        </div>
+        <EmptyState
+          icon={Server}
+          title="Aucune baie trouvée"
+          description={search || siteFilter !== 'all'
+            ? 'Essayez de modifier vos filtres de recherche'
+            : undefined}
+        />
       )}
     </div>
   );

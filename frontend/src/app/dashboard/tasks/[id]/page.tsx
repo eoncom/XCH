@@ -20,6 +20,7 @@ import {
 import { tasksApi } from '@/lib/api/tasks';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Attachments } from '@/components/Attachments';
+import { InlineEditCard } from '@/components/InlineEditCard';
 import { showToast } from '@/lib/toast';
 import {
   ArrowLeft,
@@ -105,6 +106,22 @@ export default function TaskDetailPage({
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Inline edit state
+  const [editDescription, setEditDescription] = useState('');
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => tasksApi.update(id, data as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', id] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      showToast.success('Mise à jour réussie');
+    },
+    onError: (error: Error) => {
+      showToast.error(`Erreur: ${error.message}`);
+      throw error;
+    },
+  });
 
   // Comment state
   const [newComment, setNewComment] = useState('');
@@ -342,18 +359,29 @@ export default function TaskDetailPage({
         {/* Main Content */}
         <div className="md:col-span-2 space-y-6">
           {/* Description */}
-          {task.description && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Description</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground whitespace-pre-wrap">
-                  {task.description}
-                </p>
-              </CardContent>
-            </Card>
-          )}
+          <InlineEditCard
+            title="Description"
+            canEdit={canUpdate('tasks', task?.siteId)}
+            onEdit={() => setEditDescription(task.description || '')}
+            onSave={async () => {
+              await updateMutation.mutateAsync({ description: editDescription || null });
+            }}
+            onCancel={() => setEditDescription(task.description || '')}
+            editContent={
+              <Textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Ajouter une description..."
+                rows={6}
+              />
+            }
+          >
+            {task.description ? (
+              <p className="text-muted-foreground whitespace-pre-wrap">{task.description}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">Aucune description</p>
+            )}
+          </InlineEditCard>
 
           {/* Checklist */}
           <Card>

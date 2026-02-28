@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sitesApi } from '@/lib/api/sites';
 import { Plus, MapPin, Search, List, Map } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -163,9 +164,11 @@ export default function SitesPage() {
           </div>
 
           {filteredSites?.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">Aucun site trouvé</p>
-            </div>
+            <EmptyState
+              icon={MapPin}
+              title="Aucun site trouvé"
+              description={search ? 'Essayez de modifier votre recherche' : undefined}
+            />
           )}
         </TabsContent>
 

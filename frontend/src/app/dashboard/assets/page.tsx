@@ -19,6 +19,8 @@ import { CardSkeleton } from '@/components/ui/skeleton';
 import { assetsApi } from '@/lib/api/assets';
 import { exportAssets } from '@/lib/export-utils';
 import { Plus, Search, QrCode, Package } from 'lucide-react';
+import { WarrantyBadge } from '@/components/ui/warranty-badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Asset, AssetType, AssetStatus } from '@/types';
@@ -212,9 +214,12 @@ export default function AssetsPage() {
                       </p>
                     </div>
                   </div>
-                  <Badge variant={assetStatusColors[asset.status]}>
-                    {assetStatusLabels[asset.status]}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge variant={assetStatusColors[asset.status]}>
+                      {assetStatusLabels[asset.status]}
+                    </Badge>
+                    <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -245,10 +250,13 @@ export default function AssetsPage() {
       </div>
 
       {filteredAssets?.length === 0 && (
-        <div className="text-center py-12">
-          <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Aucun équipement trouvé</p>
-        </div>
+        <EmptyState
+          icon={Package}
+          title="Aucun équipement trouvé"
+          description={search || statusFilter !== 'all' || typeFilter !== 'all'
+            ? 'Essayez de modifier vos filtres de recherche'
+            : undefined}
+        />
       )}
     </div>
   );

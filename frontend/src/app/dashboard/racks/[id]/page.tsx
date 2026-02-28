@@ -27,7 +27,9 @@ import { racksApi } from '@/lib/api/racks';
 import { usePermissions } from '@/hooks/usePermissions';
 import { assetsApi } from '@/lib/api/assets';
 import { Attachments } from '@/components/Attachments';
+import { InlineEditCard } from '@/components/InlineEditCard';
 import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
 import {
   Tooltip,
   TooltipContent,
@@ -148,6 +150,21 @@ export default function RackDetailPage({
       queryClient.invalidateQueries({ queryKey: ['rack', id] });
       setEditingNoteAssetId(null);
       setEditingNoteText('');
+    },
+  });
+
+  // Inline edit state
+  const [editNotes, setEditNotes] = useState('');
+
+  const updateRackMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => racksApi.update(id, data as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rack', id] });
+      toast.success('Mise à jour réussie');
+    },
+    onError: (error: Error) => {
+      toast.error(`Erreur: ${error.message}`);
+      throw error;
     },
   });
 
@@ -359,14 +376,33 @@ export default function RackDetailPage({
                   {occupiedUnits}U / {rack.heightU}U ({usagePercent}%)
                 </p>
               </div>
-              {rack.notes && (
-                <div>
-                  <p className="text-sm font-medium">Notes</p>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{rack.notes}</p>
-                </div>
-              )}
             </CardContent>
           </Card>
+
+          {/* Notes */}
+          <InlineEditCard
+            title="Notes"
+            canEdit={canUpdate('racks', rack?.siteId)}
+            onEdit={() => setEditNotes(rack.notes || '')}
+            onSave={async () => {
+              await updateRackMutation.mutateAsync({ notes: editNotes || null });
+            }}
+            onCancel={() => setEditNotes(rack.notes || '')}
+            editContent={
+              <Textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Ajouter des notes..."
+                rows={4}
+              />
+            }
+          >
+            {rack.notes ? (
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{rack.notes}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">Aucune note</p>
+            )}
+          </InlineEditCard>
 
           {/* Specs — conditional */}
           {(() => {

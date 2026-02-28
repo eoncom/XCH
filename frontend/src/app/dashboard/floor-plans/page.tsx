@@ -17,6 +17,7 @@ import {
 import { floorPlansApi } from '@/lib/api/floor-plans';
 import { sitesApi } from '@/lib/api/sites';
 import { Plus, Search, FileImage, MapPin, Layers } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { FloorPlan, Site } from '@/types';
@@ -214,10 +215,11 @@ export default function FloorPlansPage() {
       </div>
 
       {filteredFloorPlans?.length === 0 && (
-        <div className="text-center py-12">
-          <FileImage className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Aucun plan trouvé</p>
-        </div>
+        <EmptyState
+          icon={FileImage}
+          title="Aucun plan trouvé"
+          description={search ? 'Essayez de modifier votre recherche' : undefined}
+        />
       )}
     </div>
   );

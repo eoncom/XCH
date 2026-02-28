@@ -35,6 +35,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
 import { Plus, Search, Eye, Pencil, Trash2, Users, Settings } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Contact, ContactType, ContactCategory } from '@/types';
@@ -182,42 +183,41 @@ export default function ContactsPage() {
         </TabsList>
       </Tabs>
 
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par nom, email ou entreprise..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Type de contact" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Tous les types</SelectItem>
+            {filteredTypes?.map((type) => (
+              <SelectItem key={type.id} value={type.id}>
+                <div className="flex items-center gap-2">
+                  {type.color && (
+                    <span
+                      className="inline-block w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: type.color }}
+                    />
+                  )}
+                  {type.name}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher par nom, email ou entreprise..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-full sm:w-[250px]">
-                <SelectValue placeholder="Type de contact" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Tous les types</SelectItem>
-                {filteredTypes?.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
-                    <div className="flex items-center gap-2">
-                      {type.color && (
-                        <span
-                          className="inline-block w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: type.color }}
-                        />
-                      )}
-                      {type.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {filteredContacts && filteredContacts.length > 0 ? (
             <Table>
               <TableHeader>
@@ -316,23 +316,16 @@ export default function ContactsPage() {
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-12">
-              <Users className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground">Aucun contact trouve</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {search || categoryFilter !== 'ALL' || typeFilter !== 'ALL'
-                  ? 'Essayez de modifier vos filtres de recherche'
-                  : 'Commencez par ajouter un nouveau contact'}
-              </p>
-              {!search && categoryFilter === 'ALL' && typeFilter === 'ALL' && canCreate('contacts') && (
-                <Button asChild className="mt-4">
-                  <Link href="/dashboard/contacts/new">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Nouveau contact
-                  </Link>
-                </Button>
-              )}
-            </div>
+            <EmptyState
+              icon={Users}
+              title="Aucun contact trouvé"
+              description={search || categoryFilter !== 'ALL' || typeFilter !== 'ALL'
+                ? 'Essayez de modifier vos filtres de recherche'
+                : 'Commencez par ajouter un nouveau contact'}
+              action={!search && categoryFilter === 'ALL' && typeFilter === 'ALL' && canCreate('contacts')
+                ? { label: 'Nouveau contact', href: '/dashboard/contacts/new', icon: Plus }
+                : undefined}
+            />
           )}
         </CardContent>
       </Card>

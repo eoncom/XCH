@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { usersApi } from '@/lib/api/users';
 import { Users, UserPlus, Mail, Phone, Shield } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
 import Link from 'next/link';
 import type { User } from '@/types';
 
@@ -48,12 +49,12 @@ export default function UsersPage() {
   };
 
   if (isLoading) {
-    return <div className="text-center py-8">Chargement des utilisateurs...</div>;
+    return <div className="text-center py-12">Chargement des utilisateurs...</div>;
   }
 
   if (error) {
     return (
-      <div className="text-center py-8">
+      <div className="text-center py-12">
         <p className="text-red-600">Erreur lors du chargement des utilisateurs</p>
         <p className="text-sm text-muted-foreground mt-2">
           {error instanceof Error ? error.message : 'Erreur inconnue'}
@@ -186,9 +187,11 @@ export default function UsersPage() {
             ))}
           </div>
           {users.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              Aucun utilisateur disponible
-            </div>
+            <EmptyState
+              icon={Users}
+              title="Aucun utilisateur disponible"
+              action={{ label: 'Ajouter un utilisateur', href: '/dashboard/users/new', icon: UserPlus }}
+            />
           )}
         </CardContent>
       </Card>

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
@@ -27,6 +27,7 @@ import { tenantsApi, type SsoConfig } from '@/lib/api/tenants';
 import { useQueryClient } from '@tanstack/react-query';
 import { THEME_PRESET_LIST, type ThemePreset } from '@/lib/themes';
 import { cn } from '@/lib/utils';
+import { authApi } from '@/lib/api/auth';
 
 interface SecurityReminder {
   id: string;
@@ -549,6 +550,380 @@ function SsoConfigSection() {
   );
 }
 
+function SecurityTabContent() {
+  const { user } = useAuthStore();
+  const [totpEnabled, setTotpEnabled] = useState(user?.totpEnabled || false);
+  const [setupStep, setSetupStep] = useState<'idle' | 'qr' | 'verify' | 'backup' | 'done'>('idle');
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
+  const [totpSecret, setTotpSecret] = useState('');
+  const [verifyCode, setVerifyCode] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [isSettingUp, setIsSettingUp] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isDisabling, setIsDisabling] = useState(false);
+  const [disablePassword, setDisablePassword] = useState('');
+  const [showDisable, setShowDisable] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleStartSetup = async () => {
+    setIsSettingUp(true);
+    setError('');
+    try {
+      const data = await authApi.setup2FA();
+      setQrCodeDataUrl(data.qrCodeDataUrl);
+      setTotpSecret(data.secret);
+      setSetupStep('qr');
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors de la configuration');
+    } finally {
+      setIsSettingUp(false);
+    }
+  };
+
+  const handleVerifySetup = async () => {
+    setIsVerifying(true);
+    setError('');
+    try {
+      const data = await authApi.verifySetup(verifyCode);
+      if (data.backupCodes) {
+        setBackupCodes(data.backupCodes);
+        setSetupStep('backup');
+        setTotpEnabled(true);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Code invalide');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleDisable = async () => {
+    setIsDisabling(true);
+    setError('');
+    try {
+      await authApi.disable2FA(disablePassword);
+      setTotpEnabled(false);
+      setShowDisable(false);
+      setDisablePassword('');
+      toast.success('Double authentification désactivée');
+    } catch (err: any) {
+      setError(err.message || 'Mot de passe incorrect');
+    } finally {
+      setIsDisabling(false);
+    }
+  };
+
+  const copyBackupCodes = () => {
+    navigator.clipboard.writeText(backupCodes.join('\n'));
+    toast.success('Codes copiés dans le presse-papier');
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5" />
+          Double authentification (2FA)
+        </CardTitle>
+        <CardDescription>
+          Protégez votre compte avec un code temporaire généré par une application d'authentification (Google Authenticator, Microsoft Authenticator, etc.)
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Status */}
+        <div className="flex items-center justify-between p-4 rounded-lg border">
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              'h-10 w-10 rounded-lg flex items-center justify-center',
+              totpEnabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'
+            )}>
+              <ShieldCheck className={cn('h-5 w-5', totpEnabled ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground')} />
+            </div>
+            <div>
+              <p className="font-medium">
+                {totpEnabled ? 'Double authentification activée' : 'Double authentification désactivée'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {totpEnabled
+                  ? 'Votre compte est protégé par un code TOTP'
+                  : 'Activez la 2FA pour renforcer la sécurité de votre compte'}
+              </p>
+            </div>
+          </div>
+          <Badge variant={totpEnabled ? 'default' : 'secondary'}>
+            {totpEnabled ? 'Actif' : 'Inactif'}
+          </Badge>
+        </div>
+
+        {error && (
+          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20">
+            {error}
+          </div>
+        )}
+
+        {/* Setup flow */}
+        {!totpEnabled && setupStep === 'idle' && (
+          <Button onClick={handleStartSetup} disabled={isSettingUp}>
+            {isSettingUp ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <ShieldCheck className="mr-2 h-4 w-4" />
+            )}
+            Activer la double authentification
+          </Button>
+        )}
+
+        {setupStep === 'qr' && (
+          <div className="space-y-4">
+            <div className="p-4 border rounded-lg space-y-4">
+              <h4 className="font-medium">1. Scannez le QR code</h4>
+              <p className="text-sm text-muted-foreground">
+                Ouvrez votre application d'authentification et scannez le QR code ci-dessous.
+              </p>
+              <div className="flex justify-center">
+                {qrCodeDataUrl && (
+                  <img src={qrCodeDataUrl} alt="QR Code TOTP" className="w-48 h-48 rounded-lg border" />
+                )}
+              </div>
+              {totpSecret && (
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground mb-1">Ou entrez manuellement cette clé :</p>
+                  <code className="text-sm font-mono bg-muted px-3 py-1 rounded select-all">
+                    {totpSecret}
+                  </code>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border rounded-lg space-y-4">
+              <h4 className="font-medium">2. Entrez le code de vérification</h4>
+              <p className="text-sm text-muted-foreground">
+                Saisissez le code à 6 chiffres affiché dans votre application.
+              </p>
+              <div className="flex gap-3">
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-40 text-center text-lg tracking-widest font-mono"
+                  autoComplete="one-time-code"
+                />
+                <Button
+                  onClick={handleVerifySetup}
+                  disabled={isVerifying || verifyCode.length !== 6}
+                >
+                  {isVerifying ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="mr-2 h-4 w-4" />
+                  )}
+                  Vérifier
+                </Button>
+              </div>
+            </div>
+
+            <Button variant="ghost" onClick={() => { setSetupStep('idle'); setError(''); }}>
+              Annuler
+            </Button>
+          </div>
+        )}
+
+        {setupStep === 'backup' && (
+          <div className="space-y-4">
+            <div className="p-4 border rounded-lg border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 space-y-4">
+              <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                <Check className="h-5 w-5" />
+                <h4 className="font-medium">Double authentification activée !</h4>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Sauvegardez ces codes de récupération dans un endroit sûr. Chaque code ne peut être utilisé qu'une seule fois en cas de perte de votre appareil.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {backupCodes.map((code, i) => (
+                  <code key={i} className="text-sm font-mono bg-muted px-3 py-2 rounded text-center">
+                    {code}
+                  </code>
+                ))}
+              </div>
+              <Button variant="outline" onClick={copyBackupCodes}>
+                <Copy className="mr-2 h-4 w-4" />
+                Copier les codes
+              </Button>
+            </div>
+            <Button onClick={() => setSetupStep('done')}>
+              J'ai sauvegardé mes codes
+            </Button>
+          </div>
+        )}
+
+        {/* Disable 2FA */}
+        {totpEnabled && setupStep !== 'qr' && setupStep !== 'backup' && (
+          <div className="space-y-4">
+            {!showDisable ? (
+              <Button variant="outline" onClick={() => setShowDisable(true)}>
+                Désactiver la double authentification
+              </Button>
+            ) : (
+              <div className="p-4 border rounded-lg border-destructive/30 space-y-4">
+                <h4 className="font-medium text-destructive">Désactiver la 2FA</h4>
+                <p className="text-sm text-muted-foreground">
+                  Confirmez votre mot de passe pour désactiver la double authentification.
+                </p>
+                <div className="flex gap-3">
+                  <Input
+                    type="password"
+                    placeholder="Mot de passe actuel"
+                    value={disablePassword}
+                    onChange={(e) => setDisablePassword(e.target.value)}
+                    className="max-w-xs"
+                  />
+                  <Button
+                    variant="destructive"
+                    onClick={handleDisable}
+                    disabled={isDisabling || !disablePassword}
+                  >
+                    {isDisabling ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Désactiver
+                  </Button>
+                  <Button variant="ghost" onClick={() => { setShowDisable(false); setDisablePassword(''); setError(''); }}>
+                    Annuler
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function WarrantyThresholdsSection({ tenantData, setTenantData }: { tenantData: TenantConfig | null; setTenantData: (data: TenantConfig | null) => void }) {
+  const queryClient = useQueryClient();
+  const [warningDays, setWarningDays] = useState(90);
+  const [criticalDays, setCriticalDays] = useState(30);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load from tenant config
+  useEffect(() => {
+    if (tenantData?.config?.warrantyAlertThresholds) {
+      const thresholds = tenantData.config.warrantyAlertThresholds;
+      setWarningDays(thresholds.warning ?? 90);
+      setCriticalDays(thresholds.critical ?? 30);
+    }
+  }, [tenantData]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await apiClient.patch('/api/tenants/current', {
+        config: {
+          ...tenantData?.config,
+          warrantyAlertThresholds: {
+            warning: warningDays,
+            critical: criticalDays,
+          },
+        },
+      });
+      // Update local state
+      setTenantData(tenantData ? {
+        ...tenantData,
+        config: {
+          ...tenantData.config,
+          warrantyAlertThresholds: { warning: warningDays, critical: criticalDays },
+        },
+      } : null);
+      queryClient.invalidateQueries({ queryKey: ['tenant-branding'] });
+      toast.success('Seuils de garantie mis à jour');
+    } catch {
+      toast.error('Erreur lors de la sauvegarde');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldAlert className="h-5 w-5" />
+          Alertes garantie
+        </CardTitle>
+        <CardDescription>
+          Configurez les seuils d'alerte pour la fin de garantie des équipements. Les alertes apparaissent sur le dashboard, la liste et le détail des équipements.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="warrantyWarning" className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-amber-500" />
+              Seuil alerte jaune (jours)
+            </Label>
+            <Input
+              id="warrantyWarning"
+              type="number"
+              min={1}
+              max={365}
+              value={warningDays}
+              onChange={(e) => setWarningDays(parseInt(e.target.value) || 90)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Alerte jaune quand la garantie expire dans moins de {warningDays} jours
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="warrantyCritical" className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-orange-500" />
+              Seuil alerte orange (jours)
+            </Label>
+            <Input
+              id="warrantyCritical"
+              type="number"
+              min={1}
+              max={365}
+              value={criticalDays}
+              onChange={(e) => setCriticalDays(parseInt(e.target.value) || 30)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Alerte orange quand la garantie expire dans moins de {criticalDays} jours
+            </p>
+          </div>
+        </div>
+
+        <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+          <p className="flex items-center gap-2">
+            <Info className="h-4 w-4 shrink-0" />
+            Les équipements avec une garantie expirée sont toujours affichés en rouge, quel que soit le seuil.
+            {warningDays <= criticalDays && (
+              <span className="text-amber-600 font-medium ml-1">
+                ⚠ Le seuil jaune doit être supérieur au seuil orange.
+              </span>
+            )}
+          </p>
+        </div>
+
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            Enregistrer les seuils
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const { user } = useAuthStore();
   const { theme, setTheme } = useTheme();
@@ -727,6 +1102,10 @@ export default function SettingsPage() {
             <User className="mr-2 h-4 w-4" />
             Profil
           </TabsTrigger>
+          <TabsTrigger value="security">
+            <ShieldCheck className="mr-2 h-4 w-4" />
+            Sécurité
+          </TabsTrigger>
           <TabsTrigger value="appearance">
             <Palette className="mr-2 h-4 w-4" />
             Apparence
@@ -836,6 +1215,11 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Security Tab */}
+        <TabsContent value="security" className="space-y-6">
+          <SecurityTabContent />
         </TabsContent>
 
         {/* Appearance Tab */}
@@ -1219,6 +1603,10 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+
+          {user?.role === 'ADMIN' && (
+            <WarrantyThresholdsSection tenantData={tenantData} setTenantData={setTenantData} />
+          )}
 
           {user?.role === 'ADMIN' && (
             <Card>

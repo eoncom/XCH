@@ -30,7 +30,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const { passwordHash, ...result } = user;
+    const { passwordHash, totpSecret, totpBackupCodes, ...result } = user;
     return result;
   }
 
@@ -62,6 +62,7 @@ export class AuthService {
         role: user.role,
         tenantId: user.tenantId,
         tenant: user.tenant,
+        totpEnabled: user.totpEnabled || false,
       },
     };
   }
@@ -81,7 +82,7 @@ export class AuthService {
       include: { tenant: true },
     });
 
-    const { passwordHash, ...result } = user;
+    const { passwordHash, totpSecret, totpBackupCodes, ...result } = user;
     return result;
   }
 

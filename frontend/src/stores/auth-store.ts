@@ -38,7 +38,18 @@ export const useAuthStore = create<AuthState>()(
             throw new Error(error.message || 'Login failed');
           }
 
-          const { user } = await response.json();
+          const data = await response.json();
+
+          // ✅ 2FA required — throw special error for login page to handle
+          if (data.requires2FA) {
+            set({ isLoading: false });
+            const err: any = new Error('2FA_REQUIRED');
+            err.requires2FA = true;
+            err.tempToken = data.tempToken;
+            throw err;
+          }
+
+          const { user } = data;
 
           // ✅ Store only user data (tokens are in HTTP-only cookies)
           localStorage.setItem('user', JSON.stringify(user));

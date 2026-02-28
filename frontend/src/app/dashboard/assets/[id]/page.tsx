@@ -19,6 +19,10 @@ import {
 import { assetsApi } from '@/lib/api/assets';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Attachments } from '@/components/Attachments';
+import { InlineEditCard } from '@/components/InlineEditCard';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
 import {
   ArrowLeft,
   Edit,
@@ -48,7 +52,9 @@ import {
   Weight,
   Zap,
   Info,
+  ShieldAlert,
 } from 'lucide-react';
+import { WarrantyBadge, WarrantyAlertBanner } from '@/components/ui/warranty-badge';
 import Link from 'next/link';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -142,6 +148,22 @@ export default function AssetDetailPage({
     },
   });
 
+  // Inline edit state
+  const [editGeneral, setEditGeneral] = useState({ name: '', manufacturer: '', model: '', serialNumber: '' });
+  const [editNotes, setEditNotes] = useState('');
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => assetsApi.update(id, data as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['asset', id] });
+      toast.success('Mise à jour réussie');
+    },
+    onError: (error: Error) => {
+      toast.error(`Erreur: ${error.message}`);
+      throw error;
+    },
+  });
+
   const generateQRMutation = useMutation({
     mutationFn: () => assetsApi.generateQRCode(id),
     onSuccess: (data) => {
@@ -204,6 +226,7 @@ export default function AssetDetailPage({
           <Badge variant={assetStatusColors[asset.status]}>
             {assetStatusLabels[asset.status]}
           </Badge>
+          <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
         </div>
         <div className="flex gap-2">
           <Button
@@ -232,6 +255,9 @@ export default function AssetDetailPage({
         </div>
       </div>
 
+      {/* Warranty Alert Banner */}
+      <WarrantyAlertBanner warrantyEnd={asset.warrantyEnd} />
+
       {/* Tabs */}
       <Tabs defaultValue="info" className="w-full">
         <TabsList>
@@ -248,11 +274,58 @@ export default function AssetDetailPage({
 
         <TabsContent value="info" className="space-y-6">
           {/* General Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Informations générales</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <InlineEditCard
+            title="Informations générales"
+            canEdit={canUpdate('assets', asset?.siteId)}
+            onEdit={() => setEditGeneral({
+              name: asset.name || '',
+              manufacturer: asset.manufacturer || '',
+              model: asset.model || '',
+              serialNumber: asset.serialNumber || '',
+            })}
+            onSave={async () => {
+              await updateMutation.mutateAsync({
+                name: editGeneral.name || undefined,
+                manufacturer: editGeneral.manufacturer || undefined,
+                model: editGeneral.model || undefined,
+                serialNumber: editGeneral.serialNumber || undefined,
+              });
+            }}
+            onCancel={() => setEditGeneral({
+              name: asset.name || '',
+              manufacturer: asset.manufacturer || '',
+              model: asset.model || '',
+              serialNumber: asset.serialNumber || '',
+            })}
+            editContent={
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Type</label>
+                  <p className="text-lg">{assetTypeLabels[asset.type]}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Statut</label>
+                  <p className="text-lg">{assetStatusLabels[asset.status]}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Nom</label>
+                  <Input value={editGeneral.name} onChange={(e) => setEditGeneral(p => ({ ...p, name: e.target.value }))} placeholder="Nom de l'équipement" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Fabricant</label>
+                  <Input value={editGeneral.manufacturer} onChange={(e) => setEditGeneral(p => ({ ...p, manufacturer: e.target.value }))} placeholder="Fabricant" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Modèle</label>
+                  <Input value={editGeneral.model} onChange={(e) => setEditGeneral(p => ({ ...p, model: e.target.value }))} placeholder="Modèle" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Numéro de série</label>
+                  <Input value={editGeneral.serialNumber} onChange={(e) => setEditGeneral(p => ({ ...p, serialNumber: e.target.value }))} placeholder="Numéro de série" />
+                </div>
+              </div>
+            }
+          >
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
@@ -343,8 +416,7 @@ export default function AssetDetailPage({
                   </p>
                 </div>
               )}
-            </CardContent>
-          </Card>
+          </InlineEditCard>
 
           {/* Characteristics — conditional */}
           {(asset.inventoryTag || asset.locationText || asset.weight || asset.powerConsumption) && (
@@ -467,20 +539,31 @@ export default function AssetDetailPage({
             );
           })()}
 
-          {/* Notes — conditional */}
-          {asset.notes && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Notes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="whitespace-pre-wrap text-sm">{asset.notes}</p>
-              </CardContent>
-            </Card>
-          )}
+          {/* Notes */}
+          <InlineEditCard
+            title="Notes"
+            icon={FileText}
+            canEdit={canUpdate('assets', asset?.siteId)}
+            onEdit={() => setEditNotes(asset.notes || '')}
+            onSave={async () => {
+              await updateMutation.mutateAsync({ notes: editNotes || null });
+            }}
+            onCancel={() => setEditNotes(asset.notes || '')}
+            editContent={
+              <Textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Ajouter des notes..."
+                rows={4}
+              />
+            }
+          >
+            {asset.notes ? (
+              <p className="whitespace-pre-wrap text-sm">{asset.notes}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">Aucune note</p>
+            )}
+          </InlineEditCard>
 
           {/* External References — conditional, read-only */}
           {asset.externalRefs && asset.externalRefs.length > 0 && (

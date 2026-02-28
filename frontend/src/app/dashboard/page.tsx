@@ -7,13 +7,14 @@ import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Package, Server, CheckSquare, MapIcon, AlertTriangle, Clock, Ban, ArrowRight } from 'lucide-react';
+import { MapPin, Package, Server, CheckSquare, MapIcon, AlertTriangle, Clock, Ban, ArrowRight, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { Task, Asset, Site } from '@/types';
+import { getWarrantyStatus, getWarrantyDaysLeft, useWarrantyThresholds, type WarrantyStatus } from '@/lib/warranty';
 
 // Dynamically import map component (client-side only)
 const SitesMap = dynamic(() => import('@/components/maps/SitesMap'), {
@@ -108,6 +109,9 @@ export default function DashboardPage() {
     };
   }, [sites, assets, racks, tasks]);
 
+  // Warranty thresholds from tenant config
+  const warrantyThresholds = useWarrantyThresholds();
+
   // Calculate critical alerts across all sites
   const alerts = useMemo(() => {
     const blockedTasks = tasks.filter((t: Task) => t.status === 'BLOCKED');
@@ -116,13 +120,19 @@ export default function DashboardPage() {
     const overdueTasks = tasks.filter((t: Task) => t.dueDate && new Date(t.dueDate) < now && t.status !== 'DONE' && t.status !== 'CANCELLED');
     const outOfServiceAssets = assets.filter((a: Asset) => a.status === 'OUT_OF_SERVICE');
 
+    // Warranty alerts
+    const warrantyExpired = assets.filter((a: Asset) => getWarrantyStatus(a.warrantyEnd, warrantyThresholds) === 'expired');
+    const warrantyCritical = assets.filter((a: Asset) => getWarrantyStatus(a.warrantyEnd, warrantyThresholds) === 'expiring_critical');
+    const warrantyWarning = assets.filter((a: Asset) => getWarrantyStatus(a.warrantyEnd, warrantyThresholds) === 'expiring_warning');
+    const warrantyTotal = warrantyExpired.length + warrantyCritical.length + warrantyWarning.length;
+
     // Group alerts by site for "sites en souffrance"
-    const siteAlertMap = new Map<string, { blocked: Task[]; urgent: Task[]; overdue: Task[]; broken: Asset[] }>();
+    const siteAlertMap = new Map<string, { blocked: Task[]; urgent: Task[]; overdue: Task[]; broken: Asset[]; warrantyExpired: Asset[]; warrantyCritical: Asset[]; warrantyWarning: Asset[] }>();
 
     const ensureSite = (siteId: string | undefined) => {
       if (!siteId) return;
       if (!siteAlertMap.has(siteId)) {
-        siteAlertMap.set(siteId, { blocked: [], urgent: [], overdue: [], broken: [] });
+        siteAlertMap.set(siteId, { blocked: [], urgent: [], overdue: [], broken: [], warrantyExpired: [], warrantyCritical: [], warrantyWarning: [] });
       }
     };
 
@@ -130,13 +140,16 @@ export default function DashboardPage() {
     urgentTasks.forEach((t: Task) => { ensureSite(t.siteId); if (t.siteId) siteAlertMap.get(t.siteId)!.urgent.push(t); });
     overdueTasks.forEach((t: Task) => { ensureSite(t.siteId); if (t.siteId) siteAlertMap.get(t.siteId)!.overdue.push(t); });
     outOfServiceAssets.forEach((a: Asset) => { ensureSite(a.siteId); if (a.siteId) siteAlertMap.get(a.siteId)!.broken.push(a); });
+    warrantyExpired.forEach((a: Asset) => { ensureSite(a.siteId); if (a.siteId) siteAlertMap.get(a.siteId)!.warrantyExpired.push(a); });
+    warrantyCritical.forEach((a: Asset) => { ensureSite(a.siteId); if (a.siteId) siteAlertMap.get(a.siteId)!.warrantyCritical.push(a); });
+    warrantyWarning.forEach((a: Asset) => { ensureSite(a.siteId); if (a.siteId) siteAlertMap.get(a.siteId)!.warrantyWarning.push(a); });
 
     // Sort sites by total alert count
     const sitesWithAlerts = Array.from(siteAlertMap.entries())
       .map(([siteId, a]) => ({
         siteId,
         site: sites.find((s: Site) => s.id === siteId),
-        total: a.blocked.length + a.urgent.length + a.overdue.length + a.broken.length,
+        total: a.blocked.length + a.urgent.length + a.overdue.length + a.broken.length + a.warrantyExpired.length + a.warrantyCritical.length + a.warrantyWarning.length,
         ...a,
       }))
       .filter(s => s.total > 0)
@@ -147,10 +160,14 @@ export default function DashboardPage() {
       urgentTasks,
       overdueTasks,
       outOfServiceAssets,
-      totalAlerts: blockedTasks.length + urgentTasks.length + overdueTasks.length + outOfServiceAssets.length,
+      warrantyExpired,
+      warrantyCritical,
+      warrantyWarning,
+      warrantyTotal,
+      totalAlerts: blockedTasks.length + urgentTasks.length + overdueTasks.length + outOfServiceAssets.length + warrantyTotal,
       sitesWithAlerts,
     };
-  }, [tasks, assets, sites]);
+  }, [tasks, assets, sites, warrantyThresholds]);
 
   const isLoading = sitesLoading || assetsLoading || racksLoading || tasksLoading;
   const router = useRouter();
@@ -288,6 +305,15 @@ export default function DashboardPage() {
                   </div>
                 </div>
               )}
+              {alerts.warrantyTotal > 0 && (
+                <div className="flex items-center gap-2 p-2.5 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                  <ShieldAlert className="h-4 w-4 text-yellow-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-yellow-700 dark:text-yellow-300">{alerts.warrantyTotal}</p>
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400">Garantie{alerts.warrantyTotal > 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Sites en souffrance — détail par site */}
@@ -336,6 +362,12 @@ export default function DashboardPage() {
                       {broken.length > 0 && (
                         <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900 dark:text-purple-200">
                           {broken.length} HS
+                        </Badge>
+                      )}
+                      {(warrantyExpired.length + warrantyCritical.length + warrantyWarning.length) > 0 && (
+                        <Badge className="text-xs bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900 dark:text-yellow-200">
+                          <ShieldAlert className="h-3 w-3 mr-1" />
+                          {warrantyExpired.length + warrantyCritical.length + warrantyWarning.length} garantie{(warrantyExpired.length + warrantyCritical.length + warrantyWarning.length) > 1 ? 's' : ''}
                         </Badge>
                       )}
                       <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />

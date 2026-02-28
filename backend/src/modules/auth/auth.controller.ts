@@ -1,10 +1,13 @@
-import { Controller, Post, Body, UseGuards, Request, Get, Res, UnauthorizedException, Req } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Res, UnauthorizedException, Req, Delete, Param, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaClient } from '@prisma/client';
 import { Response, Request as ExpressRequest } from 'express';
+import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
+import { TotpService } from './totp.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LoginDto } from './dto/login.dto';
@@ -17,6 +20,8 @@ import { AuthRequest } from '../../types/request.interface';
 export class AuthController {
   constructor(
     private authService: AuthService,
+    private totpService: TotpService,
+    private jwtService: JwtService,
     private configService: ConfigService,
     private prisma: PrismaClient,
   ) {}
@@ -61,13 +66,25 @@ export class AuthController {
   @Post('login')
   @UseGuards(LocalAuthGuard)
   @ApiOperation({ summary: 'Login with email/password' })
-  @ApiResponse({ status: 200, description: 'Returns user data and sets HTTP-only cookies (accessToken, refreshToken)' })
+  @ApiResponse({ status: 200, description: 'Returns user data and sets HTTP-only cookies, or requires 2FA' })
   async login(
     @Request() req: AuthRequest,
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.login(req.user);
+    const user = req.user;
+
+    // Check if 2FA is enabled for this user
+    if (user.totpEnabled) {
+      // Issue a short-lived temp token for 2FA verification
+      const tempToken = this.jwtService.sign(
+        { sub: user.id, type: '2fa_pending' },
+        { expiresIn: '5m' },
+      );
+      return { requires2FA: true, tempToken };
+    }
+
+    const result = await this.authService.login(user);
 
     // Set HTTP-only cookies (environment-aware)
     res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', 15 * 60 * 1000));
@@ -140,6 +157,214 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile' })
   getProfile(@Request() req: AuthRequest) {
     return req.user;
+  }
+
+  // ===== TOTP 2FA Endpoints =====
+
+  @Post('2fa/setup')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate TOTP secret and QR code for 2FA setup' })
+  async setup2FA(@Request() req: AuthRequest) {
+    const user = await this.prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user || user.authProvider !== 'local') {
+      throw new BadRequestException('2FA is only available for local accounts');
+    }
+    if (user.totpEnabled) {
+      throw new BadRequestException('2FA is already enabled');
+    }
+
+    const { secret, otpAuthUrl } = this.totpService.generateSecret(user.email);
+    const qrCodeDataUrl = await this.totpService.generateQRCodeDataUrl(otpAuthUrl);
+
+    // Store the secret temporarily (not enabled yet)
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { totpSecret: secret },
+    });
+
+    return { secret, qrCodeDataUrl };
+  }
+
+  @Post('2fa/verify-setup')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verify first TOTP code to complete 2FA setup' })
+  async verifySetup2FA(
+    @Request() req: AuthRequest,
+    @Body() body: { token: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user || !user.totpSecret) {
+      throw new BadRequestException('2FA setup not initiated');
+    }
+    if (user.totpEnabled) {
+      throw new BadRequestException('2FA is already enabled');
+    }
+
+    const isValid = this.totpService.verifyToken(user.totpSecret, body.token);
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid TOTP code');
+    }
+
+    // Generate backup codes
+    const { codes, hashedCodes } = await this.totpService.generateBackupCodes();
+
+    // Enable 2FA
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        totpEnabled: true,
+        totpBackupCodes: hashedCodes,
+      },
+    });
+
+    return { enabled: true, backupCodes: codes };
+  }
+
+  @Post('2fa/verify')
+  @ApiOperation({ summary: 'Verify TOTP code during login (uses temp token)' })
+  async verify2FA(
+    @Body() body: { code: string; tempToken: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(body.tempToken);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired temp token');
+    }
+
+    if (payload.type !== '2fa_pending') {
+      throw new UnauthorizedException('Invalid token type');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      include: { tenant: true },
+    });
+    if (!user || !user.totpSecret || !user.totpEnabled) {
+      throw new UnauthorizedException('2FA not configured');
+    }
+
+    const isValid = this.totpService.verifyToken(user.totpSecret, body.code);
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid TOTP code');
+    }
+
+    // 2FA verified — issue real tokens
+    const result = await this.authService.login(user);
+    res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', 15 * 60 * 1000));
+    res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', 7 * 24 * 60 * 60 * 1000));
+
+    return { user: result.user };
+  }
+
+  @Post('2fa/backup-verify')
+  @ApiOperation({ summary: 'Verify backup code during login (uses temp token)' })
+  async verifyBackupCode(
+    @Body() body: { code: string; tempToken: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(body.tempToken);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired temp token');
+    }
+
+    if (payload.type !== '2fa_pending') {
+      throw new UnauthorizedException('Invalid token type');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      include: { tenant: true },
+    });
+    if (!user || !user.totpEnabled) {
+      throw new UnauthorizedException('2FA not configured');
+    }
+
+    const { valid, remainingCodes } = await this.totpService.verifyBackupCode(
+      body.code,
+      user.totpBackupCodes,
+    );
+
+    if (!valid) {
+      throw new UnauthorizedException('Invalid backup code');
+    }
+
+    // Update remaining backup codes
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { totpBackupCodes: remainingCodes },
+    });
+
+    // Issue real tokens
+    const result = await this.authService.login(user);
+    res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', 15 * 60 * 1000));
+    res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', 7 * 24 * 60 * 60 * 1000));
+
+    return { user: result.user };
+  }
+
+  @Post('2fa/disable')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Disable 2FA (requires current password)' })
+  async disable2FA(
+    @Request() req: AuthRequest,
+    @Body() body: { password: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user || !user.totpEnabled) {
+      throw new BadRequestException('2FA is not enabled');
+    }
+
+    // Verify password
+    if (!user.passwordHash) {
+      throw new BadRequestException('No password set');
+    }
+    const isPasswordValid = await bcrypt.compare(body.password, user.passwordHash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid password');
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        totpEnabled: false,
+        totpSecret: null,
+        totpBackupCodes: [],
+      },
+    });
+
+    return { disabled: true };
+  }
+
+  @Delete('2fa/user/:userId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Admin: disable 2FA for a specific user' })
+  async adminDisable2FA(
+    @Request() req: AuthRequest,
+    @Param('userId') userId: string,
+  ) {
+    // Only ADMIN can do this
+    if (req.user.role !== 'ADMIN') {
+      throw new UnauthorizedException('Admin access required');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        totpEnabled: false,
+        totpSecret: null,
+        totpBackupCodes: [],
+      },
+    });
+
+    return { disabled: true };
   }
 
   // ===== SSO / OIDC Endpoints =====

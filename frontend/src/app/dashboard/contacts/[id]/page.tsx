@@ -18,6 +18,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { contactsApi } from '@/lib/api/contacts';
 import { usePermissions } from '@/hooks/usePermissions';
+import { InlineEditCard } from '@/components/InlineEditCard';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   ArrowLeft,
   Edit,
@@ -95,6 +98,23 @@ export default function ContactDetailPage({
     },
     onError: (error: Error) => {
       toast.error(`Erreur: ${error.message}`);
+    },
+  });
+
+  // Inline edit state
+  const [editCoords, setEditCoords] = useState({ email: '', phone: '', mobile: '' });
+  const [editNotes, setEditNotes] = useState('');
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => contactsApi.update(id, data as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contact', id] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      toast.success('Mise à jour réussie');
+    },
+    onError: (error: Error) => {
+      toast.error(`Erreur: ${error.message}`);
+      throw error;
     },
   });
 
@@ -188,26 +208,47 @@ export default function ContactDetailPage({
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Contact info */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Phone className="h-5 w-5" />
-              Coordonnees
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <InlineEditCard
+          title="Coordonnées"
+          icon={Phone}
+          canEdit={canUpdate('contacts')}
+          onEdit={() => setEditCoords({
+            email: contact.email || '',
+            phone: contact.phone || '',
+            mobile: contact.mobile || '',
+          })}
+          onSave={async () => {
+            await updateMutation.mutateAsync({
+              email: editCoords.email || undefined,
+              phone: editCoords.phone || undefined,
+              mobile: editCoords.mobile || undefined,
+            });
+          }}
+          onCancel={() => setEditCoords({ email: '', phone: '', mobile: '' })}
+          editContent={
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Email</label>
+                <Input value={editCoords.email} onChange={(e) => setEditCoords(p => ({ ...p, email: e.target.value }))} placeholder="email@exemple.com" type="email" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Téléphone fixe</label>
+                <Input value={editCoords.phone} onChange={(e) => setEditCoords(p => ({ ...p, phone: e.target.value }))} placeholder="+33 1 23 45 67 89" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Mobile</label>
+                <Input value={editCoords.mobile} onChange={(e) => setEditCoords(p => ({ ...p, mobile: e.target.value }))} placeholder="+33 6 12 34 56 78" />
+              </div>
+            </div>
+          }
+        >
             {contact.email && (
               <div className="flex items-center gap-3">
                 <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Email</label>
                   <p>
-                    <a
-                      href={`mailto:${contact.email}`}
-                      className="text-primary hover:underline"
-                    >
-                      {contact.email}
-                    </a>
+                    <a href={`mailto:${contact.email}`} className="text-primary hover:underline">{contact.email}</a>
                   </p>
                 </div>
               </div>
@@ -216,14 +257,9 @@ export default function ContactDetailPage({
               <div className="flex items-center gap-3">
                 <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Telephone fixe</label>
+                  <label className="text-sm font-medium text-muted-foreground">Téléphone fixe</label>
                   <p>
-                    <a
-                      href={`tel:${contact.phone}`}
-                      className="text-primary hover:underline"
-                    >
-                      {contact.phone}
-                    </a>
+                    <a href={`tel:${contact.phone}`} className="text-primary hover:underline">{contact.phone}</a>
                   </p>
                 </div>
               </div>
@@ -234,21 +270,15 @@ export default function ContactDetailPage({
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Mobile</label>
                   <p>
-                    <a
-                      href={`tel:${contact.mobile}`}
-                      className="text-primary hover:underline"
-                    >
-                      {contact.mobile}
-                    </a>
+                    <a href={`tel:${contact.mobile}`} className="text-primary hover:underline">{contact.mobile}</a>
                   </p>
                 </div>
               </div>
             )}
             {!contact.email && !contact.phone && !contact.mobile && (
-              <p className="text-muted-foreground text-sm">Aucune coordonnee renseignee</p>
+              <p className="text-muted-foreground text-sm">Aucune coordonnée renseignée</p>
             )}
-          </CardContent>
-        </Card>
+        </InlineEditCard>
 
         {/* Company & Role */}
         <Card>
@@ -285,19 +315,30 @@ export default function ContactDetailPage({
       </div>
 
       {/* Notes */}
-      {contact.notes && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Notes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm whitespace-pre-wrap">{contact.notes}</p>
-          </CardContent>
-        </Card>
-      )}
+      <InlineEditCard
+        title="Notes"
+        icon={FileText}
+        canEdit={canUpdate('contacts')}
+        onEdit={() => setEditNotes(contact.notes || '')}
+        onSave={async () => {
+          await updateMutation.mutateAsync({ notes: editNotes || undefined });
+        }}
+        onCancel={() => setEditNotes(contact.notes || '')}
+        editContent={
+          <Textarea
+            value={editNotes}
+            onChange={(e) => setEditNotes(e.target.value)}
+            placeholder="Ajouter des notes..."
+            rows={4}
+          />
+        }
+      >
+        {contact.notes ? (
+          <p className="text-sm whitespace-pre-wrap">{contact.notes}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground italic">Aucune note</p>
+        )}
+      </InlineEditCard>
 
       {/* Metadata */}
       <Card>

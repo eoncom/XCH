@@ -17,7 +17,8 @@ import {
 } from '@/components/ui/select';
 import { tasksApi } from '@/lib/api/tasks';
 import { sitesApi } from '@/lib/api/sites';
-import { Plus, Calendar, User, AlertCircle, Clock, AlertTriangle, Search, X } from 'lucide-react';
+import { Plus, Calendar, User, AlertCircle, Clock, AlertTriangle, Search, X, ClipboardList } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Task, TaskStatus, TaskPriority, Site } from '@/types';
@@ -388,16 +389,11 @@ export default function TasksPage() {
       </div>
 
       {filteredTasks.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">
-            {hasFilters ? 'Aucune tâche ne correspond aux filtres' : 'Aucune tâche'}
-          </p>
-          {hasFilters && (
-            <Button variant="link" onClick={clearFilters} className="mt-2">
-              Effacer les filtres
-            </Button>
-          )}
-        </div>
+        <EmptyState
+          icon={ClipboardList}
+          title={hasFilters ? 'Aucune tâche ne correspond aux filtres' : 'Aucune tâche'}
+          description={hasFilters ? 'Essayez de modifier vos filtres de recherche' : undefined}
+        />
       )}
     </div>
   );
