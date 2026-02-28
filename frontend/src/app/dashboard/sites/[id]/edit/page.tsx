@@ -61,6 +61,8 @@ const siteSchema = z.object({
   address: z.string().optional(),
   city: z.string().optional(),
   postalCode: z.string().optional(),
+  country: z.string().optional(),
+  notes: z.string().optional(),
   latitude: z.union([z.number(), z.nan(), z.string()]).optional().transform((val) => {
     if (typeof val === 'string' && val === '') return undefined;
     if (typeof val === 'number' && !isNaN(val)) return val;
@@ -148,6 +150,8 @@ function EditSitePage({
           address: site.address || '',
           city: site.city || '',
           postalCode: site.postalCode || '',
+          country: site.country || '',
+          notes: site.notes || '',
           latitude: site.latitude,
           longitude: site.longitude,
           connectivity: site.connectivity || {
@@ -218,7 +222,7 @@ function EditSitePage({
     let fieldsToValidate: (keyof SiteFormData)[] = [];
 
     if (currentStep === 1) {
-      fieldsToValidate = ['code', 'name', 'status', 'address', 'city', 'postalCode', 'latitude', 'longitude'];
+      fieldsToValidate = ['code', 'name', 'status', 'address', 'city', 'postalCode', 'country', 'notes', 'latitude', 'longitude'];
     }
 
     const isValid = await trigger(fieldsToValidate);
@@ -466,6 +470,15 @@ function EditSitePage({
                       placeholder="75001"
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="country">Pays</Label>
+                    <Input
+                      id="country"
+                      {...register('country')}
+                      placeholder="France"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -518,6 +531,17 @@ function EditSitePage({
                     💡 Les coordonnées GPS se mettent à jour automatiquement quand vous modifiez l'adresse.
                     Vous pouvez les corriger manuellement ou cliquer sur "Actualiser GPS".
                   </p>
+                </div>
+
+                {/* Notes */}
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    {...register('notes')}
+                    placeholder="Informations complémentaires sur le site..."
+                    rows={4}
+                  />
                 </div>
               </div>
             )}

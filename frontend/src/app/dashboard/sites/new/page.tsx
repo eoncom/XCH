@@ -61,6 +61,8 @@ const siteSchema = z.object({
   address: z.string().optional(),
   city: z.string().optional(),
   postalCode: z.string().optional(),
+  country: z.string().optional(),
+  notes: z.string().optional(),
   latitude: z.union([z.number(), z.nan(), z.string()]).optional().transform((val) => {
     if (typeof val === 'string' && val === '') return undefined;
     if (typeof val === 'number' && !isNaN(val)) return val;
@@ -228,7 +230,7 @@ export default function NewSitePage() {
     let fieldsToValidate: Array<keyof SiteFormData> = [];
 
     if (currentStep === 1) {
-      fieldsToValidate = ['code', 'name', 'status', 'address', 'city', 'postalCode', 'latitude', 'longitude'];
+      fieldsToValidate = ['code', 'name', 'status', 'address', 'city', 'postalCode', 'country', 'notes', 'latitude', 'longitude'];
     }
 
     const isValid = await trigger(fieldsToValidate);
@@ -423,6 +425,15 @@ export default function NewSitePage() {
                       placeholder="75001"
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="country">Pays</Label>
+                    <Input
+                      id="country"
+                      {...register('country')}
+                      placeholder="France"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -481,6 +492,17 @@ export default function NewSitePage() {
                     💡 Les coordonnées GPS se remplissent automatiquement depuis l'adresse.
                     Vous pouvez les modifier manuellement ou cliquer sur "Actualiser GPS" pour forcer une nouvelle recherche.
                   </p>
+                </div>
+
+                {/* Notes */}
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    {...register('notes')}
+                    placeholder="Informations complémentaires sur le site..."
+                    rows={4}
+                  />
                 </div>
               </div>
             )}

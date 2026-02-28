@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { usersApi } from '@/lib/api/users';
 import { siteAccessApi, type UserSiteAccess } from '@/lib/api/site-access';
+import { Switch } from '@/components/ui/switch';
 import { ArrowLeft, MapPin, Lock, Unlock, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -38,6 +39,7 @@ const userSchema = z.object({
   password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères').optional().or(z.literal('')),
   role: z.enum(['ADMIN', 'MANAGER', 'TECHNICIEN', 'VIEWER']),
   phone: z.string().optional(),
+  active: z.boolean().optional(),
 });
 
 type UserFormData = z.infer<typeof userSchema>;
@@ -74,6 +76,7 @@ export default function EditUserPage() {
           role: user.role,
           phone: user.phone || '',
           password: '',
+          active: user.active !== false,
         }
       : undefined,
   });
@@ -175,7 +178,24 @@ export default function EditUserPage() {
                 <Label htmlFor="phone">Téléphone</Label>
                 <Input id="phone" type="tel" {...register('phone')} placeholder="+33 6 12 34 56 78" />
               </div>
+              <div className="space-y-2">
+                <Label>Compte actif</Label>
+                <div className="flex items-center gap-3 pt-1">
+                  <Switch
+                    checked={watch('active') !== false}
+                    onCheckedChange={(checked) => setValue('active', checked)}
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {watch('active') !== false ? 'Actif' : 'Désactivé'}
+                  </span>
+                </div>
+              </div>
             </div>
+            {user?.lastLoginAt && (
+              <p className="text-xs text-muted-foreground mt-4">
+                Dernière connexion : {new Date(user.lastLoginAt).toLocaleString('fr-FR')}
+              </p>
+            )}
           </CardContent>
         </Card>
 

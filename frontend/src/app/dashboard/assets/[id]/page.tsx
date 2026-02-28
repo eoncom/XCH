@@ -41,6 +41,13 @@ import {
   ArrowUpDown,
   Power,
   UserCircle,
+  Wifi,
+  Tag,
+  FileText,
+  ExternalLink,
+  Weight,
+  Zap,
+  Info,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -338,6 +345,186 @@ export default function AssetDetailPage({
               )}
             </CardContent>
           </Card>
+
+          {/* Characteristics — conditional */}
+          {(asset.inventoryTag || asset.locationText || asset.weight || asset.powerConsumption) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Info className="h-5 w-5" />
+                  Caractéristiques
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {asset.inventoryTag && (
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Tag inventaire
+                      </label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Tag className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-lg font-mono">{asset.inventoryTag}</p>
+                      </div>
+                    </div>
+                  )}
+                  {asset.locationText && (
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Emplacement
+                      </label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-lg">{asset.locationText}</p>
+                      </div>
+                    </div>
+                  )}
+                  {asset.weight != null && asset.weight > 0 && (
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Poids
+                      </label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Weight className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-lg">{asset.weight} kg</p>
+                      </div>
+                    </div>
+                  )}
+                  {asset.powerConsumption != null && asset.powerConsumption > 0 && (
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Consommation électrique
+                      </label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Zap className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-lg">{asset.powerConsumption} W</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Network Information — conditional */}
+          {(() => {
+            const net = asset.networkInfo as any;
+            const hasNetwork = net && (net.ip || net.hostname || net.mac || net.vlan || net.port);
+            if (!hasNetwork) return null;
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wifi className="h-5 w-5" />
+                    Informations réseau
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {net.ip && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">
+                          Adresse IP
+                        </label>
+                        <p className="text-lg font-mono">{net.ip}</p>
+                      </div>
+                    )}
+                    {net.hostname && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">
+                          Hostname
+                        </label>
+                        <p className="text-lg font-mono">{net.hostname}</p>
+                      </div>
+                    )}
+                    {net.mac && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">
+                          Adresse MAC
+                        </label>
+                        <p className="text-lg font-mono">{net.mac}</p>
+                      </div>
+                    )}
+                    {net.vlan && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">
+                          VLAN
+                        </label>
+                        <p className="text-lg font-mono">{net.vlan}</p>
+                      </div>
+                    )}
+                    {net.port && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">
+                          Port
+                        </label>
+                        <p className="text-lg font-mono">{net.port}</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Notes — conditional */}
+          {asset.notes && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Notes
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="whitespace-pre-wrap text-sm">{asset.notes}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* External References — conditional, read-only */}
+          {asset.externalRefs && asset.externalRefs.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ExternalLink className="h-5 w-5" />
+                  Références externes
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {asset.externalRefs.map((ref) => (
+                    <div
+                      key={ref.id}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">{ref.provider}</Badge>
+                          <span className="font-mono text-sm truncate">{ref.externalId}</span>
+                        </div>
+                        {ref.lastSync && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Dernière sync : {new Date(ref.lastSync).toLocaleString('fr-FR')}
+                          </p>
+                        )}
+                      </div>
+                      {ref.externalUrl && (
+                        <a
+                          href={ref.externalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 flex-shrink-0"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Rack Information */}
           {asset.rack && (

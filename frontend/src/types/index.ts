@@ -7,8 +7,10 @@ export interface User {
   name: string;
   role: UserRole;
   tenantId: string;
-  avatar?: string;
+  avatarUrl?: string;
   phone?: string;
+  active?: boolean;
+  lastLoginAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -118,6 +120,18 @@ export type AssetType =
 
 export type AssetStatus = 'IN_SERVICE' | 'OUT_OF_SERVICE' | 'IN_TRANSIT' | 'STOCK' | 'RETIRED';
 
+export interface ExternalRef {
+  id: string;
+  entityType: string;
+  entityId: string;
+  provider: string;
+  externalId: string;
+  externalUrl?: string;
+  metadata?: any;
+  lastSync?: string;
+  createdAt: string;
+}
+
 export interface Asset {
   id: string;
   tenantId: string;
@@ -127,9 +141,21 @@ export interface Asset {
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
+  inventoryTag?: string;
   status: AssetStatus;
+  locationText?: string;
+  networkInfo?: {
+    ip?: string;
+    mac?: string;
+    hostname?: string;
+    vlan?: string;
+    port?: string;
+  };
   purchaseDate?: string;
   warrantyEnd?: string;
+  weight?: number;
+  powerConsumption?: number;
+  notes?: string;
   rackId?: string;
   rackPositionU?: number;
   rackHeightU?: number;
@@ -142,6 +168,7 @@ export interface Asset {
   updatedAt: string;
   site?: Site;
   rack?: Rack;
+  externalRefs?: ExternalRef[];
 }
 
 // Rack types
@@ -193,6 +220,8 @@ export interface Task {
   completedAt?: string;
   checklist?: ChecklistItem[];
   ticketUrl?: string;
+  ticketRef?: string;
+  ticketStatus?: string;
   metadata?: any;
   createdAt: string;
   updatedAt: string;
@@ -288,6 +317,7 @@ export interface Contact {
   email?: string;
   phone?: string;
   mobile?: string;
+  address?: string;
   company?: string;
   role?: string;
   notes?: string;
@@ -302,6 +332,7 @@ export interface CreateContactDto {
   email?: string;
   phone?: string;
   mobile?: string;
+  address?: string;
   company?: string;
   role?: string;
   notes?: string;
@@ -518,9 +549,21 @@ export interface CreateAssetDto {
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
+  inventoryTag?: string;
   status: AssetStatus;
+  locationText?: string;
+  networkInfo?: {
+    ip?: string;
+    mac?: string;
+    hostname?: string;
+    vlan?: string;
+    port?: string;
+  };
   purchaseDate?: string;
   warrantyEnd?: string;
+  weight?: number;
+  powerConsumption?: number;
+  notes?: string;
   connectivity?: any;
   metadata?: any;
 }
@@ -538,6 +581,8 @@ export interface CreateTaskDto {
   dueDate?: string;
   checklist?: Omit<ChecklistItem, 'id'>[];
   ticketUrl?: string;
+  ticketRef?: string;
+  ticketStatus?: string;
   metadata?: any;
 }
 

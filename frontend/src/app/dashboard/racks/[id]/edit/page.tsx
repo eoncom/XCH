@@ -32,15 +32,29 @@ const rackStatusLabels: Record<RackStatus, string> = {
 
 const rackHeightOptions = [4, 6, 12, 18, 24, 42];
 
+const rackTypeLabels: Record<string, string> = {
+  WALL_MOUNTED: 'Mural',
+  FLOOR_STANDING: 'Sur pied',
+  ENCLOSED_CABINET: 'Armoire fermée',
+};
+
 const rackSchema = z.object({
   name: z.string().min(1, 'Le nom est requis'),
   siteId: z.string().min(1, 'Le site est requis'),
   heightU: z.number().min(1, 'La hauteur est requise'),
   status: z.enum(['IN_SERVICE', 'OUT_OF_SERVICE', 'PREPARATION']),
+  rackType: z.enum(['WALL_MOUNTED', 'FLOOR_STANDING', 'ENCLOSED_CABINET']).optional(),
   model: z.string().optional(),
   manufacturer: z.string().optional(),
+  serialNumber: z.string().optional(),
   location: z.string().optional(),
   notes: z.string().optional(),
+  specs: z.object({
+    depth: z.union([z.number(), z.nan(), z.string()]).transform((v) => { const n = Number(v); return isNaN(n) ? undefined : n; }).optional(),
+    maxLoad: z.union([z.number(), z.nan(), z.string()]).transform((v) => { const n = Number(v); return isNaN(n) ? undefined : n; }).optional(),
+    cooling: z.string().optional(),
+    power: z.string().optional(),
+  }).optional(),
 });
 
 type RackFormData = z.infer<typeof rackSchema>;
@@ -75,10 +89,18 @@ export default function EditRackPage() {
           siteId: rack.siteId,
           heightU: rack.heightU,
           status: rack.status,
+          rackType: rack.rackType || undefined,
           manufacturer: rack.manufacturer || '',
           model: rack.model || '',
+          serialNumber: rack.serialNumber || '',
           location: rack.location || '',
           notes: rack.notes || '',
+          specs: {
+            depth: (rack.specs as any)?.depth ?? undefined,
+            maxLoad: (rack.specs as any)?.maxLoad ?? undefined,
+            cooling: (rack.specs as any)?.cooling || '',
+            power: (rack.specs as any)?.power || '',
+          },
         }
       : undefined,
   });
@@ -96,12 +118,33 @@ export default function EditRackPage() {
   });
 
   const onSubmit = (data: RackFormData) => {
-    updateMutation.mutate(data);
+    const cleaned: any = { ...data };
+
+    // Clean empty strings
+    if (!cleaned.serialNumber) delete cleaned.serialNumber;
+    if (!cleaned.manufacturer) delete cleaned.manufacturer;
+    if (!cleaned.model) delete cleaned.model;
+    if (!cleaned.location) delete cleaned.location;
+    if (!cleaned.notes) delete cleaned.notes;
+    if (!cleaned.rackType) delete cleaned.rackType;
+
+    // Clean specs
+    if (cleaned.specs) {
+      const s = cleaned.specs;
+      if (!s.depth && s.depth !== 0) delete s.depth;
+      if (!s.maxLoad && s.maxLoad !== 0) delete s.maxLoad;
+      if (!s.cooling) delete s.cooling;
+      if (!s.power) delete s.power;
+      if (Object.keys(s).length === 0) delete cleaned.specs;
+    }
+
+    updateMutation.mutate(cleaned);
   };
 
   const siteId = watch('siteId');
   const heightU = watch('heightU');
   const status = watch('status');
+  const rackType = watch('rackType');
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
@@ -163,6 +206,15 @@ export default function EditRackPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="rackType">Type de baie</Label>
+                <Select value={rackType || ''} onValueChange={(value) => setValue('rackType', value as any)}>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner un type" /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(rackTypeLabels).map(([value, label]) => (<SelectItem key={value} value={value}>{label}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -185,16 +237,50 @@ export default function EditRackPage() {
                 <Label htmlFor="model">Modèle</Label>
                 <Input id="model" {...register('model')} placeholder="Ex: NetShelter SX 42U" />
               </div>
-              <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2">
+                <Label htmlFor="serialNumber">Numéro de série</Label>
+                <Input id="serialNumber" {...register('serialNumber')} placeholder="Ex: SN-2024-001" />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="location">Emplacement</Label>
-                <Input id="location" {...register('location')} placeholder="Ex: Salle serveur, rangée B, position 3" />
-                <p className="text-xs text-muted-foreground">Emplacement physique de la baie dans le bâtiment</p>
+                <Input id="location" {...register('location')} placeholder="Ex: Salle serveur, rangée B" />
+                <p className="text-xs text-muted-foreground">Emplacement physique dans le bâtiment</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Section 3: Notes (optionnel) */}
+        {/* Section 3: Spécifications techniques (optionnel) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Spécifications techniques
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="specs.depth">Profondeur (cm)</Label>
+                <Input id="specs.depth" type="number" step="0.1" {...register('specs.depth', { valueAsNumber: true })} placeholder="Ex: 100" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="specs.maxLoad">Charge max (kg)</Label>
+                <Input id="specs.maxLoad" type="number" step="0.1" {...register('specs.maxLoad', { valueAsNumber: true })} placeholder="Ex: 500" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="specs.cooling">Refroidissement</Label>
+                <Input id="specs.cooling" {...register('specs.cooling')} placeholder="Ex: Ventilation active, climatisation..." />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="specs.power">Alimentation</Label>
+                <Input id="specs.power" {...register('specs.power')} placeholder="Ex: 2x 16A, onduleur..." />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Section 4: Notes (optionnel) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

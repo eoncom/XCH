@@ -52,6 +52,7 @@ const taskSchema = z.object({
   assignedTo: z.string().optional(),
   dueDate: z.string().optional(),
   ticketUrl: z.string().optional(),
+  ticketRef: z.string().optional(),
 });
 
 type TaskFormData = z.infer<typeof taskSchema>;
@@ -231,9 +232,14 @@ export default function NewTaskPage() {
                 <Input id="dueDate" type="date" {...register('dueDate')} />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="ticketRef">Réf. ticket</Label>
+                <Input id="ticketRef" {...register('ticketRef')} placeholder="Ex: GLPI-1234, JIRA-567" />
+                <p className="text-xs text-muted-foreground">Référence du ticket dans le système externe</p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="ticketUrl">Lien ticket externe</Label>
                 <Input id="ticketUrl" type="url" {...register('ticketUrl')} placeholder="https://ticketing.example.com/ticket/123" />
-                <p className="text-xs text-muted-foreground">Lien vers un ticket dans un système externe (GLPI, Jira, etc.)</p>
+                <p className="text-xs text-muted-foreground">URL vers le ticket (GLPI, Jira, etc.)</p>
               </div>
             </div>
           </CardContent>

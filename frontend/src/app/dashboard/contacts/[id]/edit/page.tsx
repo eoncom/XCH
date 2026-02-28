@@ -48,6 +48,7 @@ const contactSchema = z.object({
   email: z.string().email('Email invalide').max(200).optional().or(z.literal('')),
   phone: z.string().max(30, 'Le telephone ne peut pas depasser 30 caracteres').optional().or(z.literal('')),
   mobile: z.string().max(30, 'Le mobile ne peut pas depasser 30 caracteres').optional().or(z.literal('')),
+  address: z.string().max(500, 'L\'adresse ne peut pas depasser 500 caracteres').optional().or(z.literal('')),
   company: z.string().max(200, 'L\'entreprise ne peut pas depasser 200 caracteres').optional().or(z.literal('')),
   role: z.string().max(100, 'Le role ne peut pas depasser 100 caracteres').optional().or(z.literal('')),
   notes: z.string().max(1000, 'Les notes ne peuvent pas depasser 1000 caracteres').optional().or(z.literal('')),
@@ -89,6 +90,7 @@ export default function EditContactPage({
           email: contact.email || '',
           phone: contact.phone || '',
           mobile: contact.mobile || '',
+          address: contact.address || '',
           company: contact.company || '',
           role: contact.role || '',
           notes: contact.notes || '',
@@ -104,6 +106,7 @@ export default function EditContactPage({
         email: data.email || undefined,
         phone: data.phone || undefined,
         mobile: data.mobile || undefined,
+        address: data.address || undefined,
         company: data.company || undefined,
         role: data.role || undefined,
         notes: data.notes || undefined,
@@ -219,6 +222,11 @@ export default function EditContactPage({
                 <Input id="mobile" {...register('mobile')} placeholder="+33 6 12 34 56 78" />
                 {errors.mobile && <p className="text-sm text-red-600">{errors.mobile.message}</p>}
               </div>
+            </div>
+            <div className="space-y-2 mt-4">
+              <Label htmlFor="address">Adresse</Label>
+              <Textarea id="address" {...register('address')} placeholder="Adresse postale complète" rows={2} />
+              {errors.address && <p className="text-sm text-red-600">{errors.address.message}</p>}
             </div>
           </CardContent>
         </Card>

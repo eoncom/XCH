@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -21,7 +22,7 @@ import {
 import { assetsApi } from '@/lib/api/assets';
 import { sitesApi } from '@/lib/api/sites';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
-import { ArrowLeft, Info } from 'lucide-react';
+import { ArrowLeft, Info, Wifi } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import type { AssetType, AssetStatus, CreateAssetDto, Site } from '@/types';
@@ -82,8 +83,34 @@ const assetSchema = z.object({
   manufacturer: z.string().optional(),
   model: z.string().optional(),
   serialNumber: z.string().optional(),
+  inventoryTag: z.string().optional(),
+  locationText: z.string().optional(),
+  networkInfo: z.object({
+    ip: z.string().optional(),
+    mac: z.string().optional(),
+    hostname: z.string().optional(),
+    vlan: z.string().optional(),
+    port: z.string().optional(),
+  }).optional(),
   purchaseDate: z.string().optional(),
   warrantyEnd: z.string().optional(),
+  weight: z.union([z.number(), z.nan(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === '' || val === undefined || val === null) return undefined;
+      if (typeof val === 'string') return parseFloat(val) || undefined;
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      return undefined;
+    }),
+  powerConsumption: z.union([z.number(), z.nan(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === '' || val === undefined || val === null) return undefined;
+      if (typeof val === 'string') return parseFloat(val) || undefined;
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      return undefined;
+    }),
+  notes: z.string().optional(),
 });
 
 type AssetFormData = z.infer<typeof assetSchema>;
@@ -136,7 +163,23 @@ export default function NewAssetPage() {
     if (!cleaned.manufacturer) delete cleaned.manufacturer;
     if (!cleaned.model) delete cleaned.model;
     if (!cleaned.serialNumber) delete cleaned.serialNumber;
+    if (!cleaned.inventoryTag) delete cleaned.inventoryTag;
+    if (!cleaned.locationText) delete cleaned.locationText;
+    if (!cleaned.notes) delete cleaned.notes;
+    if (cleaned.weight === undefined || cleaned.weight === null) delete cleaned.weight;
+    if (cleaned.powerConsumption === undefined || cleaned.powerConsumption === null) delete cleaned.powerConsumption;
     if (cleaned.siteId === 'none' || !cleaned.siteId) delete cleaned.siteId;
+
+    // Clean networkInfo: remove empty subfields, remove entire object if all empty
+    if (cleaned.networkInfo) {
+      if (!cleaned.networkInfo.ip) delete cleaned.networkInfo.ip;
+      if (!cleaned.networkInfo.mac) delete cleaned.networkInfo.mac;
+      if (!cleaned.networkInfo.hostname) delete cleaned.networkInfo.hostname;
+      if (!cleaned.networkInfo.vlan) delete cleaned.networkInfo.vlan;
+      if (!cleaned.networkInfo.port) delete cleaned.networkInfo.port;
+      if (Object.keys(cleaned.networkInfo).length === 0) delete cleaned.networkInfo;
+    }
+
     createMutation.mutate(cleaned);
   };
 
@@ -266,15 +309,25 @@ export default function NewAssetPage() {
                   placeholder="Ex: ProCurve 2530-48G"
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="inventoryTag">Tag inventaire</Label>
+                <Input
+                  id="inventoryTag"
+                  {...register('inventoryTag')}
+                  placeholder="Ex: INV-2024-0042"
+                />
+                <p className="text-xs text-muted-foreground">Numéro d'inventaire interne</p>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Section 3: Affectation & Dates (optional) */}
+        {/* Section 3: Localisation (optional) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Affectation & Dates
+              Localisation
               <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
             </CardTitle>
           </CardHeader>
@@ -297,7 +350,108 @@ export default function NewAssetPage() {
                 </Select>
               </div>
 
-              <div></div>
+              <div className="space-y-2">
+                <Label htmlFor="locationText">Emplacement (texte libre)</Label>
+                <Input
+                  id="locationText"
+                  {...register('locationText')}
+                  placeholder="Ex: Salle serveur, Étage 2, Bureau 204..."
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Section 4: Network (optional) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wifi className="h-5 w-5" />
+              Réseau
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="networkInfo.ip">Adresse IP</Label>
+                <Input
+                  id="networkInfo.ip"
+                  {...register('networkInfo.ip')}
+                  placeholder="Ex: 192.168.1.100"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="networkInfo.hostname">Hostname</Label>
+                <Input
+                  id="networkInfo.hostname"
+                  {...register('networkInfo.hostname')}
+                  placeholder="Ex: sw-salle-serveur-01"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="networkInfo.mac">Adresse MAC</Label>
+                <Input
+                  id="networkInfo.mac"
+                  {...register('networkInfo.mac')}
+                  placeholder="Ex: AA:BB:CC:DD:EE:FF"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="networkInfo.vlan">VLAN</Label>
+                <Input
+                  id="networkInfo.vlan"
+                  {...register('networkInfo.vlan')}
+                  placeholder="Ex: VLAN 100"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="networkInfo.port">Port réseau</Label>
+                <Input
+                  id="networkInfo.port"
+                  {...register('networkInfo.port')}
+                  placeholder="Ex: Gi0/1, eth0"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Section 5: Caractéristiques (optional) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Caractéristiques
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="weight">Poids (kg)</Label>
+                <Input
+                  id="weight"
+                  type="number"
+                  step="0.1"
+                  {...register('weight', { valueAsNumber: true })}
+                  placeholder="Ex: 3.5"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="powerConsumption">Consommation (Watts)</Label>
+                <Input
+                  id="powerConsumption"
+                  type="number"
+                  step="1"
+                  {...register('powerConsumption', { valueAsNumber: true })}
+                  placeholder="Ex: 150"
+                />
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="purchaseDate">Date d'achat</Label>
@@ -308,6 +462,27 @@ export default function NewAssetPage() {
                 <Label htmlFor="warrantyEnd">Fin de garantie</Label>
                 <Input id="warrantyEnd" type="date" {...register('warrantyEnd')} />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Section 6: Notes (optional) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Notes
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes générales</Label>
+              <Textarea
+                id="notes"
+                {...register('notes')}
+                placeholder="Notes libres sur l'équipement..."
+                rows={4}
+              />
             </div>
           </CardContent>
         </Card>

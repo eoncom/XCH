@@ -674,19 +674,45 @@ export default function TaskDetailPage({
                 </div>
               )}
 
-              {task.ticketUrl && (
+              {(task.ticketUrl || task.ticketRef) && (
                 <div className="flex items-start gap-3">
                   <ExternalLink className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div>
                     <p className="text-sm font-medium">Ticket lié</p>
-                    <a
-                      href={task.ticketUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:underline"
-                    >
-                      Ouvrir le ticket
-                    </a>
+                    {task.ticketRef && (
+                      <p className="text-sm font-mono text-muted-foreground">{task.ticketRef}</p>
+                    )}
+                    {task.ticketStatus && (
+                      <Badge variant="secondary" className="mt-1">{task.ticketStatus}</Badge>
+                    )}
+                    {task.ticketUrl && (
+                      <a
+                        href={task.ticketUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline block mt-1"
+                      >
+                        Ouvrir le ticket
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {task.completedAt && (
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Complétée le</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(task.completedAt).toLocaleDateString('fr-FR', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
                   </div>
                 </div>
               )}

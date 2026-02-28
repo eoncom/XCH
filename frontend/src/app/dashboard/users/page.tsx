@@ -152,6 +152,9 @@ export default function UsersPage() {
                       <Badge className={getRoleBadgeColor(user.role)}>
                         {getRoleLabel(user.role)}
                       </Badge>
+                      {user.active === false && (
+                        <Badge variant="secondary" className="text-xs">Inactif</Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1">
@@ -162,6 +165,11 @@ export default function UsersPage() {
                         <span className="flex items-center gap-1">
                           <Phone className="h-3 w-3" />
                           {user.phone}
+                        </span>
+                      )}
+                      {user.lastLoginAt && (
+                        <span className="text-xs">
+                          Dern. connexion : {new Date(user.lastLoginAt).toLocaleDateString('fr-FR')}
                         </span>
                       )}
                     </div>

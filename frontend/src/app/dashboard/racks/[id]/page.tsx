@@ -71,6 +71,12 @@ const rackStatusLabels: Record<RackStatus, string> = {
   PREPARATION: 'Préparation',
 };
 
+const rackTypeLabels: Record<string, string> = {
+  WALL_MOUNTED: 'Mural',
+  FLOOR_STANDING: 'Sur pied',
+  ENCLOSED_CABINET: 'Armoire fermée',
+};
+
 export default function RackDetailPage({
   params,
 }: {
@@ -301,6 +307,34 @@ export default function RackDetailPage({
                 </div>
               )}
 
+              {rack.rackType && (
+                <div>
+                  <p className="text-sm font-medium">Type de baie</p>
+                  <p className="text-sm text-muted-foreground">{rackTypeLabels[rack.rackType] || rack.rackType}</p>
+                </div>
+              )}
+
+              {rack.serialNumber && (
+                <div>
+                  <p className="text-sm font-medium">Numéro de série</p>
+                  <p className="text-sm text-muted-foreground font-mono">{rack.serialNumber}</p>
+                </div>
+              )}
+
+              {rack.manufacturer && (
+                <div>
+                  <p className="text-sm font-medium">Fabricant</p>
+                  <p className="text-sm text-muted-foreground">{rack.manufacturer}</p>
+                </div>
+              )}
+
+              {rack.model && (
+                <div>
+                  <p className="text-sm font-medium">Modèle</p>
+                  <p className="text-sm text-muted-foreground">{rack.model}</p>
+                </div>
+              )}
+
               {rack.location && (
                 <div>
                   <p className="text-sm font-medium">Emplacement</p>
@@ -325,8 +359,54 @@ export default function RackDetailPage({
                   {occupiedUnits}U / {rack.heightU}U ({usagePercent}%)
                 </p>
               </div>
+              {rack.notes && (
+                <div>
+                  <p className="text-sm font-medium">Notes</p>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{rack.notes}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* Specs — conditional */}
+          {(() => {
+            const sp = rack.specs as any;
+            const hasSpecs = sp && (sp.depth || sp.maxLoad || sp.cooling || sp.power);
+            if (!hasSpecs) return null;
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Spécifications</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {sp.depth && (
+                    <div>
+                      <p className="text-sm font-medium">Profondeur</p>
+                      <p className="text-sm text-muted-foreground">{sp.depth} cm</p>
+                    </div>
+                  )}
+                  {sp.maxLoad && (
+                    <div>
+                      <p className="text-sm font-medium">Charge max</p>
+                      <p className="text-sm text-muted-foreground">{sp.maxLoad} kg</p>
+                    </div>
+                  )}
+                  {sp.cooling && (
+                    <div>
+                      <p className="text-sm font-medium">Refroidissement</p>
+                      <p className="text-sm text-muted-foreground">{sp.cooling}</p>
+                    </div>
+                  )}
+                  {sp.power && (
+                    <div>
+                      <p className="text-sm font-medium">Alimentation</p>
+                      <p className="text-sm text-muted-foreground">{sp.power}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Mounted Equipment */}
           <Card>
