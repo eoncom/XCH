@@ -28,6 +28,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { THEME_PRESET_LIST, type ThemePreset } from '@/lib/themes';
 import { cn } from '@/lib/utils';
 import { authApi } from '@/lib/api/auth';
+import { integrationsApi, type IntegrationConfigResponse } from '@/lib/api/integrations';
 
 interface SecurityReminder {
   id: string;
@@ -944,6 +945,8 @@ export default function SettingsPage() {
   const [kumaUrl, setKumaUrl] = useState('');
   const [kumaToken, setKumaToken] = useState('');
   const [isTesting, setIsTesting] = useState<string | null>(null);
+  const [isSavingIntegration, setIsSavingIntegration] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ provider: string; success: boolean; message: string } | null>(null);
 
   // Branding state
   const [logoUrl, setLogoUrl] = useState('');
@@ -989,7 +992,21 @@ export default function SettingsPage() {
       }
     };
 
+    const loadIntegrationConfig = async () => {
+      try {
+        const config = await integrationsApi.getConfig();
+        if (config.netbox?.url) setNetboxUrl(config.netbox.url);
+        if (config.netbox?.tokenSet) setNetboxToken(config.netbox.tokenHint);
+        if (config.uptimeKuma?.url) setKumaUrl(config.uptimeKuma.url);
+        if (config.uptimeKuma?.username) setKumaToken(config.uptimeKuma.username);
+      } catch (error) {
+        // Integration config may not exist yet, ignore
+        console.debug('No integration config found');
+      }
+    };
+
     loadTenant();
+    loadIntegrationConfig();
   }, []);
 
   const handleSaveProfile = () => {
@@ -1050,10 +1067,56 @@ export default function SettingsPage() {
 
   const handleTestConnection = async (integration: string) => {
     setIsTesting(integration);
-    setTimeout(() => {
+    setTestResult(null);
+    try {
+      const provider = integration === 'NetBox' ? 'netbox' : 'uptime_kuma';
+      const result = await integrationsApi.testConnection(provider as 'netbox' | 'uptime_kuma');
+      setTestResult({ provider: integration, success: result.success, message: result.message });
+      if (result.success) {
+        toast.success(`✅ ${integration} : ${result.message}`);
+      } else {
+        toast.error(`❌ ${integration} : ${result.message}`);
+      }
+    } catch (error: any) {
+      const msg = error?.message || 'Erreur de connexion';
+      setTestResult({ provider: integration, success: false, message: msg });
+      toast.error(`❌ ${integration} : ${msg}`);
+    } finally {
       setIsTesting(null);
-      toast.success(`Connexion ${integration} testée avec succès`);
-    }, 1500);
+    }
+  };
+
+  const handleSaveIntegration = async (provider: 'netbox' | 'uptimeKuma') => {
+    setIsSavingIntegration(provider);
+    try {
+      const data: Record<string, any> = {};
+      if (provider === 'netbox') {
+        data.netbox = {
+          url: netboxUrl,
+          // Only send token if it doesn't look like a masked value
+          token: netboxToken.startsWith('****') ? '' : netboxToken,
+        };
+      } else {
+        data.uptimeKuma = {
+          url: kumaUrl,
+          username: kumaToken,
+          // For Uptime Kuma /metrics, password is optional
+          password: '',
+        };
+      }
+      const result = await integrationsApi.saveConfig(data);
+      // Update local state with masked values from server
+      if (provider === 'netbox') {
+        if (result.netbox?.tokenSet) setNetboxToken(result.netbox.tokenHint);
+      } else {
+        if (result.uptimeKuma?.url) setKumaUrl(result.uptimeKuma.url);
+      }
+      toast.success(`Configuration ${provider === 'netbox' ? 'NetBox' : 'Uptime Kuma'} enregistrée`);
+    } catch (error: any) {
+      toast.error(`Erreur : ${error?.message || 'Impossible de sauvegarder'}`);
+    } finally {
+      setIsSavingIntegration(null);
+    }
   };
 
   const handleLoadDemo = async () => {
@@ -1773,18 +1836,31 @@ export default function SettingsPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => handleTestConnection('NetBox')}
-                    disabled={isTesting === 'NetBox'}
+                    disabled={isTesting === 'NetBox' || !netboxUrl}
                   >
                     {isTesting === 'NetBox' ? (
                       <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
                     ) : null}
                     Tester la connexion
                   </Button>
-                  <Button size="sm">
-                    <Save className="mr-2 h-3 w-3" />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSaveIntegration('netbox')}
+                    disabled={isSavingIntegration === 'netbox' || !netboxUrl}
+                  >
+                    {isSavingIntegration === 'netbox' ? (
+                      <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-3 w-3" />
+                    )}
                     Enregistrer
                   </Button>
                 </div>
+                {testResult?.provider === 'NetBox' && (
+                  <p className={`text-xs mt-2 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                    {testResult.message}
+                  </p>
+                )}
               </div>
 
               {/* Uptime Kuma / Monitoring */}
@@ -1826,18 +1902,31 @@ export default function SettingsPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => handleTestConnection('Uptime Kuma')}
-                    disabled={isTesting === 'Uptime Kuma'}
+                    disabled={isTesting === 'Uptime Kuma' || !kumaUrl}
                   >
                     {isTesting === 'Uptime Kuma' ? (
                       <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
                     ) : null}
                     Tester la connexion
                   </Button>
-                  <Button size="sm">
-                    <Save className="mr-2 h-3 w-3" />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSaveIntegration('uptimeKuma')}
+                    disabled={isSavingIntegration === 'uptimeKuma' || !kumaUrl}
+                  >
+                    {isSavingIntegration === 'uptimeKuma' ? (
+                      <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-3 w-3" />
+                    )}
                     Enregistrer
                   </Button>
                 </div>
+                {testResult?.provider === 'Uptime Kuma' && (
+                  <p className={`text-xs mt-2 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                    {testResult.message}
+                  </p>
+                )}
               </div>
 
               {/* SSO Configuration */}

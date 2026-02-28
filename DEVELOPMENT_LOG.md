@@ -3929,3 +3929,24 @@ feat: alignement frontend/backend — affichage complet des champs manquants
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-02-28
+
+**Date:** 2026-02-28 20:33:21
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 2
+
+**Commit message:**
+```
+feat: add warranty filter on assets list and site detail page
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

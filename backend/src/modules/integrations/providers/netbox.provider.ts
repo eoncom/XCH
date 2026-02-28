@@ -32,6 +32,30 @@ export class NetBoxProviderService implements NetBoxProvider {
     }
   }
 
+  /**
+   * Reconfigure provider at runtime (e.g. from DB config)
+   */
+  reconfigure(url: string, token: string) {
+    if (!url || !token) {
+      this.enabled = false;
+      return;
+    }
+    this.enabled = true;
+    this.client = axios.create({
+      baseURL: url,
+      headers: {
+        Authorization: `Token ${token}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 10000,
+    });
+    this.logger.log(`NetBox provider reconfigured: ${url}`);
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   getName(): string {
     return 'NetBox';
   }

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -32,12 +33,28 @@ export class IntegrationsController {
     return this.integrationsService.getStatus();
   }
 
+  @Get('config')
+  @Resource('integrations')
+  @Action('read')
+  @ApiOperation({ summary: 'Get integration configuration (tokens masked)' })
+  getConfig(@Request() req: AuthRequest) {
+    return this.integrationsService.getIntegrationConfig(req.user.tenantId);
+  }
+
+  @Patch('config')
+  @Resource('integrations')
+  @Action('update')
+  @ApiOperation({ summary: 'Update integration configuration' })
+  updateConfig(@Body() body: Record<string, any>, @Request() req: AuthRequest) {
+    return this.integrationsService.updateIntegrationConfig(req.user.tenantId, body);
+  }
+
   @Post('test/:provider')
   @Resource('integrations')
   @Action('read')
   @ApiOperation({ summary: 'Test connection to specific provider (netbox, uptime_kuma)' })
-  testConnection(@Param('provider') provider: 'netbox' | 'uptime_kuma') {
-    return this.integrationsService.testConnection(provider);
+  testConnection(@Param('provider') provider: 'netbox' | 'uptime_kuma', @Request() req: AuthRequest) {
+    return this.integrationsService.testConnection(provider, req.user.tenantId);
   }
 
   @Post('test-all')

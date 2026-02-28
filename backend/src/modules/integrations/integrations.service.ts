@@ -17,6 +17,128 @@ export class IntegrationsService {
     private integrationMappingService: IntegrationMappingService,
   ) {}
 
+  // ==================== INTEGRATION CONFIG ====================
+
+  /**
+   * Load integration config from tenant DB and reconfigure providers if needed
+   */
+  private async ensureProvidersConfigured(tenantId: string) {
+    try {
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+      if (!tenant) return;
+      const config = tenant.config as Record<string, any> | null;
+      const integrations = config?.integrations;
+      if (!integrations) return;
+
+      // Reconfigure NetBox if DB config exists and provider not yet configured from env
+      if (integrations.netbox?.url && integrations.netbox?.token) {
+        if (!this.netboxProvider.isEnabled()) {
+          this.netboxProvider.reconfigure(integrations.netbox.url, integrations.netbox.token);
+        }
+      }
+
+      // Reconfigure Uptime Kuma if DB config exists and provider not yet configured from env
+      if (integrations.uptimeKuma?.url) {
+        if (!this.uptimeKumaProvider.isEnabled()) {
+          this.uptimeKumaProvider.reconfigure(
+            integrations.uptimeKuma.url,
+            integrations.uptimeKuma.username,
+            integrations.uptimeKuma.password,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.warn('Failed to load integration config from DB', error);
+    }
+  }
+
+  /**
+   * Get integration config for a tenant (with masked secrets)
+   */
+  async getIntegrationConfig(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const config = tenant.config as Record<string, any> | null;
+    const integrations = config?.integrations || {};
+
+    const maskToken = (token?: string) => {
+      if (!token) return '';
+      if (token.length <= 4) return '****';
+      return '****' + token.slice(-4);
+    };
+
+    return {
+      netbox: {
+        url: integrations.netbox?.url || '',
+        tokenSet: !!integrations.netbox?.token,
+        tokenHint: maskToken(integrations.netbox?.token),
+      },
+      uptimeKuma: {
+        url: integrations.uptimeKuma?.url || '',
+        username: integrations.uptimeKuma?.username || '',
+        passwordSet: !!integrations.uptimeKuma?.password,
+        passwordHint: maskToken(integrations.uptimeKuma?.password),
+      },
+    };
+  }
+
+  /**
+   * Update integration config for a tenant
+   * Empty secrets are preserved (not overwritten)
+   */
+  async updateIntegrationConfig(tenantId: string, data: Record<string, any>) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const config = (tenant.config as Record<string, any>) || {};
+    const existing = config.integrations || {};
+
+    const updatedIntegrations: Record<string, any> = { ...existing };
+
+    // Update NetBox config
+    if (data.netbox) {
+      updatedIntegrations.netbox = {
+        url: data.netbox.url ?? existing.netbox?.url ?? '',
+        // Only update token if a non-empty value is provided
+        token: data.netbox.token || existing.netbox?.token || '',
+      };
+
+      // Reconfigure provider immediately
+      if (updatedIntegrations.netbox.url && updatedIntegrations.netbox.token) {
+        this.netboxProvider.reconfigure(updatedIntegrations.netbox.url, updatedIntegrations.netbox.token);
+      }
+    }
+
+    // Update Uptime Kuma config
+    if (data.uptimeKuma) {
+      updatedIntegrations.uptimeKuma = {
+        url: data.uptimeKuma.url ?? existing.uptimeKuma?.url ?? '',
+        username: data.uptimeKuma.username ?? existing.uptimeKuma?.username ?? '',
+        // Only update password if a non-empty value is provided
+        password: data.uptimeKuma.password || existing.uptimeKuma?.password || '',
+      };
+
+      // Reconfigure provider immediately
+      if (updatedIntegrations.uptimeKuma.url) {
+        this.uptimeKumaProvider.reconfigure(
+          updatedIntegrations.uptimeKuma.url,
+          updatedIntegrations.uptimeKuma.username,
+          updatedIntegrations.uptimeKuma.password,
+        );
+      }
+    }
+
+    const updatedConfig = { ...config, integrations: updatedIntegrations };
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { config: updatedConfig },
+    });
+
+    return this.getIntegrationConfig(tenantId);
+  }
+
   /**
    * Test all integrations connections
    */
@@ -34,8 +156,13 @@ export class IntegrationsService {
 
   /**
    * Test specific provider connection
+   * If tenantId is provided, loads DB config first
    */
-  async testConnection(provider: 'netbox' | 'uptime_kuma') {
+  async testConnection(provider: 'netbox' | 'uptime_kuma', tenantId?: string) {
+    if (tenantId) {
+      await this.ensureProvidersConfigured(tenantId);
+    }
+
     if (provider === 'netbox') {
       return await this.netboxProvider.testConnection();
     } else if (provider === 'uptime_kuma') {

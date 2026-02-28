@@ -44,6 +44,27 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
     }
   }
 
+  /**
+   * Reconfigure provider at runtime (e.g. from DB config)
+   */
+  reconfigure(url: string, username?: string, password?: string) {
+    if (!url) {
+      this.enabled = false;
+      return;
+    }
+    this.enabled = true;
+    this.client = axios.create({
+      baseURL: url,
+      timeout: 15000,
+      ...(username && password ? { auth: { username, password } } : {}),
+    });
+    this.logger.log(`Uptime Kuma provider reconfigured: ${url}`);
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   getName(): string {
     return 'Uptime Kuma';
   }

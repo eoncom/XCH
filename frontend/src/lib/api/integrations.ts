@@ -12,6 +12,20 @@ import type {
   NetboxRackRemote,
 } from '@/types';
 
+export interface IntegrationConfigResponse {
+  netbox: {
+    url: string;
+    tokenSet: boolean;
+    tokenHint: string;
+  };
+  uptimeKuma: {
+    url: string;
+    username: string;
+    passwordSet: boolean;
+    passwordHint: string;
+  };
+}
+
 export const integrationsApi = {
   // Status & Connection
   getStatus: () =>
@@ -28,6 +42,13 @@ export const integrationsApi = {
       netbox: IntegrationTestResult;
       uptimeKuma: IntegrationTestResult;
     }>('/api/integrations/test-all'),
+
+  // Config
+  getConfig: () =>
+    apiClient.get<IntegrationConfigResponse>('/api/integrations/config'),
+
+  saveConfig: (data: Record<string, any>) =>
+    apiClient.patch<IntegrationConfigResponse>('/api/integrations/config', data),
 
   // NetBox proxy
   netbox: {
