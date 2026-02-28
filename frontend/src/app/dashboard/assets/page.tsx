@@ -18,8 +18,9 @@ import { ExportMenu } from '@/components/ui/export-menu';
 import { CardSkeleton } from '@/components/ui/skeleton';
 import { assetsApi } from '@/lib/api/assets';
 import { exportAssets } from '@/lib/export-utils';
-import { Plus, Search, QrCode, Package } from 'lucide-react';
+import { Plus, Search, QrCode, Package, ShieldAlert } from 'lucide-react';
 import { WarrantyBadge } from '@/components/ui/warranty-badge';
+import { getWarrantyStatus, useWarrantyThresholds, type WarrantyStatus } from '@/lib/warranty';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
@@ -66,6 +67,8 @@ export default function AssetsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [warrantyFilter, setWarrantyFilter] = useState<string>('all');
+  const warrantyThresholds = useWarrantyThresholds();
   const { canCreate } = usePermissions();
   const router = useRouter();
 
@@ -81,12 +84,32 @@ export default function AssetsPage() {
 
   const filteredAssets = assets?.filter((asset) => {
     const searchLower = search.toLowerCase();
-    return (
+    const matchesSearch = (
       asset.model?.toLowerCase().includes(searchLower) ||
       asset.manufacturer?.toLowerCase().includes(searchLower) ||
       asset.serialNumber?.toLowerCase().includes(searchLower) ||
+      asset.name?.toLowerCase().includes(searchLower) ||
       assetTypeLabels[asset.type].toLowerCase().includes(searchLower)
     );
+    // Warranty filter
+    if (warrantyFilter !== 'all') {
+      const status = getWarrantyStatus(asset.warrantyEnd, warrantyThresholds);
+      if (warrantyFilter === 'alert') {
+        // All warranty alerts (expired + critical + warning)
+        if (status !== 'expired' && status !== 'expiring_critical' && status !== 'expiring_warning') return false;
+      } else if (warrantyFilter === 'expired') {
+        if (status !== 'expired') return false;
+      } else if (warrantyFilter === 'expiring_critical') {
+        if (status !== 'expiring_critical') return false;
+      } else if (warrantyFilter === 'expiring_warning') {
+        if (status !== 'expiring_warning') return false;
+      } else if (warrantyFilter === 'ok') {
+        if (status !== 'ok') return false;
+      } else if (warrantyFilter === 'none') {
+        if (status !== 'none') return false;
+      }
+    }
+    return matchesSearch;
   });
 
   // Handle export
@@ -152,7 +175,7 @@ export default function AssetsPage() {
       </div>
 
       {/* Filters */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
@@ -188,6 +211,21 @@ export default function AssetsPage() {
                 {label}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={warrantyFilter} onValueChange={setWarrantyFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Garantie" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes garanties</SelectItem>
+            <SelectItem value="alert">⚠️ Alertes garantie</SelectItem>
+            <SelectItem value="expired">🔴 Expirée</SelectItem>
+            <SelectItem value="expiring_critical">🟠 Critique (&lt;30j)</SelectItem>
+            <SelectItem value="expiring_warning">🟡 Attention (&lt;90j)</SelectItem>
+            <SelectItem value="ok">✅ Valide</SelectItem>
+            <SelectItem value="none">— Sans garantie</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -253,7 +291,7 @@ export default function AssetsPage() {
         <EmptyState
           icon={Package}
           title="Aucun équipement trouvé"
-          description={search || statusFilter !== 'all' || typeFilter !== 'all'
+          description={search || statusFilter !== 'all' || typeFilter !== 'all' || warrantyFilter !== 'all'
             ? 'Essayez de modifier vos filtres de recherche'
             : undefined}
         />

@@ -42,9 +42,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X, Copy, Check, ChevronDown, ChevronRight, Settings, History } from 'lucide-react';
+import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X, Copy, Check, ChevronDown, ChevronRight, Settings, History, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import type { Site, Asset, Rack, Task, FloorPlan, User as UserType } from '@/types';
+import { WarrantyBadge } from '@/components/ui/warranty-badge';
+import { getWarrantyStatus, useWarrantyThresholds } from '@/lib/warranty';
 
 const healthStatusColors = {
   HEALTHY: 'success' as const,
@@ -1025,6 +1027,8 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const [taskSearch, setTaskSearch] = useState('');
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<string>('all');
+  const [assetWarrantyFilter, setAssetWarrantyFilter] = useState<string>('all');
+  const warrantyThresholds = useWarrantyThresholds();
   const { canUpdate, canDelete } = usePermissions();
 
   const handleExport = async () => {
@@ -1507,8 +1511,37 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             </CardHeader>
             <CardContent>
               {assets.length > 0 ? (
-                <div className="space-y-3">
-                  {assets.map((asset) => (
+                <div className="space-y-4">
+                  {/* Filtre garantie */}
+                  <div className="flex items-center gap-2">
+                    <Select value={assetWarrantyFilter} onValueChange={setAssetWarrantyFilter}>
+                      <SelectTrigger className="w-[220px]">
+                        <ShieldAlert className="h-4 w-4 mr-2 text-muted-foreground" />
+                        <SelectValue placeholder="Garantie" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Toutes garanties</SelectItem>
+                        <SelectItem value="alert">⚠️ Alertes garantie</SelectItem>
+                        <SelectItem value="expired">🔴 Expirée</SelectItem>
+                        <SelectItem value="expiring_critical">🟠 Critique (&lt;30j)</SelectItem>
+                        <SelectItem value="expiring_warning">🟡 Attention (&lt;90j)</SelectItem>
+                        <SelectItem value="ok">✅ Valide</SelectItem>
+                        <SelectItem value="none">— Sans garantie</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {assetWarrantyFilter !== 'all' && (
+                      <Button variant="ghost" size="sm" onClick={() => setAssetWarrantyFilter('all')}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                  {assets.filter((asset) => {
+                    if (assetWarrantyFilter === 'all') return true;
+                    const status = getWarrantyStatus(asset.warrantyEnd, warrantyThresholds);
+                    if (assetWarrantyFilter === 'alert') return status === 'expired' || status === 'expiring_critical' || status === 'expiring_warning';
+                    return status === assetWarrantyFilter;
+                  }).map((asset) => (
                     <Link
                       key={asset.id}
                       href={`/dashboard/assets/${asset.id}`}
@@ -1526,11 +1559,15 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                           </p>
                         </div>
                       </div>
-                      <Badge variant={assetStatusColors[asset.status] || 'secondary'} className="shrink-0 ml-2">
-                        {assetStatusLabels[asset.status] || asset.status}
-                      </Badge>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
+                        <Badge variant={assetStatusColors[asset.status] || 'secondary'}>
+                          {assetStatusLabels[asset.status] || asset.status}
+                        </Badge>
+                      </div>
                     </Link>
                   ))}
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-12">
