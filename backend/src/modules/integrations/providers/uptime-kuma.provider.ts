@@ -27,13 +27,14 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
     this.enabled = !!baseURL;
 
     if (this.enabled) {
-      const username = this.configService.get<string>('UPTIME_KUMA_USERNAME');
+      const username = this.configService.get<string>('UPTIME_KUMA_USERNAME') || '';
       const password = this.configService.get<string>('UPTIME_KUMA_PASSWORD');
 
       this.client = axios.create({
         baseURL,
         timeout: 15000,
-        ...(username && password ? { auth: { username, password } } : {}),
+        // Support API key auth: empty username + API key as password
+        ...(password ? { auth: { username, password } } : {}),
       });
 
       this.logger.log('Uptime Kuma provider initialized');
@@ -56,7 +57,8 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
     this.client = axios.create({
       baseURL: url,
       timeout: 15000,
-      ...(username && password ? { auth: { username, password } } : {}),
+      // Support API key auth: empty username + API key as password
+      ...(password ? { auth: { username: username || '', password } } : {}),
     });
     this.logger.log(`Uptime Kuma provider reconfigured: ${url}`);
   }

@@ -998,7 +998,7 @@ export default function SettingsPage() {
         if (config.netbox?.url) setNetboxUrl(config.netbox.url);
         if (config.netbox?.tokenSet) setNetboxToken(config.netbox.tokenHint);
         if (config.uptimeKuma?.url) setKumaUrl(config.uptimeKuma.url);
-        if (config.uptimeKuma?.username) setKumaToken(config.uptimeKuma.username);
+        if (config.uptimeKuma?.passwordSet) setKumaToken(config.uptimeKuma.passwordHint);
       } catch (error) {
         // Integration config may not exist yet, ignore
         console.debug('No integration config found');
@@ -1099,9 +1099,8 @@ export default function SettingsPage() {
       } else {
         data.uptimeKuma = {
           url: kumaUrl,
-          username: kumaToken,
-          // For Uptime Kuma /metrics, password is optional
-          password: '',
+          // API key sent as password (basic auth with empty username)
+          password: kumaToken.startsWith('****') ? '' : kumaToken,
         };
       }
       const result = await integrationsApi.saveConfig(data);
@@ -1110,6 +1109,7 @@ export default function SettingsPage() {
         if (result.netbox?.tokenSet) setNetboxToken(result.netbox.tokenHint);
       } else {
         if (result.uptimeKuma?.url) setKumaUrl(result.uptimeKuma.url);
+        if (result.uptimeKuma?.passwordSet) setKumaToken(result.uptimeKuma.passwordHint);
       }
       toast.success(`Configuration ${provider === 'netbox' ? 'NetBox' : 'Uptime Kuma'} enregistrée`);
     } catch (error: any) {
@@ -1886,11 +1886,11 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="kumaToken">Token API</Label>
+                    <Label htmlFor="kumaToken">Clé API</Label>
                     <Input
                       id="kumaToken"
                       type="password"
-                      placeholder="••••••••••••"
+                      placeholder="uk2_..."
                       value={kumaToken}
                       onChange={(e) => setKumaToken(e.target.value)}
                     />
