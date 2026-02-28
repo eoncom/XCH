@@ -320,7 +320,7 @@ export default function DashboardPage() {
             {alerts.sitesWithAlerts.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sites concernés</p>
-                {alerts.sitesWithAlerts.slice(0, 5).map(({ siteId, site, blocked, urgent, overdue, broken, total }) => (
+                {alerts.sitesWithAlerts.slice(0, 5).map(({ siteId, site, blocked, urgent, overdue, broken, warrantyExpired, warrantyCritical, warrantyWarning, total }) => (
                   <Link
                     key={siteId}
                     href={`/dashboard/sites/${siteId}`}
