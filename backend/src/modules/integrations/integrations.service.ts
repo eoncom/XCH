@@ -20,7 +20,8 @@ export class IntegrationsService {
   // ==================== INTEGRATION CONFIG ====================
 
   /**
-   * Load integration config from tenant DB and reconfigure providers if needed
+   * Load integration config from tenant DB and reconfigure providers
+   * Always reconfigures to ensure latest DB config is used
    */
   private async ensureProvidersConfigured(tenantId: string) {
     try {
@@ -30,22 +31,17 @@ export class IntegrationsService {
       const integrations = config?.integrations;
       if (!integrations) return;
 
-      // Reconfigure NetBox if DB config exists and provider not yet configured from env
+      // Always reconfigure from DB config (ensures latest credentials are used)
       if (integrations.netbox?.url && integrations.netbox?.token) {
-        if (!this.netboxProvider.isEnabled()) {
-          this.netboxProvider.reconfigure(integrations.netbox.url, integrations.netbox.token);
-        }
+        this.netboxProvider.reconfigure(integrations.netbox.url, integrations.netbox.token);
       }
 
-      // Reconfigure Uptime Kuma if DB config exists and provider not yet configured from env
       if (integrations.uptimeKuma?.url) {
-        if (!this.uptimeKumaProvider.isEnabled()) {
-          this.uptimeKumaProvider.reconfigure(
-            integrations.uptimeKuma.url,
-            integrations.uptimeKuma.username,
-            integrations.uptimeKuma.password,
-          );
-        }
+        this.uptimeKumaProvider.reconfigure(
+          integrations.uptimeKuma.url,
+          integrations.uptimeKuma.username,
+          integrations.uptimeKuma.password,
+        );
       }
     } catch (error) {
       this.logger.warn('Failed to load integration config from DB', error);
@@ -457,7 +453,10 @@ export class IntegrationsService {
   /**
    * Get all monitors from Uptime Kuma
    */
-  async getUptimeKumaMonitors() {
+  async getUptimeKumaMonitors(tenantId?: string) {
+    if (tenantId) {
+      await this.ensureProvidersConfigured(tenantId);
+    }
     return this.uptimeKumaProvider.fetchMonitors();
   }
 
@@ -578,6 +577,8 @@ export class IntegrationsService {
    * Assumes sites have metadata.monitoring.monitor identifier
    */
   async syncAllSitesHealth(tenantId: string) {
+    await this.ensureProvidersConfigured(tenantId);
+
     const sites = await this.prisma.site.findMany({
       where: { tenantId },
     });

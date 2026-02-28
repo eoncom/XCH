@@ -136,8 +136,8 @@ export class IntegrationsController {
   @Resource('integrations')
   @Action('read')
   @ApiOperation({ summary: 'List all monitors from Uptime Kuma' })
-  getUptimeKumaMonitors() {
-    return this.integrationsService.getUptimeKumaMonitors();
+  getUptimeKumaMonitors(@Request() req: AuthRequest) {
+    return this.integrationsService.getUptimeKumaMonitors(req.user.tenantId);
   }
 
   @Patch('uptime-kuma/map-monitor')
