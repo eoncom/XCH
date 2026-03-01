@@ -1865,14 +1865,22 @@ export default function SettingsPage() {
 
               {/* Uptime Kuma / Monitoring */}
               <div className="border rounded-lg p-4 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                    <Plug className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                      <Plug className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium">Monitoring (Uptime Kuma)</h4>
+                      <p className="text-sm text-muted-foreground">Surveillance — Statut de santé des équipements et services</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-medium">Monitoring (Uptime Kuma)</h4>
-                    <p className="text-sm text-muted-foreground">Surveillance — Statut de santé des équipements et services</p>
-                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/dashboard/integrations/monitoring">
+                      Configuration avancée
+                      <ExternalLink className="ml-2 h-3 w-3" />
+                    </Link>
+                  </Button>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
