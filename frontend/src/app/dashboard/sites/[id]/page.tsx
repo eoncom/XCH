@@ -1107,18 +1107,6 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const { canUpdate, canDelete } = usePermissions();
   const { statusMap: monitorStatusMap } = useLiveMonitors();
 
-  // Enrich health breakdown components with live monitor data
-  const liveHealthComponents = useMemo(() => {
-    const hb = site?.metadata?.healthBreakdown;
-    if (!hb?.components?.length) return [];
-    return hb.components.map((comp: any) => {
-      if (comp.monitorName && monitorStatusMap[comp.monitorName] !== undefined) {
-        return { ...comp, status: monitorStatusMap[comp.monitorName] };
-      }
-      return comp;
-    });
-  }, [site?.metadata?.healthBreakdown, monitorStatusMap]);
-
   const handleExport = async () => {
     setIsExporting(true);
     setExportProgress('Démarrage...');
@@ -1146,6 +1134,18 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     queryFn: () => assetsApi.getAll(),
   });
   const assets = allAssets.filter(a => a.siteId === id);
+
+  // Enrich health breakdown components with live monitor data
+  const liveHealthComponents = useMemo(() => {
+    const hb = site?.metadata?.healthBreakdown;
+    if (!hb?.components?.length) return [];
+    return hb.components.map((comp: any) => {
+      if (comp.monitorName && monitorStatusMap[comp.monitorName] !== undefined) {
+        return { ...comp, status: monitorStatusMap[comp.monitorName] };
+      }
+      return comp;
+    });
+  }, [site?.metadata?.healthBreakdown, monitorStatusMap]);
 
   // Load site racks
   const { data: racks = [] } = useQuery<Rack[]>({

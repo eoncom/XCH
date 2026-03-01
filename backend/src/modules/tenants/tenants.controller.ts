@@ -19,7 +19,7 @@ export class TenantsController {
   @Resource('tenants') @Action('read')
   @ApiOperation({ summary: 'Get current tenant' })
   getCurrentTenant(@Request() req: AuthRequest) {
-    return this.tenantsService.findOne(req.user.tenantId);
+    return this.tenantsService.findOneSafe(req.user.tenantId);
   }
 
   @Get('current/config')

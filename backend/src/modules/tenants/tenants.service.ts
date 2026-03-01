@@ -44,6 +44,22 @@ export class TenantsService {
     return tenant;
   }
 
+  /**
+   * Returns tenant without sensitive integration secrets (tokens, passwords).
+   * Use this for all API responses exposed to the frontend.
+   * Internal services that need credentials should use findOne() directly.
+   */
+  async findOneSafe(id: string) {
+    const tenant = await this.findOne(id);
+
+    if (tenant.config && typeof tenant.config === 'object') {
+      const { integrations, ...safeConfig } = tenant.config as Record<string, any>;
+      return { ...tenant, config: safeConfig };
+    }
+
+    return tenant;
+  }
+
   async update(id: string, updateTenantDto: UpdateTenantDto) {
     await this.findOne(id);
 
@@ -54,7 +70,7 @@ export class TenantsService {
   }
 
   async getConfig(id: string) {
-    const tenant = await this.findOne(id);
+    const tenant = await this.findOneSafe(id);
     return {
       name: tenant.name,
       logoUrl: tenant.logoUrl,
