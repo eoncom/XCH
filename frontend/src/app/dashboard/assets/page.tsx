@@ -17,14 +17,15 @@ import {
 import { ExportMenu } from '@/components/ui/export-menu';
 import { CardSkeleton } from '@/components/ui/skeleton';
 import { assetsApi } from '@/lib/api/assets';
+import { sitesApi } from '@/lib/api/sites';
 import { exportAssets } from '@/lib/export-utils';
-import { Plus, Search, QrCode, Package, ShieldAlert } from 'lucide-react';
+import { Plus, Search, QrCode, Package, ShieldAlert, MapPin } from 'lucide-react';
 import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds, type WarrantyStatus } from '@/lib/warranty';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
-import type { Asset, AssetType, AssetStatus } from '@/types';
+import type { Asset, AssetType, AssetStatus, Site } from '@/types';
 
 const assetTypeLabels: Record<AssetType, string> = {
   PRINTER: 'Imprimante',
@@ -67,17 +68,24 @@ export default function AssetsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [siteFilter, setSiteFilter] = useState<string>('all');
   const [warrantyFilter, setWarrantyFilter] = useState<string>('all');
   const warrantyThresholds = useWarrantyThresholds();
   const { canCreate } = usePermissions();
   const router = useRouter();
 
+  const { data: sites } = useQuery<Site[]>({
+    queryKey: ['sites'],
+    queryFn: () => sitesApi.getAll(),
+  });
+
   const { data: assets, isLoading } = useQuery<Asset[]>({
-    queryKey: ['assets', { status: statusFilter, type: typeFilter, search }],
+    queryKey: ['assets', { status: statusFilter, type: typeFilter, siteId: siteFilter, search }],
     queryFn: () =>
       assetsApi.getAll({
         status: statusFilter !== 'all' ? statusFilter : undefined,
         type: typeFilter !== 'all' ? typeFilter : undefined,
+        siteId: siteFilter !== 'all' ? siteFilter : undefined,
         search: search || undefined,
       }),
   });
@@ -189,7 +197,7 @@ export default function AssetsPage() {
       </div>
 
       {/* Filters */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
@@ -223,6 +231,20 @@ export default function AssetsPage() {
             {Object.entries(assetStatusLabels).map(([value, label]) => (
               <SelectItem key={value} value={value}>
                 {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={siteFilter} onValueChange={setSiteFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Tous les sites" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les sites</SelectItem>
+            {sites?.map((site) => (
+              <SelectItem key={site.id} value={site.id}>
+                {site.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -305,7 +327,7 @@ export default function AssetsPage() {
         <EmptyState
           icon={Package}
           title="Aucun équipement trouvé"
-          description={search || statusFilter !== 'all' || typeFilter !== 'all' || warrantyFilter !== 'all'
+          description={search || statusFilter !== 'all' || typeFilter !== 'all' || siteFilter !== 'all' || warrantyFilter !== 'all'
             ? 'Essayez de modifier vos filtres de recherche'
             : undefined}
         />
