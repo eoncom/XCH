@@ -6,8 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { sitesApi } from '@/lib/api/sites';
-import { Plus, MapPin, Search, List, Map } from 'lucide-react';
+import { Plus, MapPin, Search, List, Map, LayoutGrid } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
@@ -27,15 +29,36 @@ const SitesMap = dynamic(() => import('@/components/maps/SitesMap'), {
   ),
 });
 
-const healthStatusColors = {
+const healthStatusColors: Record<string, 'success' | 'warning' | 'error' | 'secondary'> = {
+  HEALTHY: 'success',
+  WARNING: 'warning',
+  CRITICAL: 'error',
+  UNKNOWN: 'secondary',
+};
+
+const healthStatusLabelsMap: Record<string, string> = {
+  HEALTHY: 'Sain',
+  WARNING: 'Attention',
+  CRITICAL: 'Critique',
+  UNKNOWN: 'Inconnu',
+};
+
+const healthStatusCss: Record<string, string> = {
   HEALTHY: 'bg-green-100 text-green-800',
   WARNING: 'bg-yellow-100 text-yellow-800',
   CRITICAL: 'bg-red-100 text-red-800',
   UNKNOWN: 'bg-gray-100 text-gray-800',
 };
 
+const siteStatusColors: Record<string, 'success' | 'warning' | 'secondary'> = {
+  ACTIVE: 'success',
+  PREPARATION: 'warning',
+  CLOSED: 'secondary',
+};
+
 export default function SitesPage() {
   const [search, setSearch] = useState('');
+  const [siteViewMode, setSiteViewMode] = useState<'grid' | 'list'>('grid');
   const router = useRouter();
   const { canCreate } = usePermissions();
 
@@ -140,48 +163,111 @@ export default function SitesPage() {
         </TabsList>
 
         {/* List View */}
-        <TabsContent value="list" className="mt-6">
-          <div data-testid="sites-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredSites?.map((site) => (
-              <Card
-                key={site.id}
-                data-testid="site-card"
-                className="hover:shadow-lg transition-shadow cursor-pointer"
-              >
-                <Link href={`/dashboard/sites/${site.id}`}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-lg">{site.name}</CardTitle>
-                        <p className="text-sm text-muted-foreground">{site.code}</p>
-                      </div>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${
-                          healthStatusColors[site.healthStatus]
-                        }`}
-                      >
-                        {site.healthStatus}
-                      </span>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      {site.city && (
-                        <div className="flex items-center text-muted-foreground">
-                          <MapPin className="mr-2 h-4 w-4" />
-                          {site.city}
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Statut:</span>
-                        <span className="font-medium">{site.status}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Link>
-              </Card>
-            ))}
+        <TabsContent value="list" className="mt-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">{filteredSites?.length || 0} site(s)</p>
+            <div className="flex items-center gap-1 border rounded-lg p-1">
+              <Button variant={siteViewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setSiteViewMode('grid')}>
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button variant={siteViewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setSiteViewMode('list')}>
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
+
+          {siteViewMode === 'list' ? (
+            <Card>
+              <CardContent className="pt-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nom</TableHead>
+                      <TableHead className="hidden md:table-cell">Code</TableHead>
+                      <TableHead className="hidden md:table-cell">Ville</TableHead>
+                      <TableHead>Statut</TableHead>
+                      <TableHead>Santé</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredSites?.map((site) => (
+                      <TableRow key={site.id}>
+                        <TableCell className="font-medium">
+                          <Link href={`/dashboard/sites/${site.id}`} className="hover:underline">
+                            {site.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-muted-foreground">
+                          {site.code}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {site.city || '—'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={siteStatusColors[site.status] || 'secondary'}>
+                            {site.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={healthStatusColors[site.healthStatus] || 'secondary'}>
+                            {healthStatusLabelsMap[site.healthStatus] || site.healthStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={`/dashboard/sites/${site.id}`}>Voir</Link>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          ) : (
+            <div data-testid="sites-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredSites?.map((site) => (
+                <Card
+                  key={site.id}
+                  data-testid="site-card"
+                  className="hover:shadow-lg transition-shadow cursor-pointer"
+                >
+                  <Link href={`/dashboard/sites/${site.id}`}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-lg">{site.name}</CardTitle>
+                          <p className="text-sm text-muted-foreground">{site.code}</p>
+                        </div>
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs font-medium ${
+                            healthStatusCss[site.healthStatus]
+                          }`}
+                        >
+                          {site.healthStatus}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        {site.city && (
+                          <div className="flex items-center text-muted-foreground">
+                            <MapPin className="mr-2 h-4 w-4" />
+                            {site.city}
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Statut:</span>
+                          <span className="font-medium">{site.status}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Link>
+                </Card>
+              ))}
+            </div>
+          )}
 
           {filteredSites?.length === 0 && (
             <EmptyState

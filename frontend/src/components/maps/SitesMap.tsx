@@ -18,6 +18,7 @@ interface SitesMapProps {
   selectedSiteId?: string;
   onSiteClick?: (site: Site) => void;
   height?: string;
+  siteHealthOverrides?: Record<string, string>;
 }
 
 export default function SitesMap({
@@ -25,6 +26,7 @@ export default function SitesMap({
   selectedSiteId,
   onSiteClick,
   height = '500px',
+  siteHealthOverrides,
 }: SitesMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -75,19 +77,25 @@ export default function SitesMap({
 
       const marker = L.marker([site.latitude, site.longitude]);
 
-      // Customize marker for selected site
-      if (selectedSiteId && site.id === selectedSiteId) {
-        marker.setIcon(
-          L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-            shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41],
-          })
-        );
-      }
+      // Color marker by health status (or red if selected)
+      const effectiveHealth = siteHealthOverrides?.[site.id] || site.healthStatus;
+      const markerColor = (selectedSiteId && site.id === selectedSiteId)
+        ? 'red'
+        : effectiveHealth === 'HEALTHY' ? 'green'
+        : effectiveHealth === 'WARNING' ? 'orange'
+        : effectiveHealth === 'CRITICAL' ? 'red'
+        : 'blue';
+
+      marker.setIcon(
+        L.icon({
+          iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${markerColor}.png`,
+          shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41],
+        })
+      );
 
       // Add popup with link to detail page
       const statusColor = site.status === 'ACTIVE' ? '#10b981' :
@@ -123,7 +131,7 @@ export default function SitesMap({
       const group = L.featureGroup(markers);
       mapRef.current.fitBounds(group.getBounds(), { padding: [50, 50] });
     }
-  }, [sites, selectedSiteId, onSiteClick]);
+  }, [sites, selectedSiteId, onSiteClick, siteHealthOverrides]);
 
   return (
     <div

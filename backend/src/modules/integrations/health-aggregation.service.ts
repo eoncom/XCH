@@ -30,6 +30,7 @@ export interface HealthComponent {
   status: 'up' | 'down' | 'unknown';
   role?: string;
   impact: 'critical' | 'warning' | 'none';
+  monitorName?: string;
 }
 
 export interface HealthBreakdown {
@@ -74,7 +75,17 @@ export class HealthAggregationService {
 
     // 1. Evaluate connectivity links
     for (const link of v2.links) {
-      const status = this.resolveMonitorStatus(link.monitorName, link.status, monitorStatuses);
+      // Determine effective monitorName: link's own, or inherited from associated asset
+      let effectiveMonitorName = link.monitorName;
+      if (!effectiveMonitorName && link.assetId) {
+        const associatedAsset = siteAssets.find(a => a.id === link.assetId);
+        const assetNetInfo = associatedAsset?.networkInfo as any;
+        if (assetNetInfo?.monitorName) {
+          effectiveMonitorName = assetNetInfo.monitorName;
+        }
+      }
+
+      const status = this.resolveMonitorStatus(effectiveMonitorName, link.status, monitorStatuses);
       const linkName = `${link.type || 'Link'} ${link.provider || ''}`.trim();
 
       components.push({
@@ -84,6 +95,7 @@ export class HealthAggregationService {
         status,
         role: link.role,
         impact: this.calculateLinkImpact(link, v2.links, status),
+        monitorName: effectiveMonitorName,
       });
     }
 
@@ -101,6 +113,7 @@ export class HealthAggregationService {
         name: `SD-WAN ${v2.sdwan.provider || ''}`.trim(),
         status: sdwanStatus,
         impact: sdwanStatus === 'down' ? 'warning' : 'none',
+        monitorName: v2.sdwan.monitorName,
       });
     }
 
@@ -123,6 +136,7 @@ export class HealthAggregationService {
         name: asset.name || `${asset.type}`,
         status,
         impact: this.calculateAssetImpact(asset.type, status),
+        monitorName: networkInfo.monitorName,
       });
     }
 

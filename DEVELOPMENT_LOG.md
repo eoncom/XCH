@@ -4034,3 +4034,24 @@ feat: add admin links section to asset forms + monitor-to-asset mapping UI
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-01
+
+**Date:** 2026-03-01 16:32:22
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 6
+
+**Commit message:**
+```
+feat: harmonize monitoring alerts across dashboard, assets list and site detail
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

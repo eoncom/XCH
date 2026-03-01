@@ -47,6 +47,7 @@ import Link from 'next/link';
 import type { Site, Asset, Rack, Task, FloorPlan, User as UserType } from '@/types';
 import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds } from '@/lib/warranty';
+import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 
 const healthStatusColors = {
   HEALTHY: 'success' as const,
@@ -1104,6 +1105,19 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const [assetWarrantyFilter, setAssetWarrantyFilter] = useState<string>('all');
   const warrantyThresholds = useWarrantyThresholds();
   const { canUpdate, canDelete } = usePermissions();
+  const { statusMap: monitorStatusMap } = useLiveMonitors();
+
+  // Enrich health breakdown components with live monitor data
+  const liveHealthComponents = useMemo(() => {
+    const hb = site?.metadata?.healthBreakdown;
+    if (!hb?.components?.length) return [];
+    return hb.components.map((comp: any) => {
+      if (comp.monitorName && monitorStatusMap[comp.monitorName] !== undefined) {
+        return { ...comp, status: monitorStatusMap[comp.monitorName] };
+      }
+      return comp;
+    });
+  }, [site?.metadata?.healthBreakdown, monitorStatusMap]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -1432,11 +1446,16 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               const ws = getWarrantyStatus(a.warrantyEnd, warrantyThresholds);
               return ws === 'expired' || ws === 'expiring_critical' || ws === 'expiring_warning';
             });
-            // Monitoring info from assets
+            // Monitoring info from assets (live status)
             const monitoredAssets = assets.filter(a => (a.networkInfo as any)?.monitorName);
-            const downAssets = monitoredAssets.filter(a => (a.networkInfo as any)?.monitorStatus === 'down');
+            const liveDownAssets = monitoredAssets.filter(a => {
+              const mn = (a.networkInfo as any)?.monitorName;
+              const liveStatus = mn && monitorStatusMap[mn] !== undefined ? monitorStatusMap[mn] : (a.networkInfo as any)?.monitorStatus;
+              return liveStatus === 'down';
+            });
+            const liveUpAssets = monitoredAssets.length - liveDownAssets.length;
 
-            const hasHealthData = hb?.components?.length > 0 || warrantyAlerts.length > 0 || monitoredAssets.length > 0;
+            const hasHealthData = liveHealthComponents.length > 0 || warrantyAlerts.length > 0 || monitoredAssets.length > 0;
             if (!hasHealthData && hs === 'UNKNOWN') return null;
 
             const borderColor = hs === 'CRITICAL' ? 'border-l-red-500' :
@@ -1462,10 +1481,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {/* Health breakdown components */}
-                  {hb?.components?.length > 0 && (
+                  {/* Health breakdown components (live enriched) */}
+                  {liveHealthComponents.length > 0 && (
                     <div className="space-y-1.5">
-                      {hb.components.slice(0, 5).map((comp: any, idx: number) => (
+                      {liveHealthComponents.slice(0, 5).map((comp: any, idx: number) => (
                         <div key={idx} className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2">
                             <span className={`inline-block w-2 h-2 rounded-full ${
@@ -1487,25 +1506,25 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                           )}
                         </div>
                       ))}
-                      {hb.components.length > 5 && (
-                        <p className="text-xs text-muted-foreground">+{hb.components.length - 5} autre{hb.components.length - 5 > 1 ? 's' : ''}</p>
+                      {liveHealthComponents.length > 5 && (
+                        <p className="text-xs text-muted-foreground">+{liveHealthComponents.length - 5} autre{liveHealthComponents.length - 5 > 1 ? 's' : ''}</p>
                       )}
                     </div>
                   )}
 
-                  {/* Monitoring summary */}
+                  {/* Monitoring summary (live) */}
                   {monitoredAssets.length > 0 && (
                     <div className="flex items-center gap-3 text-sm">
                       <Network className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Monitoring :</span>
                       <span className="flex items-center gap-1">
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
-                        {monitoredAssets.length - downAssets.length} UP
+                        {liveUpAssets} UP
                       </span>
-                      {downAssets.length > 0 && (
+                      {liveDownAssets.length > 0 && (
                         <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
                           <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                          {downAssets.length} DOWN
+                          {liveDownAssets.length} DOWN
                         </span>
                       )}
                     </div>
@@ -1678,8 +1697,8 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             {/* Connectivité primary + backup côte à côte */}
             <SiteConnectivitySection connectivity={site.connectivity} siteId={id} assets={assets} />
 
-            {/* Health Breakdown (si disponible dans metadata) */}
-            {site.metadata?.healthBreakdown?.components?.length > 0 && (
+            {/* Health Breakdown (live enriched) */}
+            {liveHealthComponents.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -1692,11 +1711,11 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {site.metadata.healthBreakdown.components.map((comp: any, idx: number) => (
+                    {liveHealthComponents.map((comp: any, idx: number) => (
                       <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                         <div className="flex items-center gap-2">
                           <span className={`inline-block w-2.5 h-2.5 rounded-full ${
-                            comp.status === 'up' ? 'bg-green-500' : comp.status === 'down' ? 'bg-red-500' : 'bg-gray-400'
+                            comp.status === 'up' ? 'bg-green-500' : comp.status === 'down' ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
                           }`} />
                           <span className="text-sm font-medium">{comp.name}</span>
                           <Badge variant="outline" className="text-xs">
@@ -1717,7 +1736,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                       </div>
                     ))}
                   </div>
-                  {site.metadata.healthBreakdown.timestamp && (
+                  {site.metadata?.healthBreakdown?.timestamp && (
                     <p className="text-xs text-muted-foreground mt-3">
                       Dernière vérification : {new Date(site.metadata.healthBreakdown.timestamp).toLocaleString('fr-FR')}
                     </p>

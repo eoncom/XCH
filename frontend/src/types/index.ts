@@ -86,6 +86,7 @@ export interface HealthComponent {
   status: 'up' | 'down' | 'unknown';
   role?: string;
   impact: 'critical' | 'warning' | 'none';
+  monitorName?: string;
 }
 
 export interface HealthBreakdown {

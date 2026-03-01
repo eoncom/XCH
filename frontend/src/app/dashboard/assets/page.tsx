@@ -19,11 +19,13 @@ import { CardSkeleton } from '@/components/ui/skeleton';
 import { assetsApi } from '@/lib/api/assets';
 import { sitesApi } from '@/lib/api/sites';
 import { exportAssets } from '@/lib/export-utils';
-import { Plus, Search, QrCode, Package, ShieldAlert, MapPin, Activity } from 'lucide-react';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Plus, Search, QrCode, Package, ShieldAlert, MapPin, Activity, LayoutGrid, List } from 'lucide-react';
 import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds, type WarrantyStatus } from '@/lib/warranty';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import Link from 'next/link';
 import type { Asset, AssetType, AssetStatus, Site } from '@/types';
 
@@ -71,7 +73,9 @@ export default function AssetsPage() {
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [warrantyFilter, setWarrantyFilter] = useState<string>('all');
   const [monitorFilter, setMonitorFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const warrantyThresholds = useWarrantyThresholds();
+  const { statusMap } = useLiveMonitors();
   const { canCreate } = usePermissions();
   const router = useRouter();
 
@@ -90,6 +94,14 @@ export default function AssetsPage() {
         search: search || undefined,
       }),
   });
+
+  // Resolve live monitoring status: live data takes priority over cached DB value
+  const getLiveStatus = (asset: Asset): 'up' | 'down' | 'unknown' | undefined => {
+    const mn = (asset.networkInfo as any)?.monitorName;
+    if (!mn) return undefined;
+    if (statusMap[mn] !== undefined) return statusMap[mn];
+    return (asset.networkInfo as any)?.monitorStatus;
+  };
 
   const filteredAssets = assets?.filter((asset) => {
     const searchLower = search.toLowerCase();
@@ -118,11 +130,12 @@ export default function AssetsPage() {
         if (status !== 'none') return false;
       }
     }
-    // Monitoring filter
+    // Monitoring filter (uses live status)
     if (monitorFilter !== 'all') {
       const net = asset.networkInfo as any;
-      if (monitorFilter === 'up' && net?.monitorStatus !== 'up') return false;
-      if (monitorFilter === 'down' && net?.monitorStatus !== 'down') return false;
+      const liveStatus = getLiveStatus(asset);
+      if (monitorFilter === 'up' && liveStatus !== 'up') return false;
+      if (monitorFilter === 'down' && liveStatus !== 'down') return false;
       if (monitorFilter === 'monitored' && !net?.monitorName) return false;
       if (monitorFilter === 'not_monitored' && net?.monitorName) return false;
     }
@@ -186,7 +199,15 @@ export default function AssetsPage() {
             Gérez votre inventaire d'équipements ({filteredAssets?.length || 0})
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 border rounded-lg p-1">
+            <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')}>
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')}>
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
           <ExportMenu onExport={handleExport} disabled={!filteredAssets?.length} />
           <Button variant="outline" asChild data-testid="scan-qr-btn">
             <Link href="/dashboard/assets/scanner">
@@ -288,82 +309,155 @@ export default function AssetsPage() {
         </Select>
       </div>
 
-      {/* Assets Grid */}
-      <div data-testid="assets-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {filteredAssets?.map((asset) => (
-          <Card
-            key={asset.id}
-            data-testid="asset-card"
-            className="hover-lift cursor-pointer border-border"
-          >
-            <Link href={`/dashboard/assets/${asset.id}`}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <Package className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <CardTitle className="text-lg text-foreground">
-                        {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}
-                      </CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {assetTypeLabels[asset.type]}
-                      </p>
+      {/* Assets List/Grid */}
+      {viewMode === 'list' ? (
+        <Card>
+          <CardContent className="pt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Nom</TableHead>
+                  <TableHead className="hidden md:table-cell">S/N</TableHead>
+                  <TableHead className="hidden md:table-cell">Site</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead className="hidden lg:table-cell">Garantie</TableHead>
+                  <TableHead>Monitoring</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredAssets?.map((asset) => {
+                  const liveStatus = getLiveStatus(asset);
+                  return (
+                    <TableRow key={asset.id}>
+                      <TableCell className="font-medium text-xs">
+                        {assetTypeLabels[asset.type] || asset.type}
+                      </TableCell>
+                      <TableCell>
+                        <Link href={`/dashboard/assets/${asset.id}`} className="hover:underline font-medium">
+                          {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-muted-foreground font-mono text-xs">
+                        {asset.serialNumber || '—'}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {asset.site ? (
+                          <Link href={`/dashboard/sites/${asset.siteId}`} className="text-primary hover:underline text-sm">
+                            {asset.site.name}
+                          </Link>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={assetStatusColors[asset.status]}>
+                          {assetStatusLabels[asset.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
+                      </TableCell>
+                      <TableCell>
+                        {(asset.networkInfo as any)?.monitorName ? (
+                          <span className="inline-flex items-center gap-1 text-xs" title={(asset.networkInfo as any)?.monitorName}>
+                            <span className={`inline-block w-2 h-2 rounded-full ${
+                              liveStatus === 'up' ? 'bg-green-500' :
+                              liveStatus === 'down' ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
+                            }`} />
+                            {liveStatus === 'up' ? 'UP' : liveStatus === 'down' ? 'DOWN' : '?'}
+                          </span>
+                        ) : <span className="text-muted-foreground text-xs">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/dashboard/assets/${asset.id}`}>Voir</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : (
+        <div data-testid="assets-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {filteredAssets?.map((asset) => {
+            const liveStatus = getLiveStatus(asset);
+            return (
+              <Card
+                key={asset.id}
+                data-testid="asset-card"
+                className="hover-lift cursor-pointer border-border"
+              >
+                <Link href={`/dashboard/assets/${asset.id}`}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <CardTitle className="text-lg text-foreground">
+                            {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}
+                          </CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            {assetTypeLabels[asset.type]}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge variant={assetStatusColors[asset.status]}>
+                          {assetStatusLabels[asset.status]}
+                        </Badge>
+                        <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
+                        {(asset.networkInfo as any)?.monitorName && (
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                              liveStatus === 'up'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                : liveStatus === 'down'
+                                ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                            }`}
+                            title={`Monitoring: ${(asset.networkInfo as any)?.monitorName}`}
+                          >
+                            <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                              liveStatus === 'up' ? 'bg-green-500' :
+                              liveStatus === 'down' ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
+                            }`} />
+                            {liveStatus === 'up' ? 'UP' : liveStatus === 'down' ? 'DOWN' : '?'}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <Badge variant={assetStatusColors[asset.status]}>
-                      {assetStatusLabels[asset.status]}
-                    </Badge>
-                    <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
-                    {(asset.networkInfo as any)?.monitorName && (
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                          (asset.networkInfo as any)?.monitorStatus === 'up'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                            : (asset.networkInfo as any)?.monitorStatus === 'down'
-                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                            : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                        }`}
-                        title={`Monitoring: ${(asset.networkInfo as any)?.monitorName}`}
-                      >
-                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${
-                          (asset.networkInfo as any)?.monitorStatus === 'up' ? 'bg-green-500' :
-                          (asset.networkInfo as any)?.monitorStatus === 'down' ? 'bg-red-500 animate-pulse' :
-                          'bg-gray-400'
-                        }`} />
-                        {(asset.networkInfo as any)?.monitorStatus === 'up' ? 'UP' :
-                         (asset.networkInfo as any)?.monitorStatus === 'down' ? 'DOWN' : '?'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 text-sm">
-                  {asset.serialNumber && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">S/N:</span>
-                      <span className="font-mono text-foreground">{asset.serialNumber}</span>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 text-sm">
+                      {asset.serialNumber && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">S/N:</span>
+                          <span className="font-mono text-foreground">{asset.serialNumber}</span>
+                        </div>
+                      )}
+                      {asset.site && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Site:</span>
+                          <span className="text-foreground">{asset.site.name}</span>
+                        </div>
+                      )}
+                      {asset.qrCodeUrl && (
+                        <div className="flex items-center text-muted-foreground">
+                          <QrCode className="mr-2 h-4 w-4" />
+                          QR Code généré
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {asset.site && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Site:</span>
-                      <span className="text-foreground">{asset.site.name}</span>
-                    </div>
-                  )}
-                  {asset.qrCodeUrl && (
-                    <div className="flex items-center text-muted-foreground">
-                      <QrCode className="mr-2 h-4 w-4" />
-                      QR Code généré
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Link>
-          </Card>
-        ))}
-      </div>
+                  </CardContent>
+                </Link>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {filteredAssets?.length === 0 && (
         <EmptyState
