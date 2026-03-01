@@ -9,11 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { sitesApi } from '@/lib/api/sites';
-import { Plus, MapPin, Search, List, Map, LayoutGrid } from 'lucide-react';
+import { Plus, MapPin, Search, List, Map, LayoutGrid, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import type { Site } from '@/types';
 import { ExportMenu } from '@/components/ui/export-menu';
@@ -59,6 +59,8 @@ const siteStatusColors: Record<string, 'success' | 'warning' | 'secondary'> = {
 export default function SitesPage() {
   const [search, setSearch] = useState('');
   const [siteViewMode, setSiteViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortField, setSortField] = useState<string>('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const router = useRouter();
   const { canCreate } = usePermissions();
 
@@ -73,6 +75,44 @@ export default function SitesPage() {
       site.code.toLowerCase().includes(search.toLowerCase()) ||
       site.city?.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Sort sites for table view
+  const sortedSites = useMemo(() => {
+    if (!filteredSites || !sortField) return filteredSites;
+    return [...filteredSites].sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+      switch (sortField) {
+        case 'name': valA = a.name; valB = b.name; break;
+        case 'code': valA = a.code; valB = b.code; break;
+        case 'city': valA = a.city || ''; valB = b.city || ''; break;
+        case 'status': valA = a.status; valB = b.status; break;
+        case 'health':
+          const order: Record<string, number> = { CRITICAL: 0, WARNING: 1, UNKNOWN: 2, HEALTHY: 3 };
+          valA = order[a.healthStatus] ?? 2;
+          valB = order[b.healthStatus] ?? 2;
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+      }
+      const cmp = String(valA).localeCompare(String(valB), 'fr', { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredSites, sortField, sortDir]);
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/50" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="ml-1 h-3 w-3" />
+      : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
 
   const handleSiteClick = (site: Site) => {
     router.push(`/dashboard/sites/${site.id}`);
@@ -182,16 +222,26 @@ export default function SitesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nom</TableHead>
-                      <TableHead className="hidden md:table-cell">Code</TableHead>
-                      <TableHead className="hidden md:table-cell">Ville</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead>Santé</TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('name')}>
+                        <span className="inline-flex items-center">Nom<SortIcon field="name" /></span>
+                      </TableHead>
+                      <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('code')}>
+                        <span className="inline-flex items-center">Code<SortIcon field="code" /></span>
+                      </TableHead>
+                      <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('city')}>
+                        <span className="inline-flex items-center">Ville<SortIcon field="city" /></span>
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}>
+                        <span className="inline-flex items-center">Statut<SortIcon field="status" /></span>
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('health')}>
+                        <span className="inline-flex items-center">Santé<SortIcon field="health" /></span>
+                      </TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredSites?.map((site) => (
+                    {sortedSites?.map((site) => (
                       <TableRow key={site.id}>
                         <TableCell className="font-medium">
                           <Link href={`/dashboard/sites/${site.id}`} className="hover:underline">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +20,7 @@ import { assetsApi } from '@/lib/api/assets';
 import { sitesApi } from '@/lib/api/sites';
 import { exportAssets } from '@/lib/export-utils';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Plus, Search, QrCode, Package, ShieldAlert, MapPin, Activity, LayoutGrid, List } from 'lucide-react';
+import { Plus, Search, QrCode, Package, ShieldAlert, MapPin, Activity, LayoutGrid, List, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds, type WarrantyStatus } from '@/lib/warranty';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -74,6 +74,8 @@ export default function AssetsPage() {
   const [warrantyFilter, setWarrantyFilter] = useState<string>('all');
   const [monitorFilter, setMonitorFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortField, setSortField] = useState<string>('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const warrantyThresholds = useWarrantyThresholds();
   const { statusMap } = useLiveMonitors();
   const { canCreate } = usePermissions();
@@ -141,6 +143,63 @@ export default function AssetsPage() {
     }
     return matchesSearch;
   });
+
+  // Sort assets for table view
+  const sortedAssets = useMemo(() => {
+    if (!filteredAssets || !sortField) return filteredAssets;
+    return [...filteredAssets].sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+      switch (sortField) {
+        case 'type':
+          valA = assetTypeLabels[a.type] || a.type;
+          valB = assetTypeLabels[b.type] || b.type;
+          break;
+        case 'name':
+          valA = a.name || `${a.manufacturer || ''} ${a.model || ''}`.trim();
+          valB = b.name || `${b.manufacturer || ''} ${b.model || ''}`.trim();
+          break;
+        case 'serial':
+          valA = a.serialNumber || '';
+          valB = b.serialNumber || '';
+          break;
+        case 'site':
+          valA = a.site?.name || '';
+          valB = b.site?.name || '';
+          break;
+        case 'status':
+          valA = assetStatusLabels[a.status];
+          valB = assetStatusLabels[b.status];
+          break;
+        case 'warranty':
+          valA = a.warrantyEnd || '';
+          valB = b.warrantyEnd || '';
+          break;
+        case 'monitoring':
+          valA = getLiveStatus(a) || 'zzz';
+          valB = getLiveStatus(b) || 'zzz';
+          break;
+      }
+      const cmp = String(valA).localeCompare(String(valB), 'fr', { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredAssets, sortField, sortDir]);
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/50" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="ml-1 h-3 w-3" />
+      : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
 
   // Handle export
   const handleExport = (format: 'excel' | 'pdf' | 'csv' | 'json') => {
@@ -316,18 +375,32 @@ export default function AssetsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Nom</TableHead>
-                  <TableHead className="hidden md:table-cell">S/N</TableHead>
-                  <TableHead className="hidden md:table-cell">Site</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className="hidden lg:table-cell">Garantie</TableHead>
-                  <TableHead>Monitoring</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('type')}>
+                    <span className="inline-flex items-center">Type<SortIcon field="type" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('name')}>
+                    <span className="inline-flex items-center">Nom<SortIcon field="name" /></span>
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('serial')}>
+                    <span className="inline-flex items-center">S/N<SortIcon field="serial" /></span>
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('site')}>
+                    <span className="inline-flex items-center">Site<SortIcon field="site" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}>
+                    <span className="inline-flex items-center">Statut<SortIcon field="status" /></span>
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort('warranty')}>
+                    <span className="inline-flex items-center">Garantie<SortIcon field="warranty" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('monitoring')}>
+                    <span className="inline-flex items-center">Monitoring<SortIcon field="monitoring" /></span>
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAssets?.map((asset) => {
+                {sortedAssets?.map((asset) => {
                   const liveStatus = getLiveStatus(asset);
                   return (
                     <TableRow key={asset.id}>
