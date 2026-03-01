@@ -88,6 +88,14 @@ export async function exportSiteZip(
     connectivity: site.connectivity || {},
     accessNotes: site.accessNotes || {},
     metadata: site.metadata || {},
+    floorPlans: floorPlans.map(fp => ({
+      id: fp.id,
+      title: fp.title,
+      floor: fp.floor || null,
+      building: fp.building || null,
+      version: fp.version,
+      fileType: fp.fileType || null,
+    })),
   };
   zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
@@ -144,6 +152,34 @@ export async function exportSiteZip(
               // Skip files that can't be downloaded
             }
           }
+        }
+      }
+    }
+  }
+
+  // Step 8b: Download floor plan images
+  onProgress?.({ step: 'T\él\échargement des plans...', percent: 82 });
+  if (floorPlans.length > 0) {
+    const plansFolder = zip.folder('plans');
+    if (plansFolder) {
+      for (const plan of floorPlans) {
+        if (!plan.fileUrl) continue;
+        try {
+          const response = await fetch(plan.fileUrl, { credentials: 'include' });
+          if (response.ok) {
+            const blob = await response.blob();
+            // Build filename: title + floor info + extension
+            const ext = plan.fileType || plan.mimeType?.split('/')[1] || 'png';
+            const planName = [
+              plan.title || 'plan',
+              plan.floor ? `etage-${plan.floor}` : '',
+              plan.building ? `bat-${plan.building}` : '',
+            ].filter(Boolean).join('_');
+            const safeFilename = planName.replace(/[/\\:*?"<>|]/g, '_');
+            plansFolder.file(`${safeFilename}.${ext}`, blob);
+          }
+        } catch {
+          // Skip floor plans that can't be downloaded
         }
       }
     }

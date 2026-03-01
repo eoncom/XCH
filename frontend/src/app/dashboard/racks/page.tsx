@@ -23,6 +23,8 @@ import Link from 'next/link';
 import type { Rack, RackStatus, Site } from '@/types';
 import { ExportMenu } from '@/components/ui/export-menu';
 import { exportToPDF, exportToExcel, exportToCSV } from '@/lib/export-utils';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 const rackStatusColors = {
   IN_SERVICE: 'success',
@@ -73,7 +75,7 @@ export default function RacksPage() {
 
       return {
         name: rack.name,
-        heightU: rack.heightU,
+        heightU: `${rack.heightU}U`,
         status: rackStatusLabels[rack.status],
         site: rack.site?.name || '-',
         location: rack.location || '-',
@@ -81,38 +83,93 @@ export default function RacksPage() {
         availableU: rack.heightU - occupiedUnits,
         usage: `${usagePercent}%`,
         assetsCount: rack.assets?.length || 0,
+        // Equipment names for PDF/CSV
+        equipmentList: rack.assets?.map(a => a.name || `${a.manufacturer || ''} ${a.model || ''}`.trim() || a.type).join(', ') || '-',
       };
     });
 
+    const filename = `xch-racks-${new Date().toISOString().split('T')[0]}`;
+
+    if (format === 'excel') {
+      // Custom Excel with 2 sheets: Summary + Equipment details
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Summary
+      const summaryData: any[][] = [
+        ['Liste des Baies', '', '', '', '', '', '', '', ''],
+        [`Export\u00e9 le ${new Date().toLocaleDateString('fr-FR')} - ${exportData.length} baie(s)`],
+        [],
+        ['Nom', 'Taille', 'Statut', 'Site', 'Emplacement', 'Occup\u00e9 (U)', 'Dispo (U)', 'Usage', '\u00c9quipements'],
+      ];
+      for (const r of exportData) {
+        summaryData.push([r.name, r.heightU, r.status, r.site, r.location, r.occupiedU, r.availableU, r.usage, r.assetsCount]);
+      }
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      summaryWs['!cols'] = [
+        { wch: 20 }, { wch: 10 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 },
+      ];
+      XLSX.utils.book_append_sheet(wb, summaryWs, 'R\u00e9sum\u00e9');
+
+      // Sheet 2: Equipment per rack
+      const detailData: any[][] = [
+        ['\u00c9quipements Mont\u00e9s par Baie', '', '', '', '', '', '', ''],
+        [],
+        ['Baie', 'Site', 'Position', 'Hauteur', 'Type', 'Nom', 'Fabricant / Mod\u00e8le', 'N\u00b0 S\u00e9rie'],
+      ];
+      for (const rack of filteredRacks) {
+        if (rack.assets && rack.assets.length > 0) {
+          const sortedAssets = [...rack.assets].sort((a, b) => (b.rackPositionU || 0) - (a.rackPositionU || 0));
+          for (const asset of sortedAssets) {
+            detailData.push([
+              rack.name,
+              rack.site?.name || '-',
+              asset.rackPositionU ? `U${asset.rackPositionU}` : '-',
+              asset.rackHeightU ? `${asset.rackHeightU}U` : '-',
+              asset.type,
+              asset.name || '-',
+              [asset.manufacturer, asset.model].filter(Boolean).join(' ') || '-',
+              asset.serialNumber || '-',
+            ]);
+          }
+        } else {
+          detailData.push([rack.name, rack.site?.name || '-', '-', '-', '(Vide)', '-', '-', '-']);
+        }
+      }
+      const detailWs = XLSX.utils.aoa_to_sheet(detailData);
+      detailWs['!cols'] = [
+        { wch: 20 }, { wch: 25 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 22 }, { wch: 25 }, { wch: 20 },
+      ];
+      XLSX.utils.book_append_sheet(wb, detailWs, '\u00c9quipements');
+
+      const xlsxData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([xlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, `${filename}.xlsx`);
+      return;
+    }
+
+    // PDF and CSV: include equipment list column
     const options = {
-      filename: `xch-racks-${new Date().toISOString().split('T')[0]}`,
+      filename,
       title: 'Liste des Baies',
       subtitle: `${exportData.length} baie(s)`,
       columns: [
-        { header: 'Nom', key: 'name', width: 20 },
-        { header: 'Taille', key: 'heightU', width: 10 },
-        { header: 'Statut', key: 'status', width: 15 },
-        { header: 'Site', key: 'site', width: 25 },
-        { header: 'Emplacement', key: 'location', width: 20 },
-        { header: 'Occupé (U)', key: 'occupiedU', width: 12 },
-        { header: 'Dispo (U)', key: 'availableU', width: 12 },
-        { header: 'Usage', key: 'usage', width: 10 },
-        { header: 'Équipements', key: 'assetsCount', width: 12 },
+        { header: 'Nom', key: 'name', width: 18 },
+        { header: 'Taille', key: 'heightU', width: 8 },
+        { header: 'Statut', key: 'status', width: 13 },
+        { header: 'Site', key: 'site', width: 22 },
+        { header: 'Emplacement', key: 'location', width: 18 },
+        { header: 'Occup\u00e9', key: 'occupiedU', width: 8 },
+        { header: 'Dispo', key: 'availableU', width: 8 },
+        { header: 'Usage', key: 'usage', width: 8 },
+        { header: '\u00c9quipements', key: 'equipmentList', width: 35 },
       ],
       data: exportData,
     };
 
-    switch (format) {
-      case 'pdf':
-        exportToPDF(options);
-        break;
-      case 'csv':
-        exportToCSV(options);
-        break;
-      case 'excel':
-      default:
-        exportToExcel(options);
-        break;
+    if (format === 'pdf') {
+      exportToPDF(options);
+    } else {
+      exportToCSV(options);
     }
   };
 
