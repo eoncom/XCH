@@ -4097,3 +4097,24 @@ fix: site detail crash + strip integration secrets from tenant API
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-01
+
+**Date:** 2026-03-01 19:12:44
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 4
+
+**Commit message:**
+```
+feat: sortable table columns for assets and sites list views
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

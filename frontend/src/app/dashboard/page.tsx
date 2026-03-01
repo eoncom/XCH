@@ -317,228 +317,153 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Santé & Alertes — section fusionnée */}
+      {/* Alertes — résumé compact */}
       {sites.length > 0 && (
         <Card className={alerts.totalAlerts > 0 ? 'border-red-200 dark:border-red-800' : ''}>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Activity className="h-5 w-5 text-primary" />
-                Santé & Alertes
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-primary" />
+                <span className="font-semibold text-sm">{alerts.totalAlerts > 0 ? 'Alertes' : 'Santé'}</span>
                 {alerts.totalAlerts > 0 && (
-                  <Badge variant="destructive" className="ml-1">{alerts.totalAlerts}</Badge>
+                  <Badge variant="destructive" className="text-xs">{alerts.totalAlerts}</Badge>
                 )}
-              </CardTitle>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/dashboard/integrations/monitoring">Monitoring →</Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Sites health grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-              {sites
-                .filter(s => s.status === 'ACTIVE')
-                .sort((a, b) => {
-                  const order: Record<string, number> = { CRITICAL: 0, WARNING: 1, UNKNOWN: 2, HEALTHY: 3 };
-                  return (order[a.healthStatus] ?? 2) - (order[b.healthStatus] ?? 2);
-                })
-                .slice(0, 12)
-                .map((site) => (
-                  <Link
-                    key={site.id}
-                    href={`/dashboard/sites/${site.id}`}
-                    className="flex items-center gap-2 p-2 rounded-lg border hover:bg-muted/50 transition-colors"
-                  >
-                    <span className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                      site.healthStatus === 'HEALTHY' ? 'bg-green-500' :
-                      site.healthStatus === 'WARNING' ? 'bg-amber-500' :
-                      site.healthStatus === 'CRITICAL' ? 'bg-red-500 animate-pulse' :
-                      'bg-gray-400'
-                    }`} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{site.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {site.healthStatus === 'HEALTHY' ? 'OK' :
-                         site.healthStatus === 'WARNING' ? 'Attention' :
-                         site.healthStatus === 'CRITICAL' ? 'Critique' : 'Non supervisé'}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
-            </div>
-            {sites.filter(s => s.status === 'ACTIVE').length > 12 && (
-              <p className="text-xs text-muted-foreground text-center">
-                + {sites.filter(s => s.status === 'ACTIVE').length - 12} autre(s) site(s)
-              </p>
-            )}
-
-            {/* Monitoring summary bar */}
-            {monitors.length > 0 && (
-              <div className="flex items-center gap-4 pt-2 border-t text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-green-500" />
-                  {monitors.filter(m => m.status === 'up').length} UP
-                </span>
-                {monitors.filter(m => m.status === 'down').length > 0 && (
-                  <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    {monitors.filter(m => m.status === 'down').length} DOWN
-                  </span>
-                )}
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-gray-400" />
-                  {monitors.filter(m => m.status === 'unknown').length} inconnu(s)
-                </span>
               </div>
-            )}
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                  <Link href="/dashboard/monitoring">Monitoring</Link>
+                </Button>
+                {alerts.totalAlerts > 0 && (
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                    <Link href="/dashboard/alerts">Détails →</Link>
+                  </Button>
+                )}
+              </div>
+            </div>
 
-            {/* Compteurs alertes */}
-            {alerts.totalAlerts > 0 && (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t">
+            {alerts.totalAlerts === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                Tous les sites sont opérationnels
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {/* Inline counters */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                   {alerts.downMonitors.length > 0 && (
-                    <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
-                      <WifiOff className="h-4 w-4 text-red-600 flex-shrink-0" />
-                      <div>
-                        <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.downMonitors.length}</p>
-                        <p className="text-xs text-red-600 dark:text-red-400">Moniteur{alerts.downMonitors.length > 1 ? 's' : ''} DOWN</p>
-                      </div>
-                    </div>
+                    <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
+                      <WifiOff className="h-3 w-3" />{alerts.downMonitors.length} DOWN
+                    </span>
                   )}
                   {alerts.criticalHealthSites.length > 0 && (
-                    <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
-                      <Activity className="h-4 w-4 text-red-600 flex-shrink-0" />
-                      <div>
-                        <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.criticalHealthSites.length}</p>
-                        <p className="text-xs text-red-600 dark:text-red-400">Site{alerts.criticalHealthSites.length > 1 ? 's' : ''} critique{alerts.criticalHealthSites.length > 1 ? 's' : ''}</p>
-                      </div>
-                    </div>
+                    <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
+                      <Activity className="h-3 w-3" />{alerts.criticalHealthSites.length} critique{alerts.criticalHealthSites.length > 1 ? 's' : ''}
+                    </span>
                   )}
                   {alerts.blockedTasks.length > 0 && (
-                    <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
-                      <Ban className="h-4 w-4 text-red-600 flex-shrink-0" />
-                      <div>
-                        <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.blockedTasks.length}</p>
-                        <p className="text-xs text-red-600 dark:text-red-400">Bloquée{alerts.blockedTasks.length > 1 ? 's' : ''}</p>
-                      </div>
-                    </div>
+                    <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
+                      <Ban className="h-3 w-3" />{alerts.blockedTasks.length} bloquée{alerts.blockedTasks.length > 1 ? 's' : ''}
+                    </span>
                   )}
                   {alerts.urgentTasks.length > 0 && (
-                    <div className="flex items-center gap-2 p-2.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg border border-orange-200 dark:border-orange-800">
-                      <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
-                      <div>
-                        <p className="text-lg font-bold text-orange-700 dark:text-orange-300">{alerts.urgentTasks.length}</p>
-                        <p className="text-xs text-orange-600 dark:text-orange-400">Urgente{alerts.urgentTasks.length > 1 ? 's' : ''}</p>
-                      </div>
-                    </div>
+                    <span className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
+                      <AlertTriangle className="h-3 w-3" />{alerts.urgentTasks.length} urgente{alerts.urgentTasks.length > 1 ? 's' : ''}
+                    </span>
                   )}
                   {alerts.overdueTasks.length > 0 && (
-                    <div className="flex items-center gap-2 p-2.5 bg-amber-100 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
-                      <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                      <div>
-                        <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{alerts.overdueTasks.length}</p>
-                        <p className="text-xs text-amber-600 dark:text-amber-400">En retard</p>
-                      </div>
-                    </div>
+                    <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                      <Clock className="h-3 w-3" />{alerts.overdueTasks.length} en retard
+                    </span>
                   )}
                   {alerts.outOfServiceAssets.length > 0 && (
-                    <div className="flex items-center gap-2 p-2.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg border border-purple-200 dark:border-purple-800">
-                      <Package className="h-4 w-4 text-purple-600 flex-shrink-0" />
-                      <div>
-                        <p className="text-lg font-bold text-purple-700 dark:text-purple-300">{alerts.outOfServiceAssets.length}</p>
-                        <p className="text-xs text-purple-600 dark:text-purple-400">Hors service</p>
-                      </div>
-                    </div>
+                    <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                      <Package className="h-3 w-3" />{alerts.outOfServiceAssets.length} HS
+                    </span>
                   )}
                   {alerts.warrantyTotal > 0 && (
-                    <div className="flex items-center gap-2 p-2.5 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                      <ShieldAlert className="h-4 w-4 text-yellow-600 flex-shrink-0" />
-                      <div>
-                        <p className="text-lg font-bold text-yellow-700 dark:text-yellow-300">{alerts.warrantyTotal}</p>
-                        <p className="text-xs text-yellow-600 dark:text-yellow-400">Garantie{alerts.warrantyTotal > 1 ? 's' : ''}</p>
-                      </div>
-                    </div>
+                    <span className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
+                      <ShieldAlert className="h-3 w-3" />{alerts.warrantyTotal} garantie{alerts.warrantyTotal > 1 ? 's' : ''}
+                    </span>
                   )}
                 </div>
 
-                {/* Sites concernés — détail par site */}
+                {/* Sites with issues — compact */}
                 {alerts.sitesWithAlerts.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sites concernés</p>
-                    {alerts.sitesWithAlerts.slice(0, 5).map(({ siteId, site, blocked, urgent, overdue, broken, warrantyExpired, warrantyCritical, warrantyWarning, downMonitorCount, healthIssue }) => (
+                  <div className="space-y-1">
+                    {alerts.sitesWithAlerts.slice(0, 4).map(({ siteId, site, blocked, urgent, overdue, broken, warrantyExpired, warrantyCritical, warrantyWarning, downMonitorCount, healthIssue }) => (
                       <Link
                         key={siteId}
                         href={`/dashboard/sites/${siteId}`}
-                        className="flex items-center justify-between p-3 rounded-lg border bg-background hover:bg-muted/50 transition-colors group"
+                        className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50 transition-colors group"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            {site?.healthStatus === 'CRITICAL' && (
-                              <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-                            )}
-                            {site?.healthStatus === 'WARNING' && (
-                              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                            )}
-                            {(!site?.healthStatus || site.healthStatus === 'HEALTHY' || site.healthStatus === 'UNKNOWN') && (
-                              <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold truncate">{site?.name || 'Site inconnu'}</p>
-                            <p className="text-xs text-muted-foreground">{site?.code} — {site?.city || 'N/A'}</p>
-                          </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`h-2 w-2 rounded-full flex-shrink-0 ${
+                            site?.healthStatus === 'CRITICAL' ? 'bg-red-500 animate-pulse' :
+                            site?.healthStatus === 'WARNING' ? 'bg-amber-500' : 'bg-gray-300'
+                          }`} />
+                          <span className="text-sm font-medium truncate">{site?.name || 'Site inconnu'}</span>
+                          <span className="text-xs text-muted-foreground hidden sm:inline">{site?.code}</span>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                           {downMonitorCount > 0 && (
-                            <Badge className="text-xs bg-red-100 text-red-800 border-red-200 dark:bg-red-900 dark:text-red-200">
-                              <WifiOff className="h-3 w-3 mr-1" />
-                              {downMonitorCount} DOWN
+                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">
+                              <WifiOff className="h-2.5 w-2.5 mr-0.5" />{downMonitorCount} DOWN
                             </Badge>
                           )}
                           {healthIssue && downMonitorCount === 0 && (
-                            <Badge className="text-xs bg-red-100 text-red-800 border-red-200 dark:bg-red-900 dark:text-red-200">
+                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">
                               {site?.healthStatus === 'CRITICAL' ? 'Critique' : 'Attention'}
                             </Badge>
                           )}
                           {blocked.length > 0 && (
-                            <Badge variant="destructive" className="text-xs">
-                              {blocked.length} bloquée{blocked.length > 1 ? 's' : ''}
+                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-red-200 text-red-700 dark:text-red-300">
+                              {blocked.length} bloq.
                             </Badge>
                           )}
                           {urgent.length > 0 && (
-                            <Badge className="text-xs bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900 dark:text-orange-200">
-                              {urgent.length} urgente{urgent.length > 1 ? 's' : ''}
+                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-orange-200 text-orange-700 dark:text-orange-300">
+                              {urgent.length} urg.
                             </Badge>
                           )}
-                          {overdue.length > 0 && (
-                            <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900 dark:text-amber-200">
-                              {overdue.length} retard
+                          {(broken.length + overdue.length + warrantyExpired.length + warrantyCritical.length + warrantyWarning.length) > 0 && (
+                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-muted-foreground">
+                              +{broken.length + overdue.length + warrantyExpired.length + warrantyCritical.length + warrantyWarning.length}
                             </Badge>
                           )}
-                          {broken.length > 0 && (
-                            <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900 dark:text-purple-200">
-                              {broken.length} HS
-                            </Badge>
-                          )}
-                          {(warrantyExpired.length + warrantyCritical.length + warrantyWarning.length) > 0 && (
-                            <Badge className="text-xs bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900 dark:text-yellow-200">
-                              <ShieldAlert className="h-3 w-3 mr-1" />
-                              {warrantyExpired.length + warrantyCritical.length + warrantyWarning.length} garantie{(warrantyExpired.length + warrantyCritical.length + warrantyWarning.length) > 1 ? 's' : ''}
-                            </Badge>
-                          )}
-                          <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <ArrowRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
                         </div>
                       </Link>
                     ))}
-                    {alerts.sitesWithAlerts.length > 5 && (
-                      <p className="text-xs text-muted-foreground text-center pt-1">
-                        + {alerts.sitesWithAlerts.length - 5} autre{alerts.sitesWithAlerts.length - 5 > 1 ? 's' : ''} site{alerts.sitesWithAlerts.length - 5 > 1 ? 's' : ''}
-                      </p>
+                    {alerts.sitesWithAlerts.length > 4 && (
+                      <Link href="/dashboard/alerts" className="block text-xs text-center text-primary hover:underline pt-1">
+                        + {alerts.sitesWithAlerts.length - 4} autre{alerts.sitesWithAlerts.length - 4 > 1 ? 's' : ''} →
+                      </Link>
                     )}
                   </div>
                 )}
-              </>
+              </div>
+            )}
+
+            {/* Monitoring micro-bar */}
+            {monitors.length > 0 && (
+              <div className="flex items-center gap-3 mt-3 pt-2 border-t text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  {monitors.filter(m => m.status === 'up').length} UP
+                </span>
+                {monitors.filter(m => m.status === 'down').length > 0 && (
+                  <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    {monitors.filter(m => m.status === 'down').length} DOWN
+                  </span>
+                )}
+                {monitors.filter(m => m.status === 'unknown').length > 0 && (
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                    {monitors.filter(m => m.status === 'unknown').length} inconnu{monitors.filter(m => m.status === 'unknown').length > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

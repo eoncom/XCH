@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   Contact2,
   Plug,
+  Activity,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ const navigation = [
   { name: 'Tâches', href: '/dashboard/tasks', icon: CheckSquare, moduleKey: 'tasks' },
   { name: 'Plans', href: '/dashboard/floor-plans', icon: LayoutTemplate, moduleKey: 'floor_plans' },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Contact2, moduleKey: 'contacts' },
+  { name: 'Monitoring', href: '/dashboard/monitoring', icon: Activity },
 ];
 
 const adminNavigation = [
