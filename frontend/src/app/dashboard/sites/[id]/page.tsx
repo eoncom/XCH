@@ -1489,12 +1489,16 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                           <div className="flex items-center gap-2">
                             <span className={`inline-block w-2 h-2 rounded-full ${
                               comp.status === 'up' ? 'bg-green-500' :
+                              comp.status === 'degraded' ? 'bg-amber-500' :
                               comp.status === 'down' ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
                             }`} />
-                            <span className="text-foreground">{comp.name}</span>
+                            <span className="text-foreground">
+                              {comp.name}
+                              {comp.detail && <span className="text-xs text-muted-foreground ml-1">({comp.detail})</span>}
+                            </span>
                             <span className="text-xs text-muted-foreground">
                               {comp.type === 'link' ? (comp.role === 'primary' ? 'Lien pri.' : 'Backup') :
-                               comp.type === 'sdwan' ? 'SD-WAN' : 'Équip.'}
+                               comp.type === 'sdwan' ? (comp.status === 'degraded' ? 'Dégradé' : 'SD-WAN') : 'Équip.'}
                             </span>
                           </div>
                           {comp.impact !== 'none' && (
@@ -1715,12 +1719,17 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                       <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                         <div className="flex items-center gap-2">
                           <span className={`inline-block w-2.5 h-2.5 rounded-full ${
-                            comp.status === 'up' ? 'bg-green-500' : comp.status === 'down' ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
+                            comp.status === 'up' ? 'bg-green-500' :
+                            comp.status === 'degraded' ? 'bg-amber-500' :
+                            comp.status === 'down' ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
                           }`} />
-                          <span className="text-sm font-medium">{comp.name}</span>
+                          <span className="text-sm font-medium">
+                            {comp.name}
+                            {comp.detail && <span className="text-xs text-muted-foreground ml-1">({comp.detail})</span>}
+                          </span>
                           <Badge variant="outline" className="text-xs">
                             {comp.type === 'link' ? (comp.role === 'primary' ? 'Lien primaire' : 'Lien backup') :
-                             comp.type === 'sdwan' ? 'SD-WAN' : 'Équipement'}
+                             comp.type === 'sdwan' ? (comp.status === 'degraded' ? 'SD-WAN Dégradé' : 'SD-WAN') : 'Équipement'}
                           </Badge>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1730,7 +1739,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                             </Badge>
                           )}
                           <span className="text-xs text-muted-foreground uppercase">
-                            {comp.status === 'up' ? 'OK' : comp.status === 'down' ? 'HS' : '?'}
+                            {comp.status === 'up' ? 'OK' : comp.status === 'degraded' ? 'Dégradé' : comp.status === 'down' ? 'HS' : '?'}
                           </span>
                         </div>
                       </div>

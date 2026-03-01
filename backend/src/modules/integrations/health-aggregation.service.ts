@@ -11,14 +11,18 @@ import {
  *
  * Calculates intelligent site health from multiple components:
  * - Connectivity links (primary/backup) with their Uptime Kuma status
- * - SD-WAN status
- * - Critical assets (firewalls, routers) with their monitor status
+ * - SD-WAN status (derived from component firewalls)
+ * - Monitored assets (equipment)
  *
  * Rules:
- * 1. CRITICAL if: ALL links DOWN, OR critical equipment (firewall/router) DOWN
- * 2. WARNING if: primary link DOWN but backup UP, OR SD-WAN DOWN, OR non-critical asset DOWN
+ * 1. CRITICAL if: ALL links DOWN (total connectivity loss)
+ * 2. WARNING if: primary link DOWN but backup UP, OR SD-WAN degraded/DOWN,
+ *    OR any equipment DOWN (equipment never causes CRITICAL)
  * 3. HEALTHY if: everything is UP
  * 4. UNKNOWN if: no monitoring configured
+ *
+ * SD-WAN: status is derived from component firewalls on the site.
+ * If 2 firewalls and 1 is UP → "degraded" (WARNING).
  */
 
 export type HealthStatus = 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
@@ -27,10 +31,11 @@ export interface HealthComponent {
   type: 'link' | 'sdwan' | 'asset';
   id: string;
   name: string;
-  status: 'up' | 'down' | 'unknown';
+  status: 'up' | 'down' | 'degraded' | 'unknown';
   role?: string;
   impact: 'critical' | 'warning' | 'none';
   monitorName?: string;
+  detail?: string; // e.g. "1/2 UP" for SD-WAN composite
 }
 
 export interface HealthBreakdown {
@@ -45,9 +50,6 @@ interface MonitorStatusMap {
     responseTime?: number;
   };
 }
-
-// Asset types that are considered critical infrastructure
-const CRITICAL_ASSET_TYPES = ['FIREWALL', 'ROUTER', 'SWITCH'];
 
 @Injectable()
 export class HealthAggregationService {
@@ -99,21 +101,63 @@ export class HealthAggregationService {
       });
     }
 
-    // 2. Evaluate SD-WAN
+    // 2. Evaluate SD-WAN — derive status from component firewalls
     if (v2.sdwan?.enabled) {
-      const sdwanStatus = this.resolveMonitorStatus(
-        v2.sdwan.monitorName,
-        v2.sdwan.status,
-        monitorStatuses,
+      const sdwanFirewalls = siteAssets.filter(
+        a => a.type === 'FIREWALL' && (a.networkInfo as any)?.monitorName,
       );
+
+      let sdwanStatus: 'up' | 'down' | 'degraded' | 'unknown';
+      let sdwanImpact: 'critical' | 'warning' | 'none' = 'none';
+      let sdwanDetail: string | undefined;
+      const sdwanBaseName = `SD-WAN ${v2.sdwan.provider || ''}`.trim();
+
+      if (sdwanFirewalls.length > 0) {
+        // Derive SD-WAN status from its component firewalls
+        const fwStatuses = sdwanFirewalls.map(fw =>
+          this.resolveMonitorStatus(
+            (fw.networkInfo as any).monitorName,
+            (fw.networkInfo as any).monitorStatus,
+            monitorStatuses,
+          ),
+        );
+        const upCount = fwStatuses.filter(s => s === 'up').length;
+        const downCount = fwStatuses.filter(s => s === 'down').length;
+        const total = sdwanFirewalls.length;
+
+        sdwanDetail = `${upCount}/${total} UP`;
+
+        if (upCount === total) {
+          sdwanStatus = 'up';
+        } else if (downCount === total) {
+          sdwanStatus = 'down';
+          sdwanImpact = 'warning';
+        } else if (upCount > 0) {
+          // Partial — degraded
+          sdwanStatus = 'degraded';
+          sdwanImpact = 'warning';
+        } else {
+          sdwanStatus = 'unknown';
+        }
+      } else {
+        // No firewalls with monitors — fall back to SD-WAN's own monitor
+        const fallbackStatus = this.resolveMonitorStatus(
+          v2.sdwan.monitorName,
+          v2.sdwan.status,
+          monitorStatuses,
+        );
+        sdwanStatus = fallbackStatus;
+        sdwanImpact = fallbackStatus === 'down' ? 'warning' : 'none';
+      }
 
       components.push({
         type: 'sdwan',
         id: 'sdwan',
-        name: `SD-WAN ${v2.sdwan.provider || ''}`.trim(),
+        name: sdwanBaseName,
         status: sdwanStatus,
-        impact: sdwanStatus === 'down' ? 'warning' : 'none',
+        impact: sdwanImpact,
         monitorName: v2.sdwan.monitorName,
+        detail: sdwanDetail,
       });
     }
 
@@ -127,8 +171,6 @@ export class HealthAggregationService {
         networkInfo.monitorStatus,
         monitorStatuses,
       );
-
-      const isCritical = CRITICAL_ASSET_TYPES.includes(asset.type);
 
       components.push({
         type: 'asset',
@@ -197,7 +239,9 @@ export class HealthAggregationService {
   }
 
   /**
-   * Calculate impact of an asset being down
+   * Calculate impact of an asset being down.
+   * Equipment DOWN is always WARNING (never CRITICAL).
+   * Only connectivity links can cause CRITICAL status.
    */
   private calculateAssetImpact(
     assetType: string,
@@ -205,12 +249,7 @@ export class HealthAggregationService {
   ): 'critical' | 'warning' | 'none' {
     if (status === 'up' || status === 'unknown') return 'none';
 
-    // Critical infrastructure down → critical impact
-    if (CRITICAL_ASSET_TYPES.includes(assetType)) {
-      return 'critical';
-    }
-
-    // Non-critical asset down → warning
+    // Any asset down → warning (equipment never causes CRITICAL)
     return 'warning';
   }
 
@@ -228,27 +267,16 @@ export class HealthAggregationService {
     const allUnknown = components.every(c => c.status === 'unknown');
     if (allUnknown) return 'UNKNOWN';
 
-    // CRITICAL conditions:
-    // 1. Any component with critical impact
-    const hasCriticalImpact = components.some(c => c.impact === 'critical');
-    if (hasCriticalImpact) {
-      // Check: are ALL links down? → CRITICAL
-      const links = components.filter(c => c.type === 'link');
-      if (links.length > 0 && links.every(l => l.status === 'down')) {
-        return 'CRITICAL';
-      }
-      // Critical asset (firewall/router/switch) down → CRITICAL
-      const criticalAssets = components.filter(
-        c => c.type === 'asset' && c.impact === 'critical',
-      );
-      if (criticalAssets.length > 0) {
-        return 'CRITICAL';
-      }
+    // CRITICAL condition: ALL connectivity links are DOWN (total loss)
+    const links = components.filter(c => c.type === 'link');
+    if (links.length > 0 && links.every(l => l.status === 'down')) {
+      return 'CRITICAL';
     }
 
-    // WARNING conditions:
+    // WARNING conditions: any component with warning impact, or degraded status
     const hasWarningImpact = components.some(c => c.impact === 'warning');
-    if (hasWarningImpact) return 'WARNING';
+    const hasDegraded = components.some(c => c.status === 'degraded');
+    if (hasWarningImpact || hasDegraded) return 'WARNING';
 
     // All components either UP or unknown (with at least one UP)
     const hasUp = components.some(c => c.status === 'up');
