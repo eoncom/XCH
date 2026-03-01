@@ -4076,3 +4076,24 @@ feat: live monitoring + colored map pins + list views + link-to-asset inheritanc
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-01
+
+**Date:** 2026-03-01 18:35:42
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 1
+
+**Commit message:**
+```
+fix: site detail crash + strip integration secrets from tenant API
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

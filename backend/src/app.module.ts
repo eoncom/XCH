@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bull';
+import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './config/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RbacModule } from './modules/rbac/rbac.module';
@@ -44,6 +45,9 @@ import { AdminModule } from './modules/admin/admin.module';
         password: process.env.REDIS_PASSWORD,
       },
     }),
+
+    // Scheduled tasks (cron jobs)
+    ScheduleModule.forRoot(),
 
     // Database (Prisma)
     DatabaseModule,

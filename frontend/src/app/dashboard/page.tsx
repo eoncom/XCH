@@ -149,12 +149,12 @@ export default function DashboardPage() {
     const downMonitors = monitors.filter((m) => m.status === 'down');
 
     // Group alerts by site for "sites en souffrance"
-    const siteAlertMap = new Map<string, { blocked: Task[]; urgent: Task[]; overdue: Task[]; broken: Asset[]; warrantyExpired: Asset[]; warrantyCritical: Asset[]; warrantyWarning: Asset[] }>();
+    const siteAlertMap = new Map<string, { blocked: Task[]; urgent: Task[]; overdue: Task[]; broken: Asset[]; warrantyExpired: Asset[]; warrantyCritical: Asset[]; warrantyWarning: Asset[]; downMonitorCount: number; healthIssue: boolean }>();
 
     const ensureSite = (siteId: string | undefined) => {
       if (!siteId) return;
       if (!siteAlertMap.has(siteId)) {
-        siteAlertMap.set(siteId, { blocked: [], urgent: [], overdue: [], broken: [], warrantyExpired: [], warrantyCritical: [], warrantyWarning: [] });
+        siteAlertMap.set(siteId, { blocked: [], urgent: [], overdue: [], broken: [], warrantyExpired: [], warrantyCritical: [], warrantyWarning: [], downMonitorCount: 0, healthIssue: false });
       }
     };
 
@@ -166,16 +166,45 @@ export default function DashboardPage() {
     warrantyCritical.forEach((a: Asset) => { ensureSite(a.siteId); if (a.siteId) siteAlertMap.get(a.siteId)!.warrantyCritical.push(a); });
     warrantyWarning.forEach((a: Asset) => { ensureSite(a.siteId); if (a.siteId) siteAlertMap.get(a.siteId)!.warrantyWarning.push(a); });
 
-    // Include sites with CRITICAL/WARNING health status even if no task/warranty alerts
-    criticalHealthSites.forEach((s: Site) => { ensureSite(s.id); });
-    warningHealthSites.forEach((s: Site) => { ensureSite(s.id); });
+    // Include sites with CRITICAL/WARNING health status
+    criticalHealthSites.forEach((s: Site) => { ensureSite(s.id); siteAlertMap.get(s.id)!.healthIssue = true; });
+    warningHealthSites.forEach((s: Site) => { ensureSite(s.id); siteAlertMap.get(s.id)!.healthIssue = true; });
 
-    // Sort sites by total alert count
+    // Match DOWN monitors to sites via assets' monitorName
+    if (downMonitors.length > 0) {
+      const downMonitorNames = new Set(downMonitors.map(m => m.name));
+      assets.forEach((a: Asset) => {
+        const mn = (a.networkInfo as any)?.monitorName;
+        if (mn && downMonitorNames.has(mn) && a.siteId) {
+          ensureSite(a.siteId);
+          siteAlertMap.get(a.siteId)!.downMonitorCount++;
+        }
+      });
+      // Also check site connectivity links for DOWN monitors
+      sites.forEach((s: Site) => {
+        const connectivity = s.connectivity as any;
+        const links = connectivity?.links || connectivity?.v2?.links || [];
+        links.forEach((link: any) => {
+          if (link.monitorName && downMonitorNames.has(link.monitorName)) {
+            ensureSite(s.id);
+            siteAlertMap.get(s.id)!.downMonitorCount++;
+          }
+        });
+        // SD-WAN monitor
+        const sdwan = connectivity?.sdwan || connectivity?.v2?.sdwan;
+        if (sdwan?.monitorName && downMonitorNames.has(sdwan.monitorName)) {
+          ensureSite(s.id);
+          siteAlertMap.get(s.id)!.downMonitorCount++;
+        }
+      });
+    }
+
+    // Sort sites by severity (health issue first, then total alert count)
     const sitesWithAlerts = Array.from(siteAlertMap.entries())
       .map(([siteId, a]) => ({
         siteId,
         site: sites.find((s: Site) => s.id === siteId),
-        total: a.blocked.length + a.urgent.length + a.overdue.length + a.broken.length + a.warrantyExpired.length + a.warrantyCritical.length + a.warrantyWarning.length,
+        total: a.blocked.length + a.urgent.length + a.overdue.length + a.broken.length + a.warrantyExpired.length + a.warrantyCritical.length + a.warrantyWarning.length + a.downMonitorCount + (a.healthIssue ? 1 : 0),
         ...a,
       }))
       .filter(s => s.total > 0)
@@ -288,14 +317,17 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* État de santé des sites */}
+      {/* Santé & Alertes — section fusionnée */}
       {sites.length > 0 && (
-        <Card>
+        <Card className={alerts.totalAlerts > 0 ? 'border-red-200 dark:border-red-800' : ''}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Activity className="h-5 w-5 text-primary" />
-                État de santé des sites
+                Santé & Alertes
+                {alerts.totalAlerts > 0 && (
+                  <Badge variant="destructive" className="ml-1">{alerts.totalAlerts}</Badge>
+                )}
               </CardTitle>
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/dashboard/integrations/monitoring">Monitoring →</Link>
@@ -360,152 +392,153 @@ export default function DashboardPage() {
                 </span>
               </div>
             )}
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Alertes critiques globales */}
-      {alerts.totalAlerts > 0 && (
-        <Card className="border-red-200 dark:border-red-800 bg-red-50/30 dark:bg-red-950/10">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-5 w-5 text-red-600" />
-              Alertes critiques
-              <Badge variant="destructive" className="ml-1">{alerts.totalAlerts}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {/* Compteurs résumés en ligne */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-              {alerts.blockedTasks.length > 0 && (
-                <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
-                  <Ban className="h-4 w-4 text-red-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.blockedTasks.length}</p>
-                    <p className="text-xs text-red-600 dark:text-red-400">Bloquée{alerts.blockedTasks.length > 1 ? 's' : ''}</p>
-                  </div>
-                </div>
-              )}
-              {alerts.urgentTasks.length > 0 && (
-                <div className="flex items-center gap-2 p-2.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg border border-orange-200 dark:border-orange-800">
-                  <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-lg font-bold text-orange-700 dark:text-orange-300">{alerts.urgentTasks.length}</p>
-                    <p className="text-xs text-orange-600 dark:text-orange-400">Urgente{alerts.urgentTasks.length > 1 ? 's' : ''}</p>
-                  </div>
-                </div>
-              )}
-              {alerts.overdueTasks.length > 0 && (
-                <div className="flex items-center gap-2 p-2.5 bg-amber-100 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{alerts.overdueTasks.length}</p>
-                    <p className="text-xs text-amber-600 dark:text-amber-400">En retard</p>
-                  </div>
-                </div>
-              )}
-              {alerts.outOfServiceAssets.length > 0 && (
-                <div className="flex items-center gap-2 p-2.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg border border-purple-200 dark:border-purple-800">
-                  <Package className="h-4 w-4 text-purple-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-lg font-bold text-purple-700 dark:text-purple-300">{alerts.outOfServiceAssets.length}</p>
-                    <p className="text-xs text-purple-600 dark:text-purple-400">Hors service</p>
-                  </div>
-                </div>
-              )}
-              {alerts.warrantyTotal > 0 && (
-                <div className="flex items-center gap-2 p-2.5 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                  <ShieldAlert className="h-4 w-4 text-yellow-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-lg font-bold text-yellow-700 dark:text-yellow-300">{alerts.warrantyTotal}</p>
-                    <p className="text-xs text-yellow-600 dark:text-yellow-400">Garantie{alerts.warrantyTotal > 1 ? 's' : ''}</p>
-                  </div>
-                </div>
-              )}
-              {alerts.criticalHealthSites.length > 0 && (
-                <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
-                  <Activity className="h-4 w-4 text-red-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.criticalHealthSites.length}</p>
-                    <p className="text-xs text-red-600 dark:text-red-400">Site{alerts.criticalHealthSites.length > 1 ? 's' : ''} critique{alerts.criticalHealthSites.length > 1 ? 's' : ''}</p>
-                  </div>
-                </div>
-              )}
-              {alerts.downMonitors.length > 0 && (
-                <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
-                  <WifiOff className="h-4 w-4 text-red-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.downMonitors.length}</p>
-                    <p className="text-xs text-red-600 dark:text-red-400">Moniteur{alerts.downMonitors.length > 1 ? 's' : ''} DOWN</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Sites en souffrance — détail par site */}
-            {alerts.sitesWithAlerts.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sites concernés</p>
-                {alerts.sitesWithAlerts.slice(0, 5).map(({ siteId, site, blocked, urgent, overdue, broken, warrantyExpired, warrantyCritical, warrantyWarning, total }) => (
-                  <Link
-                    key={siteId}
-                    href={`/dashboard/sites/${siteId}`}
-                    className="flex items-center justify-between p-3 rounded-lg border bg-background hover:bg-muted/50 transition-colors group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        {site?.healthStatus === 'CRITICAL' && (
-                          <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-                        )}
-                        {site?.healthStatus === 'WARNING' && (
-                          <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                        )}
-                        {(!site?.healthStatus || site.healthStatus === 'HEALTHY' || site.healthStatus === 'UNKNOWN') && (
-                          <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate">{site?.name || 'Site inconnu'}</p>
-                        <p className="text-xs text-muted-foreground">{site?.code} — {site?.city || 'N/A'}</p>
+            {/* Compteurs alertes */}
+            {alerts.totalAlerts > 0 && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t">
+                  {alerts.downMonitors.length > 0 && (
+                    <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
+                      <WifiOff className="h-4 w-4 text-red-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.downMonitors.length}</p>
+                        <p className="text-xs text-red-600 dark:text-red-400">Moniteur{alerts.downMonitors.length > 1 ? 's' : ''} DOWN</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {blocked.length > 0 && (
-                        <Badge variant="destructive" className="text-xs">
-                          {blocked.length} bloquée{blocked.length > 1 ? 's' : ''}
-                        </Badge>
-                      )}
-                      {urgent.length > 0 && (
-                        <Badge className="text-xs bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900 dark:text-orange-200">
-                          {urgent.length} urgente{urgent.length > 1 ? 's' : ''}
-                        </Badge>
-                      )}
-                      {overdue.length > 0 && (
-                        <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900 dark:text-amber-200">
-                          {overdue.length} retard
-                        </Badge>
-                      )}
-                      {broken.length > 0 && (
-                        <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900 dark:text-purple-200">
-                          {broken.length} HS
-                        </Badge>
-                      )}
-                      {(warrantyExpired.length + warrantyCritical.length + warrantyWarning.length) > 0 && (
-                        <Badge className="text-xs bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900 dark:text-yellow-200">
-                          <ShieldAlert className="h-3 w-3 mr-1" />
-                          {warrantyExpired.length + warrantyCritical.length + warrantyWarning.length} garantie{(warrantyExpired.length + warrantyCritical.length + warrantyWarning.length) > 1 ? 's' : ''}
-                        </Badge>
-                      )}
-                      <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  )}
+                  {alerts.criticalHealthSites.length > 0 && (
+                    <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
+                      <Activity className="h-4 w-4 text-red-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.criticalHealthSites.length}</p>
+                        <p className="text-xs text-red-600 dark:text-red-400">Site{alerts.criticalHealthSites.length > 1 ? 's' : ''} critique{alerts.criticalHealthSites.length > 1 ? 's' : ''}</p>
+                      </div>
                     </div>
-                  </Link>
-                ))}
-                {alerts.sitesWithAlerts.length > 5 && (
-                  <p className="text-xs text-muted-foreground text-center pt-1">
-                    + {alerts.sitesWithAlerts.length - 5} autre{alerts.sitesWithAlerts.length - 5 > 1 ? 's' : ''} site{alerts.sitesWithAlerts.length - 5 > 1 ? 's' : ''}
-                  </p>
+                  )}
+                  {alerts.blockedTasks.length > 0 && (
+                    <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
+                      <Ban className="h-4 w-4 text-red-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.blockedTasks.length}</p>
+                        <p className="text-xs text-red-600 dark:text-red-400">Bloquée{alerts.blockedTasks.length > 1 ? 's' : ''}</p>
+                      </div>
+                    </div>
+                  )}
+                  {alerts.urgentTasks.length > 0 && (
+                    <div className="flex items-center gap-2 p-2.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg border border-orange-200 dark:border-orange-800">
+                      <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-lg font-bold text-orange-700 dark:text-orange-300">{alerts.urgentTasks.length}</p>
+                        <p className="text-xs text-orange-600 dark:text-orange-400">Urgente{alerts.urgentTasks.length > 1 ? 's' : ''}</p>
+                      </div>
+                    </div>
+                  )}
+                  {alerts.overdueTasks.length > 0 && (
+                    <div className="flex items-center gap-2 p-2.5 bg-amber-100 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{alerts.overdueTasks.length}</p>
+                        <p className="text-xs text-amber-600 dark:text-amber-400">En retard</p>
+                      </div>
+                    </div>
+                  )}
+                  {alerts.outOfServiceAssets.length > 0 && (
+                    <div className="flex items-center gap-2 p-2.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg border border-purple-200 dark:border-purple-800">
+                      <Package className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-lg font-bold text-purple-700 dark:text-purple-300">{alerts.outOfServiceAssets.length}</p>
+                        <p className="text-xs text-purple-600 dark:text-purple-400">Hors service</p>
+                      </div>
+                    </div>
+                  )}
+                  {alerts.warrantyTotal > 0 && (
+                    <div className="flex items-center gap-2 p-2.5 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                      <ShieldAlert className="h-4 w-4 text-yellow-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-lg font-bold text-yellow-700 dark:text-yellow-300">{alerts.warrantyTotal}</p>
+                        <p className="text-xs text-yellow-600 dark:text-yellow-400">Garantie{alerts.warrantyTotal > 1 ? 's' : ''}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Sites concernés — détail par site */}
+                {alerts.sitesWithAlerts.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sites concernés</p>
+                    {alerts.sitesWithAlerts.slice(0, 5).map(({ siteId, site, blocked, urgent, overdue, broken, warrantyExpired, warrantyCritical, warrantyWarning, downMonitorCount, healthIssue }) => (
+                      <Link
+                        key={siteId}
+                        href={`/dashboard/sites/${siteId}`}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-background hover:bg-muted/50 transition-colors group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            {site?.healthStatus === 'CRITICAL' && (
+                              <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+                            )}
+                            {site?.healthStatus === 'WARNING' && (
+                              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                            )}
+                            {(!site?.healthStatus || site.healthStatus === 'HEALTHY' || site.healthStatus === 'UNKNOWN') && (
+                              <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate">{site?.name || 'Site inconnu'}</p>
+                            <p className="text-xs text-muted-foreground">{site?.code} — {site?.city || 'N/A'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                          {downMonitorCount > 0 && (
+                            <Badge className="text-xs bg-red-100 text-red-800 border-red-200 dark:bg-red-900 dark:text-red-200">
+                              <WifiOff className="h-3 w-3 mr-1" />
+                              {downMonitorCount} DOWN
+                            </Badge>
+                          )}
+                          {healthIssue && downMonitorCount === 0 && (
+                            <Badge className="text-xs bg-red-100 text-red-800 border-red-200 dark:bg-red-900 dark:text-red-200">
+                              {site?.healthStatus === 'CRITICAL' ? 'Critique' : 'Attention'}
+                            </Badge>
+                          )}
+                          {blocked.length > 0 && (
+                            <Badge variant="destructive" className="text-xs">
+                              {blocked.length} bloquée{blocked.length > 1 ? 's' : ''}
+                            </Badge>
+                          )}
+                          {urgent.length > 0 && (
+                            <Badge className="text-xs bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900 dark:text-orange-200">
+                              {urgent.length} urgente{urgent.length > 1 ? 's' : ''}
+                            </Badge>
+                          )}
+                          {overdue.length > 0 && (
+                            <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900 dark:text-amber-200">
+                              {overdue.length} retard
+                            </Badge>
+                          )}
+                          {broken.length > 0 && (
+                            <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900 dark:text-purple-200">
+                              {broken.length} HS
+                            </Badge>
+                          )}
+                          {(warrantyExpired.length + warrantyCritical.length + warrantyWarning.length) > 0 && (
+                            <Badge className="text-xs bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900 dark:text-yellow-200">
+                              <ShieldAlert className="h-3 w-3 mr-1" />
+                              {warrantyExpired.length + warrantyCritical.length + warrantyWarning.length} garantie{(warrantyExpired.length + warrantyCritical.length + warrantyWarning.length) > 1 ? 's' : ''}
+                            </Badge>
+                          )}
+                          <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </Link>
+                    ))}
+                    {alerts.sitesWithAlerts.length > 5 && (
+                      <p className="text-xs text-muted-foreground text-center pt-1">
+                        + {alerts.sitesWithAlerts.length - 5} autre{alerts.sitesWithAlerts.length - 5 > 1 ? 's' : ''} site{alerts.sitesWithAlerts.length - 5 > 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </CardContent>
         </Card>
