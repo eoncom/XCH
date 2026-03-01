@@ -526,7 +526,8 @@ async function main() {
       tenantId: tenant.id,
       siteId: site1.id,
       rackId: rack2.id,
-      type: AssetType.OTHER,
+      type: AssetType.ROUTER,
+      name: 'Routeur WAN Principal',
       model: 'Cisco ISR 4331',
       manufacturer: 'Cisco',
       serialNumber: 'RTR-PAR-001',
@@ -538,6 +539,9 @@ async function main() {
         ip: '10.1.1.254',
         mac: '00:1A:2B:3C:01:FE',
         hostname: 'rtr-par-wan',
+        adminLinks: [
+          { label: 'Interface Admin', url: 'https://10.1.1.254' },
+        ],
       },
       purchaseDate: new Date('2024-01-05'),
       warrantyEnd: new Date('2029-01-05'),
@@ -552,6 +556,7 @@ async function main() {
       siteId: site1.id,
       rackId: rack2.id,
       type: AssetType.FIREWALL,
+      name: 'FortiGate Périmètre',
       model: 'Fortinet FortiGate 200F',
       manufacturer: 'Fortinet',
       serialNumber: 'FW-PAR-001',
@@ -563,6 +568,9 @@ async function main() {
         ip: '10.1.1.253',
         mac: '00:1A:2B:3C:01:FD',
         hostname: 'fw-par-main',
+        adminLinks: [
+          { label: 'FortiGate Console', url: 'https://10.1.1.253' },
+        ],
       },
       purchaseDate: new Date('2024-01-05'),
       warrantyEnd: new Date('2029-01-05'),
@@ -727,7 +735,8 @@ async function main() {
       tenantId: tenant.id,
       siteId: site2.id,
       rackId: rack3.id,
-      type: AssetType.OTHER,
+      type: AssetType.ROUTER,
+      name: 'Routeur WAN Lyon',
       model: 'MikroTik CCR1036',
       manufacturer: 'MikroTik',
       serialNumber: 'RTR-LYN-001',
@@ -739,6 +748,9 @@ async function main() {
         ip: '10.2.1.254',
         mac: '00:1A:2B:3C:02:FE',
         hostname: 'rtr-lyn-wan',
+        adminLinks: [
+          { label: 'WinBox / WebFig', url: 'https://10.2.1.254' },
+        ],
       },
       purchaseDate: new Date('2024-02-20'),
       warrantyEnd: new Date('2027-02-20'),
@@ -1034,6 +1046,7 @@ async function main() {
       siteId: site4.id,
       rackId: rack4.id,
       type: AssetType.FIREWALL,
+      name: 'Palo Alto Datacenter',
       model: 'Palo Alto PA-3220',
       manufacturer: 'Palo Alto',
       serialNumber: 'FW-BDX-001',
@@ -1045,6 +1058,9 @@ async function main() {
         ip: '10.4.1.253',
         mac: '00:1A:2B:3C:04:FD',
         hostname: 'fw-bdx-dc',
+        adminLinks: [
+          { label: 'Palo Alto Console', url: 'https://10.4.1.253' },
+        ],
       },
       purchaseDate: new Date('2023-10-01'),
       warrantyEnd: new Date('2028-10-01'),
@@ -1215,6 +1231,74 @@ async function main() {
   });
 
   console.log('✅ Assets created: 36 total');
+
+  // 5.1 Update sites with V2 connectivity
+  console.log('\n🔌 Adding V2 connectivity to sites...');
+
+  await prisma.site.update({
+    where: { id: site1.id },
+    data: {
+      connectivity: {
+        links: [
+          { id: 'link-par-1', role: 'primary', type: 'Fibre optique', provider: 'Orange Business', ref: 'FTTO-PAR-001', bandwidth: '1 Gbps / 1 Gbps', assetId: router1.id },
+          { id: 'link-par-2', role: 'backup', type: '4G', provider: 'Bouygues Telecom', ref: '4G-PAR-001', bandwidth: '150 Mbps' },
+        ],
+        sdwan: {
+          enabled: true,
+          provider: 'Fortinet SD-WAN',
+          firewallIds: [firewall1.id],
+        },
+        cutProcedure: 'Contacter le NOC Orange au 0800 XX XX XX. Si coupure prolongée, basculer sur le lien 4G backup via interface FortiGate.',
+      },
+    },
+  });
+
+  await prisma.site.update({
+    where: { id: site2.id },
+    data: {
+      connectivity: {
+        links: [
+          { id: 'link-lyn-1', role: 'primary', type: 'Fibre optique', provider: 'SFR Business', ref: 'FTTH-LYN-001', bandwidth: '500 Mbps / 200 Mbps', assetId: router2.id },
+          { id: 'link-lyn-2', role: 'backup', type: '4G', provider: 'Orange', ref: '4G-LYN-001', bandwidth: '100 Mbps' },
+        ],
+        cutProcedure: 'Contacter SFR Business au 1023. Basculer sur 4G depuis interface MikroTik.',
+      },
+    },
+  });
+
+  // site3 (Marseille) - no connectivity yet (in preparation)
+
+  await prisma.site.update({
+    where: { id: site4.id },
+    data: {
+      connectivity: {
+        links: [
+          { id: 'link-bdx-1', role: 'primary', type: 'Fibre optique dédiée', provider: 'Orange Business', ref: 'FTTO-BDX-001', bandwidth: '10 Gbps / 10 Gbps' },
+          { id: 'link-bdx-2', role: 'backup', type: 'Fibre optique', provider: 'SFR Business', ref: 'FTTH-BDX-002', bandwidth: '1 Gbps / 1 Gbps' },
+        ],
+        sdwan: {
+          enabled: true,
+          provider: 'Palo Alto Prisma SD-WAN',
+          firewallIds: [firewall2.id],
+        },
+        cutProcedure: 'DATACENTER CRITIQUE - Appeler immédiatement le NOC 24/7 au 01 XX XX XX XX. Procédure de failover automatique active.',
+      },
+    },
+  });
+
+  await prisma.site.update({
+    where: { id: site5.id },
+    data: {
+      connectivity: {
+        links: [
+          { id: 'link-tls-1', role: 'primary', type: 'Fibre optique', provider: 'Orange', ref: 'FTTH-TLS-001', bandwidth: '300 Mbps / 100 Mbps' },
+        ],
+        cutProcedure: 'Contacter Orange support au 3900.',
+      },
+    },
+  });
+
+  console.log('✅ V2 connectivity added to 4 sites (Marseille excluded - in preparation)');
 
   // 6. Create comprehensive tasks (15 total)
   const task1 = await prisma.task.create({

@@ -42,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X, Copy, Check, ChevronDown, ChevronRight, Settings, History, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, MapPin, Edit, Trash2, Package, Phone, Mail, User, Users, Wifi, Globe, Shield, Clock, AlertTriangle, FileText, Download, Loader2, Map, Server, ExternalLink, HardDrive, FolderOpen, Search, Plus, Info, Lock, Unlock, UserPlus, X, Copy, Check, ChevronDown, ChevronRight, Settings, History, ShieldAlert, Activity, Network } from 'lucide-react';
 import Link from 'next/link';
 import type { Site, Asset, Rack, Task, FloorPlan, User as UserType } from '@/types';
 import { WarrantyBadge } from '@/components/ui/warranty-badge';
@@ -790,29 +790,34 @@ function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: strin
 }
 
 // === Connectivité côte à côte ===
-function SiteConnectivitySection({ connectivity, siteId }: { connectivity: Site['connectivity']; siteId: string }) {
-  if (!connectivity || (!connectivity.primary && !connectivity.backup)) return null;
+function SiteConnectivitySection({ connectivity, siteId, assets }: { connectivity: Site['connectivity']; siteId: string; assets?: Asset[] }) {
+  // Support both V1 and V2 formats
+  const hasV2Links = connectivity && Array.isArray(connectivity.links) && connectivity.links.length > 0;
+  const hasV1 = connectivity && (connectivity.primary || connectivity.backup);
 
-  const ConnBlock = ({ conn, label, variant }: { conn: { type?: string; provider?: string; ref?: string }; label: string; variant: 'primary' | 'backup' }) => (
-    <div className={`border rounded-lg p-4 ${variant === 'backup' ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800' : ''}`}>
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{label}</p>
-          {conn.provider && <p className="text-lg font-bold mt-0.5">{conn.provider}</p>}
-          {conn.type && <p className="text-sm text-muted-foreground">{conn.type}</p>}
-        </div>
-        <Badge variant={variant === 'primary' ? 'success' : 'warning'}>
-          {variant === 'primary' ? 'Actif' : 'Veille'}
-        </Badge>
-      </div>
-      {conn.ref && (
-        <div className="bg-muted/50 rounded-lg p-3">
-          <p className="text-xs text-muted-foreground font-medium">Référence ligne</p>
-          <p className="text-sm font-mono mt-0.5">{conn.ref}</p>
-        </div>
-      )}
-    </div>
-  );
+  if (!connectivity || (!hasV2Links && !hasV1)) return null;
+
+  // Normalize to links array for display
+  const links = hasV2Links
+    ? connectivity.links!
+    : [
+        ...(connectivity.primary ? [{ id: 'v1-primary', role: 'primary' as const, ...connectivity.primary }] : []),
+        ...(connectivity.backup ? [{ id: 'v1-backup', role: 'backup' as const, ...connectivity.backup }] : []),
+      ];
+
+  const sdwan = connectivity.sdwan;
+
+  const getAssetName = (assetId?: string) => {
+    if (!assetId || !assets) return null;
+    const asset = assets.find(a => a.id === assetId);
+    return asset ? (asset.name || `${asset.type} ${asset.model || ''}`.trim()) : null;
+  };
+
+  const statusColor = (status?: string) => {
+    if (status === 'up') return 'bg-green-500';
+    if (status === 'down') return 'bg-red-500';
+    return 'bg-gray-400';
+  };
 
   return (
     <Card>
@@ -829,13 +834,82 @@ function SiteConnectivitySection({ connectivity, siteId }: { connectivity: Site[
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid md:grid-cols-2 gap-4">
-          {connectivity.primary && (
-            <ConnBlock conn={connectivity.primary} label="Lien primaire" variant="primary" />
-          )}
-          {connectivity.backup && (
-            <ConnBlock conn={connectivity.backup} label="Lien backup" variant="backup" />
-          )}
+          {links.map((link) => (
+            <div key={link.id} className={`border rounded-lg p-4 ${link.role === 'backup' ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800' : ''}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                      Lien {link.role === 'primary' ? 'primaire' : 'backup'}
+                    </p>
+                    {(link as any).status && (
+                      <span className={`inline-block w-2 h-2 rounded-full ${statusColor((link as any).status)}`} title={(link as any).status} />
+                    )}
+                  </div>
+                  {link.provider && <p className="text-lg font-bold mt-0.5">{link.provider}</p>}
+                  {link.type && <p className="text-sm text-muted-foreground">{link.type}</p>}
+                </div>
+                <Badge variant={link.role === 'primary' ? 'success' : 'warning'}>
+                  {link.role === 'primary' ? 'Actif' : 'Veille'}
+                </Badge>
+              </div>
+              <div className="space-y-2">
+                {link.ref && (
+                  <div className="bg-muted/50 rounded-lg p-2">
+                    <p className="text-xs text-muted-foreground font-medium">Référence</p>
+                    <p className="text-sm font-mono mt-0.5">{link.ref}</p>
+                  </div>
+                )}
+                {(link as any).bandwidth && (
+                  <div className="bg-muted/50 rounded-lg p-2">
+                    <p className="text-xs text-muted-foreground font-medium">Bande passante</p>
+                    <p className="text-sm mt-0.5">{(link as any).bandwidth}</p>
+                  </div>
+                )}
+                {(link as any).assetId && getAssetName((link as any).assetId) && (
+                  <div className="bg-muted/50 rounded-lg p-2">
+                    <p className="text-xs text-muted-foreground font-medium">Équipement</p>
+                    <Link href={`/dashboard/assets/${(link as any).assetId}`} className="text-sm text-blue-600 hover:underline mt-0.5 inline-block">
+                      {getAssetName((link as any).assetId)}
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
+
+        {/* SD-WAN section */}
+        {sdwan?.enabled && (
+          <div className="border rounded-lg p-4 bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Server className="h-4 w-4" />
+                <p className="text-sm font-semibold">SD-WAN</p>
+                {sdwan.status && (
+                  <span className={`inline-block w-2 h-2 rounded-full ${statusColor(sdwan.status)}`} title={sdwan.status} />
+                )}
+              </div>
+              {sdwan.firewallIds?.length === 2 && (
+                <Badge variant="outline" className="text-xs">HA</Badge>
+              )}
+            </div>
+            {sdwan.provider && <p className="text-sm text-muted-foreground">{sdwan.provider}</p>}
+            {sdwan.firewallIds && sdwan.firewallIds.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {sdwan.firewallIds.map(fwId => {
+                  const name = getAssetName(fwId);
+                  return name ? (
+                    <Link key={fwId} href={`/dashboard/assets/${fwId}`}>
+                      <Badge variant="secondary" className="text-xs hover:bg-secondary/80 cursor-pointer">{name}</Badge>
+                    </Link>
+                  ) : null;
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {connectivity.cutProcedure && (
           <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
             <p className="text-sm font-medium flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
@@ -1488,7 +1562,55 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             <SiteContactsGrid contacts={site.contacts || []} siteId={id} />
 
             {/* Connectivité primary + backup côte à côte */}
-            <SiteConnectivitySection connectivity={site.connectivity} siteId={id} />
+            <SiteConnectivitySection connectivity={site.connectivity} siteId={id} assets={assets} />
+
+            {/* Health Breakdown (si disponible dans metadata) */}
+            {site.metadata?.healthBreakdown?.components?.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Activity className="h-5 w-5" />
+                    Détail santé du site
+                    <Badge variant={healthStatusColors[site.healthStatus]} className="ml-2">
+                      {site.healthStatus}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {site.metadata.healthBreakdown.components.map((comp: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block w-2.5 h-2.5 rounded-full ${
+                            comp.status === 'up' ? 'bg-green-500' : comp.status === 'down' ? 'bg-red-500' : 'bg-gray-400'
+                          }`} />
+                          <span className="text-sm font-medium">{comp.name}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {comp.type === 'link' ? (comp.role === 'primary' ? 'Lien primaire' : 'Lien backup') :
+                             comp.type === 'sdwan' ? 'SD-WAN' : 'Équipement'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {comp.impact !== 'none' && (
+                            <Badge variant={comp.impact === 'critical' ? 'error' : 'warning'} className="text-xs">
+                              {comp.impact === 'critical' ? 'Critique' : 'Attention'}
+                            </Badge>
+                          )}
+                          <span className="text-xs text-muted-foreground uppercase">
+                            {comp.status === 'up' ? 'OK' : comp.status === 'down' ? 'HS' : '?'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {site.metadata.healthBreakdown.timestamp && (
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Dernière vérification : {new Date(site.metadata.healthBreakdown.timestamp).toLocaleString('fr-FR')}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Accès au site */}
             <SiteAccessInfoSection accessNotes={site.accessNotes} securityReminders={securityReminders} siteId={id} />

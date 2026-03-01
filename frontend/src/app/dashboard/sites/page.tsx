@@ -55,14 +55,34 @@ export default function SitesPage() {
     router.push(`/dashboard/sites/${site.id}`);
   };
 
-  const handleExport = (format: 'excel' | 'pdf' | 'csv') => {
+  const handleExport = (format: 'excel' | 'pdf' | 'csv' | 'json') => {
     if (!filteredSites) return;
+
+    const summarizeConnectivity = (conn: any): string => {
+      if (!conn) return '';
+      if (Array.isArray(conn.links)) {
+        return conn.links
+          .map((l: any) => `${l.type || ''} ${l.provider || ''}`.trim())
+          .filter(Boolean)
+          .join(' + ');
+      }
+      const parts: string[] = [];
+      if (conn.primary?.provider) parts.push(conn.primary.provider);
+      if (conn.backup?.provider) parts.push(conn.backup.provider);
+      return parts.join(' + ');
+    };
+
     const exportData = filteredSites.map((site) => ({
       name: site.name,
       code: site.code,
       status: site.status,
+      city: (site as any).city || '',
+      postalCode: (site as any).postalCode || '',
       address: site.address || '',
       healthStatus: site.healthStatus,
+      assetsCount: '',
+      tasksCount: '',
+      connectivity: summarizeConnectivity(site.connectivity),
     }));
     exportSites(exportData, format);
   };

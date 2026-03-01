@@ -3,8 +3,10 @@ import { PrismaClient } from '@prisma/client';
 import { NetBoxProviderService } from './providers/netbox.provider';
 import { HealthStatus } from '@prisma/client';
 import { UptimeKumaProviderService } from './providers/uptime-kuma.provider';
+import { HealthAggregationService } from './health-aggregation.service';
 import { IntegrationMappingService } from './mapping/integration-mapping.service';
 import { SyncNetBoxSitesDto, SyncNetBoxDevicesDto, MapAssetToNetBoxDto } from './dto/sync-netbox.dto';
+import { normalizeConnectivity } from '../../common/utils/connectivity-migration';
 
 @Injectable()
 export class IntegrationsService {
@@ -14,6 +16,7 @@ export class IntegrationsService {
     private prisma: PrismaClient,
     private netboxProvider: NetBoxProviderService,
     private uptimeKumaProvider: UptimeKumaProviderService,
+    private healthAggregation: HealthAggregationService,
     private integrationMappingService: IntegrationMappingService,
   ) {}
 
@@ -573,14 +576,30 @@ export class IntegrationsService {
   }
 
   /**
-   * Sync all sites health from Uptime Kuma
-   * Assumes sites have metadata.monitoring.monitor identifier
+   * Sync all sites health from Uptime Kuma (V2 — intelligent aggregation)
+   * 1. Fetch ALL monitors from Uptime Kuma in 1 call
+   * 2. For each site: normalize connectivity V2, collect monitorNames from links+sdwan+assets
+   * 3. Resolve each monitorName → status from fetched monitors
+   * 4. Update cached statuses in connectivity and asset networkInfo
+   * 5. Calculate intelligent health status → store healthStatus + healthBreakdown
    */
   async syncAllSitesHealth(tenantId: string) {
     await this.ensureProvidersConfigured(tenantId);
 
+    // 1. Fetch all monitors in a single call
+    const allMonitors = await this.uptimeKumaProvider.fetchMonitors();
+    const monitorStatusMap = this.healthAggregation.buildMonitorStatusMap(allMonitors);
+
+    this.logger.log(`Fetched ${allMonitors.length} monitors for health sync`);
+
+    // 2. Get all sites with their assets
     const sites = await this.prisma.site.findMany({
       where: { tenantId },
+      include: {
+        assets: {
+          select: { id: true, name: true, type: true, networkInfo: true },
+        },
+      },
     });
 
     const results = {
@@ -592,15 +611,89 @@ export class IntegrationsService {
 
     for (const site of sites) {
       try {
-        const monitorIdentifier = (site.connectivity as any)?.['monitoring']?.['monitor'];
+        const v2Connectivity = normalizeConnectivity(site.connectivity);
 
-        if (!monitorIdentifier) {
+        // Check if there's any monitoring configured
+        const hasLinkMonitors = v2Connectivity.links.some(l => l.monitorName);
+        const hasSdwanMonitor = v2Connectivity.sdwan?.monitorName;
+        const hasAssetMonitors = site.assets.some(
+          a => (a.networkInfo as any)?.monitorName,
+        );
+
+        // Also check V1 monitoring.monitor for backward compat
+        const v1Monitor = (site.connectivity as any)?.monitoring?.monitor;
+
+        if (!hasLinkMonitors && !hasSdwanMonitor && !hasAssetMonitors && !v1Monitor) {
           results.skipped++;
           continue;
         }
 
-        await this.updateSiteHealthFromMonitor(site.id, tenantId, monitorIdentifier);
+        // If V1 monitor exists but no V2 link monitors, use V1 approach (backward compat)
+        if (v1Monitor && !hasLinkMonitors) {
+          // Legacy: single monitor for entire site
+          const monitorStatus = monitorStatusMap[v1Monitor];
+          if (monitorStatus) {
+            const healthStatus = monitorStatus.status === 'up' ? 'HEALTHY' : monitorStatus.status === 'down' ? 'CRITICAL' : 'UNKNOWN';
+            await this.prisma.site.update({
+              where: { id: site.id },
+              data: {
+                healthStatus: healthStatus as HealthStatus,
+                lastHealthCheck: new Date(),
+              },
+            });
+            results.updated++;
+          } else {
+            results.skipped++;
+          }
+          continue;
+        }
+
+        // 3. Update cached statuses in connectivity
+        const updatedConnectivity = this.healthAggregation.updateCachedStatuses(
+          site.connectivity,
+          monitorStatusMap,
+        );
+
+        // 4. Update cached statuses in monitored assets
+        for (const asset of site.assets) {
+          const networkInfo = asset.networkInfo as any;
+          if (networkInfo?.monitorName) {
+            const updatedNetworkInfo = this.healthAggregation.updateAssetMonitorStatus(
+              networkInfo,
+              monitorStatusMap,
+            );
+            if (updatedNetworkInfo !== networkInfo) {
+              await this.prisma.asset.update({
+                where: { id: asset.id },
+                data: { networkInfo: updatedNetworkInfo },
+              });
+            }
+          }
+        }
+
+        // 5. Calculate intelligent health
+        const breakdown = this.healthAggregation.calculateSiteHealth(
+          updatedConnectivity,
+          site.assets,
+          monitorStatusMap,
+        );
+
+        // 6. Save health status + breakdown + updated connectivity
+        const metadata = (site.metadata as Record<string, any>) || {};
+        metadata.healthBreakdown = breakdown;
+
+        await this.prisma.site.update({
+          where: { id: site.id },
+          data: {
+            healthStatus: breakdown.overall as HealthStatus,
+            lastHealthCheck: new Date(),
+            connectivity: updatedConnectivity,
+            metadata,
+          },
+        });
+
         results.updated++;
+        this.logger.debug(`Site ${site.name}: health=${breakdown.overall}, components=${breakdown.components.length}`);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         this.logger.error(`Failed to update health for site ${site.id}`, errorMessage);
@@ -608,8 +701,69 @@ export class IntegrationsService {
       }
     }
 
-    this.logger.log(`Sites health sync completed: ${JSON.stringify(results)}`);
+    this.logger.log(`Sites health sync V2 completed: ${JSON.stringify(results)}`);
     return results;
+  }
+
+  /**
+   * Map an Uptime Kuma monitor to a specific asset
+   * Stores monitor name in asset.networkInfo.monitorName
+   */
+  async mapMonitorToAsset(
+    assetId: string,
+    tenantId: string,
+    monitorName: string | null,
+  ) {
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+    });
+
+    if (!asset) {
+      throw new NotFoundException('Asset not found');
+    }
+
+    const networkInfo = (asset.networkInfo as Record<string, any>) || {};
+
+    if (monitorName) {
+      networkInfo.monitorName = monitorName;
+    } else {
+      delete networkInfo.monitorName;
+      delete networkInfo.monitorStatus;
+      delete networkInfo.lastHealthCheck;
+    }
+
+    await this.prisma.asset.update({
+      where: { id: assetId },
+      data: { networkInfo },
+    });
+
+    this.logger.log(
+      monitorName
+        ? `Monitor "${monitorName}" mapped to asset ${assetId}`
+        : `Monitor unmapped from asset ${assetId}`,
+    );
+
+    return { assetId, monitorName, mapped: !!monitorName };
+  }
+
+  /**
+   * Get health breakdown for a site
+   */
+  async getSiteHealthBreakdown(siteId: string, tenantId: string) {
+    const site = await this.prisma.site.findFirst({
+      where: { id: siteId, tenantId },
+    });
+
+    if (!site) {
+      throw new NotFoundException('Site not found');
+    }
+
+    const metadata = site.metadata as Record<string, any>;
+    return metadata?.healthBreakdown || {
+      overall: site.healthStatus,
+      timestamp: site.lastHealthCheck?.toISOString() || new Date().toISOString(),
+      components: [],
+    };
   }
 
   // ==================== NETBOX CONTACTS ====================

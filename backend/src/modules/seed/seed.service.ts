@@ -109,8 +109,11 @@ export class SeedService {
           { name: 'Marie Lefebvre', phone: '+33 6 12 34 56 78', email: 'm.lefebvre@alto.fr', role: 'Chef de site' },
         ],
         connectivity: {
-          primary: { type: 'Fibre optique dédiée', provider: 'Orange Business', ref: 'FTTO-DEF-001' },
-          backup: { type: '4G/5G', provider: 'Bouygues Telecom', ref: '4G-DEF-001' },
+          links: [
+            { id: 'lnk-def-primary', role: 'primary', type: 'Fibre optique dédiée', provider: 'Orange Business', ref: 'FTTO-DEF-001', bandwidth: '1 Gbps / 1 Gbps' },
+            { id: 'lnk-def-backup', role: 'backup', type: '4G/5G', provider: 'Bouygues Telecom', ref: '4G-DEF-001', bandwidth: '300 Mbps' },
+          ],
+          sdwan: { enabled: true, provider: 'Fortinet SD-WAN', firewallIds: [] as string[], notes: 'HA Active/Passive avec 2 FortiGate 100F' },
           cutProcedure: 'Contacter le NOC au 01 XX XX XX XX puis basculer SD-WAN',
         },
         notes: 'Grand site Tour Alto - 8 étages, salle IT au RDC et étage 4. Accès badge NEXITY + escorte zone serveur.',
@@ -129,8 +132,11 @@ export class SeedService {
           { name: 'Thomas Bernard', phone: '+33 1 69 15 00 00', email: 't.bernard@saclay.fr', role: 'DSI Campus', isPrimary: true },
         ],
         connectivity: {
-          primary: { type: 'Fibre optique', provider: 'SFR Business', ref: 'FTTH-SAC-001' },
-          backup: { type: '5G', provider: 'Bouygues Telecom', ref: '5G-SAC-001' },
+          links: [
+            { id: 'lnk-sac-primary', role: 'primary', type: 'Fibre optique', provider: 'SFR Business', ref: 'FTTH-SAC-001', bandwidth: '500 Mbps / 200 Mbps' },
+            { id: 'lnk-sac-backup', role: 'backup', type: '5G', provider: 'Bouygues Telecom', ref: '5G-SAC-001', bandwidth: '200 Mbps' },
+          ],
+          sdwan: { enabled: true, provider: 'Fortinet SD-WAN', firewallIds: [] as string[] },
         },
         notes: 'Campus universitaire - 3 bâtiments interconnectés. WiFi haute densité (amphithéâtres 500 places).',
       },
@@ -149,8 +155,10 @@ export class SeedService {
           { name: 'Julien Petit', phone: '+33 6 98 76 54 32', email: 'j.petit@omega.fr', role: 'Technicien réseau' },
         ],
         connectivity: {
-          primary: { type: 'Fibre optique', provider: 'Bouygues Telecom', ref: 'FTTH-VEL-001' },
-          backup: { type: '4G', provider: 'Convergence', ref: '4G-VEL-001' },
+          links: [
+            { id: 'lnk-vel-primary', role: 'primary', type: 'Fibre optique', provider: 'Bouygues Telecom', ref: 'FTTH-VEL-001', bandwidth: '500 Mbps / 200 Mbps' },
+            { id: 'lnk-vel-backup', role: 'backup', type: '4G', provider: 'Convergence', ref: '4G-VEL-001', bandwidth: '150 Mbps' },
+          ],
         },
         notes: 'Immeuble bureaux 5 étages. Warning: climatisation salle serveur en maintenance depuis 2 semaines.',
       },
@@ -169,8 +177,10 @@ export class SeedService {
           { name: 'François Dubois', phone: '+33 1 46 02 00 00', email: 'f.dubois@residenceparc.fr', role: 'Responsable site', isPrimary: true },
         ],
         connectivity: {
-          primary: { type: 'FTTH', provider: 'Orange', ref: 'FTTH-STC-001' },
-          backup: { type: '4G', provider: 'Bouygues Telecom', ref: '4G-STC-001' },
+          links: [
+            { id: 'lnk-stc-primary', role: 'primary', type: 'FTTH', provider: 'Orange', ref: 'FTTH-STC-001', bandwidth: '1 Gbps / 300 Mbps' },
+            { id: 'lnk-stc-backup', role: 'backup', type: '4G', provider: 'Bouygues Telecom', ref: '4G-STC-001', bandwidth: '100 Mbps' },
+          ],
         },
         notes: 'Résidence en construction - 2 bâtiments. Salle technique au sous-sol bâtiment A.',
       },
@@ -188,8 +198,10 @@ export class SeedService {
           { name: 'Isabelle Roche', phone: '+33 1 60 13 00 00', email: 'i.roche@atlantis.fr', role: 'Directrice technique', isPrimary: true },
         ],
         connectivity: {
-          primary: { type: 'Fibre optique', provider: 'Free Pro', ref: 'FTTH-MAS-001' },
-          backup: { type: '4G', provider: 'Convergence', ref: '4G-MAS-001' },
+          links: [
+            { id: 'lnk-mas-primary', role: 'primary', type: 'Fibre optique', provider: 'Free Pro', ref: 'FTTH-MAS-001', bandwidth: '1 Gbps / 600 Mbps' },
+            { id: 'lnk-mas-backup', role: 'backup', type: '4G', provider: 'Convergence', ref: '4G-MAS-001', bandwidth: '100 Mbps' },
+          ],
         },
         notes: 'Pôle commercial et bureaux - 3 étages. Déploiement phase 2 en cours.',
       },
@@ -208,7 +220,9 @@ export class SeedService {
           { name: 'Élodie Garnier', phone: '+33 6 45 67 89 01', email: 'e.garnier@marcel.fr', role: 'Chef de projet', isPrimary: true },
         ],
         connectivity: {
-          primary: { type: '5G', provider: 'Bouygues Telecom', ref: '5G-BOU-001' },
+          links: [
+            { id: 'lnk-bou-primary', role: 'primary', type: '5G', provider: 'Bouygues Telecom', ref: '5G-BOU-001', bandwidth: '300 Mbps' },
+          ],
         },
         notes: 'Petit showroom temporaire - installation prévue semaine prochaine. Pas de salle serveur, équipement sous bureau.',
       },
@@ -361,11 +375,11 @@ export class SeedService {
       // LA DÉFENSE - GRAND CHANTIER (SD-WAN Fortinet, switches, AP WiFi, imprimantes, Teams Room)
       // =====================================================================
       // SD-WAN / Firewall Fortinet
-      { siteId: defense.id, rackId: defR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 100F', serialNumber: 'FGT100F-DEF-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN principal - HA Active', networkInfo: { ip: '10.1.0.1', hostname: 'FW-DEF-01', vlan: '1' } },
-      { siteId: defense.id, rackId: defR1.id, rackPositionU: 2, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 100F', serialNumber: 'FGT100F-DEF-002', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN secondaire - HA Passive', networkInfo: { ip: '10.1.0.2', hostname: 'FW-DEF-02', vlan: '1' } },
+      { siteId: defense.id, rackId: defR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, name: 'FortiGate Active', manufacturer: 'Fortinet', model: 'FortiGate 100F', serialNumber: 'FGT100F-DEF-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN principal - HA Active', networkInfo: { ip: '10.1.0.1', hostname: 'FW-DEF-01', vlan: '1', adminLinks: [{ label: 'FortiGate Console', url: 'https://10.1.0.1' }] } },
+      { siteId: defense.id, rackId: defR1.id, rackPositionU: 2, rackHeightU: 1, type: AssetType.FIREWALL, name: 'FortiGate Passive', manufacturer: 'Fortinet', model: 'FortiGate 100F', serialNumber: 'FGT100F-DEF-002', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN secondaire - HA Passive', networkInfo: { ip: '10.1.0.2', hostname: 'FW-DEF-02', vlan: '1', adminLinks: [{ label: 'FortiGate Console', url: 'https://10.1.0.2' }] } },
       // Switches Fortinet
-      { siteId: defense.id, rackId: defR1.id, rackPositionU: 5, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-POE', serialNumber: 'FS148E-DEF-001', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur réseau - Stack Master', networkInfo: { ip: '10.1.1.1', hostname: 'SW-DEF-CORE-01', vlan: '1' } },
-      { siteId: defense.id, rackId: defR1.id, rackPositionU: 6, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-POE', serialNumber: 'FS148E-DEF-002', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur réseau - Stack Member', networkInfo: { ip: '10.1.1.2', hostname: 'SW-DEF-CORE-02', vlan: '1' } },
+      { siteId: defense.id, rackId: defR1.id, rackPositionU: 5, rackHeightU: 1, type: AssetType.SWITCH, name: 'Switch Core Master', manufacturer: 'Fortinet', model: 'FortiSwitch 148E-POE', serialNumber: 'FS148E-DEF-001', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur réseau - Stack Master', networkInfo: { ip: '10.1.1.1', hostname: 'SW-DEF-CORE-01', vlan: '1', adminLinks: [{ label: 'Switch Management', url: 'https://10.1.1.1' }] } },
+      { siteId: defense.id, rackId: defR1.id, rackPositionU: 6, rackHeightU: 1, type: AssetType.SWITCH, name: 'Switch Core Member', manufacturer: 'Fortinet', model: 'FortiSwitch 148E-POE', serialNumber: 'FS148E-DEF-002', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur réseau - Stack Member', networkInfo: { ip: '10.1.1.2', hostname: 'SW-DEF-CORE-02', vlan: '1', adminLinks: [{ label: 'Switch Management', url: 'https://10.1.1.2' }] } },
       { siteId: defense.id, rackId: defR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-FPOE', serialNumber: 'FS148E-DEF-003', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 1-2', networkInfo: { ip: '10.1.2.1', hostname: 'SW-DEF-DIST-01' } },
       { siteId: defense.id, rackId: defR2.id, rackPositionU: 2, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-FPOE', serialNumber: 'FS148E-DEF-004', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 3-4', networkInfo: { ip: '10.1.2.2', hostname: 'SW-DEF-DIST-02' } },
       { siteId: defense.id, rackId: defR3.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 124E-POE', serialNumber: 'FS124E-DEF-005', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 5-6', networkInfo: { ip: '10.1.3.1', hostname: 'SW-DEF-DIST-03' } },
@@ -404,7 +418,7 @@ export class SeedService {
       // SACLAY - GRAND CHANTIER
       // =====================================================================
       // SD-WAN Fortinet
-      { siteId: saclay.id, rackId: sacR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 80F', serialNumber: 'FGT80F-SAC-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN campus', networkInfo: { ip: '10.2.0.1', hostname: 'FW-SAC-01' } },
+      { siteId: saclay.id, rackId: sacR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, name: 'FortiGate Campus', manufacturer: 'Fortinet', model: 'FortiGate 80F', serialNumber: 'FGT80F-SAC-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN campus', networkInfo: { ip: '10.2.0.1', hostname: 'FW-SAC-01', adminLinks: [{ label: 'FortiGate Console', url: 'https://10.2.0.1' }] } },
       // Switches Fortinet
       { siteId: saclay.id, rackId: sacR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-POE', serialNumber: 'FS148E-SAC-001', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur campus', networkInfo: { ip: '10.2.1.1', hostname: 'SW-SAC-CORE-01' } },
       { siteId: saclay.id, rackId: sacR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-FPOE', serialNumber: 'FS148E-SAC-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution bâtiment B' },
@@ -431,7 +445,7 @@ export class SeedService {
       // VÉLIZY - GRAND CHANTIER
       // =====================================================================
       // SD-WAN Fortinet
-      { siteId: velizy.id, rackId: velR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 80F', serialNumber: 'FGT80F-VEL-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN principal', networkInfo: { ip: '10.3.0.1', hostname: 'FW-VEL-01' } },
+      { siteId: velizy.id, rackId: velR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, name: 'FortiGate Omega', manufacturer: 'Fortinet', model: 'FortiGate 80F', serialNumber: 'FGT80F-VEL-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN principal', networkInfo: { ip: '10.3.0.1', hostname: 'FW-VEL-01', adminLinks: [{ label: 'FortiGate Console', url: 'https://10.3.0.1' }] } },
       // Switches Fortinet
       { siteId: velizy.id, rackId: velR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 148E-POE', serialNumber: 'FS148E-VEL-001', status: AssetStatus.IN_SERVICE, notes: 'Switch cœur', networkInfo: { ip: '10.3.1.1', hostname: 'SW-VEL-CORE-01' } },
       { siteId: velizy.id, rackId: velR1.id, rackPositionU: 4, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 124E-POE', serialNumber: 'FS124E-VEL-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution étages 1-3' },
@@ -453,7 +467,7 @@ export class SeedService {
       // SAINT-CLOUD - MOYEN CHANTIER
       // =====================================================================
       // SD-WAN
-      { siteId: stcloud.id, rackId: stcR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 60F', serialNumber: 'FGT60F-STC-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN', networkInfo: { ip: '10.4.0.1', hostname: 'FW-STC-01' } },
+      { siteId: stcloud.id, rackId: stcR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, name: 'FortiGate Parc', manufacturer: 'Fortinet', model: 'FortiGate 60F', serialNumber: 'FGT60F-STC-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN', networkInfo: { ip: '10.4.0.1', hostname: 'FW-STC-01', adminLinks: [{ label: 'FortiGate Console', url: 'https://10.4.0.1' }] } },
       // Switches Fortinet
       { siteId: stcloud.id, rackId: stcR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 124E-POE', serialNumber: 'FS124E-STC-001', status: AssetStatus.IN_SERVICE, notes: 'Switch principal' },
       { siteId: stcloud.id, rackId: stcR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 108E-POE', serialNumber: 'FS108E-STC-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution' },
@@ -472,7 +486,7 @@ export class SeedService {
       // MASSY - MOYEN CHANTIER
       // =====================================================================
       // SD-WAN
-      { siteId: massy.id, rackId: masR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, manufacturer: 'Fortinet', model: 'FortiGate 60F', serialNumber: 'FGT60F-MAS-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN', networkInfo: { ip: '10.5.0.1', hostname: 'FW-MAS-01' } },
+      { siteId: massy.id, rackId: masR1.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.FIREWALL, name: 'FortiGate Atlantis', manufacturer: 'Fortinet', model: 'FortiGate 60F', serialNumber: 'FGT60F-MAS-001', status: AssetStatus.IN_SERVICE, notes: 'SD-WAN', networkInfo: { ip: '10.5.0.1', hostname: 'FW-MAS-01', adminLinks: [{ label: 'FortiGate Console', url: 'https://10.5.0.1' }] } },
       // Switches Fortinet
       { siteId: massy.id, rackId: masR1.id, rackPositionU: 3, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 124E-POE', serialNumber: 'FS124E-MAS-001', status: AssetStatus.IN_SERVICE, notes: 'Switch principal' },
       { siteId: massy.id, rackId: masR2.id, rackPositionU: 1, rackHeightU: 1, type: AssetType.SWITCH, manufacturer: 'Fortinet', model: 'FortiSwitch 108E-POE', serialNumber: 'FS108E-MAS-002', status: AssetStatus.IN_SERVICE, notes: 'Switch distribution WiFi' },
@@ -503,6 +517,31 @@ export class SeedService {
         },
       });
       assets.push(asset);
+    }
+
+    // Link firewall IDs to SD-WAN config + assetIds to links
+    const fwDef1 = assets.find(a => a.serialNumber === 'FGT100F-DEF-001');
+    const fwDef2 = assets.find(a => a.serialNumber === 'FGT100F-DEF-002');
+    const fwSac = assets.find(a => a.serialNumber === 'FGT80F-SAC-001');
+
+    if (defense && fwDef1 && fwDef2) {
+      const conn = defense.connectivity as any;
+      conn.sdwan.firewallIds = [fwDef1.id, fwDef2.id];
+      // Link primary lien to FortiGate Active (link → firewall for visual association)
+      if (conn.links?.[0]) conn.links[0].assetId = fwDef1.id;
+      await this.prisma.site.update({
+        where: { id: defense.id },
+        data: { connectivity: conn },
+      });
+    }
+    if (saclay && fwSac) {
+      const conn = saclay.connectivity as any;
+      conn.sdwan.firewallIds = [fwSac.id];
+      if (conn.links?.[0]) conn.links[0].assetId = fwSac.id;
+      await this.prisma.site.update({
+        where: { id: saclay.id },
+        data: { connectivity: conn },
+      });
     }
 
     return assets;

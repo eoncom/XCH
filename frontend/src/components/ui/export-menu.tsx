@@ -9,9 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Download, FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, FileJson, Loader2 } from 'lucide-react';
 
-type ExportFormat = 'excel' | 'pdf' | 'csv';
+type ExportFormat = 'excel' | 'pdf' | 'csv' | 'json';
 
 interface ExportMenuProps {
   onExport: (format: ExportFormat) => void | Promise<void>;
@@ -45,6 +45,7 @@ export function ExportMenu({
     excel: <FileSpreadsheet className="h-4 w-4" />,
     pdf: <FileText className="h-4 w-4" />,
     csv: <FileSpreadsheet className="h-4 w-4" />,
+    json: <FileJson className="h-4 w-4" />,
   };
 
   return (
@@ -70,6 +71,12 @@ export function ExportMenu({
             <div className="flex items-center">
               <FileSpreadsheet className="mr-2 h-4 w-4 text-blue-600" />
               CSV
+            </div>
+          </SelectItem>
+          <SelectItem value="json">
+            <div className="flex items-center">
+              <FileJson className="mr-2 h-4 w-4 text-amber-600" />
+              JSON
             </div>
           </SelectItem>
         </SelectContent>
@@ -128,12 +135,14 @@ export function ExportButton({
     excel: 'Excel',
     pdf: 'PDF',
     csv: 'CSV',
+    json: 'JSON',
   };
 
   const formatIcons: Record<ExportFormat, React.ReactNode> = {
     excel: <FileSpreadsheet className="mr-2 h-4 w-4" />,
     pdf: <FileText className="mr-2 h-4 w-4" />,
     csv: <FileSpreadsheet className="mr-2 h-4 w-4" />,
+    json: <FileJson className="mr-2 h-4 w-4" />,
   };
 
   return (

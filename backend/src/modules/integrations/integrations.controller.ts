@@ -182,8 +182,34 @@ export class IntegrationsController {
   @Post('uptime-kuma/sync/health-all')
   @Resource('integrations')
   @Action('update')
-  @ApiOperation({ summary: 'Sync all sites health from Uptime Kuma' })
+  @ApiOperation({ summary: 'Sync all sites health from Uptime Kuma (V2 intelligent aggregation)' })
   syncAllSitesHealth(@Request() req: AuthRequest) {
     return this.integrationsService.syncAllSitesHealth(req.user.tenantId);
+  }
+
+  @Patch('uptime-kuma/map-monitor-to-asset')
+  @Resource('integrations')
+  @Action('update')
+  @ApiOperation({ summary: 'Map an Uptime Kuma monitor to an asset' })
+  mapMonitorToAsset(
+    @Request() req: AuthRequest,
+    @Body() body: { assetId: string; monitorName: string | null },
+  ) {
+    return this.integrationsService.mapMonitorToAsset(
+      body.assetId,
+      req.user.tenantId,
+      body.monitorName,
+    );
+  }
+
+  @Get('sites/:siteId/health-breakdown')
+  @Resource('integrations')
+  @Action('read')
+  @ApiOperation({ summary: 'Get health breakdown details for a site' })
+  getSiteHealthBreakdown(
+    @Param('siteId') siteId: string,
+    @Request() req: AuthRequest,
+  ) {
+    return this.integrationsService.getSiteHealthBreakdown(siteId, req.user.tenantId);
   }
 }

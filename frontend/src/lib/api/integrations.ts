@@ -142,6 +142,29 @@ export const integrationsApi = {
       apiClient.get<Record<string, { siteId: string; siteName: string }>>(
         '/api/integrations/uptime-kuma/monitor-mappings'
       ),
+
+    mapMonitorToAsset: (assetId: string, monitorName: string | null) =>
+      apiClient.patch<{ assetId: string; monitorName: string | null; mapped: boolean }>(
+        '/api/integrations/uptime-kuma/map-monitor-to-asset',
+        { assetId, monitorName }
+      ),
+  },
+
+  // Health
+  health: {
+    getSiteBreakdown: (siteId: string) =>
+      apiClient.get<{
+        overall: string;
+        timestamp: string;
+        components: Array<{
+          type: 'link' | 'sdwan' | 'asset';
+          id: string;
+          name: string;
+          status: 'up' | 'down' | 'unknown';
+          role?: string;
+          impact: 'critical' | 'warning' | 'none';
+        }>;
+      }>(`/api/integrations/sites/${siteId}/health-breakdown`),
   },
 
   // Integration Mapping

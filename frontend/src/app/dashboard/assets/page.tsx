@@ -113,16 +113,30 @@ export default function AssetsPage() {
   });
 
   // Handle export
-  const handleExport = (format: 'excel' | 'pdf' | 'csv') => {
+  const handleExport = (format: 'excel' | 'pdf' | 'csv' | 'json') => {
     if (!filteredAssets) return;
+
+    const formatWarranty = (warrantyEnd?: string) => {
+      if (!warrantyEnd) return '';
+      const end = new Date(warrantyEnd);
+      if (end < new Date()) return `Expirée (${end.toLocaleDateString('fr-FR')})`;
+      return `Valide → ${end.toLocaleDateString('fr-FR')}`;
+    };
 
     const exportData = filteredAssets.map((asset) => ({
       type: assetTypeLabels[asset.type],
+      name: asset.name || '',
       brand: asset.manufacturer || '',
       model: asset.model || '',
       serialNumber: asset.serialNumber || '',
       status: assetStatusLabels[asset.status],
       siteName: asset.site?.name || '',
+      ip: (asset.networkInfo as any)?.ip || '',
+      hostname: (asset.networkInfo as any)?.hostname || '',
+      warranty: formatWarranty(asset.warrantyEnd),
+      inventoryTag: asset.inventoryTag || '',
+      purchaseDate: asset.purchaseDate ? new Date(asset.purchaseDate).toLocaleDateString('fr-FR') : '',
+      rack: asset.rack?.name || '',
     }));
 
     exportAssets(exportData, format);

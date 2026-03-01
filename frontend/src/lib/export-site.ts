@@ -414,13 +414,21 @@ function generateSiteReportPdf(
 function generateAssetsExcel(assets: Asset[], racks: Rack[]): ArrayBuffer {
   const rackMap = Object.fromEntries(racks.map((r) => [r.id, r.name]));
 
+  const formatWarranty = (warrantyEnd?: string) => {
+    if (!warrantyEnd) return '';
+    const end = new Date(warrantyEnd);
+    if (end < new Date()) return `Expirée (${end.toLocaleDateString('fr-FR')})`;
+    return `Valide → ${end.toLocaleDateString('fr-FR')}`;
+  };
+
   const wsData: any[][] = [
-    ['Inventaire \Équipements', '', '', '', '', '', '', '', ''],
+    ['Inventaire Équipements', '', '', '', '', '', '', '', '', '', '', '', '', ''],
     [],
-    ['Type', 'Nom', 'Fabricant', 'Mod\èle', 'N\° S\érie', 'Statut', 'Baie', 'Position U', 'Notes'],
+    ['Type', 'Nom', 'Fabricant', 'Modèle', 'N° Série', 'Statut', 'IP', 'Hostname', 'MAC', 'Tag inv.', 'Garantie', 'Date achat', 'Baie', 'Notes'],
   ];
 
   for (const a of assets) {
+    const net = a.networkInfo as any;
     wsData.push([
       a.type,
       a.name || '',
@@ -428,20 +436,27 @@ function generateAssetsExcel(assets: Asset[], racks: Rack[]): ArrayBuffer {
       a.model || '',
       a.serialNumber || '',
       a.status,
+      net?.ip || '',
+      net?.hostname || '',
+      net?.mac || '',
+      a.inventoryTag || '',
+      formatWarranty(a.warrantyEnd),
+      a.purchaseDate ? new Date(a.purchaseDate).toLocaleDateString('fr-FR') : '',
       a.rackId ? rackMap[a.rackId] || '' : '',
-      a.rackPositionU ? `U${a.rackPositionU}` : '',
-      '', // notes
+      a.notes || '',
     ]);
   }
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
   ws['!cols'] = [
-    { wch: 15 }, { wch: 25 }, { wch: 18 }, { wch: 20 },
-    { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 30 },
+    { wch: 14 }, { wch: 22 }, { wch: 15 }, { wch: 20 },
+    { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 16 },
+    { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 12 },
+    { wch: 12 }, { wch: 30 },
   ];
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '\Équipements');
+  XLSX.utils.book_append_sheet(wb, ws, 'Équipements');
 
   return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 }

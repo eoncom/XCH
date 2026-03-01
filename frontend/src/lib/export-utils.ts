@@ -1,7 +1,7 @@
 /**
  * XCH - Export Utilities
  *
- * Fonctions pour exporter les données en PDF et Excel
+ * Fonctions pour exporter les données en PDF, Excel, CSV et JSON
  */
 
 import { jsPDF } from 'jspdf';
@@ -16,7 +16,7 @@ interface ExportColumn {
   width?: number;
 }
 
-interface ExportOptions {
+export interface ExportOptions {
   filename: string;
   title?: string;
   subtitle?: string;
@@ -29,53 +29,73 @@ interface SiteExportData {
   code: string;
   status: string;
   address: string;
+  city?: string;
+  postalCode?: string;
   healthStatus: string;
   assetsCount?: number;
   tasksCount?: number;
+  connectivity?: string;
 }
 
 interface AssetExportData {
   type: string;
+  name?: string;
   brand: string;
   model: string;
   serialNumber: string;
   status: string;
   siteName?: string;
+  ip?: string;
+  hostname?: string;
+  warranty?: string;
+  inventoryTag?: string;
+  purchaseDate?: string;
+  rack?: string;
 }
 
 // ==================== PDF EXPORT ====================
 
 /**
  * Export data to PDF with table format
+ * Uses landscape for many columns, portrait otherwise
+ * Reduced margins for maximum content area
  */
 export function exportToPDF(options: ExportOptions): void {
   const { filename, title, subtitle, columns, data } = options;
 
+  // Auto-detect orientation: landscape if >7 columns
+  const orientation = columns.length > 7 ? 'landscape' : 'portrait';
+  const margin = 10; // Reduced margins for more space
+
   // Create PDF document
   const doc = new jsPDF({
-    orientation: 'landscape',
+    orientation,
     unit: 'mm',
     format: 'a4',
   });
 
   // Add title
   if (title) {
-    doc.setFontSize(20);
+    doc.setFontSize(16);
     doc.setTextColor(59, 130, 246); // Primary blue
-    doc.text(title, 14, 20);
+    doc.text(title, margin, 15);
   }
 
-  // Add subtitle
+  // Add subtitle + date on same line
+  const subtitleY = title ? 22 : 10;
   if (subtitle) {
-    doc.setFontSize(12);
+    doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
-    doc.text(subtitle, 14, 28);
+    doc.text(subtitle, margin, subtitleY);
   }
-
-  // Add date
-  doc.setFontSize(10);
+  doc.setFontSize(8);
   doc.setTextColor(150, 150, 150);
-  doc.text(`Exporté le ${new Date().toLocaleDateString('fr-FR')}`, 14, title ? 35 : 15);
+  doc.text(
+    `Export ${new Date().toLocaleDateString('fr-FR')}`,
+    doc.internal.pageSize.width - margin,
+    subtitleY,
+    { align: 'right' }
+  );
 
   // Prepare table data
   const tableHeaders = columns.map((col) => col.header);
@@ -86,42 +106,43 @@ export function exportToPDF(options: ExportOptions): void {
     })
   );
 
-  // Add table
+  // Adaptive font size based on column count
+  const fontSize = columns.length > 8 ? 7 : columns.length > 6 ? 8 : 9;
+
+  // Add table — fills the width
   autoTable(doc, {
     head: [tableHeaders],
     body: tableData,
-    startY: title ? 40 : 20,
+    startY: title ? 27 : 15,
+    margin: { left: margin, right: margin },
+    tableWidth: 'auto',
     theme: 'striped',
     headStyles: {
-      fillColor: [59, 130, 246], // Primary blue
+      fillColor: [59, 130, 246],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
+      fontSize: fontSize,
     },
     alternateRowStyles: {
       fillColor: [245, 247, 250],
     },
     styles: {
-      fontSize: 9,
-      cellPadding: 3,
+      fontSize: fontSize,
+      cellPadding: 2,
+      overflow: 'linebreak',
     },
-    columnStyles: columns.reduce((acc, col, index) => {
-      if (col.width) {
-        acc[index] = { cellWidth: col.width };
-      }
-      return acc;
-    }, {} as Record<number, { cellWidth: number }>),
   });
 
-  // Add footer
+  // Add footer on all pages
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
     doc.text(
       `XCH - Gestion IT Sites | Page ${i}/${pageCount}`,
       doc.internal.pageSize.width / 2,
-      doc.internal.pageSize.height - 10,
+      doc.internal.pageSize.height - 7,
       { align: 'center' }
     );
   }
@@ -210,24 +231,46 @@ export function exportToCSV(options: ExportOptions): void {
   saveAs(blob, `${filename}.csv`);
 }
 
+// ==================== JSON EXPORT ====================
+
+/**
+ * Export data to JSON
+ */
+export function exportToJSON(options: ExportOptions): void {
+  const { filename, title, data } = options;
+
+  const jsonData = {
+    title: title || filename,
+    exportedAt: new Date().toISOString(),
+    count: data.length,
+    data,
+  };
+
+  const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+  saveAs(blob, `${filename}.json`);
+}
+
 // ==================== SPECIFIC EXPORTS ====================
 
 /**
  * Export sites list
  */
-export function exportSites(sites: SiteExportData[], format: 'pdf' | 'excel' | 'csv' = 'excel'): void {
+export function exportSites(sites: SiteExportData[], format: 'pdf' | 'excel' | 'csv' | 'json' = 'excel'): void {
   const options: ExportOptions = {
     filename: `xch-sites-${new Date().toISOString().split('T')[0]}`,
     title: 'Liste des Sites',
     subtitle: `${sites.length} site(s)`,
     columns: [
-      { header: 'Nom', key: 'name', width: 30 },
-      { header: 'Code', key: 'code', width: 15 },
+      { header: 'Nom', key: 'name', width: 25 },
+      { header: 'Code', key: 'code', width: 10 },
       { header: 'Statut', key: 'status', width: 12 },
-      { header: 'Adresse', key: 'address', width: 40 },
-      { header: 'Santé', key: 'healthStatus', width: 12 },
-      { header: 'Équipements', key: 'assetsCount', width: 12 },
-      { header: 'Tâches', key: 'tasksCount', width: 10 },
+      { header: 'Ville', key: 'city', width: 15 },
+      { header: 'CP', key: 'postalCode', width: 8 },
+      { header: 'Adresse', key: 'address', width: 30 },
+      { header: 'Santé', key: 'healthStatus', width: 10 },
+      { header: 'Équip.', key: 'assetsCount', width: 8 },
+      { header: 'Tâches', key: 'tasksCount', width: 8 },
+      { header: 'Connectivité', key: 'connectivity', width: 25 },
     ],
     data: sites,
   };
@@ -239,6 +282,9 @@ export function exportSites(sites: SiteExportData[], format: 'pdf' | 'excel' | '
     case 'csv':
       exportToCSV(options);
       break;
+    case 'json':
+      exportToJSON(options);
+      break;
     case 'excel':
     default:
       exportToExcel(options);
@@ -247,20 +293,26 @@ export function exportSites(sites: SiteExportData[], format: 'pdf' | 'excel' | '
 }
 
 /**
- * Export assets list
+ * Export assets list (enriched with IP, warranty, hostname, etc.)
  */
-export function exportAssets(assets: AssetExportData[], format: 'pdf' | 'excel' | 'csv' = 'excel'): void {
+export function exportAssets(assets: AssetExportData[], format: 'pdf' | 'excel' | 'csv' | 'json' = 'excel'): void {
   const options: ExportOptions = {
     filename: `xch-assets-${new Date().toISOString().split('T')[0]}`,
     title: 'Liste des Équipements',
     subtitle: `${assets.length} équipement(s)`,
     columns: [
-      { header: 'Type', key: 'type', width: 15 },
-      { header: 'Marque', key: 'brand', width: 15 },
-      { header: 'Modèle', key: 'model', width: 25 },
-      { header: 'N° Série', key: 'serialNumber', width: 20 },
+      { header: 'Type', key: 'type', width: 12 },
+      { header: 'Nom', key: 'name', width: 18 },
+      { header: 'Marque', key: 'brand', width: 12 },
+      { header: 'Modèle', key: 'model', width: 18 },
+      { header: 'N° Série', key: 'serialNumber', width: 18 },
       { header: 'Statut', key: 'status', width: 12 },
-      { header: 'Site', key: 'siteName', width: 25 },
+      { header: 'Site', key: 'siteName', width: 18 },
+      { header: 'IP', key: 'ip', width: 14 },
+      { header: 'Hostname', key: 'hostname', width: 16 },
+      { header: 'Garantie', key: 'warranty', width: 14 },
+      { header: 'Tag inv.', key: 'inventoryTag', width: 12 },
+      { header: 'Baie', key: 'rack', width: 10 },
     ],
     data: assets,
   };
@@ -271,6 +323,9 @@ export function exportAssets(assets: AssetExportData[], format: 'pdf' | 'excel' 
       break;
     case 'csv':
       exportToCSV(options);
+      break;
+    case 'json':
+      exportToJSON(options);
       break;
     case 'excel':
     default:
@@ -334,18 +389,23 @@ export function exportSiteReport(
 
     autoTable(doc, {
       startY: y,
-      head: [['Type', 'Marque', 'Modèle', 'N° Série', 'Statut']],
-      body: assets.map((a) => [a.type, a.brand || '-', a.model || '-', a.serialNumber || '-', a.status]),
+      head: [['Type', 'Nom', 'Marque', 'Modèle', 'N° Série', 'Statut']],
+      body: assets.map((a) => [a.type, a.name || '-', a.brand || '-', a.model || '-', a.serialNumber || '-', a.status]),
       theme: 'striped',
       headStyles: { fillColor: [59, 130, 246] },
-      styles: { fontSize: 9 },
+      styles: { fontSize: 8 },
+      margin: { left: 10, right: 10 },
     });
 
     y = (doc as any).lastAutoTable.finalY + 15;
   }
 
   // Tasks table
-  if (tasks.length > 0 && y < 250) {
+  if (tasks.length > 0) {
+    if (y > 250) {
+      doc.addPage();
+      y = 20;
+    }
     doc.setFontSize(14);
     doc.setTextColor(30, 41, 59);
     doc.text(`Tâches (${tasks.length})`, 14, y);
@@ -358,18 +418,23 @@ export function exportSiteReport(
       theme: 'striped',
       headStyles: { fillColor: [34, 197, 94] },
       styles: { fontSize: 9 },
+      margin: { left: 10, right: 10 },
     });
   }
 
-  // Footer
-  doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
-  doc.text(
-    `Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`,
-    doc.internal.pageSize.width / 2,
-    doc.internal.pageSize.height - 10,
-    { align: 'center' }
-  );
+  // Footer on all pages
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(150, 150, 150);
+    doc.text(
+      `XCH | Page ${i}/${pageCount} | ${new Date().toLocaleDateString('fr-FR')}`,
+      doc.internal.pageSize.width / 2,
+      doc.internal.pageSize.height - 7,
+      { align: 'center' }
+    );
+  }
 
   // Save
   doc.save(`rapport-${site.code}-${new Date().toISOString().split('T')[0]}.pdf`);
@@ -415,10 +480,10 @@ export function exportRackDiagram(
   const usedUnits = assets.reduce((sum, a) => sum + a.height, 0);
   const occupancy = Math.round((usedUnits / totalUnits) * 100);
 
-  const y = (doc as any).lastAutoTable.finalY + 15;
+  const yFinal = (doc as any).lastAutoTable.finalY + 15;
   doc.setFontSize(12);
   doc.setTextColor(30, 41, 59);
-  doc.text(`Occupation: ${usedUnits}U / ${totalUnits}U (${occupancy}%)`, 14, y);
+  doc.text(`Occupation: ${usedUnits}U / ${totalUnits}U (${occupancy}%)`, 14, yFinal);
 
   // Footer
   doc.setFontSize(8);

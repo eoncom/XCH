@@ -55,7 +55,53 @@ export interface SiteContact {
   category?: 'INTERNAL' | 'PROVIDER' | 'PARTNER' | 'TECHNICAL' | 'EMERGENCY';
 }
 
+// V2 connectivity link
+export interface ConnectivityLink {
+  id: string;
+  role: 'primary' | 'backup';
+  type?: string;
+  provider?: string;
+  ref?: string;
+  bandwidth?: string;
+  assetId?: string;
+  monitorName?: string;
+  status?: 'up' | 'down' | 'unknown';
+}
+
+// V2 SD-WAN configuration
+export interface SdwanConfig {
+  enabled: boolean;
+  provider?: string;
+  firewallIds: string[];
+  monitorName?: string;
+  status?: 'up' | 'down' | 'unknown';
+  notes?: string;
+}
+
+// Health breakdown component
+export interface HealthComponent {
+  type: 'link' | 'sdwan' | 'asset';
+  id: string;
+  name: string;
+  status: 'up' | 'down' | 'unknown';
+  role?: string;
+  impact: 'critical' | 'warning' | 'none';
+}
+
+export interface HealthBreakdown {
+  overall: HealthStatus;
+  timestamp: string;
+  components: HealthComponent[];
+}
+
+// V2 site connectivity (links array + SD-WAN)
 export interface SiteConnectivity {
+  // V2 fields
+  links?: ConnectivityLink[];
+  sdwan?: SdwanConfig;
+  cutProcedure?: string;
+
+  // V1 legacy fields (backward compat, read-only)
   primary?: {
     type?: string;
     provider?: string;
@@ -66,7 +112,6 @@ export interface SiteConnectivity {
     provider?: string;
     ref?: string;
   };
-  cutProcedure?: string;
   monitoring?: {
     source?: string;
     monitor?: string;
@@ -74,6 +119,12 @@ export interface SiteConnectivity {
     uptime?: number;
     responseTime?: number;
   };
+}
+
+// Admin link for equipment
+export interface AdminLink {
+  label: string;
+  url: string;
 }
 
 export interface SiteAccessNotes {
@@ -158,6 +209,10 @@ export interface Asset {
     hostname?: string;
     vlan?: string;
     port?: string;
+    monitorName?: string;
+    monitorStatus?: 'up' | 'down' | 'unknown';
+    lastHealthCheck?: string;
+    adminLinks?: AdminLink[];
   };
   purchaseDate?: string;
   warrantyEnd?: string;

@@ -539,6 +539,70 @@ export default function AssetDetailPage({
             );
           })()}
 
+          {/* Monitoring Status — conditional */}
+          {(() => {
+            const net = asset.networkInfo as any;
+            if (!net?.monitorName) return null;
+            const statusColor = net.monitorStatus === 'up' ? 'bg-green-500' : net.monitorStatus === 'down' ? 'bg-red-500' : 'bg-gray-400';
+            const statusLabel = net.monitorStatus === 'up' ? 'En ligne' : net.monitorStatus === 'down' ? 'Hors service' : 'Inconnu';
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ShieldAlert className="h-5 w-5" />
+                    Monitoring
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-block w-3 h-3 rounded-full ${statusColor}`} />
+                    <div>
+                      <p className="font-medium">{statusLabel}</p>
+                      <p className="text-sm text-muted-foreground">Sonde : {net.monitorName}</p>
+                    </div>
+                  </div>
+                  {net.lastHealthCheck && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Dernière vérification : {new Date(net.lastHealthCheck).toLocaleString('fr-FR')}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Admin Links — conditional */}
+          {(() => {
+            const net = asset.networkInfo as any;
+            if (!net?.adminLinks || net.adminLinks.length === 0) return null;
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ExternalLink className="h-5 w-5" />
+                    Liens d&apos;administration
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {net.adminLinks.map((link: { label: string; url: string }, idx: number) => (
+                      <a
+                        key={idx}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border hover:bg-muted/50 transition-colors text-sm"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {link.label}
+                      </a>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {/* Notes */}
           <InlineEditCard
             title="Notes"
