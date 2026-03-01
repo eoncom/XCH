@@ -672,9 +672,15 @@ export class IntegrationsService {
         }
 
         // 5. Calculate intelligent health
+        const assetsForHealth = site.assets.map((a) => ({
+          id: a.id,
+          name: a.name ?? undefined,
+          type: a.type as string,
+          networkInfo: a.networkInfo as any,
+        }));
         const breakdown = this.healthAggregation.calculateSiteHealth(
           updatedConnectivity,
-          site.assets,
+          assetsForHealth,
           monitorStatusMap,
         );
 
