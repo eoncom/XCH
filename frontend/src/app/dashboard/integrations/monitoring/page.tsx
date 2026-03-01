@@ -33,11 +33,13 @@ import {
   MapPin,
   Link2,
   Link2Off,
+  Package,
 } from 'lucide-react';
 import { integrationsApi } from '@/lib/api/integrations';
 import { sitesApi } from '@/lib/api/sites';
+import { assetsApi } from '@/lib/api/assets';
 import { showToast } from '@/lib/toast';
-import type { Site } from '@/types';
+import type { Site, Asset } from '@/types';
 
 interface Monitor {
   id: number;
@@ -107,6 +109,12 @@ export default function MonitoringPage() {
     },
   });
 
+  // Fetch all assets for equipment mapping dropdown
+  const { data: assets = [] } = useQuery<Asset[]>({
+    queryKey: ['assets'],
+    queryFn: () => assetsApi.getAll({}),
+  });
+
   const mapMonitorMutation = useMutation({
     mutationFn: ({ siteId, monitorName }: { siteId: string; monitorName: string | null }) =>
       integrationsApi.uptimeKuma.mapMonitorToSite(siteId, monitorName),
@@ -121,6 +129,22 @@ export default function MonitoringPage() {
     },
     onError: () => {
       showToast.error('Erreur lors de l\'association');
+    },
+  });
+
+  const mapAssetMutation = useMutation({
+    mutationFn: ({ assetId, monitorName }: { assetId: string; monitorName: string | null }) =>
+      integrationsApi.uptimeKuma.mapMonitorToAsset(assetId, monitorName),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      if (variables.monitorName) {
+        showToast.success('Moniteur associé à l\'équipement');
+      } else {
+        showToast.success('Association équipement supprimée');
+      }
+    },
+    onError: () => {
+      showToast.error('Erreur lors de l\'association équipement');
     },
   });
 
@@ -146,7 +170,7 @@ export default function MonitoringPage() {
     return monitorMappings[monitorName]?.siteId;
   };
 
-  // Helper: handle mapping change
+  // Helper: handle site mapping change
   const handleMapChange = (monitorName: string, siteId: string) => {
     if (siteId === '__none__') {
       // Find the current mapping's siteId to unmap
@@ -156,6 +180,30 @@ export default function MonitoringPage() {
       }
     } else {
       mapMonitorMutation.mutate({ siteId, monitorName });
+    }
+  };
+
+  // Helper: build reverse mapping monitorName -> asset
+  const assetMappings: Record<string, { assetId: string; assetName: string }> = {};
+  assets.forEach((asset) => {
+    const monitorName = (asset.networkInfo as any)?.monitorName;
+    if (monitorName) {
+      assetMappings[monitorName] = {
+        assetId: asset.id,
+        assetName: asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || asset.serialNumber || 'Équipement',
+      };
+    }
+  });
+
+  // Helper: handle asset mapping change
+  const handleAssetMapChange = (monitorName: string, assetId: string) => {
+    if (assetId === '__none__') {
+      const currentAssetId = assetMappings[monitorName]?.assetId;
+      if (currentAssetId) {
+        mapAssetMutation.mutate({ assetId: currentAssetId, monitorName: null });
+      }
+    } else {
+      mapAssetMutation.mutate({ assetId, monitorName });
     }
   };
 
@@ -351,15 +399,19 @@ export default function MonitoringPage() {
               <CardContent className="p-0">
                 <div className="border-t">
                   {/* Table header */}
-                  <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
+                  <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
                     <span className="col-span-1">Statut</span>
-                    <span className="col-span-3">Nom</span>
+                    <span className="col-span-2">Nom</span>
                     <span className="col-span-1">Type</span>
                     <span className="col-span-1">Latence</span>
-                    <span className="col-span-2">Certificat SSL</span>
-                    <span className="col-span-4 flex items-center gap-1">
+                    <span className="col-span-1">Cert. SSL</span>
+                    <span className="col-span-3 flex items-center gap-1">
                       <MapPin className="h-3 w-3" />
                       Site associé
+                    </span>
+                    <span className="col-span-3 flex items-center gap-1">
+                      <Package className="h-3 w-3" />
+                      Équipement
                     </span>
                   </div>
 
@@ -376,10 +428,16 @@ export default function MonitoringPage() {
                       const certWarning = monitor.certExpiry !== undefined && monitor.certExpiry < 30 && !certDanger;
                       const mappedSiteId = getMappedSiteId(monitor.name);
 
+                      const mappedAsset = assetMappings[monitor.name];
+                      // Filter assets by mapped site if available
+                      const filteredAssets = mappedSiteId
+                        ? assets.filter(a => a.siteId === mappedSiteId)
+                        : assets;
+
                       return (
                         <div
                           key={monitor.id}
-                          className={`grid grid-cols-12 gap-4 px-4 py-3 border-b last:border-b-0 items-center text-sm hover:bg-muted/30 transition-colors ${
+                          className={`grid grid-cols-12 gap-2 px-4 py-3 border-b last:border-b-0 items-center text-sm hover:bg-muted/30 transition-colors ${
                             monitor.status === 'down' ? 'bg-red-50/50 dark:bg-red-950/10' : ''
                           }`}
                         >
@@ -392,7 +450,7 @@ export default function MonitoringPage() {
                               {config.label}
                             </Badge>
                           </div>
-                          <div className="col-span-3">
+                          <div className="col-span-2">
                             <p className="font-medium truncate">{monitor.name}</p>
                           </div>
                           <div className="col-span-1">
@@ -407,7 +465,7 @@ export default function MonitoringPage() {
                               {monitor.responseTime > 0 ? `${monitor.responseTime}ms` : '—'}
                             </span>
                           </div>
-                          <div className="col-span-2">
+                          <div className="col-span-1">
                             {monitor.certExpiry !== undefined ? (
                               <span className={`text-sm ${
                                 certDanger ? 'text-red-600 font-medium' :
@@ -421,7 +479,7 @@ export default function MonitoringPage() {
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </div>
-                          <div className="col-span-4">
+                          <div className="col-span-3">
                             <Select
                               value={mappedSiteId || '__none__'}
                               onValueChange={(value) => handleMapChange(monitor.name, value)}
@@ -444,6 +502,35 @@ export default function MonitoringPage() {
                                       <span className="flex items-center gap-1.5">
                                         <MapPin className="h-3 w-3 text-indigo-500" />
                                         {site.name}
+                                      </span>
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="col-span-3">
+                            <Select
+                              value={mappedAsset?.assetId || '__none__'}
+                              onValueChange={(value) => handleAssetMapChange(monitor.name, value)}
+                              disabled={mapAssetMutation.isPending}
+                            >
+                              <SelectTrigger className={`h-8 text-xs ${mappedAsset ? 'border-emerald-300 dark:border-emerald-700' : ''}`}>
+                                <SelectValue placeholder="— Aucun —" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">
+                                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                                    <Link2Off className="h-3 w-3" />
+                                    Aucun équipement
+                                  </span>
+                                </SelectItem>
+                                {filteredAssets
+                                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                                  .map((asset) => (
+                                    <SelectItem key={asset.id} value={asset.id}>
+                                      <span className="flex items-center gap-1.5">
+                                        <Package className="h-3 w-3 text-emerald-500" />
+                                        {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || asset.serialNumber || 'Équipement'}
                                       </span>
                                     </SelectItem>
                                   ))}

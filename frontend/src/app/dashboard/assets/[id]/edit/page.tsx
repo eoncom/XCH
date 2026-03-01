@@ -22,7 +22,7 @@ import {
 import { assetsApi } from '@/lib/api/assets';
 import { sitesApi } from '@/lib/api/sites';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
-import { ArrowLeft, Info, Wifi } from 'lucide-react';
+import { ArrowLeft, Info, Wifi, ExternalLink, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import type { Asset, AssetType, AssetStatus, Site, UpdateAssetDto } from '@/types';
 
@@ -90,6 +90,10 @@ const assetSchema = z.object({
     hostname: z.string().optional(),
     vlan: z.string().optional(),
     port: z.string().optional(),
+    adminLinks: z.array(z.object({
+      label: z.string(),
+      url: z.string(),
+    })).optional(),
   }).optional(),
   purchaseDate: z.string().optional(),
   warrantyEnd: z.string().optional(),
@@ -157,6 +161,7 @@ export default function EditAssetPage() {
             hostname: (asset.networkInfo as any)?.hostname || '',
             vlan: (asset.networkInfo as any)?.vlan || '',
             port: (asset.networkInfo as any)?.port || '',
+            adminLinks: (asset.networkInfo as any)?.adminLinks || [],
           },
           purchaseDate: asset.purchaseDate ? asset.purchaseDate.split('T')[0] : '',
           warrantyEnd: asset.warrantyEnd ? asset.warrantyEnd.split('T')[0] : '',
@@ -206,6 +211,15 @@ export default function EditAssetPage() {
       if (!cleaned.networkInfo.hostname) delete cleaned.networkInfo.hostname;
       if (!cleaned.networkInfo.vlan) delete cleaned.networkInfo.vlan;
       if (!cleaned.networkInfo.port) delete cleaned.networkInfo.port;
+      // Clean adminLinks: remove entries with empty label or url
+      if (cleaned.networkInfo.adminLinks) {
+        cleaned.networkInfo.adminLinks = cleaned.networkInfo.adminLinks.filter(
+          (l: any) => l.label && l.url
+        );
+        if (cleaned.networkInfo.adminLinks.length === 0) {
+          delete cleaned.networkInfo.adminLinks;
+        }
+      }
       if (Object.keys(cleaned.networkInfo).length === 0) delete cleaned.networkInfo;
     }
 
@@ -450,6 +464,75 @@ export default function EditAssetPage() {
                   placeholder="Ex: Gi0/1, eth0"
                 />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Section 4.5: Liens d'administration (optional) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ExternalLink className="h-5 w-5" />
+              Liens d'administration
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {(watch('networkInfo.adminLinks') || []).map((link: any, index: number) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    placeholder="Label (ex: Console, WebUI...)"
+                    value={link?.label || ''}
+                    onChange={(e) => {
+                      const links = [...(watch('networkInfo.adminLinks') || [])];
+                      links[index] = { ...links[index], label: e.target.value };
+                      setValue('networkInfo.adminLinks', links);
+                    }}
+                    className="flex-1"
+                  />
+                  <Input
+                    placeholder="URL (ex: https://192.168.1.1)"
+                    value={link?.url || ''}
+                    onChange={(e) => {
+                      const links = [...(watch('networkInfo.adminLinks') || [])];
+                      links[index] = { ...links[index], url: e.target.value };
+                      setValue('networkInfo.adminLinks', links);
+                    }}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                    onClick={() => {
+                      const links = [...(watch('networkInfo.adminLinks') || [])];
+                      links.splice(index, 1);
+                      setValue('networkInfo.adminLinks', links);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const links = [...(watch('networkInfo.adminLinks') || [])];
+                  links.push({ label: '', url: '' });
+                  setValue('networkInfo.adminLinks', links);
+                }}
+                className="mt-2"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Ajouter un lien
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Liens rapides vers les interfaces d'administration de l'équipement (console web, SSH, etc.)
+              </p>
             </div>
           </CardContent>
         </Card>
