@@ -1423,6 +1423,120 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             );
           })()}
 
+          {/* État de santé du site */}
+          {(() => {
+            const hb = site.metadata?.healthBreakdown;
+            const hs = site.healthStatus as string;
+            // Warranty alerts for this site's assets
+            const warrantyAlerts = assets.filter(a => {
+              const ws = getWarrantyStatus(a.warrantyEnd, warrantyThresholds);
+              return ws === 'expired' || ws === 'expiring_critical' || ws === 'expiring_warning';
+            });
+            // Monitoring info from assets
+            const monitoredAssets = assets.filter(a => (a.networkInfo as any)?.monitorName);
+            const downAssets = monitoredAssets.filter(a => (a.networkInfo as any)?.monitorStatus === 'down');
+
+            const hasHealthData = hb?.components?.length > 0 || warrantyAlerts.length > 0 || monitoredAssets.length > 0;
+            if (!hasHealthData && hs === 'UNKNOWN') return null;
+
+            const borderColor = hs === 'CRITICAL' ? 'border-l-red-500' :
+                                hs === 'WARNING' ? 'border-l-amber-500' :
+                                hs === 'HEALTHY' ? 'border-l-green-500' : 'border-l-gray-400';
+            const statusLabel = hs === 'CRITICAL' ? 'Critique' :
+                                hs === 'WARNING' ? 'Attention' :
+                                hs === 'HEALTHY' ? 'Sain' : 'Inconnu';
+            const statusBadgeVariant = healthStatusColors[site.healthStatus] || 'secondary';
+
+            return (
+              <Card className={`border-l-4 ${borderColor}`}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Activity className="h-5 w-5" />
+                      État de santé
+                      <Badge variant={statusBadgeVariant}>{statusLabel}</Badge>
+                    </CardTitle>
+                    <Button variant="ghost" size="sm" onClick={() => setActiveTab('infos-pratiques')} className="text-xs text-muted-foreground">
+                      Détails
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Health breakdown components */}
+                  {hb?.components?.length > 0 && (
+                    <div className="space-y-1.5">
+                      {hb.components.slice(0, 5).map((comp: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-block w-2 h-2 rounded-full ${
+                              comp.status === 'up' ? 'bg-green-500' :
+                              comp.status === 'down' ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
+                            }`} />
+                            <span className="text-foreground">{comp.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {comp.type === 'link' ? (comp.role === 'primary' ? 'Lien pri.' : 'Backup') :
+                               comp.type === 'sdwan' ? 'SD-WAN' : 'Équip.'}
+                            </span>
+                          </div>
+                          {comp.impact !== 'none' && (
+                            <span className={`text-xs font-medium ${
+                              comp.impact === 'critical' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'
+                            }`}>
+                              {comp.impact === 'critical' ? 'Critique' : 'Attention'}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {hb.components.length > 5 && (
+                        <p className="text-xs text-muted-foreground">+{hb.components.length - 5} autre{hb.components.length - 5 > 1 ? 's' : ''}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Monitoring summary */}
+                  {monitoredAssets.length > 0 && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <Network className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Monitoring :</span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
+                        {monitoredAssets.length - downAssets.length} UP
+                      </span>
+                      {downAssets.length > 0 && (
+                        <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                          {downAssets.length} DOWN
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Warranty alerts */}
+                  {warrantyAlerts.length > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert className="h-4 w-4 text-amber-500" />
+                        <span className="text-muted-foreground">
+                          {warrantyAlerts.length} équipement{warrantyAlerts.length > 1 ? 's' : ''} avec alerte garantie
+                        </span>
+                      </div>
+                      <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setActiveTab('assets')}>
+                        Voir
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Last check timestamp */}
+                  {hb?.timestamp && (
+                    <p className="text-xs text-muted-foreground pt-1 border-t">
+                      Dernière vérification : {new Date(hb.timestamp).toLocaleString('fr-FR')}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {/* Synthèse rapide : contact principal + horaires */}
           {(() => {
             const primaryContact = (site.contacts || []).find((c: any) => c.isPrimary) || (site.contacts || [])[0];

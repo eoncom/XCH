@@ -6,8 +6,9 @@ import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
+import { integrationsApi } from '@/lib/api/integrations';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Package, Server, CheckSquare, MapIcon, AlertTriangle, Clock, Ban, ArrowRight, ShieldAlert } from 'lucide-react';
+import { MapPin, Package, Server, CheckSquare, MapIcon, AlertTriangle, Clock, Ban, ArrowRight, ShieldAlert, Activity, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
@@ -27,7 +28,7 @@ const SitesMap = dynamic(() => import('@/components/maps/SitesMap'), {
 });
 
 interface DashboardStats {
-  sites: { total: number; active: number; critical: number };
+  sites: { total: number; active: number; critical: number; healthy: number; warning: number; criticalHealth: number; unknown: number };
   assets: { total: number; inService: number; inStock: number };
   racks: { total: number; activeU: number; totalU: number };
   tasks: { total: number; todo: number; inProgress: number; done: number };
@@ -55,6 +56,14 @@ export default function DashboardPage() {
     queryFn: () => tasksApi.getAll(),
   });
 
+  // Fetch Uptime Kuma monitors (non-blocking, silent failure)
+  const { data: monitors = [] } = useQuery<Array<{ id: number; name: string; type: string; status: 'up' | 'down' | 'unknown'; responseTime: number; certExpiry?: number }>>({
+    queryKey: ['uptime-kuma-monitors'],
+    queryFn: () => integrationsApi.uptimeKuma.getMonitors(),
+    retry: 1,
+    staleTime: 60_000,
+  });
+
   // Calculate stats from real data
   const stats: DashboardStats = useMemo(() => {
     // Sites stats
@@ -62,6 +71,10 @@ export default function DashboardPage() {
     const criticalSites = sites.filter(
       (s) => s.healthStatus === 'CRITICAL' || s.healthStatus === 'WARNING'
     ).length;
+    const healthySites = sites.filter((s) => s.healthStatus === 'HEALTHY').length;
+    const warningSites = sites.filter((s) => s.healthStatus === 'WARNING').length;
+    const criticalHealthSites = sites.filter((s) => s.healthStatus === 'CRITICAL').length;
+    const unknownSites = sites.filter((s) => s.healthStatus === 'UNKNOWN' || !s.healthStatus).length;
 
     // Assets stats
     const inServiceAssets = assets.filter((a) => a.status === 'IN_SERVICE').length;
@@ -89,6 +102,10 @@ export default function DashboardPage() {
         total: sites.length,
         active: activeSites,
         critical: criticalSites,
+        healthy: healthySites,
+        warning: warningSites,
+        criticalHealth: criticalHealthSites,
+        unknown: unknownSites,
       },
       assets: {
         total: assets.length,
@@ -126,6 +143,11 @@ export default function DashboardPage() {
     const warrantyWarning = assets.filter((a: Asset) => getWarrantyStatus(a.warrantyEnd, warrantyThresholds) === 'expiring_warning');
     const warrantyTotal = warrantyExpired.length + warrantyCritical.length + warrantyWarning.length;
 
+    // Monitoring/health alerts
+    const criticalHealthSites = sites.filter((s: Site) => s.healthStatus === 'CRITICAL');
+    const warningHealthSites = sites.filter((s: Site) => s.healthStatus === 'WARNING');
+    const downMonitors = monitors.filter((m) => m.status === 'down');
+
     // Group alerts by site for "sites en souffrance"
     const siteAlertMap = new Map<string, { blocked: Task[]; urgent: Task[]; overdue: Task[]; broken: Asset[]; warrantyExpired: Asset[]; warrantyCritical: Asset[]; warrantyWarning: Asset[] }>();
 
@@ -143,6 +165,10 @@ export default function DashboardPage() {
     warrantyExpired.forEach((a: Asset) => { ensureSite(a.siteId); if (a.siteId) siteAlertMap.get(a.siteId)!.warrantyExpired.push(a); });
     warrantyCritical.forEach((a: Asset) => { ensureSite(a.siteId); if (a.siteId) siteAlertMap.get(a.siteId)!.warrantyCritical.push(a); });
     warrantyWarning.forEach((a: Asset) => { ensureSite(a.siteId); if (a.siteId) siteAlertMap.get(a.siteId)!.warrantyWarning.push(a); });
+
+    // Include sites with CRITICAL/WARNING health status even if no task/warranty alerts
+    criticalHealthSites.forEach((s: Site) => { ensureSite(s.id); });
+    warningHealthSites.forEach((s: Site) => { ensureSite(s.id); });
 
     // Sort sites by total alert count
     const sitesWithAlerts = Array.from(siteAlertMap.entries())
@@ -164,10 +190,13 @@ export default function DashboardPage() {
       warrantyCritical,
       warrantyWarning,
       warrantyTotal,
-      totalAlerts: blockedTasks.length + urgentTasks.length + overdueTasks.length + outOfServiceAssets.length + warrantyTotal,
+      criticalHealthSites,
+      warningHealthSites,
+      downMonitors,
+      totalAlerts: blockedTasks.length + urgentTasks.length + overdueTasks.length + outOfServiceAssets.length + warrantyTotal + criticalHealthSites.length + downMonitors.length,
       sitesWithAlerts,
     };
-  }, [tasks, assets, sites, warrantyThresholds]);
+  }, [tasks, assets, sites, monitors, warrantyThresholds]);
 
   const isLoading = sitesLoading || assetsLoading || racksLoading || tasksLoading;
   const router = useRouter();
@@ -203,8 +232,11 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.sites.total}</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.sites.active} actifs • {stats.sites.critical} alertes
+              <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+                {stats.sites.healthy > 0 && <><span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />{stats.sites.healthy} sain{stats.sites.healthy > 1 ? 's' : ''}</>}
+                {stats.sites.warning > 0 && <><span className="mx-0.5">•</span><span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />{stats.sites.warning} attention</>}
+                {stats.sites.criticalHealth > 0 && <><span className="mx-0.5">•</span><span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />{stats.sites.criticalHealth} critique{stats.sites.criticalHealth > 1 ? 's' : ''}</>}
+                {stats.sites.healthy === 0 && stats.sites.warning === 0 && stats.sites.criticalHealth === 0 && <>{stats.sites.active} actif{stats.sites.active > 1 ? 's' : ''}</>}
               </p>
             </CardContent>
           </Card>
@@ -255,6 +287,82 @@ export default function DashboardPage() {
           </Card>
         </Link>
       </div>
+
+      {/* État de santé des sites */}
+      {sites.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Activity className="h-5 w-5 text-primary" />
+                État de santé des sites
+              </CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/dashboard/integrations/monitoring">Monitoring →</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Sites health grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+              {sites
+                .filter(s => s.status === 'ACTIVE')
+                .sort((a, b) => {
+                  const order: Record<string, number> = { CRITICAL: 0, WARNING: 1, UNKNOWN: 2, HEALTHY: 3 };
+                  return (order[a.healthStatus] ?? 2) - (order[b.healthStatus] ?? 2);
+                })
+                .slice(0, 12)
+                .map((site) => (
+                  <Link
+                    key={site.id}
+                    href={`/dashboard/sites/${site.id}`}
+                    className="flex items-center gap-2 p-2 rounded-lg border hover:bg-muted/50 transition-colors"
+                  >
+                    <span className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                      site.healthStatus === 'HEALTHY' ? 'bg-green-500' :
+                      site.healthStatus === 'WARNING' ? 'bg-amber-500' :
+                      site.healthStatus === 'CRITICAL' ? 'bg-red-500 animate-pulse' :
+                      'bg-gray-400'
+                    }`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{site.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {site.healthStatus === 'HEALTHY' ? 'OK' :
+                         site.healthStatus === 'WARNING' ? 'Attention' :
+                         site.healthStatus === 'CRITICAL' ? 'Critique' : 'Non supervisé'}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+            </div>
+            {sites.filter(s => s.status === 'ACTIVE').length > 12 && (
+              <p className="text-xs text-muted-foreground text-center">
+                + {sites.filter(s => s.status === 'ACTIVE').length - 12} autre(s) site(s)
+              </p>
+            )}
+
+            {/* Monitoring summary bar */}
+            {monitors.length > 0 && (
+              <div className="flex items-center gap-4 pt-2 border-t text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                  {monitors.filter(m => m.status === 'up').length} UP
+                </span>
+                {monitors.filter(m => m.status === 'down').length > 0 && (
+                  <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    {monitors.filter(m => m.status === 'down').length} DOWN
+                  </span>
+                )}
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-gray-400" />
+                  {monitors.filter(m => m.status === 'unknown').length} inconnu(s)
+                </span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Alertes critiques globales */}
       {alerts.totalAlerts > 0 && (
@@ -311,6 +419,24 @@ export default function DashboardPage() {
                   <div>
                     <p className="text-lg font-bold text-yellow-700 dark:text-yellow-300">{alerts.warrantyTotal}</p>
                     <p className="text-xs text-yellow-600 dark:text-yellow-400">Garantie{alerts.warrantyTotal > 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+              )}
+              {alerts.criticalHealthSites.length > 0 && (
+                <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
+                  <Activity className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.criticalHealthSites.length}</p>
+                    <p className="text-xs text-red-600 dark:text-red-400">Site{alerts.criticalHealthSites.length > 1 ? 's' : ''} critique{alerts.criticalHealthSites.length > 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+              )}
+              {alerts.downMonitors.length > 0 && (
+                <div className="flex items-center gap-2 p-2.5 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
+                  <WifiOff className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-red-700 dark:text-red-300">{alerts.downMonitors.length}</p>
+                    <p className="text-xs text-red-600 dark:text-red-400">Moniteur{alerts.downMonitors.length > 1 ? 's' : ''} DOWN</p>
                   </div>
                 </div>
               )}

@@ -19,7 +19,7 @@ import { CardSkeleton } from '@/components/ui/skeleton';
 import { assetsApi } from '@/lib/api/assets';
 import { sitesApi } from '@/lib/api/sites';
 import { exportAssets } from '@/lib/export-utils';
-import { Plus, Search, QrCode, Package, ShieldAlert, MapPin } from 'lucide-react';
+import { Plus, Search, QrCode, Package, ShieldAlert, MapPin, Activity } from 'lucide-react';
 import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds, type WarrantyStatus } from '@/lib/warranty';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -70,6 +70,7 @@ export default function AssetsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [warrantyFilter, setWarrantyFilter] = useState<string>('all');
+  const [monitorFilter, setMonitorFilter] = useState<string>('all');
   const warrantyThresholds = useWarrantyThresholds();
   const { canCreate } = usePermissions();
   const router = useRouter();
@@ -116,6 +117,14 @@ export default function AssetsPage() {
       } else if (warrantyFilter === 'none') {
         if (status !== 'none') return false;
       }
+    }
+    // Monitoring filter
+    if (monitorFilter !== 'all') {
+      const net = asset.networkInfo as any;
+      if (monitorFilter === 'up' && net?.monitorStatus !== 'up') return false;
+      if (monitorFilter === 'down' && net?.monitorStatus !== 'down') return false;
+      if (monitorFilter === 'monitored' && !net?.monitorName) return false;
+      if (monitorFilter === 'not_monitored' && net?.monitorName) return false;
     }
     return matchesSearch;
   });
@@ -197,7 +206,7 @@ export default function AssetsPage() {
       </div>
 
       {/* Filters */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
@@ -264,6 +273,19 @@ export default function AssetsPage() {
             <SelectItem value="none">— Sans garantie</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select value={monitorFilter} onValueChange={setMonitorFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Monitoring" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tout monitoring</SelectItem>
+            <SelectItem value="up">🟢 En ligne (UP)</SelectItem>
+            <SelectItem value="down">🔴 Hors ligne (DOWN)</SelectItem>
+            <SelectItem value="monitored">📡 Supervisé</SelectItem>
+            <SelectItem value="not_monitored">— Non supervisé</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Assets Grid */}
@@ -293,6 +315,26 @@ export default function AssetsPage() {
                       {assetStatusLabels[asset.status]}
                     </Badge>
                     <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
+                    {(asset.networkInfo as any)?.monitorName && (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                          (asset.networkInfo as any)?.monitorStatus === 'up'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                            : (asset.networkInfo as any)?.monitorStatus === 'down'
+                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                        }`}
+                        title={`Monitoring: ${(asset.networkInfo as any)?.monitorName}`}
+                      >
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                          (asset.networkInfo as any)?.monitorStatus === 'up' ? 'bg-green-500' :
+                          (asset.networkInfo as any)?.monitorStatus === 'down' ? 'bg-red-500 animate-pulse' :
+                          'bg-gray-400'
+                        }`} />
+                        {(asset.networkInfo as any)?.monitorStatus === 'up' ? 'UP' :
+                         (asset.networkInfo as any)?.monitorStatus === 'down' ? 'DOWN' : '?'}
+                      </span>
+                    )}
                   </div>
                 </div>
               </CardHeader>
@@ -327,7 +369,7 @@ export default function AssetsPage() {
         <EmptyState
           icon={Package}
           title="Aucun équipement trouvé"
-          description={search || statusFilter !== 'all' || typeFilter !== 'all' || siteFilter !== 'all' || warrantyFilter !== 'all'
+          description={search || statusFilter !== 'all' || typeFilter !== 'all' || siteFilter !== 'all' || warrantyFilter !== 'all' || monitorFilter !== 'all'
             ? 'Essayez de modifier vos filtres de recherche'
             : undefined}
         />
