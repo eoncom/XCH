@@ -69,6 +69,7 @@ p, TECHNICIEN, tasks, update, *
 p, TECHNICIEN, floor-plans, read, *
 p, TECHNICIEN, floor-plans, create, *
 p, TECHNICIEN, floor-plans, update, *
+p, TECHNICIEN, integrations, read, *
 p, TECHNICIEN, contacts, read, *
 p, TECHNICIEN, contact-types, read, *
 
@@ -79,5 +80,6 @@ p, VIEWER, assets, read, *
 p, VIEWER, racks, read, *
 p, VIEWER, tasks, read, *
 p, VIEWER, floor-plans, read, *
+p, VIEWER, integrations, read, *
 p, VIEWER, contacts, read, *
 p, VIEWER, contact-types, read, *
