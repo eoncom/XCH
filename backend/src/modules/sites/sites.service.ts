@@ -200,11 +200,28 @@ export class SitesService {
 
     const { latitude, longitude, ...siteData } = updateSiteDto;
 
+    // Only update coordinates if they actually changed (avoid polluting audit log)
+    let coordinatesChanged = false;
     if (latitude !== undefined && longitude !== undefined) {
-      await this.prisma.$executeRawUnsafe(
-        `UPDATE "sites" SET coordinates = ST_GeomFromText('POINT(${longitude} ${latitude})', 4326) WHERE id = $1`,
+      // Fetch current coordinates from PostGIS
+      const currentCoords = await this.prisma.$queryRawUnsafe<any[]>(
+        `SELECT ST_Y(coordinates::geometry) as latitude, ST_X(coordinates::geometry) as longitude FROM "sites" WHERE id = $1 AND coordinates IS NOT NULL`,
         id,
       );
+      const currentLat = currentCoords?.[0]?.latitude;
+      const currentLng = currentCoords?.[0]?.longitude;
+
+      // Compare with tolerance for floating point (skip if same within ~0.1m)
+      const hasCoords = currentLat !== null && currentLat !== undefined;
+      if (!hasCoords ||
+          Math.abs(currentLat - latitude) > 0.000001 ||
+          Math.abs(currentLng - longitude) > 0.000001) {
+        await this.prisma.$executeRawUnsafe(
+          `UPDATE "sites" SET coordinates = ST_GeomFromText('POINT(${longitude} ${latitude})', 4326) WHERE id = $1`,
+          id,
+        );
+        coordinatesChanged = true;
+      }
     }
 
     const updated = await this.prisma.site.update({
@@ -212,11 +229,11 @@ export class SitesService {
       data: siteData,
     });
 
-    // Audit log with diff
+    // Audit log with diff — only include lat/lng if coordinates actually changed
     if (before) {
       const changes = this.auditLogService.diffChanges(
         before as Record<string, any>,
-        { ...siteData, ...(latitude !== undefined ? { latitude, longitude } : {}) },
+        { ...siteData, ...(coordinatesChanged ? { latitude, longitude } : {}) },
       );
       if (changes) {
         await this.auditLogService.log({

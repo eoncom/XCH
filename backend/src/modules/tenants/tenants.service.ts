@@ -10,9 +10,13 @@ const DEFAULT_MODULES: Record<string, boolean> = {
   tasks: true,
   floor_plans: true,
   contacts: true,
+  documents: true,
   integrations_netbox: true,
   integrations_monitoring: true,
+  monitoring_dashboard: true,
+  alerts: true,
   qr_codes: true,
+  site_access_control: true,
 };
 
 /** Human-readable descriptions for each module */
@@ -23,9 +27,13 @@ const MODULE_DESCRIPTIONS: Record<string, { label: string; description: string }
   tasks: { label: 'Tâches', description: 'Suivi des tâches et interventions' },
   floor_plans: { label: 'Plans d\'étage', description: 'Plans interactifs avec repères cliquables' },
   contacts: { label: 'Contacts', description: 'Annuaire des contacts par site' },
+  documents: { label: 'Documents', description: 'Gestion des documents et pièces jointes' },
   integrations_netbox: { label: 'NetBox', description: 'Synchronisation avec NetBox (DCIM)' },
   integrations_monitoring: { label: 'Monitoring', description: 'Intégration Uptime Kuma / monitoring' },
+  monitoring_dashboard: { label: 'Tableau de bord monitoring', description: 'Vue synthétique de l\'état de santé des sites' },
+  alerts: { label: 'Alertes', description: 'Notifications et alertes basées sur le monitoring' },
   qr_codes: { label: 'QR Codes', description: 'Génération et scan de QR codes pour les équipements' },
+  site_access_control: { label: 'Droits d\'accès site', description: 'Contrôle d\'accès granulaire par site et par utilisateur' },
 };
 
 @Injectable()
