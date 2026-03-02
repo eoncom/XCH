@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useCallback } from 'react';
+import { use, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -135,6 +135,21 @@ export default function FloorPlanDetailPage({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const { canUpdate, canDelete } = usePermissions();
   const { getLabelsForType, getLabel } = useEnumLabels();
+
+  // Merge DB enum labels with ALL static pin types so nothing is missing
+  const pinTypeOptions = useMemo(() => {
+    const dbLabels = getLabelsForType('PinType');
+    return Object.entries(pinTypeLabels).map(([enumValue, label], index) => {
+      const dbLabel = dbLabels.find(l => l.enumValue === enumValue);
+      return {
+        enumValue,
+        label: dbLabel?.label || label,
+        sortOrder: dbLabel?.sortOrder ?? index,
+        isHidden: dbLabel?.isHidden ?? false,
+      };
+    }).filter(t => !t.isHidden).sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [getLabelsForType]);
+
   const [showAddPinDialog, setShowAddPinDialog] = useState(false);
   const [showPinInfoDialog, setShowPinInfoDialog] = useState(false);
   const [showEditPinDialog, setShowEditPinDialog] = useState(false);
@@ -681,10 +696,7 @@ export default function FloorPlanDetailPage({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(getLabelsForType('PinType').length > 0
-                    ? getLabelsForType('PinType').filter(t => !t.isHidden).sort((a, b) => a.sortOrder - b.sortOrder)
-                    : Object.entries(pinTypeLabels).map(([v, l]) => ({ enumValue: v, label: l }))
-                  ).map((item) => (
+                  {pinTypeOptions.map((item) => (
                     <SelectItem key={item.enumValue} value={item.enumValue}>
                       {item.label}
                     </SelectItem>
@@ -984,10 +996,7 @@ export default function FloorPlanDetailPage({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(getLabelsForType('PinType').length > 0
-                    ? getLabelsForType('PinType').filter(t => !t.isHidden).sort((a, b) => a.sortOrder - b.sortOrder)
-                    : Object.entries(pinTypeLabels).map(([v, l]) => ({ enumValue: v, label: l }))
-                  ).map((item) => (
+                  {pinTypeOptions.map((item) => (
                     <SelectItem key={item.enumValue} value={item.enumValue}>
                       {item.label}
                     </SelectItem>

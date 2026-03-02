@@ -73,6 +73,12 @@ export class RacksService {
         assets: {
           select: {
             id: true,
+            name: true,
+            type: true,
+            manufacturer: true,
+            model: true,
+            serialNumber: true,
+            status: true,
             rackHeightU: true,
             rackPositionU: true,
           },
