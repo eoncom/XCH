@@ -5,7 +5,7 @@ import { test, expect } from '../../fixtures/auth.fixture';
  *
  * Scénarios testés:
  * - Logout réussi
- * - Suppression du token
+ * - Suppression des cookies d'authentification
  * - Redirection vers /login
  * - Protection des routes après logout
  */
@@ -22,9 +22,10 @@ test.describe('Authentification - Logout', () => {
     // Vérifier redirection vers /login
     await expect(page).toHaveURL('/login');
 
-    // Vérifier suppression token
-    const token = await page.evaluate(() => localStorage.getItem('xch_token'));
-    expect(token).toBeNull();
+    // Vérifier suppression des cookies d'authentification
+    const cookies = await page.context().cookies();
+    const accessToken = cookies.find(c => c.name === 'accessToken');
+    expect(accessToken).toBeFalsy();
   });
 
   test('devrait bloquer accès dashboard après logout', async ({ page, loginAsAdmin, logout }) => {
@@ -70,7 +71,10 @@ test.describe('Authentification - Logout', () => {
 
     // Vérifier succès
     await expect(page).toHaveURL('/dashboard');
-    const token = await page.evaluate(() => localStorage.getItem('accessToken'));
-    expect(token).toBeTruthy();
+
+    // Vérifier cookie accessToken présent
+    const cookies = await page.context().cookies();
+    const accessToken = cookies.find(c => c.name === 'accessToken');
+    expect(accessToken).toBeTruthy();
   });
 });

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, Get, Res, UnauthorizedException, Req, Delete, Param, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Res, UnauthorizedException, Req, Delete, Param, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
@@ -6,10 +6,13 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaClient } from '@prisma/client';
 import { Response, Request as ExpressRequest } from 'express';
 import * as bcrypt from 'bcrypt';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { TotpService } from './totp.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { CasbinGuard } from '../../common/guards/casbin.guard';
+import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -64,6 +67,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @UseGuards(LocalAuthGuard)
   @ApiOperation({ summary: 'Login with email/password' })
   @ApiResponse({ status: 200, description: 'Returns user data and sets HTTP-only cookies, or requires 2FA' })
@@ -146,7 +150,12 @@ export class AuthController {
   }
 
   @Post('register')
-  @ApiOperation({ summary: 'Register new user' })
+  @UseGuards(JwtAuthGuard, CasbinGuard)
+  @ApiBearerAuth()
+  @Resource('users')
+  @Action('create')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @ApiOperation({ summary: 'Register new user (ADMIN only)' })
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
@@ -223,6 +232,7 @@ export class AuthController {
   }
 
   @Post('2fa/verify')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Verify TOTP code during login (uses temp token)' })
   async verify2FA(
     @Body() body: { code: string; tempToken: string },
@@ -261,6 +271,7 @@ export class AuthController {
   }
 
   @Post('2fa/backup-verify')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Verify backup code during login (uses temp token)' })
   async verifyBackupCode(
     @Body() body: { code: string; tempToken: string },

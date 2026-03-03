@@ -28,6 +28,8 @@ async function bootstrap() {
   // Add configured FRONTEND_URL if set (for external/cross-origin setups)
   if (frontendUrl) allowedOrigins.push(frontendUrl);
 
+  const trustProxyCors = configService.get('TRUST_PROXY_CORS', 'false') === 'true';
+
   app.enableCors({
     origin: (origin, callback) => {
       // Allow requests with no origin (same-origin via nginx, mobile apps, Postman)
@@ -35,10 +37,12 @@ async function bootstrap() {
 
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
-      } else {
-        console.log(`⚠️ CORS: origin ${origin} not in allowed list, allowing anyway behind proxy`);
-        // Behind nginx, trust all origins since nginx controls access
+      } else if (trustProxyCors) {
+        // Behind nginx: trust proxy to control access
         callback(null, true);
+      } else {
+        console.warn(`🚫 CORS: origin ${origin} rejected (not in allowed list)`);
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
       }
     },
     credentials: true, // ✅ CRITICAL for cookies

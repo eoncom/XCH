@@ -198,43 +198,17 @@ test.describe('RBAC - SUPERUSER Role (Manager)', () => {
     await loginAsManager(); // SUPERUSER role
   });
 
-  test('should allow full CRUD on Sites', async ({ page }) => {
+  test('should allow read access to Sites', async ({ page }) => {
     await page.goto('/dashboard/sites');
     await page.waitForLoadState('networkidle');
 
-    // Devrait voir bouton "Nouveau site"
+    // MANAGER a uniquement read sur sites (pas create/update/delete)
+    await expect(page.locator('h1')).toContainText(/Sites/i);
+
+    // Bouton "Nouveau site" ne devrait PAS être visible
     const createButton = page.locator('button:has-text("Nouveau site")');
-    await expect(createButton).toBeVisible({ timeout: 5000 });
-  });
-
-  test('should allow edit Site', async ({ page }) => {
-    await page.goto('/dashboard/sites');
-
-    const firstSite = page.locator('a[href^="/dashboard/sites/"]').first();
-    const siteExists = await firstSite.isVisible().catch(() => false);
-
-    if (siteExists) {
-      await firstSite.click();
-      await page.waitForURL(/\/dashboard\/sites\/[a-z0-9-]+$/);
-
-      // Bouton "Modifier" devrait être visible
-      await expect(page.locator('button:has-text("Modifier")')).toBeVisible();
-    }
-  });
-
-  test('should allow delete Site', async ({ page }) => {
-    await page.goto('/dashboard/sites');
-
-    const firstSite = page.locator('a[href^="/dashboard/sites/"]').first();
-    const siteExists = await firstSite.isVisible().catch(() => false);
-
-    if (siteExists) {
-      await firstSite.click();
-      await page.waitForURL(/\/dashboard\/sites\/[a-z0-9-]+$/);
-
-      // Bouton "Supprimer" devrait être visible
-      await expect(page.locator('button:has-text("Supprimer")')).toBeVisible();
-    }
+    const buttonExists = await createButton.isVisible().catch(() => false);
+    expect(buttonExists).toBe(false);
   });
 
   test('should allow Settings access', async ({ page }) => {

@@ -25,9 +25,35 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Check if account is temporarily locked
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const remainingMin = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+      throw new UnauthorizedException(
+        `Compte temporairement verrouillé. Réessayez dans ${remainingMin} minute(s).`,
+      );
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
+      // Increment failed attempts, lock after 5 failures
+      const newAttempts = (user.failedLoginAttempts || 0) + 1;
+      const lockData: any = { failedLoginAttempts: newAttempts };
+      if (newAttempts >= 5) {
+        lockData.lockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 min lockout
+      }
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: lockData,
+      });
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Successful login — reset failed attempts
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: 0, lockedUntil: null },
+      });
     }
 
     const { passwordHash, totpSecret, totpBackupCodes, ...result } = user;

@@ -89,6 +89,10 @@ model User {
   totpEnabled     Boolean   @default(false)
   totpBackupCodes String[]
 
+  // Account lockout
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
   // Metadata
   lastLoginAt DateTime?
   createdAt   DateTime  @default(now())

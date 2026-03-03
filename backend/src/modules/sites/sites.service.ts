@@ -28,16 +28,13 @@ export class SitesService {
       throw new ConflictException('Site with this code already exists');
     }
 
-    let coordinates = null;
-    if (createSiteDto.latitude && createSiteDto.longitude) {
-      coordinates = `POINT(${createSiteDto.longitude} ${createSiteDto.latitude})`;
-    }
+    const hasCoordinates = !!(createSiteDto.latitude && createSiteDto.longitude);
 
     const { latitude, longitude, ...siteData } = createSiteDto;
 
     const result = await this.prisma.$queryRawUnsafe<{id: string}[]>(
       `INSERT INTO "sites" ("id", "tenantId", "code", "name", "status", "address", "city", "postalCode", "country", "coordinates", "healthStatus", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4::"SiteStatus", $5, $6, $7, $8, ${coordinates ? `ST_GeomFromText($9, 4326)` : 'NULL'}, $10::"HealthStatus", NOW(), NOW())
+       VALUES (gen_random_uuid(), $1, $2, $3, $4::"SiteStatus", $5, $6, $7, $8, ${hasCoordinates ? `ST_SetSRID(ST_MakePoint($9, $10), 4326)` : 'NULL'}, ${hasCoordinates ? '$11' : '$9'}::"HealthStatus", NOW(), NOW())
        RETURNING id`,
       tenantId,
       siteData.code,
@@ -47,7 +44,7 @@ export class SitesService {
       siteData.city,
       siteData.postalCode || null,
       siteData.country || 'France',
-      ...(coordinates ? [coordinates] : []),
+      ...(hasCoordinates ? [longitude, latitude] : []),
       siteData.healthStatus || 'UNKNOWN',
     );
 
@@ -217,8 +214,10 @@ export class SitesService {
           Math.abs(currentLat - latitude) > 0.000001 ||
           Math.abs(currentLng - longitude) > 0.000001) {
         await this.prisma.$executeRawUnsafe(
-          `UPDATE "sites" SET coordinates = ST_GeomFromText('POINT(${longitude} ${latitude})', 4326) WHERE id = $1`,
+          `UPDATE "sites" SET coordinates = ST_SetSRID(ST_MakePoint($2, $3), 4326) WHERE id = $1`,
           id,
+          longitude,
+          latitude,
         );
         coordinatesChanged = true;
       }

@@ -36,6 +36,9 @@ p, ADMIN, contact-types, create, *
 p, ADMIN, contact-types, read, *
 p, ADMIN, contact-types, update, *
 p, ADMIN, contact-types, delete, *
+p, ADMIN, backup, create, *
+p, ADMIN, backup, read, *
+p, ADMIN, backup, delete, *
 
 # MANAGER
 p, MANAGER, tenants, read, *
