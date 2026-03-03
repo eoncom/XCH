@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2 } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
@@ -29,6 +29,7 @@ import { THEME_PRESET_LIST, type ThemePreset } from '@/lib/themes';
 import { cn } from '@/lib/utils';
 import { authApi } from '@/lib/api/auth';
 import { integrationsApi, type IntegrationConfigResponse } from '@/lib/api/integrations';
+import { backupApi, type BackupMetadata } from '@/lib/api/backup';
 
 interface SecurityReminder {
   id: string;
@@ -968,6 +969,18 @@ export default function SettingsPage() {
   const [isResetting, setIsResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
+  // Backup state
+  const [backupList, setBackupList] = useState<BackupMetadata[]>([]);
+  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
+  const [isCreatingFullBackup, setIsCreatingFullBackup] = useState(false);
+  const [isCreatingSiteBackup, setIsCreatingSiteBackup] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [isDeletingBackup, setIsDeletingBackup] = useState<string | null>(null);
+  const [selectedBackupSiteId, setSelectedBackupSiteId] = useState('');
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [availableSites, setAvailableSites] = useState<{ id: string; name: string; code: string }[]>([]);
+
   // Load tenant data on mount
   useEffect(() => {
     const loadTenant = async () => {
@@ -1008,6 +1021,104 @@ export default function SettingsPage() {
     loadTenant();
     loadIntegrationConfig();
   }, []);
+
+  // Load backup list + sites for backup tab
+  const loadBackups = async () => {
+    setIsLoadingBackups(true);
+    try {
+      const data = await backupApi.list();
+      setBackupList(data.backups || []);
+    } catch (error) {
+      console.error('Failed to load backups:', error);
+    } finally {
+      setIsLoadingBackups(false);
+    }
+  };
+
+  const loadSitesForBackup = async () => {
+    try {
+      const data = await apiClient.get<{ data: { id: string; name: string; code: string }[] }>('/api/sites');
+      setAvailableSites(data.data || data as any || []);
+    } catch (error) {
+      console.debug('Failed to load sites for backup:', error);
+    }
+  };
+
+  const handleCreateFullBackup = async () => {
+    setIsCreatingFullBackup(true);
+    try {
+      const result = await backupApi.createFull();
+      toast.success(result.message || 'Backup complet créé avec succès');
+      loadBackups();
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors de la création du backup');
+    } finally {
+      setIsCreatingFullBackup(false);
+    }
+  };
+
+  const handleCreateSiteBackup = async () => {
+    if (!selectedBackupSiteId) {
+      toast.error('Veuillez sélectionner un site');
+      return;
+    }
+    setIsCreatingSiteBackup(true);
+    try {
+      await backupApi.createSiteBackup(selectedBackupSiteId);
+      toast.success('Backup du site téléchargé');
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors du backup du site');
+    } finally {
+      setIsCreatingSiteBackup(false);
+    }
+  };
+
+  const handleRestoreSite = async () => {
+    if (!restoreFile) {
+      toast.error('Veuillez sélectionner un fichier ZIP');
+      return;
+    }
+    setIsRestoring(true);
+    try {
+      const result = await backupApi.restoreSite(restoreFile);
+      toast.success(result.message || `Site "${result.siteName}" restauré avec succès`);
+      setRestoreFile(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors de la restauration');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const handleDeleteBackup = async (id: string) => {
+    setIsDeletingBackup(id);
+    try {
+      await backupApi.deleteBackup(id);
+      toast.success('Backup supprimé');
+      setBackupList((prev) => prev.filter((b) => b.id !== id));
+      setShowDeleteConfirm(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors de la suppression');
+    } finally {
+      setIsDeletingBackup(null);
+    }
+  };
+
+  const handleDownloadBackup = async (id: string) => {
+    try {
+      await backupApi.downloadBackup(id);
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors du téléchargement');
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
 
   const handleSaveProfile = () => {
     setIsSaving(true);
@@ -1195,6 +1306,12 @@ export default function SettingsPage() {
             <TabsTrigger value="types">
               <Tags className="mr-2 h-4 w-4" />
               Types
+            </TabsTrigger>
+          )}
+          {user?.role === 'ADMIN' && (
+            <TabsTrigger value="backup">
+              <HardDrive className="mr-2 h-4 w-4" />
+              Sauvegardes
             </TabsTrigger>
           )}
         </TabsList>
@@ -1942,6 +2059,255 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Backup Tab */}
+        {user?.role === 'ADMIN' && (
+          <TabsContent value="backup" className="space-y-6" onFocusCapture={() => { loadBackups(); loadSitesForBackup(); }}>
+
+            {/* Section A — Créer une sauvegarde */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Archive className="h-5 w-5" />
+                  Créer une sauvegarde
+                </CardTitle>
+                <CardDescription>
+                  Sauvegardez l'intégralité de votre base de données ou exportez un site spécifique.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Full backup */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <h4 className="font-medium">Backup complet</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Base de données + fichiers MinIO (plans, photos, QR codes)
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleCreateFullBackup}
+                    disabled={isCreatingFullBackup}
+                  >
+                    {isCreatingFullBackup ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Database className="mr-2 h-4 w-4" />
+                    )}
+                    {isCreatingFullBackup ? 'Création en cours...' : 'Lancer le backup'}
+                  </Button>
+                </div>
+
+                {/* Site backup */}
+                <div className="p-4 border rounded-lg space-y-3">
+                  <div>
+                    <h4 className="font-medium">Backup d&apos;un site</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Exporter un site avec tous ses assets, plans, tâches et fichiers en ZIP.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <select
+                      className="flex h-9 w-full max-w-sm rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={selectedBackupSiteId}
+                      onChange={(e) => setSelectedBackupSiteId(e.target.value)}
+                    >
+                      <option value="">Sélectionner un site...</option>
+                      {availableSites.map((site) => (
+                        <option key={site.id} value={site.id}>
+                          {site.code} — {site.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="outline"
+                      onClick={handleCreateSiteBackup}
+                      disabled={isCreatingSiteBackup || !selectedBackupSiteId}
+                    >
+                      {isCreatingSiteBackup ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                      )}
+                      Exporter ZIP
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Section B — Sauvegardes disponibles */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileArchive className="h-5 w-5" />
+                      Sauvegardes disponibles
+                    </CardTitle>
+                    <CardDescription>
+                      Liste des backups stockés sur le serveur (MinIO).
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={loadBackups} disabled={isLoadingBackups}>
+                    <RefreshCw className={`mr-2 h-3 w-3 ${isLoadingBackups ? 'animate-spin' : ''}`} />
+                    Actualiser
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {isLoadingBackups ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground">
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Chargement...
+                  </div>
+                ) : backupList.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <HardDrive className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p>Aucune sauvegarde disponible</p>
+                    <p className="text-xs mt-1">Créez votre premier backup ci-dessus.</p>
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left p-3 font-medium">Nom</th>
+                          <th className="text-left p-3 font-medium">Type</th>
+                          <th className="text-left p-3 font-medium">Date</th>
+                          <th className="text-left p-3 font-medium">Taille</th>
+                          <th className="text-right p-3 font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {backupList.map((backup) => (
+                          <tr key={backup.id} className="hover:bg-muted/30">
+                            <td className="p-3">
+                              <span className="font-mono text-xs">{backup.filename}</span>
+                            </td>
+                            <td className="p-3">
+                              <Badge variant={backup.type === 'full' ? 'default' : 'secondary'}>
+                                {backup.type === 'full' ? 'Complet' : 'Site'}
+                              </Badge>
+                              {backup.siteName && (
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  {backup.siteName}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-muted-foreground">
+                              {new Date(backup.createdAt).toLocaleString('fr-FR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </td>
+                            <td className="p-3 text-muted-foreground">
+                              {formatFileSize(backup.size)}
+                            </td>
+                            <td className="p-3 text-right space-x-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDownloadBackup(backup.id)}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              {showDeleteConfirm === backup.id ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => handleDeleteBackup(backup.id)}
+                                    disabled={isDeletingBackup === backup.id}
+                                  >
+                                    {isDeletingBackup === backup.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      'Confirmer'
+                                    )}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowDeleteConfirm(null)}
+                                  >
+                                    Annuler
+                                  </Button>
+                                </span>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setShowDeleteConfirm(backup.id)}
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Section C — Restaurer un site */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  Restaurer un site
+                </CardTitle>
+                <CardDescription>
+                  Importez un fichier ZIP de backup pour restaurer un site avec toutes ses données.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <Label htmlFor="restore-file" className="sr-only">Fichier ZIP de backup</Label>
+                    <Input
+                      id="restore-file"
+                      type="file"
+                      accept=".zip"
+                      onChange={(e) => setRestoreFile(e.target.files?.[0] || null)}
+                      className="cursor-pointer"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleRestoreSite}
+                    disabled={isRestoring || !restoreFile}
+                    variant="outline"
+                  >
+                    {isRestoring ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="mr-2 h-4 w-4" />
+                    )}
+                    {isRestoring ? 'Restauration...' : 'Restaurer'}
+                  </Button>
+                </div>
+                {restoreFile && (
+                  <p className="text-xs text-muted-foreground">
+                    Fichier sélectionné : <span className="font-mono">{restoreFile.name}</span> ({formatFileSize(restoreFile.size)})
+                  </p>
+                )}
+                <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    La restauration crée un nouveau site avec les données du backup.
+                    Les identifiants internes sont régénérés pour éviter les conflits.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

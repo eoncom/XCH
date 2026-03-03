@@ -1,8 +1,15 @@
 # 🚀 Installation Production - XCH
 
-**Dernière mise à jour :** 2026-01-01
+**Dernière mise à jour :** 2026-03-03
 
 Guide complet pour déployer XCH sur serveur Linux en production.
+
+> **🚀 Installation rapide :** Le script `install.sh` à la racine automatise tout le déploiement.
+> ```bash
+> git clone https://github.com/eoncom/XCH.git && cd XCH
+> chmod +x install.sh && ./install.sh   # Choisir mode 1 (Nginx intégré) ou 2 (Nginx externe)
+> ```
+> Le guide ci-dessous détaille chaque étape pour référence.
 
 ---
 
@@ -288,6 +295,14 @@ OIDC_CALLBACK_URL=https://xch.votre-domaine.com/auth/oidc/callback
 # CORS
 # ==========================================
 CORS_ORIGIN=https://xch.votre-domaine.com
+# Accepter toutes les origines si derrière un reverse proxy de confiance
+TRUST_PROXY_CORS=true
+
+# ==========================================
+# BACKUP
+# ==========================================
+# Activer le backup automatique quotidien à 2h AM
+AUTO_BACKUP=false
 
 # ==========================================
 # LOGGING
@@ -444,10 +459,16 @@ docker compose logs -f
 
 ### 4.2 Migration base de données
 
+> **Note :** Avec le déploiement Docker (recommandé), les migrations sont automatiquement exécutées par `docker-entrypoint.sh` au démarrage du container backend. **Aucune action manuelle n'est nécessaire.**
+
+Les données initiales (organisation, admin, démo) sont créées via le **Setup Wizard** accessible à `http://votre-domaine/setup` lors du premier lancement.
+
+**En cas de déploiement sans Docker (non recommandé) :**
+
 ```bash
 cd ~/apps/xch/backend
 
-# Installer dépendances (si pas fait)
+# Installer dépendances
 npm ci --only=production
 
 # Générer Prisma Client
@@ -456,8 +477,7 @@ npx prisma generate
 # Appliquer les migrations (PRODUCTION!)
 npx prisma migrate deploy
 
-# Seed données initiales (admin, rôles, etc.)
-npx prisma db seed
+# Les données sont chargées via le Setup Wizard, PAS via prisma db seed
 ```
 
 ### 4.3 Build backend et frontend
@@ -623,9 +643,8 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Backend API
-    location /api {
-        rewrite ^/api/(.*) /$1 break;
+    # Backend API (les routes backend incluent déjà /api/)
+    location /api/ {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;

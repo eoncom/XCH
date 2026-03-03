@@ -1,6 +1,6 @@
 # 🛠️ Installation Développement - XCH
 
-**Dernière mise à jour :** 2026-01-01
+**Dernière mise à jour :** 2026-03-03
 
 Guide complet pour installer et développer XCH sur Windows avec WSL2.
 
@@ -19,13 +19,38 @@ Ce guide vous permettra d'installer XCH en mode développement avec :
 
 ---
 
+## 🚀 Installation rapide (recommandée)
+
+Le script `install.sh` à la racine automatise toute l'installation :
+
+```bash
+git clone https://github.com/eoncom/XCH.git
+cd XCH
+chmod +x install.sh
+./install.sh    # Choisir mode 3 (Développement)
+```
+
+Le script :
+1. Vérifie les prérequis (Docker, Docker Compose)
+2. Génère des secrets cryptographiques uniques
+3. Crée les fichiers `.env` (root + backend + frontend)
+4. Build et lance tous les services Docker
+5. Attend que le backend soit prêt
+6. Affiche l'URL du Setup Wizard
+
+Ouvrez ensuite le **Setup Wizard** dans votre navigateur pour créer votre organisation, l'admin, et charger les données de démo.
+
+> **Le guide ci-dessous détaille chaque étape manuellement** pour référence ou debugging.
+
+---
+
 ## ✅ Prérequis
 
 ### Logiciels requis
 
 | Logiciel | Version minimale | Téléchargement |
 |----------|-----------------|----------------|
-| **Node.js** | 18.17.0+ | https://nodejs.org/ |
+| **Node.js** | 20.0.0+ | https://nodejs.org/ |
 | **npm** | 9.0.0+ | Inclus avec Node.js |
 | **Git** | 2.40.0+ | https://git-scm.com/ |
 | **Docker Desktop** | 24.0.0+ | https://www.docker.com/products/docker-desktop/ |
@@ -54,7 +79,7 @@ wsl --list --verbose
 ```bash
 # Node.js
 node --version
-# Doit afficher : v18.x.x ou supérieur
+# Doit afficher : v20.x.x ou supérieur
 
 # npm
 npm --version
@@ -210,6 +235,8 @@ docker compose logs -f
 
 ### 2.4 Migration base de données
 
+> **⚡ Méthode rapide :** Utilisez le script `install.sh` à la racine du projet qui automatise tout (génération secrets, .env, Docker, migrations, Setup Wizard). Voir section ci-dessous.
+
 ```bash
 cd backend
 
@@ -217,15 +244,14 @@ cd backend
 npx prisma generate
 
 # Appliquer les migrations
-npx prisma migrate dev --name init
-
-# Seed données de test
-npx prisma db seed
+npx prisma migrate dev
 
 # Vérifier avec Prisma Studio (optionnel)
 npx prisma studio
 # Ouvre http://localhost:5555
 ```
+
+> **Note :** Les données de démo sont chargées via le **Setup Wizard** (http://localhost:3001/setup) lors du premier lancement, PAS via `npx prisma db seed`.
 
 ### 2.5 Démarrer le backend
 
@@ -322,7 +348,7 @@ npm run dev
 | Service | URL | Statut attendu |
 |---------|-----|----------------|
 | **Backend API** | http://localhost:3000 | `{"message":"Welcome to XCH API"}` |
-| **Swagger Docs** | http://localhost:3000/api | Interface Swagger UI |
+| **Swagger Docs** | http://localhost:3000/api/docs | Interface Swagger UI |
 | **Frontend App** | http://localhost:3001 | Page de login XCH |
 | **Prisma Studio** | http://localhost:5555 | Interface DB (si lancé) |
 | **MinIO Console** | http://localhost:9001 | Console MinIO |
@@ -332,7 +358,7 @@ npm run dev
 1. **Ouvrir le navigateur :** http://localhost:3001
 2. **Credentials de test :**
    - Email : `admin@xch.local`
-   - Password : `admin`
+   - Password : celui que vous avez choisi dans le Setup Wizard
 3. **Cliquer "Se connecter"**
 4. **Vérifier redirection vers :** http://localhost:3001/dashboard
 
@@ -454,7 +480,7 @@ docker compose exec postgres psql -U xch_user -d xch_dev -c "SELECT 1;"
 # Si échec, recréer le container
 docker compose down
 docker compose up -d postgres
-npm run prisma:migrate
+npx prisma migrate dev
 ```
 
 ### Problème : npm install échoue
@@ -1339,9 +1365,9 @@ http://IP_SERVEUR:3101
 http://192.168.1.100:3101
 ```
 
-**Compte admin par défaut :**
-- Email : `admin@xch.local`
-- Password : `admin123`
+**Compte admin :**
+- Email : celui configuré dans le Setup Wizard
+- Password : celui configuré dans le Setup Wizard (min 8 chars, 1 majuscule, 1 minuscule, 1 chiffre)
 
 ---
 

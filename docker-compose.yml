@@ -71,6 +71,7 @@ services:
       mc mb xch/photos --ignore-existing;
       mc mb xch/exports --ignore-existing;
       mc mb xch/qrcodes --ignore-existing;
+      mc mb xch/xch-backups --ignore-existing;
       mc anonymous set download xch/xch-storage;
       mc anonymous set download xch/qrcodes;
       exit 0;
