@@ -195,6 +195,44 @@ export class FloorPlansController {
     return floorPlan;
   }
 
+  @Get(':id/heatmap-data')
+  @Resource('floor-plans')
+  @Action('read')
+  @ApiOperation({ summary: 'Get heatmap data: AP pins with linked assets and scale info' })
+  async getHeatmapData(@Param('id') id: string, @Request() req: AuthRequest) {
+    const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
+    if (floorPlan.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      );
+      if (perm === ResourcePermissionLevel.NONE) {
+        throw new ForbiddenException('No access to floor plans on this site');
+      }
+    }
+    return this.floorPlansService.getHeatmapData(id, req.user.tenantId);
+  }
+
+  @Patch(':id/scale')
+  @Resource('floor-plans')
+  @Action('update')
+  @ApiOperation({ summary: 'Update floor plan scale calibration' })
+  async updateScale(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+    @Body() body: { scaleMetersPerPixel: number; scaleRefLine?: any },
+  ) {
+    const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
+    if (floorPlan.siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions to modify floor plan scale');
+      }
+    }
+    return this.floorPlansService.updateScale(id, req.user.tenantId, body.scaleMetersPerPixel, body.scaleRefLine);
+  }
+
   @Get(':id/stats')
   @Resource('floor-plans')
   @Action('read')

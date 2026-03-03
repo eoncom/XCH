@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Image as KonvaImage, Circle, Text, Group, Rect, Line, RegularPolygon } from 'react-konva';
 import { jsPDF } from 'jspdf';
-import type { FloorPlan, Pin, PinType, Rack } from '@/types';
+import type { FloorPlan, Pin, PinType, Rack, HeatmapConfig, HeatmapAccessPoint } from '@/types';
+import WifiHeatmapLayer, { renderHeatmapToCanvas } from './WifiHeatmapLayer';
 
 // Custom hook to load image
 // Tries with crossOrigin='anonymous' first (needed for canvas export / PDF generation).
@@ -61,6 +62,14 @@ interface FloorPlanViewerProps {
   onPinDragEnd?: (pinId: string, x: number, y: number) => void;
   editable?: boolean;
   onExportReady?: (exportFn: () => void) => void;
+  /** Wi-Fi heatmap configuration */
+  heatmapConfig?: HeatmapConfig;
+  /** Access point data for heatmap rendering */
+  heatmapAccessPoints?: HeatmapAccessPoint[];
+  /** Scale calibration (meters per normalized unit) */
+  scaleMetersPerPixel?: number | null;
+  /** Callback when an AP pin is dragged (for live heatmap update) */
+  onApPinDragMove?: (pinId: string, x: number, y: number) => void;
 }
 
 const PIN_COLORS: Record<PinType, string> = {
@@ -643,6 +652,10 @@ export default function FloorPlanViewer({
   onPinDragEnd,
   editable = false,
   onExportReady,
+  heatmapConfig,
+  heatmapAccessPoints,
+  scaleMetersPerPixel,
+  onApPinDragMove,
 }: FloorPlanViewerProps) {
   const [image, imageStatus] = useImage(floorPlan.fileUrl || '');
   const [scale, setScale] = useState(1);
@@ -650,6 +663,23 @@ export default function FloorPlanViewer({
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+
+  // Heatmap drag update trigger (incremented to force re-render)
+  const [heatmapTrigger, setHeatmapTrigger] = useState(0);
+  const heatmapAPRef = useRef(heatmapAccessPoints);
+  heatmapAPRef.current = heatmapAccessPoints;
+  const heatmapConfigRef = useRef(heatmapConfig);
+  heatmapConfigRef.current = heatmapConfig;
+  const scaleRef = useRef(scaleMetersPerPixel);
+  scaleRef.current = scaleMetersPerPixel;
+
+  // Filter pins: hide non-AP when heatmap active and hideOtherPins is true
+  const visiblePins = useMemo(() => {
+    if (heatmapConfig?.enabled && heatmapConfig.hideOtherPins) {
+      return pins.filter(p => p.pinType === 'ACCESS_POINT');
+    }
+    return pins;
+  }, [pins, heatmapConfig?.enabled, heatmapConfig?.hideOtherPins]);
 
   // Refs to hold latest data for export (avoids re-render loops)
   const pinsRef = useRef(pins);
@@ -677,6 +707,21 @@ export default function FloorPlanViewer({
       if (!ctx) return;
       ctx.scale(2, 2);
       ctx.drawImage(currentImage, 0, 0);
+
+      // Draw heatmap layer on canvas (if active)
+      const currentHeatmapConfig = heatmapConfigRef.current;
+      const currentHeatmapAPs = heatmapAPRef.current;
+      const currentScale = scaleRef.current;
+      if (currentHeatmapConfig?.enabled && currentHeatmapAPs && currentHeatmapAPs.length > 0) {
+        renderHeatmapToCanvas(
+          ctx,
+          currentHeatmapAPs,
+          currentHeatmapConfig,
+          currentScale || null,
+          currentImage.width,
+          currentImage.height,
+        );
+      }
 
       // Draw pins on canvas
       currentPins.forEach(pin => {
@@ -1376,17 +1421,41 @@ export default function FloorPlanViewer({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
+        {/* Background layer */}
         <Layer>
           {image && <KonvaImage image={image} />}
+        </Layer>
 
-          {image && pins.map((pin) => (
+        {/* Heatmap layer (between background and pins) */}
+        {image && heatmapConfig?.enabled && heatmapAccessPoints && heatmapAccessPoints.length > 0 && (
+          <Layer listening={false}>
+            <WifiHeatmapLayer
+              accessPoints={heatmapAccessPoints}
+              config={heatmapConfig}
+              scaleMetersPerPixel={scaleMetersPerPixel || null}
+              imageWidth={image.width}
+              imageHeight={image.height}
+              updateTrigger={heatmapTrigger}
+            />
+          </Layer>
+        )}
+
+        {/* Pins layer */}
+        <Layer>
+          {image && visiblePins.map((pin) => (
             <PinMarker
               key={pin.id}
               pin={pin}
               imageWidth={image.width}
               imageHeight={image.height}
               onClick={() => onPinClick?.(pin)}
-              onDragEnd={(x, y) => onPinDragEnd?.(pin.id, x, y)}
+              onDragEnd={(x, y) => {
+                onPinDragEnd?.(pin.id, x, y);
+                // Trigger heatmap re-render after AP drag
+                if (pin.pinType === 'ACCESS_POINT') {
+                  setHeatmapTrigger(t => t + 1);
+                }
+              }}
               draggable={editable}
             />
           ))}

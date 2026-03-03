@@ -1,5 +1,5 @@
 import { apiClient } from '../api-client';
-import type { FloorPlan, Pin } from '@/types';
+import type { FloorPlan, Pin, HeatmapData } from '@/types';
 
 export interface PdfInspectResult {
   pageCount: number;
@@ -69,4 +69,11 @@ export const floorPlansApi = {
 
   deletePin: (floorPlanId: string, pinId: string) =>
     apiClient.delete(`/api/floor-plans/${floorPlanId}/pins/${pinId}`),
+
+  // Heatmap
+  getHeatmapData: (id: string) =>
+    apiClient.get<HeatmapData>(`/api/floor-plans/${id}/heatmap-data`),
+
+  updateScale: (id: string, scaleMetersPerPixel: number, scaleRefLine?: any) =>
+    apiClient.patch(`/api/floor-plans/${id}/scale`, { scaleMetersPerPixel, scaleRefLine }),
 };

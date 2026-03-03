@@ -436,6 +436,10 @@ model FloorPlan {
   uploadedBy String
   uploadedAt DateTime @default(now())
 
+  // Scale calibration (for heatmap / measurements)
+  scaleMetersPerPixel Float?  // Meters per normalized unit (0-1)
+  scaleRefLine        Json?   @db.JsonB // {x1,y1,x2,y2,meters} reference line
+
   // Relations
   pins Pin[]
 

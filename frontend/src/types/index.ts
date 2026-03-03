@@ -350,11 +350,65 @@ export interface FloorPlan {
   uploadedBy?: string;
   uploadedAt?: string;
   notes?: string;
+  // Scale calibration (for heatmap / measurements)
+  scaleMetersPerPixel?: number;
+  scaleRefLine?: { x1: number; y1: number; x2: number; y2: number; meters: number };
   createdAt?: string;
   updatedAt?: string;
   site?: Site;
   pins?: Pin[];
   _count?: { pins: number };
+}
+
+// Wi-Fi Heatmap types
+export interface WifiProfile {
+  txPower: number;            // dBm (ex: 20)
+  frequency: '2.4' | '5' | '6';  // GHz
+  estimatedRange: number;     // meters
+  antennaGain: number;        // dBi
+  label?: string;             // "Ubiquiti U6-Pro 5GHz"
+}
+
+export interface WifiProfilePreset {
+  manufacturer: string;
+  model: string;
+  profiles: {
+    '2.4'?: WifiProfile;
+    '5'?: WifiProfile;
+    '6'?: WifiProfile;
+  };
+}
+
+export interface HeatmapConfig {
+  enabled: boolean;
+  frequency: '2.4' | '5' | '6' | 'all';
+  minSignal: number;          // dBm threshold (ex: -80)
+  opacity: number;            // 0.0-1.0
+  hideOtherPins: boolean;
+}
+
+export interface HeatmapAccessPoint {
+  pinId: string;
+  x: number;
+  y: number;
+  label?: string;
+  asset?: {
+    id: string;
+    name?: string;
+    manufacturer?: string;
+    model?: string;
+    type: string;
+    status: string;
+    wifiProfile?: WifiProfile;
+    networkInfo?: any;
+  } | null;
+}
+
+export interface HeatmapData {
+  floorPlanId: string;
+  scaleMetersPerPixel: number | null;
+  scaleRefLine: any;
+  accessPoints: HeatmapAccessPoint[];
 }
 
 // Contact types

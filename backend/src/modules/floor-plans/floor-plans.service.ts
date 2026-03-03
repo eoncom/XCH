@@ -370,6 +370,90 @@ export class FloorPlansService {
     return { message: 'Floor plan deleted successfully' };
   }
 
+  // ==================== HEATMAP ====================
+
+  /**
+   * Get heatmap data: ACCESS_POINT pins with their linked assets and scale info
+   */
+  async getHeatmapData(id: string, tenantId: string) {
+    const floorPlan = await this.prisma.floorPlan.findFirst({
+      where: { id, site: { tenantId } },
+      select: {
+        id: true,
+        scaleMetersPerPixel: true,
+        scaleRefLine: true,
+        pins: {
+          where: {
+            pinType: 'ACCESS_POINT',
+          },
+          select: {
+            id: true,
+            x: true,
+            y: true,
+            label: true,
+            asset: {
+              select: {
+                id: true,
+                name: true,
+                manufacturer: true,
+                model: true,
+                type: true,
+                networkInfo: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!floorPlan) {
+      throw new NotFoundException('Floor plan not found');
+    }
+
+    return {
+      floorPlanId: floorPlan.id,
+      scaleMetersPerPixel: floorPlan.scaleMetersPerPixel,
+      scaleRefLine: floorPlan.scaleRefLine,
+      accessPoints: floorPlan.pins.map(pin => ({
+        pinId: pin.id,
+        x: pin.x,
+        y: pin.y,
+        label: pin.label,
+        asset: pin.asset ? {
+          id: pin.asset.id,
+          name: pin.asset.name,
+          manufacturer: pin.asset.manufacturer,
+          model: pin.asset.model,
+          type: pin.asset.type,
+          status: pin.asset.status,
+          wifiProfile: (pin.asset.networkInfo as any)?.wifiProfile || null,
+          networkInfo: pin.asset.networkInfo,
+        } : null,
+      })),
+    };
+  }
+
+  /**
+   * Update floor plan scale calibration
+   */
+  async updateScale(id: string, tenantId: string, scaleMetersPerPixel: number, scaleRefLine?: any) {
+    await this.findOne(id, tenantId);
+
+    return await this.prisma.floorPlan.update({
+      where: { id },
+      data: {
+        scaleMetersPerPixel,
+        scaleRefLine: scaleRefLine || undefined,
+      },
+      select: {
+        id: true,
+        scaleMetersPerPixel: true,
+        scaleRefLine: true,
+      },
+    });
+  }
+
   // ==================== VERSIONING ====================
 
   /**

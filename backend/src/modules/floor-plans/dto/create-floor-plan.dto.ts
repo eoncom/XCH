@@ -35,4 +35,13 @@ export class CreateFloorPlanDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiProperty({ required: false, description: 'Scale: meters per normalized pixel unit (0-1)' })
+  @IsNumber()
+  @IsOptional()
+  scaleMetersPerPixel?: number;
+
+  @ApiProperty({ required: false, description: 'Scale reference line: {x1,y1,x2,y2,meters}' })
+  @IsOptional()
+  scaleRefLine?: any;
 }

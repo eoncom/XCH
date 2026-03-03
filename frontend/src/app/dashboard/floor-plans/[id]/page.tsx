@@ -46,7 +46,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import type { FloorPlan, Pin, PinType, Asset, AssetType, Rack } from '@/types';
+import type { FloorPlan, Pin, PinType, Asset, AssetType, Rack, HeatmapConfig, HeatmapAccessPoint } from '@/types';
+import { findWifiProfile } from '@/lib/wifi-profiles';
 
 // Dynamically import FloorPlanViewer (client-side only for Konva)
 const FloorPlanViewer = dynamic(
@@ -59,6 +60,16 @@ const FloorPlanViewer = dynamic(
       </div>
     ),
   }
+);
+
+// Dynamically import heatmap components
+const HeatmapControls = dynamic(
+  () => import('@/components/floor-plans/HeatmapControls'),
+  { ssr: false }
+);
+const ScaleCalibration = dynamic(
+  () => import('@/components/floor-plans/ScaleCalibration'),
+  { ssr: false }
 );
 
 const pinTypeLabels: Record<PinType, string> = {
@@ -167,6 +178,17 @@ export default function FloorPlanDetailPage({
   const [showNewVersionDialog, setShowNewVersionDialog] = useState(false);
   const [newVersionNotes, setNewVersionNotes] = useState('');
   const [newVersionFile, setNewVersionFile] = useState<File | null>(null);
+
+  // Heatmap state
+  const [heatmapConfig, setHeatmapConfig] = useState<HeatmapConfig>({
+    enabled: false,
+    frequency: '5',
+    minSignal: -80,
+    opacity: 0.5,
+    hideOtherPins: false,
+  });
+  const [showScaleCalibration, setShowScaleCalibration] = useState(false);
+  const [scalePickPoints, setScalePickPoints] = useState<{ x: number; y: number }[]>([]);
 
   const { data: floorPlan, isLoading } = useQuery<FloorPlan>({
     queryKey: ['floor-plan', id],
@@ -374,6 +396,50 @@ export default function FloorPlanDetailPage({
     setExportFunction(() => exportFn);
   }, []);
 
+  // ==================== HEATMAP ====================
+
+  // Build heatmap access points from floor plan pins + assets
+  const heatmapAccessPoints: HeatmapAccessPoint[] = useMemo(() => {
+    if (!floorPlan?.pins) return [];
+    return floorPlan.pins
+      .filter(pin => pin.pinType === 'ACCESS_POINT')
+      .map(pin => ({
+        pinId: pin.id,
+        x: pin.x,
+        y: pin.y,
+        label: pin.label || undefined,
+        asset: pin.asset ? {
+          id: pin.asset.id,
+          name: pin.asset.name || undefined,
+          manufacturer: pin.asset.manufacturer || undefined,
+          model: pin.asset.model || undefined,
+          type: pin.asset.type,
+          status: pin.asset.status,
+          wifiProfile: (pin.asset as any).metadata?.wifiProfile || undefined,
+          networkInfo: pin.asset.networkInfo,
+        } : null,
+      }));
+  }, [floorPlan?.pins]);
+
+  const apCount = heatmapAccessPoints.length;
+
+  // Save scale mutation
+  const scaleMutation = useMutation({
+    mutationFn: ({ scaleVal, refLine }: { scaleVal: number; refLine?: any }) =>
+      floorPlansApi.updateScale(id, scaleVal, refLine),
+    onSuccess: () => {
+      showToast.success('Échelle du plan enregistrée');
+      queryClient.invalidateQueries({ queryKey: ['floor-plan', id] });
+    },
+    onError: () => {
+      showToast.error('Erreur lors de l\'enregistrement de l\'échelle');
+    },
+  });
+
+  const handleSaveScale = (scaleVal: number, refLine?: any) => {
+    scaleMutation.mutate({ scaleVal, refLine });
+  };
+
   if (isLoading) {
     return <div className="text-center py-12">Chargement...</div>;
   }
@@ -471,6 +537,9 @@ export default function FloorPlanDetailPage({
                 onPinDragEnd={canUpdate('floor-plans', floorPlan?.siteId) ? handlePinDragEnd : undefined}
                 editable={canUpdate('floor-plans', floorPlan?.siteId)}
                 onExportReady={handleExportReady}
+                heatmapConfig={heatmapConfig}
+                heatmapAccessPoints={heatmapAccessPoints}
+                scaleMetersPerPixel={floorPlan.scaleMetersPerPixel}
               />
             </CardContent>
           </Card>
@@ -525,6 +594,17 @@ export default function FloorPlanDetailPage({
               )}
             </CardContent>
           </Card>
+
+          {/* Wi-Fi Heatmap Controls */}
+          {apCount > 0 && (
+            <HeatmapControls
+              config={heatmapConfig}
+              onChange={setHeatmapConfig}
+              apCount={apCount}
+              hasScale={!!floorPlan.scaleMetersPerPixel}
+              onCalibrateScale={() => setShowScaleCalibration(true)}
+            />
+          )}
 
           {/* Version History */}
           {versionHistory && versionHistory.length > 1 && (
@@ -1178,6 +1258,20 @@ export default function FloorPlanDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Scale Calibration Dialog */}
+      <ScaleCalibration
+        open={showScaleCalibration}
+        onClose={() => setShowScaleCalibration(false)}
+        onSave={handleSaveScale}
+        currentScale={floorPlan?.scaleMetersPerPixel}
+        currentRefLine={floorPlan?.scaleRefLine}
+        pickedPoints={scalePickPoints}
+        onStartPickingPoints={() => {
+          setScalePickPoints([]);
+          // User will click on the plan - handled via a special mode
+        }}
+      />
     </div>
   );
 }
