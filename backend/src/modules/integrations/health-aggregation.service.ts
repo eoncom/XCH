@@ -194,21 +194,29 @@ export class HealthAggregationService {
 
   /**
    * Resolve monitor status from:
-   * 1. Live monitor statuses map (from Uptime Kuma fetch)
-   * 2. Cached status in the entity
-   * 3. Default to 'unknown'
+   * 1. No monitorName → not monitored → 'unknown'
+   * 2. Live monitor statuses map (from Uptime Kuma fetch)
+   * 3. Cached status in the entity (from previous sync)
+   * 4. Default to 'unknown'
    */
   private resolveMonitorStatus(
     monitorName: string | undefined,
     cachedStatus: string | undefined,
     monitorStatuses: MonitorStatusMap,
   ): 'up' | 'down' | 'unknown' {
-    if (monitorName && monitorStatuses[monitorName]) {
+    // No monitor configured → not monitored → unknown
+    if (!monitorName) return 'unknown';
+
+    // Priority 1: live status from Uptime Kuma
+    if (monitorStatuses[monitorName]) {
       return monitorStatuses[monitorName].status;
     }
+
+    // Priority 2: cached status from previous sync
     if (cachedStatus === 'up' || cachedStatus === 'down') {
       return cachedStatus;
     }
+
     return 'unknown';
   }
 

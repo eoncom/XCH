@@ -465,16 +465,35 @@ export class IntegrationsService {
     }
 
     const isEnabled = this.uptimeKumaProvider.isEnabled();
-    this.logger.log(`getUptimeKumaMonitors: provider enabled=${isEnabled}, status=${this.uptimeKumaProvider.getStatus()}`);
+    const providerStatus = this.uptimeKumaProvider.getDetailedStatus();
+    this.logger.log(`getUptimeKumaMonitors: provider enabled=${isEnabled}, status=${providerStatus.status}`);
 
     if (!isEnabled) {
       this.logger.warn('Uptime Kuma provider is disabled — no URL configured in tenant settings or env vars');
-      return [];
+      return {
+        monitors: [],
+        status: 'not_configured' as const,
+        message: 'Uptime Kuma non configuré. Ajoutez l\'URL dans Paramètres > Intégrations.',
+      };
     }
 
     const monitors = await this.uptimeKumaProvider.fetchMonitors();
     this.logger.log(`getUptimeKumaMonitors: returned ${monitors.length} monitors`);
-    return monitors;
+
+    if (providerStatus.status === 'error') {
+      return {
+        monitors,
+        status: 'error' as const,
+        message: providerStatus.lastError || 'Erreur de connexion à Uptime Kuma',
+        lastFetch: providerStatus.lastFetch,
+      };
+    }
+
+    return {
+      monitors,
+      status: 'connected' as const,
+      lastFetch: providerStatus.lastFetch,
+    };
   }
 
   /**

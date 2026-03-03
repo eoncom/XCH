@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Image as KonvaImage, Circle, Text, Group, Rect, Line, RegularPolygon } from 'react-konva';
 import { jsPDF } from 'jspdf';
 import type { FloorPlan, Pin, PinType, Rack, HeatmapConfig, HeatmapAccessPoint } from '@/types';
@@ -70,6 +70,14 @@ interface FloorPlanViewerProps {
   scaleMetersPerPixel?: number | null;
   /** Callback when an AP pin is dragged (for live heatmap update) */
   onApPinDragMove?: (pinId: string, x: number, y: number) => void;
+  /** Calibration mode: user is picking points on the plan */
+  calibrationMode?: boolean;
+  /** Points picked during calibration (normalized 0-1) */
+  calibrationPoints?: { x: number; y: number }[];
+  /** Saved reference line from previous calibration */
+  scaleRefLine?: { x1: number; y1: number; x2: number; y2: number; meters: number } | null;
+  /** Show metric grid overlay */
+  showCalibrationGrid?: boolean;
 }
 
 const PIN_COLORS: Record<PinType, string> = {
@@ -656,6 +664,10 @@ export default function FloorPlanViewer({
   heatmapAccessPoints,
   scaleMetersPerPixel,
   onApPinDragMove,
+  calibrationMode,
+  calibrationPoints,
+  scaleRefLine,
+  showCalibrationGrid,
 }: FloorPlanViewerProps) {
   const [image, imageStatus] = useImage(floorPlan.fileUrl || '');
   const [scale, setScale] = useState(1);
@@ -700,6 +712,48 @@ export default function FloorPlanViewer({
       if (!currentImage) return;
 
       // --- Step 1: Draw plan + pins on offscreen canvas ---
+      const currentHeatmapConfig = heatmapConfigRef.current;
+      const currentHeatmapAPs = heatmapAPRef.current;
+      const currentScale = scaleRef.current;
+      const heatmapActive = !!(currentHeatmapConfig?.enabled && currentHeatmapAPs && currentHeatmapAPs.length > 0);
+
+      // Helper: draw pins on a canvas context
+      const drawPinsOnCanvas = (ctx: CanvasRenderingContext2D, pinsToRender: typeof currentPins) => {
+        pinsToRender.forEach(pin => {
+          const px = pin.x * currentImage.width;
+          const py = pin.y * currentImage.height;
+          const color = PIN_COLORS[pin.pinType] || PIN_COLORS.OTHER;
+          const sigle = PIN_LABELS[pin.pinType] || '?';
+
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.globalAlpha = 0.2;
+          ctx.fillStyle = '#000000';
+          ctx.beginPath();
+          ctx.arc(1, 1, 15, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          drawPinShapeCanvas(ctx, pin.pinType, color);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(sigle, 0, 0);
+          if (pin.label) {
+            ctx.fillStyle = '#ffffff';
+            ctx.globalAlpha = 0.85;
+            const labelWidth = ctx.measureText(pin.label).width + 8;
+            ctx.fillRect(-labelWidth / 2, 16, labelWidth, 16);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(pin.label, 0, 25);
+          }
+          ctx.restore();
+        });
+      };
+
+      // Render Page 1: Complete plan (without heatmap, all pins)
       const canvas = document.createElement('canvas');
       canvas.width = currentImage.width * 2;
       canvas.height = currentImage.height * 2;
@@ -707,62 +761,33 @@ export default function FloorPlanViewer({
       if (!ctx) return;
       ctx.scale(2, 2);
       ctx.drawImage(currentImage, 0, 0);
-
-      // Draw heatmap layer on canvas (if active)
-      const currentHeatmapConfig = heatmapConfigRef.current;
-      const currentHeatmapAPs = heatmapAPRef.current;
-      const currentScale = scaleRef.current;
-      if (currentHeatmapConfig?.enabled && currentHeatmapAPs && currentHeatmapAPs.length > 0) {
-        renderHeatmapToCanvas(
-          ctx,
-          currentHeatmapAPs,
-          currentHeatmapConfig,
-          currentScale || null,
-          currentImage.width,
-          currentImage.height,
-        );
-      }
-
-      // Draw pins on canvas
-      currentPins.forEach(pin => {
-        const px = pin.x * currentImage.width;
-        const py = pin.y * currentImage.height;
-        const color = PIN_COLORS[pin.pinType] || PIN_COLORS.OTHER;
-        const sigle = PIN_LABELS[pin.pinType] || '?';
-
-        ctx.save();
-        ctx.translate(px, py);
-
-        ctx.globalAlpha = 0.2;
-        ctx.fillStyle = '#000000';
-        ctx.beginPath();
-        ctx.arc(1, 1, 15, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-
-        drawPinShapeCanvas(ctx, pin.pinType, color);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 10px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(sigle, 0, 0);
-
-        if (pin.label) {
-          ctx.fillStyle = '#ffffff';
-          ctx.globalAlpha = 0.85;
-          const labelWidth = ctx.measureText(pin.label).width + 8;
-          ctx.fillRect(-labelWidth / 2, 16, labelWidth, 16);
-          ctx.globalAlpha = 1;
-          ctx.fillStyle = '#000000';
-          ctx.font = 'bold 11px sans-serif';
-          ctx.fillText(pin.label, 0, 25);
-        }
-
-        ctx.restore();
-      });
-
+      drawPinsOnCanvas(ctx, currentPins);
       const planDataUrl = canvas.toDataURL('image/png');
+
+      // Render Page 2: Heatmap Wi-Fi (only if heatmap is active)
+      let heatmapDataUrl: string | null = null;
+      if (heatmapActive) {
+        const hCanvas = document.createElement('canvas');
+        hCanvas.width = currentImage.width * 2;
+        hCanvas.height = currentImage.height * 2;
+        const hCtx = hCanvas.getContext('2d');
+        if (hCtx) {
+          hCtx.scale(2, 2);
+          hCtx.drawImage(currentImage, 0, 0);
+          renderHeatmapToCanvas(
+            hCtx,
+            currentHeatmapAPs!,
+            currentHeatmapConfig!,
+            currentScale || null,
+            currentImage.width,
+            currentImage.height,
+          );
+          // Draw only AP pins on heatmap page
+          const apPins = currentPins.filter(p => p.pinType === 'ACCESS_POINT');
+          drawPinsOnCanvas(hCtx, apPins);
+          heatmapDataUrl = hCanvas.toDataURL('image/png');
+        }
+      }
 
       // --- Step 2: Build PDF ---
       const planName = currentFloorPlan.name || currentFloorPlan.title || 'Plan';
@@ -1094,6 +1119,63 @@ export default function FloorPlanViewer({
             tY += 4;
           }
         }
+      }
+
+      // --- Heatmap page (Page 2) ---
+      if (heatmapDataUrl) {
+        pdf.addPage(isLandscape ? 'landscape' : 'portrait');
+        const p2Y = margin;
+
+        // Title
+        pdf.setFontSize(14);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 0, 0);
+        const freqLabel = currentHeatmapConfig!.frequency === 'all' ? 'Toutes bandes' : `${currentHeatmapConfig!.frequency} GHz`;
+        pdf.text(`Couverture Wi-Fi — ${freqLabel}`, margin, p2Y + 6);
+
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(`${planName} — Estimation indicative en espace libre`, margin, p2Y + 11);
+        pdf.setTextColor(0, 0, 0);
+
+        // Heatmap image
+        const hImgTop = p2Y + 15;
+        const hAvailH = pageH - hImgTop - margin - 20;
+        let hImgW = availW;
+        let hImgH = hImgW / imgRatio;
+        if (hImgH > hAvailH) {
+          hImgH = hAvailH;
+          hImgW = hImgH * imgRatio;
+        }
+        const hImgX = margin + (availW - hImgW) / 2;
+        pdf.addImage(heatmapDataUrl, 'PNG', hImgX, hImgTop, hImgW, hImgH);
+        pdf.setDrawColor(200, 200, 200);
+        pdf.setLineWidth(0.3);
+        pdf.rect(hImgX, hImgTop, hImgW, hImgH);
+
+        // Signal legend
+        const sigLegY = hImgTop + hImgH + 4;
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Légende signal', margin, sigLegY + 3);
+
+        const sigItems = [
+          { color: [16, 185, 129], label: 'Excellent', range: '> -50 dBm' },
+          { color: [234, 179, 8], label: 'Bon', range: '-50 à -65 dBm' },
+          { color: [249, 115, 22], label: 'Acceptable', range: '-65 à -80 dBm' },
+          { color: [239, 68, 68], label: 'Faible', range: '< -80 dBm' },
+        ];
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'normal');
+        sigItems.forEach((item, i) => {
+          const sx = margin + i * 45;
+          const sy = sigLegY + 6;
+          pdf.setFillColor(item.color[0], item.color[1], item.color[2]);
+          pdf.circle(sx + 2, sy + 1.5, 1.5, 'F');
+          pdf.setTextColor(50, 50, 50);
+          pdf.text(`${item.label} (${item.range})`, sx + 5, sy + 2.5);
+        });
       }
 
       // Save PDF
@@ -1437,6 +1519,69 @@ export default function FloorPlanViewer({
               imageHeight={image.height}
               updateTrigger={heatmapTrigger}
             />
+          </Layer>
+        )}
+
+        {/* Calibration layer (reference line, picked points, metric grid) */}
+        {image && (calibrationMode || scaleRefLine || showCalibrationGrid) && (
+          <Layer listening={false}>
+            {/* Metric grid */}
+            {showCalibrationGrid && scaleMetersPerPixel && scaleMetersPerPixel > 0 && (() => {
+              const gridSpacingMeters = scaleMetersPerPixel > 50 ? 10 : scaleMetersPerPixel > 20 ? 5 : 2;
+              const gridSpacingPx = (gridSpacingMeters / scaleMetersPerPixel) * image.width;
+              const gridLines: React.ReactElement[] = [];
+              for (let x = gridSpacingPx; x < image.width; x += gridSpacingPx) {
+                gridLines.push(
+                  <Line key={`gv-${x}`} points={[x, 0, x, image.height]} stroke="rgba(150,150,150,0.3)" strokeWidth={1} dash={[4, 4]} />,
+                  <Text key={`gvt-${x}`} x={x + 2} y={4} text={`${Math.round(x / gridSpacingPx * gridSpacingMeters)}m`} fontSize={10} fill="rgba(150,150,150,0.6)" />
+                );
+              }
+              for (let y = gridSpacingPx; y < image.height; y += gridSpacingPx) {
+                gridLines.push(
+                  <Line key={`gh-${y}`} points={[0, y, image.width, y]} stroke="rgba(150,150,150,0.3)" strokeWidth={1} dash={[4, 4]} />,
+                  <Text key={`ght-${y}`} x={4} y={y + 2} text={`${Math.round(y / gridSpacingPx * gridSpacingMeters)}m`} fontSize={10} fill="rgba(150,150,150,0.6)" />
+                );
+              }
+              return gridLines;
+            })()}
+
+            {/* Calibration picked points (red circles) */}
+            {calibrationMode && calibrationPoints && calibrationPoints.map((pt, i) => (
+              <React.Fragment key={`cal-pt-${i}`}>
+                <Circle x={pt.x * image.width} y={pt.y * image.height} radius={8} fill="rgba(239,68,68,0.8)" stroke="#fff" strokeWidth={2} />
+                <Text x={pt.x * image.width + 12} y={pt.y * image.height - 8} text={i === 0 ? 'A' : 'B'} fontSize={14} fontStyle="bold" fill="#ef4444" />
+              </React.Fragment>
+            ))}
+
+            {/* Calibration line between picked points */}
+            {calibrationMode && calibrationPoints && calibrationPoints.length === 2 && (
+              <Line
+                points={[
+                  calibrationPoints[0].x * image.width, calibrationPoints[0].y * image.height,
+                  calibrationPoints[1].x * image.width, calibrationPoints[1].y * image.height,
+                ]}
+                stroke="#ef4444" strokeWidth={2} dash={[8, 4]}
+              />
+            )}
+
+            {/* Saved reference line (subtle gray) */}
+            {!calibrationMode && scaleRefLine && (
+              <>
+                <Line
+                  points={[
+                    scaleRefLine.x1 * image.width, scaleRefLine.y1 * image.height,
+                    scaleRefLine.x2 * image.width, scaleRefLine.y2 * image.height,
+                  ]}
+                  stroke="rgba(150,150,150,0.5)" strokeWidth={1.5} dash={[6, 3]}
+                />
+                <Text
+                  x={(scaleRefLine.x1 + scaleRefLine.x2) / 2 * image.width + 5}
+                  y={(scaleRefLine.y1 + scaleRefLine.y2) / 2 * image.height - 12}
+                  text={`${scaleRefLine.meters}m`}
+                  fontSize={11} fill="rgba(120,120,120,0.7)" fontStyle="italic"
+                />
+              </>
+            )}
           </Layer>
         )}
 

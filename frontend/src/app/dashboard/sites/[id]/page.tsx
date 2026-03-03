@@ -1108,7 +1108,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const [assetStatusFilter, setAssetStatusFilter] = useState<string>('all');
   const warrantyThresholds = useWarrantyThresholds();
   const { canUpdate, canDelete } = usePermissions();
-  const { statusMap: monitorStatusMap } = useLiveMonitors();
+  const { statusMap: monitorStatusMap, providerStatus: kumaStatus } = useLiveMonitors();
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -1142,12 +1142,15 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const liveHealthComponents = useMemo(() => {
     const hb = site?.metadata?.healthBreakdown;
     if (!hb?.components?.length) return [];
-    return hb.components.map((comp: any) => {
-      if (comp.monitorName && monitorStatusMap[comp.monitorName] !== undefined) {
-        return { ...comp, status: monitorStatusMap[comp.monitorName] };
-      }
-      return comp;
-    });
+    return hb.components
+      // Filter out components without monitoring (no monitorName + unknown status)
+      .filter((comp: any) => comp.monitorName || (comp.status !== 'unknown'))
+      .map((comp: any) => {
+        if (comp.monitorName && monitorStatusMap[comp.monitorName] !== undefined) {
+          return { ...comp, status: monitorStatusMap[comp.monitorName] };
+        }
+        return comp;
+      });
   }, [site?.metadata?.healthBreakdown, monitorStatusMap]);
 
   // Load site racks
@@ -1535,6 +1538,15 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         </span>
                       )}
                     </div>
+                  )}
+                  {monitoredAssets.length === 0 && liveHealthComponents.length === 0 && kumaStatus !== 'connected' && (
+                    <p className="text-xs text-muted-foreground">
+                      {kumaStatus === 'not_configured'
+                        ? 'Monitoring non configuré. Configurez Uptime Kuma dans Paramètres > Intégrations.'
+                        : kumaStatus === 'error'
+                        ? 'Erreur de connexion à Uptime Kuma.'
+                        : 'Aucun équipement monitoré.'}
+                    </p>
                   )}
 
                   {/* Warranty alerts */}

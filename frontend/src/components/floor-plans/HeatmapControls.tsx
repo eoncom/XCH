@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Wifi, WifiOff, Eye, EyeOff, Ruler } from 'lucide-react';
+import { Wifi, WifiOff, Eye, EyeOff, Ruler, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
@@ -17,6 +17,8 @@ interface HeatmapControlsProps {
   apCount: number;
   hasScale: boolean;
   onCalibrateScale: () => void;
+  showGrid?: boolean;
+  onToggleGrid?: (show: boolean) => void;
 }
 
 const FREQUENCY_OPTIONS = [
@@ -32,6 +34,8 @@ export default function HeatmapControls({
   apCount,
   hasScale,
   onCalibrateScale,
+  showGrid,
+  onToggleGrid,
 }: HeatmapControlsProps) {
   const updateConfig = (partial: Partial<HeatmapConfig>) => {
     onChange({ ...config, ...partial });
@@ -156,6 +160,20 @@ export default function HeatmapControls({
               onCheckedChange={(hideOtherPins) => updateConfig({ hideOtherPins })}
             />
           </div>
+
+          {/* Metric grid toggle (only when scale is set) */}
+          {hasScale && onToggleGrid && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Grid3X3 className="h-3 w-3 text-muted-foreground" />
+                <Label className="text-xs">Grille métrique</Label>
+              </div>
+              <Switch
+                checked={showGrid ?? false}
+                onCheckedChange={onToggleGrid}
+              />
+            </div>
+          )}
 
           <Separator />
 

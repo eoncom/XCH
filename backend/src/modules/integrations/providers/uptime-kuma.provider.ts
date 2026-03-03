@@ -18,6 +18,8 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
   private client: AxiosInstance;
   private enabled: boolean;
   private status: 'connected' | 'disconnected' | 'error' = 'disconnected';
+  private lastError: string | null = null;
+  private lastFetch: string | null = null;
 
   constructor(private configService: ConfigService) {
     const baseURL = this.configService.get<string>('UPTIME_KUMA_URL');
@@ -73,6 +75,20 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
 
   getStatus(): 'connected' | 'disconnected' | 'error' {
     return this.status;
+  }
+
+  getDetailedStatus(): {
+    enabled: boolean;
+    status: 'connected' | 'disconnected' | 'error';
+    lastError: string | null;
+    lastFetch: string | null;
+  } {
+    return {
+      enabled: this.enabled,
+      status: this.status,
+      lastError: this.lastError,
+      lastFetch: this.lastFetch,
+    };
   }
 
   /**
@@ -229,12 +245,15 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
       const monitors = this.parsePrometheusMetrics(response.data);
 
       this.status = 'connected';
+      this.lastError = null;
+      this.lastFetch = new Date().toISOString();
       this.logger.log(`Fetched ${monitors.length} monitors from Uptime Kuma`);
       return monitors;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error('Failed to fetch monitors from Uptime Kuma', errorMessage);
       this.status = 'error';
+      this.lastError = errorMessage;
 
       // Return empty array instead of throwing (circuit breaker pattern)
       return [];

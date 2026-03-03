@@ -189,6 +189,8 @@ export default function FloorPlanDetailPage({
   });
   const [showScaleCalibration, setShowScaleCalibration] = useState(false);
   const [scalePickPoints, setScalePickPoints] = useState<{ x: number; y: number }[]>([]);
+  const [calibrationMode, setCalibrationMode] = useState(false);
+  const [showCalibrationGrid, setShowCalibrationGrid] = useState(false);
 
   const { data: floorPlan, isLoading } = useQuery<FloorPlan>({
     queryKey: ['floor-plan', id],
@@ -319,6 +321,16 @@ export default function FloorPlanDetailPage({
   };
 
   const handleStageClick = (x: number, y: number) => {
+    // Calibration mode: pick points for scale
+    if (calibrationMode) {
+      const newPoints = [...scalePickPoints, { x, y }];
+      setScalePickPoints(newPoints);
+      if (newPoints.length >= 2) {
+        setCalibrationMode(false);
+        setShowScaleCalibration(true);
+      }
+      return;
+    }
     setNewPinPosition({ x, y });
     setShowAddPinDialog(true);
   };
@@ -522,7 +534,11 @@ export default function FloorPlanDetailPage({
                   </Button>
                 )}
               </div>
-              {canUpdate('floor-plans', floorPlan?.siteId) && (
+              {calibrationMode ? (
+                <p className="text-sm text-amber-600 dark:text-amber-400 font-medium animate-pulse">
+                  Cliquez {2 - scalePickPoints.length} point{2 - scalePickPoints.length > 1 ? 's' : ''} sur le plan pour calibrer l&apos;échelle
+                </p>
+              ) : canUpdate('floor-plans', floorPlan?.siteId) && (
                 <p className="text-sm text-muted-foreground">
                   Cliquez sur le plan pour ajouter un repère
                 </p>
@@ -540,6 +556,10 @@ export default function FloorPlanDetailPage({
                 heatmapConfig={heatmapConfig}
                 heatmapAccessPoints={heatmapAccessPoints}
                 scaleMetersPerPixel={floorPlan.scaleMetersPerPixel}
+                calibrationMode={calibrationMode}
+                calibrationPoints={scalePickPoints}
+                scaleRefLine={floorPlan.scaleRefLine as any}
+                showCalibrationGrid={showCalibrationGrid}
               />
             </CardContent>
           </Card>
@@ -603,6 +623,8 @@ export default function FloorPlanDetailPage({
               apCount={apCount}
               hasScale={!!floorPlan.scaleMetersPerPixel}
               onCalibrateScale={() => setShowScaleCalibration(true)}
+              showGrid={showCalibrationGrid}
+              onToggleGrid={setShowCalibrationGrid}
             />
           )}
 
@@ -1269,7 +1291,7 @@ export default function FloorPlanDetailPage({
         pickedPoints={scalePickPoints}
         onStartPickingPoints={() => {
           setScalePickPoints([]);
-          // User will click on the plan - handled via a special mode
+          setCalibrationMode(true);
         }}
       />
     </div>
