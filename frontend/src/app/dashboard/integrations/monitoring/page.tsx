@@ -38,6 +38,7 @@ import {
 import { integrationsApi } from '@/lib/api/integrations';
 import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
+import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import { showToast } from '@/lib/toast';
 import type { Site, Asset } from '@/types';
 
@@ -78,12 +79,7 @@ export default function MonitoringPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
 
-  const { data: monitors = [], isLoading, isError, error, dataUpdatedAt } = useQuery<Monitor[]>({
-    queryKey: ['uptime-kuma-monitors'],
-    queryFn: () => integrationsApi.uptimeKuma.getMonitors(),
-    refetchInterval: 60_000,
-    retry: 1,
-  });
+  const { monitors, isLoading, isError, error, dataUpdatedAt } = useLiveMonitors();
 
   // Fetch sites for the mapping dropdown
   const { data: sites = [] } = useQuery<Site[]>({

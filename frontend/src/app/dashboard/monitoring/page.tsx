@@ -5,9 +5,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { integrationsApi } from '@/lib/api/integrations';
 import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
+import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import {
   Activity, WifiOff, Search, Clock, CheckCircle2, XCircle, HelpCircle,
   ChevronDown, ChevronRight, MapPin, Globe, Layers, Shield, Server,
@@ -63,15 +63,7 @@ export default function MonitoringOverviewPage() {
   const [viewMode, setViewMode] = useState<'by-site' | 'by-type' | 'all'>('by-site');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
-  const { data: monitors = [], isLoading, refetch, dataUpdatedAt } = useQuery<Array<{
-    id: number; name: string; type: string; status: 'up' | 'down' | 'unknown'; responseTime: number; certExpiry?: number;
-  }>>({
-    queryKey: ['uptime-kuma-monitors'],
-    queryFn: () => integrationsApi.uptimeKuma.getMonitors(),
-    retry: 1,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
-  });
+  const { monitors, isLoading, refetch, dataUpdatedAt } = useLiveMonitors();
 
   const { data: sites = [] } = useQuery({
     queryKey: ['sites'],

@@ -117,14 +117,7 @@ export const integrationsApi = {
   // Uptime Kuma
   uptimeKuma: {
     getMonitors: () =>
-      apiClient.get<Array<{
-        id: number;
-        name: string;
-        type: string;
-        status: 'up' | 'down' | 'unknown';
-        responseTime: number;
-        certExpiry?: number;
-      }>>('/api/integrations/uptime-kuma/monitors'),
+      apiClient.get<any>('/api/integrations/uptime-kuma/monitors'),
 
     syncSiteHealth: (siteId: string, monitorName: string) =>
       apiClient.post(`/api/integrations/uptime-kuma/sync/health/${siteId}?monitor=${encodeURIComponent(monitorName)}`),

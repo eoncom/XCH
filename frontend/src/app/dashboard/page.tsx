@@ -6,7 +6,7 @@ import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
-import { integrationsApi } from '@/lib/api/integrations';
+import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, Package, Server, CheckSquare, MapIcon, AlertTriangle, Clock, Ban, ArrowRight, ShieldAlert, Activity, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -57,12 +57,7 @@ export default function DashboardPage() {
   });
 
   // Fetch Uptime Kuma monitors (non-blocking, silent failure)
-  const { data: monitors = [] } = useQuery<Array<{ id: number; name: string; type: string; status: 'up' | 'down' | 'unknown'; responseTime: number; certExpiry?: number }>>({
-    queryKey: ['uptime-kuma-monitors'],
-    queryFn: () => integrationsApi.uptimeKuma.getMonitors(),
-    retry: 1,
-    staleTime: 60_000,
-  });
+  const { monitors } = useLiveMonitors();
 
   // Calculate stats from real data
   const stats: DashboardStats = useMemo(() => {

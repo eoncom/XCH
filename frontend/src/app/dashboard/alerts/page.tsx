@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { tasksApi } from '@/lib/api/tasks';
-import { integrationsApi } from '@/lib/api/integrations';
+import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import {
   ArrowLeft, ArrowRight, WifiOff, Activity, Ban, AlertTriangle, Clock,
   Package, ShieldAlert, CheckCircle2, MapPin, Filter,
@@ -34,12 +34,7 @@ export default function AlertsPage() {
   const { data: sites = [] } = useQuery({ queryKey: ['sites'], queryFn: sitesApi.getAll });
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: () => assetsApi.getAll() });
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks'], queryFn: () => tasksApi.getAll() });
-  const { data: monitors = [] } = useQuery<Array<{ id: number; name: string; type: string; status: 'up' | 'down' | 'unknown'; responseTime: number }>>({
-    queryKey: ['uptime-kuma-monitors'],
-    queryFn: () => integrationsApi.uptimeKuma.getMonitors(),
-    retry: 1,
-    staleTime: 60_000,
-  });
+  const { monitors } = useLiveMonitors();
 
   const warrantyThresholds = useWarrantyThresholds();
 
