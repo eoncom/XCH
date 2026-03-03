@@ -40,11 +40,14 @@ export class IntegrationsService {
       }
 
       if (integrations.uptimeKuma?.url) {
+        this.logger.log(`Reconfiguring Uptime Kuma from DB config: ${integrations.uptimeKuma.url}`);
         this.uptimeKumaProvider.reconfigure(
           integrations.uptimeKuma.url,
           integrations.uptimeKuma.username,
           integrations.uptimeKuma.password,
         );
+      } else {
+        this.logger.log('No Uptime Kuma URL in tenant DB config, keeping current provider config');
       }
     } catch (error) {
       this.logger.warn('Failed to load integration config from DB', error);
@@ -460,7 +463,18 @@ export class IntegrationsService {
     if (tenantId) {
       await this.ensureProvidersConfigured(tenantId);
     }
-    return this.uptimeKumaProvider.fetchMonitors();
+
+    const isEnabled = this.uptimeKumaProvider.isEnabled();
+    this.logger.log(`getUptimeKumaMonitors: provider enabled=${isEnabled}, status=${this.uptimeKumaProvider.getStatus()}`);
+
+    if (!isEnabled) {
+      this.logger.warn('Uptime Kuma provider is disabled — no URL configured in tenant settings or env vars');
+      return [];
+    }
+
+    const monitors = await this.uptimeKumaProvider.fetchMonitors();
+    this.logger.log(`getUptimeKumaMonitors: returned ${monitors.length} monitors`);
+    return monitors;
   }
 
   /**

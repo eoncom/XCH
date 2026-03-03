@@ -1103,6 +1103,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<string>('all');
   const [assetWarrantyFilter, setAssetWarrantyFilter] = useState<string>('all');
+  const [assetSearch, setAssetSearch] = useState('');
+  const [assetTypeFilter, setAssetTypeFilter] = useState<string>('all');
+  const [assetStatusFilter, setAssetStatusFilter] = useState<string>('all');
   const warrantyThresholds = useWarrantyThresholds();
   const { canUpdate, canDelete } = usePermissions();
   const { statusMap: monitorStatusMap } = useLiveMonitors();
@@ -1776,10 +1779,45 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             <CardContent>
               {assets.length > 0 ? (
                 <div className="space-y-4">
-                  {/* Filtre garantie */}
-                  <div className="flex items-center gap-2">
+                  {/* Filtres équipements */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Rechercher..."
+                        value={assetSearch}
+                        onChange={(e) => setAssetSearch(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                    <Select value={assetTypeFilter} onValueChange={setAssetTypeFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Tous les types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tous les types</SelectItem>
+                        {Object.entries(assetTypeLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={assetStatusFilter} onValueChange={setAssetStatusFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Tous les statuts" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tous les statuts</SelectItem>
+                        {Object.entries(assetStatusLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Select value={assetWarrantyFilter} onValueChange={setAssetWarrantyFilter}>
-                      <SelectTrigger className="w-[220px]">
+                      <SelectTrigger>
                         <ShieldAlert className="h-4 w-4 mr-2 text-muted-foreground" />
                         <SelectValue placeholder="Garantie" />
                       </SelectTrigger>
@@ -1793,18 +1831,44 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         <SelectItem value="none">— Sans garantie</SelectItem>
                       </SelectContent>
                     </Select>
-                    {assetWarrantyFilter !== 'all' && (
-                      <Button variant="ghost" size="sm" onClick={() => setAssetWarrantyFilter('all')}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
                   </div>
+                  {(assetSearch || assetTypeFilter !== 'all' || assetStatusFilter !== 'all' || assetWarrantyFilter !== 'all') && (
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => {
+                        setAssetSearch('');
+                        setAssetTypeFilter('all');
+                        setAssetStatusFilter('all');
+                        setAssetWarrantyFilter('all');
+                      }}>
+                        <X className="h-4 w-4 mr-1" />
+                        Effacer les filtres
+                      </Button>
+                    </div>
+                  )}
                   <div className="space-y-3">
                   {assets.filter((asset) => {
-                    if (assetWarrantyFilter === 'all') return true;
-                    const status = getWarrantyStatus(asset.warrantyEnd, warrantyThresholds);
-                    if (assetWarrantyFilter === 'alert') return status === 'expired' || status === 'expiring_critical' || status === 'expiring_warning';
-                    return status === assetWarrantyFilter;
+                    // Recherche texte
+                    if (assetSearch) {
+                      const s = assetSearch.toLowerCase();
+                      const name = (asset.name || '').toLowerCase();
+                      const serial = (asset.serialNumber || '').toLowerCase();
+                      const manufacturer = (asset.manufacturer || '').toLowerCase();
+                      const model = (asset.model || '').toLowerCase();
+                      if (!name.includes(s) && !serial.includes(s) && !manufacturer.includes(s) && !model.includes(s)) {
+                        return false;
+                      }
+                    }
+                    // Filtre type
+                    if (assetTypeFilter !== 'all' && asset.type !== assetTypeFilter) return false;
+                    // Filtre statut
+                    if (assetStatusFilter !== 'all' && asset.status !== assetStatusFilter) return false;
+                    // Filtre garantie
+                    if (assetWarrantyFilter !== 'all') {
+                      const status = getWarrantyStatus(asset.warrantyEnd, warrantyThresholds);
+                      if (assetWarrantyFilter === 'alert') return status === 'expired' || status === 'expiring_critical' || status === 'expiring_warning';
+                      return status === assetWarrantyFilter;
+                    }
+                    return true;
                   }).map((asset) => (
                     <Link
                       key={asset.id}

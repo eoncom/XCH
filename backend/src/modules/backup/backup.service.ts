@@ -5,6 +5,51 @@ import { Cron } from '@nestjs/schedule';
 import { StorageService } from '../../common/services/storage.service';
 import * as archiver from 'archiver';
 import AdmZip from 'adm-zip';
+import { PassThrough } from 'stream';
+
+// ============================================================================
+// Pin rendering constants (mirror from frontend FloorPlanViewer.tsx)
+// ============================================================================
+
+const PIN_COLORS: Record<string, string> = {
+  SWITCH: '#3b82f6',
+  FIREWALL: '#ef4444',
+  ACCESS_POINT: '#10b981',
+  PRINTER: '#6366f1',
+  RACK: '#8b5cf6',
+  CAMERA: '#f59e0b',
+  PATCH_PANEL: '#06b6d4',
+  RJ45: '#14b8a6',
+  NRO: '#a855f7',
+  ROUTER: '#f97316',
+  TEAMS_ROOM: '#0ea5e9',
+  WEBCAM: '#ec4899',
+  DISPLAY: '#84cc16',
+  SERVER: '#475569',
+  PDU: '#d97706',
+  BOX_5G: '#e11d48',
+  OTHER: '#6b7280',
+};
+
+const PIN_LABELS: Record<string, string> = {
+  SWITCH: 'SW',
+  FIREWALL: 'FW',
+  ACCESS_POINT: 'AP',
+  PRINTER: 'PR',
+  RACK: 'RK',
+  CAMERA: 'CA',
+  PATCH_PANEL: 'PP',
+  RJ45: 'RJ',
+  NRO: 'NR',
+  ROUTER: 'RT',
+  TEAMS_ROOM: 'TR',
+  WEBCAM: 'WC',
+  DISPLAY: 'EC',
+  SERVER: 'SV',
+  PDU: 'PD',
+  BOX_5G: '5G',
+  OTHER: '??',
+};
 
 interface BackupMetadata {
   version: string;
@@ -29,6 +74,7 @@ interface BackupListItem {
 export class BackupService {
   private readonly logger = new Logger(BackupService.name);
   private readonly BACKUP_BUCKET = 'xch-backups';
+  private _minioClient: any = null;
 
   constructor(
     private prisma: PrismaClient,
@@ -56,11 +102,8 @@ export class BackupService {
       counts: this.countRecords(data),
     });
 
-    await this.storageService.uploadFile(
-      { buffer: zipBuffer, originalname: filename, mimetype: 'application/zip' } as any,
-      this.BACKUP_BUCKET,
-      filename,
-    );
+    // Upload directly to xch-backups bucket (not via storageService which targets xch-storage)
+    await this.uploadToBackupBucket(zipBuffer, filename);
 
     this.logger.log(`Full backup completed: ${filename} (${zipBuffer.length} bytes)`);
     await this.logBackupAction(tenantId, userId, 'BACKUP_FULL', { filename, size: zipBuffer.length });
@@ -87,7 +130,8 @@ export class BackupService {
     const filename = `site-${site.code}-${timestamp}.zip`;
 
     const data = await this.exportSiteData(tenantId, siteId);
-    const files = await this.collectSiteFiles(data);
+    const pins = data['pins'] || [];
+    const files = await this.collectSiteFiles(data, pins);
 
     const zipBuffer = await this.createSiteZip(data, files, {
       version: '1.0',
@@ -100,11 +144,7 @@ export class BackupService {
     });
 
     try {
-      await this.storageService.uploadFile(
-        { buffer: zipBuffer, originalname: filename, mimetype: 'application/zip' } as any,
-        this.BACKUP_BUCKET,
-        filename,
-      );
+      await this.uploadToBackupBucket(zipBuffer, filename);
     } catch (err: any) {
       this.logger.warn(`Could not store backup in MinIO: ${err.message}`);
     }
@@ -151,10 +191,12 @@ export class BackupService {
       }
     }
 
-    // Collect file entries
+    // Collect file entries (only from raw/ subfolder or legacy plans/ folder for restore)
     const fileEntries: { entryName: string; data: Buffer }[] = [];
     for (const entry of entries) {
       if (entry.entryName.includes('/files/') && !entry.isDirectory) {
+        // Skip rendered files — only restore raw source files
+        if (entry.entryName.includes('/rendered/')) continue;
         fileEntries.push({ entryName: entry.entryName, data: entry.getData() });
       }
     }
@@ -331,11 +373,20 @@ export class BackupService {
       try {
         const parts = fileEntry.entryName.split('/files/');
         if (parts.length >= 2) {
-          const relativePath = parts[1];
+          let relativePath = parts[1];
+          // Strip raw/ prefix for MinIO storage (restore as original path)
+          if (relativePath.startsWith('raw/')) {
+            relativePath = relativePath.substring(4);
+          }
           const folder = relativePath.substring(0, relativePath.lastIndexOf('/'));
           const fname = relativePath.substring(relativePath.lastIndexOf('/') + 1);
           await this.storageService.uploadFile(
-            { buffer: fileEntry.data, originalname: fname, mimetype: 'application/octet-stream' } as any,
+            {
+              buffer: fileEntry.data,
+              originalname: fname,
+              mimetype: 'application/octet-stream',
+              size: fileEntry.data.length,
+            } as any,
             folder,
             fname,
           );
@@ -413,7 +464,7 @@ export class BackupService {
     const changes = log.changes as Record<string, any> || {};
     if (changes.filename) {
       try {
-        await this.storageService.deleteFile(`${this.BACKUP_BUCKET}/${changes.filename}`);
+        await this.deleteFromBackupBucket(changes.filename);
       } catch (err: any) {
         this.logger.warn(`Could not delete backup file: ${err.message}`);
       }
@@ -448,7 +499,7 @@ export class BackupService {
   }
 
   // ==========================================================================
-  // PRIVATE HELPERS
+  // PRIVATE HELPERS — DATA EXPORT
   // ==========================================================================
 
   private async exportAllTenantData(tenantId: string): Promise<Record<string, any[]>> {
@@ -516,7 +567,14 @@ export class BackupService {
     };
   }
 
-  private async collectSiteFiles(data: Record<string, any[]>): Promise<{ path: string; content: Buffer }[]> {
+  // ==========================================================================
+  // PRIVATE HELPERS — FILE COLLECTION + PLAN RENDERING
+  // ==========================================================================
+
+  private async collectSiteFiles(
+    data: Record<string, any[]>,
+    pins: any[] = [],
+  ): Promise<{ path: string; content: Buffer }[]> {
     const files: { path: string; content: Buffer }[] = [];
     const floorPlans = data['floor-plans'] || [];
 
@@ -525,7 +583,21 @@ export class BackupService {
         try {
           const buffer = await this.downloadFromStorage(plan.fileUrl);
           const filename = plan.fileUrl.split('/').pop() || `plan-${plan.id}`;
-          files.push({ path: `plans/${filename}`, content: buffer });
+
+          // Include raw file (needed for restore)
+          files.push({ path: `plans/raw/${filename}`, content: buffer });
+
+          // Generate rendered version with pins overlay
+          const planPins = pins.filter((p: any) => p.floorPlanId === plan.id);
+          if (planPins.length > 0) {
+            try {
+              const rendered = await this.renderPlanWithPins(buffer, planPins, plan.title || 'Plan');
+              const renderedName = filename.replace(/\.[^.]+$/, '') + '-with-pins.png';
+              files.push({ path: `plans/rendered/${renderedName}`, content: rendered });
+            } catch (renderErr: any) {
+              this.logger.warn(`Could not render plan with pins: ${renderErr.message}`);
+            }
+          }
         } catch {
           this.logger.warn(`Could not download floor plan file: ${plan.fileUrl}`);
         }
@@ -535,14 +607,75 @@ export class BackupService {
     return files;
   }
 
+  /**
+   * Render a floor plan image with pin overlays using sharp + SVG composite.
+   * Produces a PNG with colored pin markers at correct positions.
+   */
+  private async renderPlanWithPins(
+    planBuffer: Buffer,
+    pins: any[],
+    planTitle: string,
+  ): Promise<Buffer> {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const sharp = require('sharp');
+
+    // Get image dimensions
+    const metadata = await sharp(planBuffer).metadata();
+    const imgWidth = metadata.width || 800;
+    const imgHeight = metadata.height || 600;
+
+    // Build SVG overlay with pin markers
+    const svgElements = pins.map((pin: any) => {
+      const px = Math.round((pin.x || 0) * imgWidth);
+      const py = Math.round((pin.y || 0) * imgHeight);
+      const color = PIN_COLORS[pin.pinType] || PIN_COLORS.OTHER;
+      const sigle = PIN_LABELS[pin.pinType] || '??';
+
+      // Pin circle with shadow
+      let svg = `<circle cx="${px}" cy="${py}" r="16" fill="rgba(0,0,0,0.3)" />`;
+      svg += `<circle cx="${px}" cy="${py - 1}" r="14" fill="${color}" stroke="white" stroke-width="2"/>`;
+      svg += `<text x="${px}" y="${py + 3}" text-anchor="middle" font-family="Arial,sans-serif" font-weight="bold" font-size="11" fill="white">${sigle}</text>`;
+
+      // Label below pin
+      if (pin.label) {
+        const escapedLabel = pin.label.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const labelWidth = Math.max(40, escapedLabel.length * 7 + 8);
+        svg += `<rect x="${px - labelWidth / 2}" y="${py + 18}" width="${labelWidth}" height="16" rx="3" fill="rgba(255,255,255,0.9)" stroke="rgba(0,0,0,0.2)" stroke-width="0.5"/>`;
+        svg += `<text x="${px}" y="${py + 30}" text-anchor="middle" font-family="Arial,sans-serif" font-weight="600" font-size="9" fill="#333">${escapedLabel}</text>`;
+      }
+
+      return svg;
+    }).join('\n');
+
+    const svgOverlay = Buffer.from(`<svg width="${imgWidth}" height="${imgHeight}" xmlns="http://www.w3.org/2000/svg">${svgElements}</svg>`);
+
+    // Composite pins overlay onto the plan image
+    const renderedBuffer = await sharp(planBuffer)
+      .composite([{ input: svgOverlay, top: 0, left: 0 }])
+      .png()
+      .toBuffer();
+
+    this.logger.log(`Rendered plan "${planTitle}" with ${pins.length} pins (${renderedBuffer.length} bytes)`);
+    return renderedBuffer;
+  }
+
+  // ==========================================================================
+  // PRIVATE HELPERS — ZIP CREATION
+  // ==========================================================================
+
   private async createZipFromData(data: Record<string, any[]>, metadata: BackupMetadata): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const archive = archiver('zip', { zlib: { level: 9 } });
+      const passthrough = new PassThrough();
       const chunks: Buffer[] = [];
 
-      archive.on('data', (chunk: Buffer) => chunks.push(chunk));
-      archive.on('end', () => resolve(Buffer.concat(chunks)));
+      passthrough.on('data', (chunk: Buffer) => chunks.push(chunk));
+      passthrough.on('end', () => resolve(Buffer.concat(chunks)));
+      passthrough.on('error', reject);
       archive.on('error', reject);
+      archive.on('warning', (err: any) => this.logger.warn(`Archiver warning: ${err.message}`));
+
+      archive.pipe(passthrough);
 
       archive.append(JSON.stringify(metadata, null, 2), { name: 'metadata.json' });
       for (const [key, records] of Object.entries(data)) {
@@ -561,11 +694,16 @@ export class BackupService {
 
     return new Promise((resolve, reject) => {
       const archive = archiver('zip', { zlib: { level: 9 } });
+      const passthrough = new PassThrough();
       const chunks: Buffer[] = [];
 
-      archive.on('data', (chunk: Buffer) => chunks.push(chunk));
-      archive.on('end', () => resolve(Buffer.concat(chunks)));
+      passthrough.on('data', (chunk: Buffer) => chunks.push(chunk));
+      passthrough.on('end', () => resolve(Buffer.concat(chunks)));
+      passthrough.on('error', reject);
       archive.on('error', reject);
+      archive.on('warning', (err: any) => this.logger.warn(`Archiver warning: ${err.message}`));
+
+      archive.pipe(passthrough);
 
       archive.append(JSON.stringify(metadata, null, 2), { name: `${prefix}/metadata.json` });
       for (const [key, records] of Object.entries(data)) {
@@ -586,6 +724,68 @@ export class BackupService {
     return counts;
   }
 
+  // ==========================================================================
+  // PRIVATE HELPERS — MINIO / STORAGE
+  // ==========================================================================
+
+  /**
+   * Get or create a cached MinIO client for backup bucket operations.
+   */
+  private getMinioClient(): any {
+    if (!this._minioClient) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Minio = require('minio');
+      this._minioClient = new Minio.Client({
+        endPoint: this.configService.get('MINIO_ENDPOINT', 'minio'),
+        port: parseInt(this.configService.get('MINIO_PORT', '9000') as string),
+        useSSL: this.configService.get('MINIO_USE_SSL', 'false') === 'true',
+        accessKey: this.configService.get('MINIO_ACCESS_KEY', 'xch_minio_admin'),
+        secretKey: this.configService.get('MINIO_SECRET_KEY', ''),
+      });
+    }
+    return this._minioClient;
+  }
+
+  /**
+   * Upload a buffer directly to the xch-backups bucket.
+   * Creates the bucket if it doesn't exist.
+   */
+  private async uploadToBackupBucket(buffer: Buffer, filename: string): Promise<void> {
+    const client = this.getMinioClient();
+
+    // Ensure bucket exists
+    try {
+      const exists = await client.bucketExists(this.BACKUP_BUCKET);
+      if (!exists) {
+        await client.makeBucket(this.BACKUP_BUCKET, 'us-east-1');
+        this.logger.log(`Created backup bucket: ${this.BACKUP_BUCKET}`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not verify backup bucket: ${err.message}`);
+    }
+
+    await client.putObject(
+      this.BACKUP_BUCKET,
+      filename,
+      buffer,
+      buffer.length,
+      { 'Content-Type': 'application/zip' },
+    );
+    this.logger.log(`Backup uploaded to ${this.BACKUP_BUCKET}/${filename} (${buffer.length} bytes)`);
+  }
+
+  /**
+   * Delete a file from the xch-backups bucket.
+   */
+  private async deleteFromBackupBucket(filename: string): Promise<void> {
+    const client = this.getMinioClient();
+    await client.removeObject(this.BACKUP_BUCKET, filename);
+    this.logger.log(`Backup deleted from ${this.BACKUP_BUCKET}/${filename}`);
+  }
+
+  /**
+   * Download a file from MinIO by parsing bucket/key from path.
+   */
   private async downloadFromStorage(filePath: string): Promise<Buffer> {
     let cleanPath = filePath;
     if (cleanPath.startsWith('/storage/')) cleanPath = cleanPath.replace('/storage/', '');
@@ -610,17 +810,9 @@ export class BackupService {
     });
   }
 
-  private getMinioClient(): any {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Minio = require('minio');
-    return new Minio.Client({
-      endPoint: this.configService.get('MINIO_ENDPOINT', 'localhost'),
-      port: parseInt(this.configService.get('MINIO_PORT', '9000') as string),
-      useSSL: this.configService.get('MINIO_USE_SSL', 'false') === 'true',
-      accessKey: this.configService.get('MINIO_ACCESS_KEY', 'xch_minio_admin'),
-      secretKey: this.configService.get('MINIO_SECRET_KEY', 'XchMinIO2024SecureKey!'),
-    });
-  }
+  // ==========================================================================
+  // PRIVATE HELPERS — AUDIT + CLEANUP
+  // ==========================================================================
 
   private async logBackupAction(
     tenantId: string,
@@ -659,7 +851,7 @@ export class BackupService {
         const changes = log.changes as Record<string, any> || {};
         if (changes.filename) {
           try {
-            await this.storageService.deleteFile(`${this.BACKUP_BUCKET}/${changes.filename}`);
+            await this.deleteFromBackupBucket(changes.filename);
           } catch {
             // File may already be deleted
           }

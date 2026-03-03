@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { authApi } from '@/lib/api/auth';
 import { integrationsApi, type IntegrationConfigResponse } from '@/lib/api/integrations';
 import { backupApi, type BackupMetadata } from '@/lib/api/backup';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface SecurityReminder {
   id: string;
@@ -2106,18 +2107,18 @@ export default function SettingsPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <select
-                      className="flex h-9 w-full max-w-sm rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      value={selectedBackupSiteId}
-                      onChange={(e) => setSelectedBackupSiteId(e.target.value)}
-                    >
-                      <option value="">Sélectionner un site...</option>
-                      {availableSites.map((site) => (
-                        <option key={site.id} value={site.id}>
-                          {site.code} — {site.name}
-                        </option>
-                      ))}
-                    </select>
+                    <Select value={selectedBackupSiteId || undefined} onValueChange={setSelectedBackupSiteId}>
+                      <SelectTrigger className="w-full max-w-sm">
+                        <SelectValue placeholder="Sélectionner un site..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableSites.map((site) => (
+                          <SelectItem key={site.id} value={site.id}>
+                            {site.code} — {site.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button
                       variant="outline"
                       onClick={handleCreateSiteBackup}

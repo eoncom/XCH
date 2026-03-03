@@ -4139,3 +4139,24 @@ fix: moduleKey nav Monitoring/Alertes + RBAC read intégrations pour tous
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-03
+
+**Date:** 2026-03-03 14:44:31
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 3
+
+**Commit message:**
+```
+feat: onglet Sauvegardes dans Paramètres + fix MinIO + docs à jour
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

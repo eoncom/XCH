@@ -384,9 +384,18 @@ export default function MonitoringPage() {
               <CardContent className="py-12 text-center">
                 <Activity className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
                 <p className="text-muted-foreground mb-2">Aucun moniteur détecté</p>
-                <p className="text-xs text-muted-foreground">
-                  Vérifiez que votre instance Uptime Kuma est configurée et contient des moniteurs.
+                <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                  Vérifiez que :<br />
+                  • L&apos;URL Uptime Kuma est configurée dans Paramètres → Intégrations<br />
+                  • L&apos;instance est accessible depuis le serveur backend<br />
+                  • L&apos;endpoint /metrics est activé dans Uptime Kuma<br />
+                  • Des moniteurs sont créés dans votre instance
                 </p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/dashboard/settings">
+                    Configurer les intégrations
+                  </Link>
+                </Button>
               </CardContent>
             </Card>
           ) : (
