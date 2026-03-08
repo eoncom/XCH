@@ -34,8 +34,7 @@ import type { Site } from '@/types';
 
 export default function MonitoringConfigPage() {
   const queryClient = useQueryClient();
-  const { canUpdate } = usePermissions();
-  const isAdmin = canUpdate('settings');
+  const { isAdmin } = usePermissions();
 
   // Provider config state
   const [monitoringType, setMonitoringType] = useState('');
