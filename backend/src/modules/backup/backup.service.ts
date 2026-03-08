@@ -74,7 +74,7 @@ interface BackupListItem {
 export class BackupService {
   private readonly logger = new Logger(BackupService.name);
   private readonly BACKUP_BUCKET = 'xch-backups';
-  private _minioClient: any = null;
+  private _minioClient: InstanceType<typeof import('minio').Client> | null = null;
 
   constructor(
     private prisma: PrismaClient,
@@ -145,8 +145,8 @@ export class BackupService {
 
     try {
       await this.uploadToBackupBucket(zipBuffer, filename);
-    } catch (err: any) {
-      this.logger.warn(`Could not store backup in MinIO: ${err.message}`);
+    } catch (err: unknown) {
+      this.logger.warn(`Could not store backup in MinIO: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
 
     await this.logBackupAction(tenantId, userId, 'BACKUP_SITE', {
@@ -386,13 +386,13 @@ export class BackupService {
               originalname: fname,
               mimetype: 'application/octet-stream',
               size: fileEntry.data.length,
-            } as any,
+            } as Express.Multer.File,
             folder,
             fname,
           );
         }
-      } catch (err: any) {
-        this.logger.warn(`Could not restore file ${fileEntry.entryName}: ${err.message}`);
+      } catch (err: unknown) {
+        this.logger.warn(`Could not restore file ${fileEntry.entryName}: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     }
 
@@ -465,8 +465,8 @@ export class BackupService {
     if (changes.filename) {
       try {
         await this.deleteFromBackupBucket(changes.filename);
-      } catch (err: any) {
-        this.logger.warn(`Could not delete backup file: ${err.message}`);
+      } catch (err: unknown) {
+        this.logger.warn(`Could not delete backup file: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     }
 
@@ -488,13 +488,13 @@ export class BackupService {
         try {
           await this.createFullBackup(tenant.id, 'system');
           this.logger.log(`Scheduled backup completed for tenant: ${tenant.name}`);
-        } catch (err: any) {
-          this.logger.error(`Scheduled backup failed for tenant ${tenant.id}: ${err.message}`);
+        } catch (err: unknown) {
+          this.logger.error(`Scheduled backup failed for tenant ${tenant.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
         }
       }
       await this.cleanupOldBackups();
-    } catch (err: any) {
-      this.logger.error(`Scheduled backup failed: ${err.message}`);
+    } catch (err: unknown) {
+      this.logger.error(`Scheduled backup failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
 
@@ -760,8 +760,8 @@ export class BackupService {
         await client.makeBucket(this.BACKUP_BUCKET, 'us-east-1');
         this.logger.log(`Created backup bucket: ${this.BACKUP_BUCKET}`);
       }
-    } catch (err: any) {
-      this.logger.warn(`Could not verify backup bucket: ${err.message}`);
+    } catch (err: unknown) {
+      this.logger.warn(`Could not verify backup bucket: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
 
     await client.putObject(
@@ -831,8 +831,8 @@ export class BackupService {
           changes,
         },
       });
-    } catch (err: any) {
-      this.logger.warn(`Could not create audit log: ${err.message}`);
+    } catch (err: unknown) {
+      this.logger.warn(`Could not create audit log: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
 
@@ -857,8 +857,8 @@ export class BackupService {
           }
         }
       }
-    } catch (err: any) {
-      this.logger.warn(`Cleanup failed: ${err.message}`);
+    } catch (err: unknown) {
+      this.logger.warn(`Cleanup failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
 }

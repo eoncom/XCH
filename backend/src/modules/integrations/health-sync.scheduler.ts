@@ -43,6 +43,14 @@ export class HealthSyncScheduler {
 
       // Check if any monitoring provider is configured (new or legacy format)
       const config = tenant.config as Record<string, any> | null;
+
+      // Check if health sync is disabled in tenant config
+      const monitoringConfig = config?.integrations?.monitoring;
+      if (monitoringConfig?.healthSyncEnabled === false) {
+        this.logger.debug('Health sync disabled in tenant config, skipping');
+        return;
+      }
+
       const activeProvider = this.monitoringFactory.getActiveProvider(config);
 
       if (!activeProvider) {

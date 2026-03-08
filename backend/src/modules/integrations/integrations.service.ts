@@ -165,6 +165,7 @@ export class IntegrationsService {
         password: data.monitoring.password || existing.monitoring?.password || '',
         webhookSecret: data.monitoring.webhookSecret || existing.monitoring?.webhookSecret || '',
         webhookEnabled: data.monitoring.webhookEnabled ?? existing.monitoring?.webhookEnabled ?? false,
+        healthSyncEnabled: data.monitoring.healthSyncEnabled ?? existing.monitoring?.healthSyncEnabled ?? true,
       };
 
       // Reconfigure provider immediately
@@ -179,13 +180,16 @@ export class IntegrationsService {
         });
       }
 
-      // Also update legacy uptimeKuma field for backward compat
+      // Sync legacy uptimeKuma field for backward compat
       if (mc.type === 'uptime_kuma') {
         updatedIntegrations.uptimeKuma = {
           url: mc.url,
           username: mc.username,
           password: mc.password,
         };
+      } else {
+        // Clear legacy field when switching away from Uptime Kuma
+        delete updatedIntegrations.uptimeKuma;
       }
     }
 
@@ -776,9 +780,9 @@ export class IntegrationsService {
 
     this.logger.log(`Fetched ${allMonitors.length} monitors for health sync`);
 
-    // 2. Get all sites with their assets
+    // 2. Get all sites with their assets (only monitoring-enabled sites)
     const sites = await this.prisma.site.findMany({
-      where: { tenantId },
+      where: { tenantId, monitoringEnabled: true },
       include: {
         assets: {
           select: { id: true, name: true, type: true, networkInfo: true },

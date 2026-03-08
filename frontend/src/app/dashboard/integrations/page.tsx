@@ -184,7 +184,7 @@ export default function IntegrationsPage() {
           </CardFooter>
         </Card>
 
-        {/* Monitoring Card */}
+        {/* Monitoring Card — Configuration centralisée */}
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between">
@@ -207,8 +207,8 @@ export default function IntegrationsPage() {
           <CardContent>
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Surveillez l'etat de vos liens Internet et SDWAN par site.
-                Compatible avec plusieurs solutions de monitoring.
+                Configuration centralisée dans la section Monitoring du menu principal.
+                Compatible Uptime Kuma et Gatus.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="outline">Uptime Kuma</Badge>
@@ -217,26 +217,9 @@ export default function IntegrationsPage() {
               </div>
             </div>
           </CardContent>
-          <CardFooter className="flex justify-between border-t pt-6">
-            <Button
-              variant="outline"
-              onClick={() => testMonitoringMutation.mutate()}
-              disabled={testMonitoringMutation.isPending}
-            >
-              {testMonitoringMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Test en cours...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Tester connexion
-                </>
-              )}
-            </Button>
+          <CardFooter className="flex justify-end border-t pt-6">
             <Button asChild>
-              <Link href="/dashboard/integrations/monitoring">
+              <Link href="/dashboard/monitoring/config">
                 <Settings className="mr-2 h-4 w-4" />
                 Configurer
               </Link>

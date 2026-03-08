@@ -153,6 +153,7 @@ export interface Site {
   accessNotes?: SiteAccessNotes;
   notes?: string;
   metadata?: any;
+  monitoringEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }

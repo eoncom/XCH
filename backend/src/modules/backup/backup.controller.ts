@@ -41,6 +41,30 @@ export class BackupController {
     return result;
   }
 
+  // ===== Site Restore (MUST be before :siteId to avoid route conflict) =====
+
+  @Post('site/restore')
+  @Resource('backup')
+  @Action('create')
+  @SkipThrottle()
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+    }),
+  )
+  @ApiOperation({ summary: '[ADMIN] Restore site from backup ZIP' })
+  async restoreSiteBackup(
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: AuthRequest,
+  ) {
+    return this.backupService.restoreSiteBackup(
+      req.user.tenantId,
+      file.buffer,
+      req.user.id,
+    );
+  }
+
   // ===== Site Backup =====
 
   @Post('site/:siteId')
@@ -65,30 +89,6 @@ export class BackupController {
       'Content-Length': buffer.length,
     });
     res.end(buffer);
-  }
-
-  // ===== Site Restore =====
-
-  @Post('site/restore')
-  @Resource('backup')
-  @Action('create')
-  @SkipThrottle()
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
-    }),
-  )
-  @ApiOperation({ summary: '[ADMIN] Restore site from backup ZIP' })
-  async restoreSiteBackup(
-    @UploadedFile() file: Express.Multer.File,
-    @Request() req: AuthRequest,
-  ) {
-    return this.backupService.restoreSiteBackup(
-      req.user.tenantId,
-      file.buffer,
-      req.user.id,
-    );
   }
 
   // ===== Backup Management =====

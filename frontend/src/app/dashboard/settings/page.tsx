@@ -1999,8 +1999,8 @@ export default function SettingsPage() {
                 )}
               </div>
 
-              {/* Monitoring Provider */}
-              <div className="border rounded-lg p-4 space-y-4">
+              {/* Monitoring — Centralized under /dashboard/monitoring/config */}
+              <div className="border rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
@@ -2008,85 +2008,16 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <h4 className="font-medium">Monitoring</h4>
-                      <p className="text-sm text-muted-foreground">Surveillance — Statut de santé des équipements et services</p>
+                      <p className="text-sm text-muted-foreground">Configuration centralisée dans la section Monitoring</p>
                     </div>
                   </div>
                   <Button variant="outline" size="sm" asChild>
-                    <Link href="/dashboard/integrations/monitoring">
-                      Configuration avancée
+                    <Link href="/dashboard/monitoring/config">
+                      Configurer
                       <ExternalLink className="ml-2 h-3 w-3" />
                     </Link>
                   </Button>
                 </div>
-
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="monitoringType">Provider</Label>
-                    <Select value={monitoringType} onValueChange={setMonitoringType}>
-                      <SelectTrigger id="monitoringType">
-                        <SelectValue placeholder="Choisir un provider" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="uptime_kuma">Uptime Kuma</SelectItem>
-                        <SelectItem value="gatus">Gatus</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="kumaUrl">
-                      URL {monitoringType === 'gatus' ? 'Gatus' : 'Uptime Kuma'}
-                    </Label>
-                    <Input
-                      id="kumaUrl"
-                      placeholder={monitoringType === 'gatus' ? 'https://gatus.example.com' : 'https://uptime.example.com'}
-                      value={kumaUrl}
-                      onChange={(e) => setKumaUrl(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="kumaToken">
-                      {monitoringType === 'gatus' ? 'Bearer Token' : 'Clé API'}
-                    </Label>
-                    <Input
-                      id="kumaToken"
-                      type="password"
-                      placeholder={monitoringType === 'gatus' ? 'bearer-token...' : 'uk2_...'}
-                      value={kumaToken}
-                      onChange={(e) => setKumaToken(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleTestConnection('Monitoring')}
-                    disabled={isTesting === 'Monitoring' || !kumaUrl || !monitoringType}
-                  >
-                    {isTesting === 'Monitoring' ? (
-                      <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
-                    ) : null}
-                    Tester la connexion
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => handleSaveIntegration('monitoring')}
-                    disabled={isSavingIntegration === 'monitoring' || !kumaUrl || !monitoringType}
-                  >
-                    {isSavingIntegration === 'monitoring' ? (
-                      <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
-                    ) : (
-                      <Save className="mr-2 h-3 w-3" />
-                    )}
-                    Enregistrer
-                  </Button>
-                </div>
-                {testResult?.provider === 'Monitoring' && (
-                  <p className={`text-xs mt-2 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                    {testResult.message}
-                  </p>
-                )}
               </div>
 
               {/* SSO Configuration */}

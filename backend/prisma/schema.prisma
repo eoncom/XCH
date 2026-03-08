@@ -196,6 +196,9 @@ model Site {
   // Governance Documents Reference
   governanceDocsRef String? // URL to "Référentiel droits documents"
 
+  // Monitoring
+  monitoringEnabled Boolean      @default(true)
+
   // Health
   healthStatus    HealthStatus @default(UNKNOWN)
   lastHealthCheck DateTime?

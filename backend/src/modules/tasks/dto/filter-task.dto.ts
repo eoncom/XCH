@@ -1,5 +1,6 @@
 import { IsString, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { TaskStatus, TaskPriority } from '@prisma/client';
 
 export class FilterTaskDto {
   @ApiProperty({ required: false })
@@ -7,15 +8,15 @@ export class FilterTaskDto {
   @IsOptional()
   search?: string;
 
-  @ApiProperty({ enum: ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED'], required: false })
-  @IsEnum(['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED'])
+  @ApiProperty({ enum: TaskStatus, required: false })
+  @IsEnum(TaskStatus)
   @IsOptional()
-  status?: string;
+  status?: TaskStatus;
 
-  @ApiProperty({ enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'], required: false })
-  @IsEnum(['LOW', 'MEDIUM', 'HIGH', 'URGENT'])
+  @ApiProperty({ enum: TaskPriority, required: false })
+  @IsEnum(TaskPriority)
   @IsOptional()
-  priority?: string;
+  priority?: TaskPriority;
 
   @ApiProperty({ required: false })
   @IsString()

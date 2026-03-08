@@ -23,6 +23,19 @@ import { Attachments } from '@/components/Attachments';
 import { InlineEditCard } from '@/components/InlineEditCard';
 import { showToast } from '@/lib/toast';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  taskStatusLabels as centralTaskStatusLabels,
+  taskStatusColors as centralTaskStatusColors,
+  taskPriorityLabels as centralTaskPriorityLabels,
+  taskPriorityColors as centralTaskPriorityColors,
+} from '@/lib/status-labels';
+import {
   ArrowLeft,
   Edit,
   Trash2,
@@ -47,35 +60,11 @@ const checklistItemSchema = z.object({
   text: z.string().min(1, 'Le texte est requis').max(200, 'Maximum 200 caractères'),
 });
 
-const taskStatusLabels: Record<TaskStatus, string> = {
-  TODO: 'À faire',
-  IN_PROGRESS: 'En cours',
-  BLOCKED: 'Bloqué',
-  DONE: 'Terminé',
-  CANCELLED: 'Annulé',
-};
-
-const taskStatusColors = {
-  TODO: 'secondary',
-  IN_PROGRESS: 'default',
-  BLOCKED: 'error',
-  DONE: 'success',
-  CANCELLED: 'secondary',
-} as const;
-
-const taskPriorityColors = {
-  LOW: 'secondary',
-  MEDIUM: 'default',
-  HIGH: 'warning',
-  URGENT: 'error',
-} as const;
-
-const taskPriorityLabels: Record<TaskPriority, string> = {
-  LOW: 'Faible',
-  MEDIUM: 'Moyenne',
-  HIGH: 'Haute',
-  URGENT: 'Urgente',
-};
+// Use centralized labels from status-labels.ts
+const taskStatusLabels = centralTaskStatusLabels as Record<TaskStatus, string>;
+const taskStatusColors = centralTaskStatusColors as Record<TaskStatus, string>;
+const taskPriorityLabels = centralTaskPriorityLabels as Record<TaskPriority, string>;
+const taskPriorityColors = centralTaskPriorityColors as Record<TaskPriority, string>;
 
 function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -328,9 +317,26 @@ export default function TaskDetailPage({
           <div>
             <h1 className="text-3xl font-bold">{task.title}</h1>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant={taskStatusColors[task.status]}>
-                {taskStatusLabels[task.status]}
-              </Badge>
+              {canUpdate('tasks', task?.siteId) ? (
+                <Select
+                  value={task.status}
+                  onValueChange={(value) => updateMutation.mutate({ status: value })}
+                  disabled={updateMutation.isPending}
+                >
+                  <SelectTrigger className="w-[140px] h-7 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(taskStatusLabels) as [TaskStatus, string][]).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Badge variant={taskStatusColors[task.status]}>
+                  {taskStatusLabels[task.status]}
+                </Badge>
+              )}
               <Badge variant={taskPriorityColors[task.priority]}>
                 {taskPriorityLabels[task.priority]}
               </Badge>
