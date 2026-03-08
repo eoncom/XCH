@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsObject, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { SiteStatus, HealthStatus } from '@prisma/client';
 
@@ -82,4 +82,9 @@ export class CreateSiteDto {
   @IsObject()
   @IsOptional()
   metadata?: any;
+
+  @ApiProperty({ required: false, description: 'Enable/disable monitoring for this site', default: true })
+  @IsBoolean()
+  @IsOptional()
+  monitoringEnabled?: boolean;
 }

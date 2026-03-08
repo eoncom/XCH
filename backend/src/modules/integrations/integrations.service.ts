@@ -117,6 +117,7 @@ export class IntegrationsService {
         passwordHint: maskToken(monitoringConfig.password || legacyKuma.password),
         webhookSecret: monitoringConfig.webhookSecret ? '****' : '',
         webhookEnabled: !!monitoringConfig.webhookEnabled,
+        healthSyncEnabled: monitoringConfig.healthSyncEnabled !== false,
       },
       // Legacy field kept for backward compat with existing frontend
       uptimeKuma: {

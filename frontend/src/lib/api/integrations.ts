@@ -28,6 +28,7 @@ export interface IntegrationConfigResponse {
     passwordHint: string;
     webhookSecret: string;
     webhookEnabled: boolean;
+    healthSyncEnabled: boolean;
   };
   /** @deprecated Use monitoring instead */
   uptimeKuma: {

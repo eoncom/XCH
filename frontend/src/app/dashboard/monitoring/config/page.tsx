@@ -256,18 +256,17 @@ export default function MonitoringConfigPage() {
               checked={healthSyncEnabled}
               onCheckedChange={(checked) => {
                 setHealthSyncEnabled(checked);
-                // Auto-save when toggling
+                // Auto-save — only send healthSyncEnabled, don't resend credentials
                 integrationsApi.saveConfig({
                   monitoring: {
-                    type: monitoringType,
-                    url: monitoringUrl,
-                    apiKey: monitoringToken,
-                    password: monitoringToken,
                     healthSyncEnabled: checked,
                   },
                 }).then(() => {
                   queryClient.invalidateQueries({ queryKey: ['integration-config'] });
                   showToast.success(checked ? 'Synchronisation activée' : 'Synchronisation désactivée');
+                }).catch((err: unknown) => {
+                  setHealthSyncEnabled(!checked); // rollback
+                  showToast.error(err instanceof Error ? err.message : 'Erreur');
                 });
               }}
               disabled={!isAdmin || !monitoringUrl}
