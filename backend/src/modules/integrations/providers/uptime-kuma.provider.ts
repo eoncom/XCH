@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { UptimeKumaProvider } from '../interfaces/integration-provider.interface';
+import {
+  MonitoringProvider,
+  MonitoringProviderConfig,
+  NormalizedMonitor,
+  NormalizedMonitorStatus,
+} from '../interfaces/integration-provider.interface';
 import axios, { AxiosInstance } from 'axios';
 
 interface ParsedMonitor {
@@ -13,7 +18,7 @@ interface ParsedMonitor {
 }
 
 @Injectable()
-export class UptimeKumaProviderService implements UptimeKumaProvider {
+export class UptimeKumaProviderService implements MonitoringProvider {
   private readonly logger = new Logger(UptimeKumaProviderService.name);
   private client: AxiosInstance;
   private enabled: boolean;
@@ -50,19 +55,20 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
   /**
    * Reconfigure provider at runtime (e.g. from DB config)
    */
-  reconfigure(url: string, username?: string, password?: string) {
-    if (!url) {
+  reconfigure(config: MonitoringProviderConfig): void {
+    if (!config.url) {
       this.enabled = false;
       return;
     }
     this.enabled = true;
+    const password = config.password || config.apiKey;
     this.client = axios.create({
-      baseURL: url,
+      baseURL: config.url,
       timeout: 15000,
       // Support API key auth: empty username + API key as password
-      ...(password ? { auth: { username: username || '', password } } : {}),
+      ...(password ? { auth: { username: config.username || '', password } } : {}),
     });
-    this.logger.log(`Uptime Kuma provider reconfigured: ${url}`);
+    this.logger.log(`Uptime Kuma provider reconfigured: ${config.url}`);
   }
 
   isEnabled(): boolean {
@@ -235,7 +241,7 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
   /**
    * Fetch all monitors from Uptime Kuma via /metrics
    */
-  async fetchMonitors(): Promise<ParsedMonitor[]> {
+  async fetchMonitors(): Promise<NormalizedMonitor[]> {
     if (!this.enabled) {
       return [];
     }
@@ -265,7 +271,7 @@ export class UptimeKumaProviderService implements UptimeKumaProvider {
    */
   async getMonitorStatus(
     identifier: string,
-  ): Promise<{ status: 'up' | 'down' | 'unknown'; uptime: number; lastCheck: Date; responseTime: number } | null> {
+  ): Promise<NormalizedMonitorStatus | null> {
     if (!this.enabled) {
       return null;
     }

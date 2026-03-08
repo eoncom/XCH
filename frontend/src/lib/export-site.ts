@@ -456,8 +456,8 @@ async function generateFloorPlanPdf(
       // Build description
       let pinDesc = pin.description || '';
       if (pin.pinType === 'NRO' && !pinDesc) {
-        const provider = (site.connectivity as any)?.primary?.provider;
-        if (provider) pinDesc = `Fournisseur: ${provider}`;
+        const primaryLink = (site.connectivity as any)?.links?.find((l: any) => l.role === 'primary');
+        if (primaryLink?.provider) pinDesc = `Fournisseur: ${primaryLink.provider}`;
       }
       if (pin.pinType === 'RACK' && pin.rack && !pinDesc) {
         pinDesc = `Baie: ${pin.rack.name} (${pin.rack.heightU}U)`;
@@ -589,53 +589,44 @@ async function generateFloorPlanPdf(
 
     const conn = site.connectivity as any;
 
-    if (conn.primary) {
-      pdf.setFontSize(8);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(168, 85, 247);
-      pdf.text('Fournisseur principal', margin + 2, tY + 3.5);
-      tY += 5;
+    const links: any[] = conn.links || [];
 
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(30, 30, 30);
-      pdf.setFontSize(7);
-      if (conn.primary.provider) {
-        pdf.text(`Fournisseur: ${conn.primary.provider}`, margin + 4, tY + 3.5);
-        tY += 4;
-      }
-      if (conn.primary.type) {
-        pdf.text(`Type: ${conn.primary.type}`, margin + 4, tY + 3.5);
-        tY += 4;
-      }
-      if (conn.primary.refClient) {
-        pdf.text(`R\u00e9f. client: ${conn.primary.refClient}`, margin + 4, tY + 3.5);
-        tY += 4;
-      }
-      if (conn.primary.bandwidth) {
-        pdf.text(`D\u00e9bit: ${conn.primary.bandwidth}`, margin + 4, tY + 3.5);
-        tY += 4;
-      }
-    }
+    if (links.length > 0) {
+      links.forEach((link: any, idx: number) => {
+        if (tY + 10 > pageH - margin) {
+          pdf.addPage();
+          tY = margin + 6;
+        }
 
-    if (conn.backup?.provider) {
-      tY += 2;
-      pdf.setFontSize(8);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(168, 85, 247);
-      pdf.text('Fournisseur backup', margin + 2, tY + 3.5);
-      tY += 5;
+        if (idx > 0) tY += 2;
 
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(30, 30, 30);
-      pdf.setFontSize(7);
-      if (conn.backup.provider) {
-        pdf.text(`Fournisseur: ${conn.backup.provider}`, margin + 4, tY + 3.5);
-        tY += 4;
-      }
-      if (conn.backup.type) {
-        pdf.text(`Type: ${conn.backup.type}`, margin + 4, tY + 3.5);
-        tY += 4;
-      }
+        const roleLabel = link.role === 'primary' ? 'Lien principal' : 'Lien backup';
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(168, 85, 247);
+        pdf.text(roleLabel, margin + 2, tY + 3.5);
+        tY += 5;
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(30, 30, 30);
+        pdf.setFontSize(7);
+        if (link.provider) {
+          pdf.text(`Fournisseur: ${link.provider}`, margin + 4, tY + 3.5);
+          tY += 4;
+        }
+        if (link.type) {
+          pdf.text(`Type: ${link.type}`, margin + 4, tY + 3.5);
+          tY += 4;
+        }
+        if (link.ref) {
+          pdf.text(`R\u00e9f.: ${link.ref}`, margin + 4, tY + 3.5);
+          tY += 4;
+        }
+        if (link.bandwidth) {
+          pdf.text(`D\u00e9bit: ${link.bandwidth}`, margin + 4, tY + 3.5);
+          tY += 4;
+        }
+      });
     }
   }
 
@@ -934,7 +925,7 @@ function generateSiteReportPdf(
   }
 
   // === Connectivit\u00e9 ===
-  if (site.connectivity && ((site.connectivity as any).primary || (site.connectivity as any).backup)) {
+  if (site.connectivity && (site.connectivity as any).links?.length > 0) {
     if (y > pageH - 50) { doc.addPage(); y = 20; }
     doc.setFontSize(14);
     doc.setTextColor(59, 130, 246);
@@ -943,24 +934,17 @@ function generateSiteReportPdf(
 
     doc.setFontSize(10);
     doc.setTextColor(30, 41, 59);
-    if ((site.connectivity as any).primary) {
+    const connLinks: any[] = (site.connectivity as any).links || [];
+    connLinks.forEach((link: any) => {
+      const roleLabel = link.role === 'primary' ? 'Principale:' : 'Secours:';
       doc.setFont('helvetica', 'bold');
-      doc.text('Principale:', margin, y); y += 5;
+      doc.text(roleLabel, margin, y); y += 5;
       doc.setFont('helvetica', 'normal');
-      if ((site.connectivity as any).primary.provider) { doc.text(`  Op\u00e9rateur: ${(site.connectivity as any).primary.provider}`, margin, y); y += 5; }
-      if ((site.connectivity as any).primary.type) { doc.text(`  Type: ${(site.connectivity as any).primary.type}`, margin, y); y += 5; }
-      if ((site.connectivity as any).primary.ref) { doc.text(`  R\u00e9f: ${(site.connectivity as any).primary.ref}`, margin, y); y += 5; }
+      if (link.provider) { doc.text(`  Op\u00e9rateur: ${link.provider}`, margin, y); y += 5; }
+      if (link.type) { doc.text(`  Type: ${link.type}`, margin, y); y += 5; }
+      if (link.ref) { doc.text(`  R\u00e9f: ${link.ref}`, margin, y); y += 5; }
       y += 3;
-    }
-    if ((site.connectivity as any).backup) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Secours:', margin, y); y += 5;
-      doc.setFont('helvetica', 'normal');
-      if ((site.connectivity as any).backup.provider) { doc.text(`  Op\u00e9rateur: ${(site.connectivity as any).backup.provider}`, margin, y); y += 5; }
-      if ((site.connectivity as any).backup.type) { doc.text(`  Type: ${(site.connectivity as any).backup.type}`, margin, y); y += 5; }
-      if ((site.connectivity as any).backup.ref) { doc.text(`  R\u00e9f: ${(site.connectivity as any).backup.ref}`, margin, y); y += 5; }
-      y += 3;
-    }
+    });
     y += 5;
   }
 

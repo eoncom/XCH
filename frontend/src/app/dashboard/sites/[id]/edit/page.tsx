@@ -152,17 +152,8 @@ function EditSitePage({
   const initLinks = (): ConnectivityLink[] => {
     const conn = site?.connectivity;
     if (!conn) return [];
-    // V2 format
     if (Array.isArray(conn.links)) return conn.links;
-    // V1 format → convert
-    const links: ConnectivityLink[] = [];
-    if (conn.primary && (conn.primary.type || conn.primary.provider || conn.primary.ref)) {
-      links.push({ id: crypto.randomUUID(), role: 'primary', type: conn.primary.type, provider: conn.primary.provider, ref: conn.primary.ref });
-    }
-    if (conn.backup && (conn.backup.type || conn.backup.provider || conn.backup.ref)) {
-      links.push({ id: crypto.randomUUID(), role: 'backup', type: conn.backup.type, provider: conn.backup.provider, ref: conn.backup.ref });
-    }
-    return links;
+    return [];
   };
 
   const initSdwan = (): SdwanConfig => {
@@ -354,10 +345,6 @@ function EditSitePage({
     if (sdwan.enabled) connectivity.sdwan = sdwan;
     if (cleanedData.cutProcedure) connectivity.cutProcedure = cleanedData.cutProcedure;
     delete (cleanedData as any).cutProcedure;
-
-    // Preserve existing monitoring mappings from connectivity
-    const existingMonitoring = (site?.connectivity as any)?.monitoring;
-    if (existingMonitoring) connectivity.monitoring = existingMonitoring;
 
     // Build metadata with serverInfo
     const hasServerInfo = serverInfo.smbPath || serverInfo.sharepointUrl || serverInfo.gedUrl || serverInfo.accessRightsUrl || serverInfo.notes;

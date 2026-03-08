@@ -130,20 +130,20 @@ export class IntegrationsController {
     return this.integrationsService.syncNetBoxContacts(req.user.tenantId);
   }
 
-  // ==================== UPTIME KUMA ====================
+  // ==================== MONITORING (generic) ====================
 
-  @Get('uptime-kuma/monitors')
+  @Get('monitoring/monitors')
   @Resource('integrations')
   @Action('read')
-  @ApiOperation({ summary: 'List all monitors from Uptime Kuma' })
-  getUptimeKumaMonitors(@Request() req: AuthRequest) {
-    return this.integrationsService.getUptimeKumaMonitors(req.user.tenantId);
+  @ApiOperation({ summary: 'List all monitors from the active monitoring provider' })
+  getMonitors(@Request() req: AuthRequest) {
+    return this.integrationsService.getMonitors(req.user.tenantId);
   }
 
-  @Patch('uptime-kuma/map-monitor')
+  @Patch('monitoring/map-monitor')
   @Resource('integrations')
   @Action('update')
-  @ApiOperation({ summary: 'Map an Uptime Kuma monitor to a site' })
+  @ApiOperation({ summary: 'Map a monitor to a site' })
   mapMonitorToSite(
     @Request() req: AuthRequest,
     @Body() body: { siteId: string; monitorName: string | null },
@@ -155,7 +155,7 @@ export class IntegrationsController {
     );
   }
 
-  @Get('uptime-kuma/monitor-mappings')
+  @Get('monitoring/monitor-mappings')
   @Resource('integrations')
   @Action('read')
   @ApiOperation({ summary: 'Get all monitor-to-site mappings' })
@@ -163,10 +163,10 @@ export class IntegrationsController {
     return this.integrationsService.getMonitorMappings(req.user.tenantId);
   }
 
-  @Post('uptime-kuma/sync/health/:siteId')
+  @Post('monitoring/sync/health/:siteId')
   @Resource('integrations')
   @Action('update')
-  @ApiOperation({ summary: 'Update site health status from Uptime Kuma monitor' })
+  @ApiOperation({ summary: 'Update site health status from monitoring provider' })
   updateSiteHealth(
     @Param('siteId') siteId: string,
     @Request() req: AuthRequest,
@@ -179,18 +179,18 @@ export class IntegrationsController {
     );
   }
 
-  @Post('uptime-kuma/sync/health-all')
+  @Post('monitoring/sync/health-all')
   @Resource('integrations')
   @Action('update')
-  @ApiOperation({ summary: 'Sync all sites health from Uptime Kuma (V2 intelligent aggregation)' })
+  @ApiOperation({ summary: 'Sync all sites health from monitoring provider (intelligent aggregation)' })
   syncAllSitesHealth(@Request() req: AuthRequest) {
     return this.integrationsService.syncAllSitesHealth(req.user.tenantId);
   }
 
-  @Patch('uptime-kuma/map-monitor-to-asset')
+  @Patch('monitoring/map-monitor-to-asset')
   @Resource('integrations')
   @Action('update')
-  @ApiOperation({ summary: 'Map an Uptime Kuma monitor to an asset' })
+  @ApiOperation({ summary: 'Map a monitor to an asset' })
   mapMonitorToAsset(
     @Request() req: AuthRequest,
     @Body() body: { assetId: string; monitorName: string | null },
@@ -200,6 +200,24 @@ export class IntegrationsController {
       req.user.tenantId,
       body.monitorName,
     );
+  }
+
+  // ==================== LEGACY ALIASES (backward compat) ====================
+
+  @Get('uptime-kuma/monitors')
+  @Resource('integrations')
+  @Action('read')
+  @ApiOperation({ summary: '[Deprecated] Use /monitoring/monitors instead' })
+  getUptimeKumaMonitors(@Request() req: AuthRequest) {
+    return this.integrationsService.getMonitors(req.user.tenantId);
+  }
+
+  @Post('uptime-kuma/sync/health-all')
+  @Resource('integrations')
+  @Action('update')
+  @ApiOperation({ summary: '[Deprecated] Use /monitoring/sync/health-all instead' })
+  syncAllSitesHealthLegacy(@Request() req: AuthRequest) {
+    return this.integrationsService.syncAllSitesHealth(req.user.tenantId);
   }
 
   @Get('sites/:siteId/health-breakdown')

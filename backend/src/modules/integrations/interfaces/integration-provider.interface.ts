@@ -49,26 +49,62 @@ export interface NetBoxProvider extends IntegrationProvider {
 }
 
 /**
- * Uptime Kuma-specific provider interface
+ * Generic monitoring provider interface.
+ * Any monitoring engine (Uptime Kuma, Gatus, etc.) must implement this.
  */
-export interface UptimeKumaProvider extends IntegrationProvider {
-  /**
-   * Fetch all monitors
-   */
-  fetchMonitors(): Promise<any[]>;
+export interface MonitoringProvider extends IntegrationProvider {
+  /** Fetch all monitors, normalized to a common format */
+  fetchMonitors(): Promise<NormalizedMonitor[]>;
 
-  /**
-   * Get monitor status by tag or name
-   */
-  getMonitorStatus(identifier: string): Promise<{
-    status: 'up' | 'down' | 'unknown';
-    uptime: number;
-    lastCheck: Date;
-    responseTime?: number;
-  } | null>;
+  /** Get a single monitor's status by name or identifier */
+  getMonitorStatus(identifier: string): Promise<NormalizedMonitorStatus | null>;
 
-  /**
-   * Map monitor status to XCH health status
-   */
+  /** Map raw monitor status to XCH health status string */
   mapToHealthStatus(monitorStatus: 'up' | 'down' | 'unknown'): string;
+
+  /** Check if this provider is enabled/configured */
+  isEnabled(): boolean;
+
+  /** Reconfigure the provider at runtime (e.g. from tenant config) */
+  reconfigure(config: MonitoringProviderConfig): void;
 }
+
+/** Normalized monitor data returned by any provider */
+export interface NormalizedMonitor {
+  id: string | number;
+  name: string;
+  type: string;
+  status: 'up' | 'down' | 'unknown';
+  responseTime?: number;
+  url?: string;
+}
+
+/** Normalized status for a single monitor */
+export interface NormalizedMonitorStatus {
+  status: 'up' | 'down' | 'unknown';
+  uptime?: number;
+  lastCheck: Date;
+  responseTime?: number;
+}
+
+/** Configuration passed to reconfigure() */
+export interface MonitoringProviderConfig {
+  url: string;
+  apiKey?: string;
+  username?: string;
+  password?: string;
+}
+
+/** Normalized webhook event from any monitoring engine */
+export interface NormalizedWebhookEvent {
+  monitorName: string;
+  status: 'up' | 'down' | 'unknown' | 'maintenance';
+  message?: string;
+  timestamp: Date;
+  responseTime?: number;
+}
+
+/**
+ * @deprecated Use MonitoringProvider instead. Kept for backward compatibility.
+ */
+export type UptimeKumaProvider = MonitoringProvider;

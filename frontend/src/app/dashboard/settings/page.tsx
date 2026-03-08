@@ -944,6 +944,7 @@ export default function SettingsPage() {
   // Integration state
   const [netboxUrl, setNetboxUrl] = useState('');
   const [netboxToken, setNetboxToken] = useState('');
+  const [monitoringType, setMonitoringType] = useState('');
   const [kumaUrl, setKumaUrl] = useState('');
   const [kumaToken, setKumaToken] = useState('');
   const [isTesting, setIsTesting] = useState<string | null>(null);
@@ -1011,8 +1012,13 @@ export default function SettingsPage() {
         const config = await integrationsApi.getConfig();
         if (config.netbox?.url) setNetboxUrl(config.netbox.url);
         if (config.netbox?.tokenSet) setNetboxToken(config.netbox.tokenHint);
-        if (config.uptimeKuma?.url) setKumaUrl(config.uptimeKuma.url);
-        if (config.uptimeKuma?.passwordSet) setKumaToken(config.uptimeKuma.passwordHint);
+        // Load monitoring config (new format first, then legacy)
+        if (config.monitoring?.type) setMonitoringType(config.monitoring.type);
+        else if (config.uptimeKuma?.url) setMonitoringType('uptime_kuma');
+        if (config.monitoring?.url || config.uptimeKuma?.url) setKumaUrl(config.monitoring?.url || config.uptimeKuma?.url || '');
+        if (config.monitoring?.passwordSet || config.monitoring?.apiKeySet || config.uptimeKuma?.passwordSet) {
+          setKumaToken(config.monitoring?.apiKeyHint || config.monitoring?.passwordHint || config.uptimeKuma?.passwordHint || '');
+        }
       } catch (error) {
         // Integration config may not exist yet, ignore
         console.debug('No integration config found');
@@ -1181,24 +1187,30 @@ export default function SettingsPage() {
     setIsTesting(integration);
     setTestResult(null);
     try {
-      const provider = integration === 'NetBox' ? 'netbox' : 'uptime_kuma';
-      const result = await integrationsApi.testConnection(provider as 'netbox' | 'uptime_kuma');
+      let provider: string;
+      if (integration === 'NetBox') {
+        provider = 'netbox';
+      } else {
+        // Use the selected monitoring provider type, or fallback to 'monitoring'
+        provider = monitoringType || 'monitoring';
+      }
+      const result = await integrationsApi.testConnection(provider as any);
       setTestResult({ provider: integration, success: result.success, message: result.message });
       if (result.success) {
-        toast.success(`✅ ${integration} : ${result.message}`);
+        toast.success(`${integration} : ${result.message}`);
       } else {
-        toast.error(`❌ ${integration} : ${result.message}`);
+        toast.error(`${integration} : ${result.message}`);
       }
     } catch (error: any) {
       const msg = error?.message || 'Erreur de connexion';
       setTestResult({ provider: integration, success: false, message: msg });
-      toast.error(`❌ ${integration} : ${msg}`);
+      toast.error(`${integration} : ${msg}`);
     } finally {
       setIsTesting(null);
     }
   };
 
-  const handleSaveIntegration = async (provider: 'netbox' | 'uptimeKuma') => {
+  const handleSaveIntegration = async (provider: 'netbox' | 'monitoring') => {
     setIsSavingIntegration(provider);
     try {
       const data: Record<string, any> = {};
@@ -1209,10 +1221,13 @@ export default function SettingsPage() {
           token: netboxToken.startsWith('****') ? '' : netboxToken,
         };
       } else {
-        data.uptimeKuma = {
+        data.monitoring = {
+          type: monitoringType,
           url: kumaUrl,
-          // API key sent as password (basic auth with empty username)
-          password: kumaToken.startsWith('****') ? '' : kumaToken,
+          // API key / password
+          ...(monitoringType === 'gatus'
+            ? { apiKey: kumaToken.startsWith('****') ? '' : kumaToken }
+            : { password: kumaToken.startsWith('****') ? '' : kumaToken }),
         };
       }
       const result = await integrationsApi.saveConfig(data);
@@ -1220,10 +1235,13 @@ export default function SettingsPage() {
       if (provider === 'netbox') {
         if (result.netbox?.tokenSet) setNetboxToken(result.netbox.tokenHint);
       } else {
-        if (result.uptimeKuma?.url) setKumaUrl(result.uptimeKuma.url);
-        if (result.uptimeKuma?.passwordSet) setKumaToken(result.uptimeKuma.passwordHint);
+        if (result.monitoring?.url) setKumaUrl(result.monitoring.url);
+        if (result.monitoring?.apiKeySet) setKumaToken(result.monitoring.apiKeyHint);
+        else if (result.monitoring?.passwordSet) setKumaToken(result.monitoring.passwordHint);
       }
-      toast.success(`Configuration ${provider === 'netbox' ? 'NetBox' : 'Uptime Kuma'} enregistrée`);
+      const providerLabel = provider === 'netbox' ? 'NetBox'
+        : monitoringType === 'gatus' ? 'Gatus' : 'Uptime Kuma';
+      toast.success(`Configuration ${providerLabel} enregistrée`);
     } catch (error: any) {
       toast.error(`Erreur : ${error?.message || 'Impossible de sauvegarder'}`);
     } finally {
@@ -1981,7 +1999,7 @@ export default function SettingsPage() {
                 )}
               </div>
 
-              {/* Uptime Kuma / Monitoring */}
+              {/* Monitoring Provider */}
               <div className="border rounded-lg p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -1989,7 +2007,7 @@ export default function SettingsPage() {
                       <Plug className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <h4 className="font-medium">Monitoring (Uptime Kuma)</h4>
+                      <h4 className="font-medium">Monitoring</h4>
                       <p className="text-sm text-muted-foreground">Surveillance — Statut de santé des équipements et services</p>
                     </div>
                   </div>
@@ -2001,22 +2019,38 @@ export default function SettingsPage() {
                   </Button>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid md:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="kumaUrl">URL Uptime Kuma</Label>
+                    <Label htmlFor="monitoringType">Provider</Label>
+                    <Select value={monitoringType} onValueChange={setMonitoringType}>
+                      <SelectTrigger id="monitoringType">
+                        <SelectValue placeholder="Choisir un provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="uptime_kuma">Uptime Kuma</SelectItem>
+                        <SelectItem value="gatus">Gatus</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="kumaUrl">
+                      URL {monitoringType === 'gatus' ? 'Gatus' : 'Uptime Kuma'}
+                    </Label>
                     <Input
                       id="kumaUrl"
-                      placeholder="https://uptime.example.com"
+                      placeholder={monitoringType === 'gatus' ? 'https://gatus.example.com' : 'https://uptime.example.com'}
                       value={kumaUrl}
                       onChange={(e) => setKumaUrl(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="kumaToken">Clé API</Label>
+                    <Label htmlFor="kumaToken">
+                      {monitoringType === 'gatus' ? 'Bearer Token' : 'Clé API'}
+                    </Label>
                     <Input
                       id="kumaToken"
                       type="password"
-                      placeholder="uk2_..."
+                      placeholder={monitoringType === 'gatus' ? 'bearer-token...' : 'uk2_...'}
                       value={kumaToken}
                       onChange={(e) => setKumaToken(e.target.value)}
                     />
@@ -2027,20 +2061,20 @@ export default function SettingsPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleTestConnection('Uptime Kuma')}
-                    disabled={isTesting === 'Uptime Kuma' || !kumaUrl}
+                    onClick={() => handleTestConnection('Monitoring')}
+                    disabled={isTesting === 'Monitoring' || !kumaUrl || !monitoringType}
                   >
-                    {isTesting === 'Uptime Kuma' ? (
+                    {isTesting === 'Monitoring' ? (
                       <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
                     ) : null}
                     Tester la connexion
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => handleSaveIntegration('uptimeKuma')}
-                    disabled={isSavingIntegration === 'uptimeKuma' || !kumaUrl}
+                    onClick={() => handleSaveIntegration('monitoring')}
+                    disabled={isSavingIntegration === 'monitoring' || !kumaUrl || !monitoringType}
                   >
-                    {isSavingIntegration === 'uptimeKuma' ? (
+                    {isSavingIntegration === 'monitoring' ? (
                       <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
                     ) : (
                       <Save className="mr-2 h-3 w-3" />
@@ -2048,7 +2082,7 @@ export default function SettingsPage() {
                     Enregistrer
                   </Button>
                 </div>
-                {testResult?.provider === 'Uptime Kuma' && (
+                {testResult?.provider === 'Monitoring' && (
                   <p className={`text-xs mt-2 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
                     {testResult.message}
                   </p>

@@ -1,3 +1,4 @@
+// NOTE: V1 format (primary/backup) is deprecated. All data should be in V2 format (links array).
 /**
  * Connectivity V1 → V2 migration utility
  *
@@ -59,15 +60,6 @@ export function isV2Format(raw: any): boolean {
 }
 
 /**
- * Detect whether raw connectivity JSON is V1 format
- */
-export function isV1Format(raw: any): boolean {
-  if (!raw || typeof raw !== 'object') return false;
-  // V1 has primary/backup objects but NO links array
-  return !Array.isArray(raw.links) && (raw.primary || raw.backup);
-}
-
-/**
  * Normalize any connectivity format to V2
  * - V2 input → returned as-is
  * - V1 input → converted to V2
@@ -120,32 +112,6 @@ export function normalizeConnectivity(raw: any): ConnectivityV2 {
   return {
     links,
     cutProcedure: v1.cutProcedure || undefined,
-  };
-}
-
-/**
- * Convert V2 connectivity back to include V1 legacy fields for backward compat
- * Used when returning data to frontend that might still use V1 fields
- */
-export function toV1Compat(v2: ConnectivityV2): any {
-  const primaryLink = v2.links.find(l => l.role === 'primary');
-  const backupLink = v2.links.find(l => l.role === 'backup');
-
-  return {
-    // V2 fields
-    links: v2.links,
-    sdwan: v2.sdwan,
-    cutProcedure: v2.cutProcedure,
-    // V1 legacy fields
-    primary: primaryLink
-      ? { type: primaryLink.type, provider: primaryLink.provider, ref: primaryLink.ref }
-      : undefined,
-    backup: backupLink
-      ? { type: backupLink.type, provider: backupLink.provider, ref: backupLink.ref }
-      : undefined,
-    monitoring: primaryLink?.monitorName
-      ? { source: 'uptime_kuma', monitor: primaryLink.monitorName }
-      : undefined,
   };
 }
 

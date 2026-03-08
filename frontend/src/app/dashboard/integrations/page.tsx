@@ -73,7 +73,7 @@ export default function IntegrationsPage() {
   });
 
   const testMonitoringMutation = useMutation({
-    mutationFn: () => integrationsApi.testConnection('uptime_kuma'),
+    mutationFn: () => integrationsApi.testConnection('monitoring' as any),
     onSuccess: (result) => {
       if (result.success) {
         toast.success('Connexion Monitoring reussie', {
@@ -200,7 +200,7 @@ export default function IntegrationsPage() {
               {isLoading ? (
                 <Skeleton className="h-6 w-24" />
               ) : (
-                <StatusBadge status={status?.uptimeKuma?.status || 'disconnected'} />
+                <StatusBadge status={status?.uptimeKuma?.status || status?.monitoring?.uptimeKuma?.status || 'disconnected'} />
               )}
             </div>
           </CardHeader>
@@ -212,7 +212,7 @@ export default function IntegrationsPage() {
               </p>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="outline">Uptime Kuma</Badge>
-                <Badge variant="outline">CheckMK</Badge>
+                <Badge variant="outline">Gatus</Badge>
                 <Badge variant="outline">Webhooks</Badge>
               </div>
             </div>

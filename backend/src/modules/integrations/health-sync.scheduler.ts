@@ -2,10 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaClient } from '@prisma/client';
 import { IntegrationsService } from './integrations.service';
+import { MonitoringProviderFactory } from './providers/monitoring-provider.factory';
 
 /**
- * Scheduled job that automatically syncs site health status from Uptime Kuma.
+ * Scheduled job that automatically syncs site health status from the active monitoring provider.
  * Runs every 5 minutes to keep healthStatus up-to-date without manual intervention.
+ * Acts as a safety net alongside webhooks (poll-based fallback).
  */
 @Injectable()
 export class HealthSyncScheduler {
@@ -14,6 +16,7 @@ export class HealthSyncScheduler {
 
   constructor(
     private readonly integrationsService: IntegrationsService,
+    private readonly monitoringFactory: MonitoringProviderFactory,
     private readonly prisma: PrismaClient,
   ) {}
 
@@ -38,16 +41,16 @@ export class HealthSyncScheduler {
         return;
       }
 
-      // Check if Uptime Kuma integration is configured
+      // Check if any monitoring provider is configured (new or legacy format)
       const config = tenant.config as Record<string, any> | null;
-      const uptimeKumaUrl = config?.integrations?.uptimeKuma?.url;
+      const activeProvider = this.monitoringFactory.getActiveProvider(config);
 
-      if (!uptimeKumaUrl) {
-        this.logger.debug('Uptime Kuma not configured, skipping health sync');
+      if (!activeProvider) {
+        this.logger.debug('No monitoring provider configured, skipping health sync');
         return;
       }
 
-      this.logger.log('Starting scheduled health sync...');
+      this.logger.log(`Starting scheduled health sync (provider: ${activeProvider.getName()})...`);
       const result = await this.integrationsService.syncAllSitesHealth(tenant.id);
       this.logger.log(
         `Scheduled health sync completed: ${result.updated} updated, ${result.skipped} skipped, ${result.errors.length} errors`,

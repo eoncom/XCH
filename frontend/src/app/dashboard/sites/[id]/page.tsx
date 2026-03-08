@@ -792,19 +792,11 @@ function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: strin
 
 // === Connectivité côte à côte ===
 function SiteConnectivitySection({ connectivity, siteId, assets }: { connectivity: Site['connectivity']; siteId: string; assets?: Asset[] }) {
-  // Support both V1 and V2 formats
-  const hasV2Links = connectivity && Array.isArray(connectivity.links) && connectivity.links.length > 0;
-  const hasV1 = connectivity && (connectivity.primary || connectivity.backup);
+  const hasLinks = connectivity && Array.isArray(connectivity.links) && connectivity.links.length > 0;
 
-  if (!connectivity || (!hasV2Links && !hasV1)) return null;
+  if (!connectivity || !hasLinks) return null;
 
-  // Normalize to links array for display
-  const links = hasV2Links
-    ? connectivity.links!
-    : [
-        ...(connectivity.primary ? [{ id: 'v1-primary', role: 'primary' as const, ...connectivity.primary }] : []),
-        ...(connectivity.backup ? [{ id: 'v1-backup', role: 'backup' as const, ...connectivity.backup }] : []),
-      ];
+  const links = connectivity.links || [];
 
   const sdwan = connectivity.sdwan;
 
@@ -1241,7 +1233,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   // Déterminer si on a du contenu pour l'onglet Infos pratiques
   const hasServerInfo = site.metadata?.serverInfo && (site.metadata.serverInfo.smbPath || site.metadata.serverInfo.sharepointUrl || site.metadata.serverInfo.gedUrl || site.metadata.serverInfo.accessRightsUrl);
   const hasContacts = site.contacts && site.contacts.length > 0;
-  const hasConnectivity = site.connectivity && (site.connectivity.primary || site.connectivity.backup);
+  const hasConnectivity = site.connectivity && Array.isArray(site.connectivity.links) && site.connectivity.links.length > 0;
   const hasAccessNotes = site.accessNotes && (site.accessNotes.schedules || site.accessNotes.badges || site.accessNotes.procedures || site.accessNotes.safety);
   const hasInfosPratiques = hasServerInfo || hasContacts || hasConnectivity || hasAccessNotes;
 
@@ -1461,8 +1453,16 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             });
             const liveUpAssets = monitoredAssets.length - liveDownAssets.length;
 
-            const hasHealthData = liveHealthComponents.length > 0 || warrantyAlerts.length > 0 || monitoredAssets.length > 0;
+            // Check if monitoring is actually configured for this site
+            const connectivity = site.connectivity as any;
+            const hasLinkMonitors = connectivity?.links?.some((l: any) => l.monitorName);
+            const hasSdwanMonitor = connectivity?.sdwan?.monitorName;
+            const hasAnyMonitoring = hasLinkMonitors || hasSdwanMonitor || monitoredAssets.length > 0;
+
+            const hasHealthData = liveHealthComponents.length > 0 || warrantyAlerts.length > 0 || hasAnyMonitoring;
             if (!hasHealthData && hs === 'UNKNOWN') return null;
+            // If healthStatus is stored but no monitoring is configured, don't show stale data
+            if (!hasAnyMonitoring && warrantyAlerts.length === 0 && liveHealthComponents.length === 0) return null;
 
             const borderColor = hs === 'CRITICAL' ? 'border-l-red-500' :
                                 hs === 'WARNING' ? 'border-l-amber-500' :
@@ -1542,9 +1542,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                   {monitoredAssets.length === 0 && liveHealthComponents.length === 0 && kumaStatus !== 'connected' && (
                     <p className="text-xs text-muted-foreground">
                       {kumaStatus === 'not_configured'
-                        ? 'Monitoring non configuré. Configurez Uptime Kuma dans Paramètres > Intégrations.'
+                        ? 'Monitoring non configuré. Configurez le monitoring dans Paramètres > Intégrations.'
                         : kumaStatus === 'error'
-                        ? 'Erreur de connexion à Uptime Kuma.'
+                        ? 'Erreur de connexion au monitoring.'
                         : 'Aucun équipement monitoré.'}
                     </p>
                   )}

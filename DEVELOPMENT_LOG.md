@@ -4223,3 +4223,24 @@ fix: 5 bugs post-déploiement (health UP sans monitoring, Kuma response, calibra
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-08
+
+**Date:** 2026-03-08 08:32:03
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 13
+- Frontend files modified: 12
+
+**Commit message:**
+```
+fix: use useLiveMonitors hook to fix TypeError M.filter regression
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

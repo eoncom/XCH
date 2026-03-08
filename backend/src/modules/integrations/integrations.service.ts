@@ -2,7 +2,8 @@ import { Injectable, NotFoundException, Logger, BadRequestException } from '@nes
 import { PrismaClient } from '@prisma/client';
 import { NetBoxProviderService } from './providers/netbox.provider';
 import { HealthStatus } from '@prisma/client';
-import { UptimeKumaProviderService } from './providers/uptime-kuma.provider';
+import { MonitoringProviderFactory } from './providers/monitoring-provider.factory';
+import { MonitoringProvider } from './interfaces/integration-provider.interface';
 import { HealthAggregationService } from './health-aggregation.service';
 import { IntegrationMappingService } from './mapping/integration-mapping.service';
 import { SyncNetBoxSitesDto, SyncNetBoxDevicesDto, MapAssetToNetBoxDto } from './dto/sync-netbox.dto';
@@ -15,7 +16,7 @@ export class IntegrationsService {
   constructor(
     private prisma: PrismaClient,
     private netboxProvider: NetBoxProviderService,
-    private uptimeKumaProvider: UptimeKumaProviderService,
+    private monitoringFactory: MonitoringProviderFactory,
     private healthAggregation: HealthAggregationService,
     private integrationMappingService: IntegrationMappingService,
   ) {}
@@ -23,35 +24,59 @@ export class IntegrationsService {
   // ==================== INTEGRATION CONFIG ====================
 
   /**
-   * Load integration config from tenant DB and reconfigure providers
-   * Always reconfigures to ensure latest DB config is used
+   * Load integration config from tenant DB and reconfigure providers.
+   * Returns the tenant config for use by callers that need it.
    */
-  private async ensureProvidersConfigured(tenantId: string) {
+  private async ensureProvidersConfigured(tenantId: string): Promise<Record<string, any> | null> {
     try {
       const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-      if (!tenant) return;
+      if (!tenant) return null;
       const config = tenant.config as Record<string, any> | null;
       const integrations = config?.integrations;
-      if (!integrations) return;
+      if (!integrations) return config;
 
-      // Always reconfigure from DB config (ensures latest credentials are used)
+      // Always reconfigure NetBox from DB config
       if (integrations.netbox?.url && integrations.netbox?.token) {
         this.netboxProvider.reconfigure(integrations.netbox.url, integrations.netbox.token);
       }
 
-      if (integrations.uptimeKuma?.url) {
-        this.logger.log(`Reconfiguring Uptime Kuma from DB config: ${integrations.uptimeKuma.url}`);
-        this.uptimeKumaProvider.reconfigure(
-          integrations.uptimeKuma.url,
-          integrations.uptimeKuma.username,
-          integrations.uptimeKuma.password,
-        );
+      // Reconfigure monitoring provider from DB config (new or legacy format)
+      const monitoringConfig = integrations.monitoring;
+      if (monitoringConfig?.type && monitoringConfig?.url) {
+        const provider = this.monitoringFactory.getProvider(monitoringConfig.type);
+        this.logger.log(`Reconfiguring ${monitoringConfig.type} provider from DB config: ${monitoringConfig.url}`);
+        provider.reconfigure({
+          url: monitoringConfig.url,
+          apiKey: monitoringConfig.apiKey,
+          username: monitoringConfig.username,
+          password: monitoringConfig.password,
+        });
+      } else if (integrations.uptimeKuma?.url) {
+        // Legacy format fallback
+        this.logger.log(`Reconfiguring Uptime Kuma from legacy DB config: ${integrations.uptimeKuma.url}`);
+        const kumaProvider = this.monitoringFactory.getProvider('uptime_kuma');
+        kumaProvider.reconfigure({
+          url: integrations.uptimeKuma.url,
+          username: integrations.uptimeKuma.username,
+          password: integrations.uptimeKuma.password,
+        });
       } else {
-        this.logger.log('No Uptime Kuma URL in tenant DB config, keeping current provider config');
+        this.logger.log('No monitoring provider URL in tenant DB config');
       }
+
+      return config;
     } catch (error) {
       this.logger.warn('Failed to load integration config from DB', error);
+      return null;
     }
+  }
+
+  /**
+   * Get the active monitoring provider for a tenant (loads config + resolves provider)
+   */
+  private async getMonitoringProvider(tenantId: string): Promise<MonitoringProvider | null> {
+    const config = await this.ensureProvidersConfigured(tenantId);
+    return this.monitoringFactory.getActiveProvider(config);
   }
 
   /**
@@ -70,17 +95,35 @@ export class IntegrationsService {
       return '****' + token.slice(-4);
     };
 
+    // Build monitoring config from new format or legacy
+    const monitoringConfig = integrations.monitoring || {};
+    const legacyKuma = integrations.uptimeKuma || {};
+    const monitoringType = monitoringConfig.type || (legacyKuma.url ? 'uptime_kuma' : '');
+    const monitoringUrl = monitoringConfig.url || legacyKuma.url || '';
+
     return {
       netbox: {
         url: integrations.netbox?.url || '',
         tokenSet: !!integrations.netbox?.token,
         tokenHint: maskToken(integrations.netbox?.token),
       },
+      monitoring: {
+        type: monitoringType,
+        url: monitoringUrl,
+        username: monitoringConfig.username || legacyKuma.username || '',
+        apiKeySet: !!monitoringConfig.apiKey,
+        apiKeyHint: maskToken(monitoringConfig.apiKey),
+        passwordSet: !!(monitoringConfig.password || legacyKuma.password),
+        passwordHint: maskToken(monitoringConfig.password || legacyKuma.password),
+        webhookSecret: monitoringConfig.webhookSecret ? '****' : '',
+        webhookEnabled: !!monitoringConfig.webhookEnabled,
+      },
+      // Legacy field kept for backward compat with existing frontend
       uptimeKuma: {
-        url: integrations.uptimeKuma?.url || '',
-        username: integrations.uptimeKuma?.username || '',
-        passwordSet: !!integrations.uptimeKuma?.password,
-        passwordHint: maskToken(integrations.uptimeKuma?.password),
+        url: legacyKuma.url || monitoringUrl || '',
+        username: legacyKuma.username || monitoringConfig.username || '',
+        passwordSet: !!(legacyKuma.password || monitoringConfig.password),
+        passwordHint: maskToken(legacyKuma.password || monitoringConfig.password),
       },
     };
   }
@@ -112,22 +155,64 @@ export class IntegrationsService {
       }
     }
 
-    // Update Uptime Kuma config
-    if (data.uptimeKuma) {
+    // Update monitoring config (new generic format)
+    if (data.monitoring) {
+      updatedIntegrations.monitoring = {
+        type: data.monitoring.type ?? existing.monitoring?.type ?? '',
+        url: data.monitoring.url ?? existing.monitoring?.url ?? '',
+        username: data.monitoring.username ?? existing.monitoring?.username ?? '',
+        apiKey: data.monitoring.apiKey || existing.monitoring?.apiKey || '',
+        password: data.monitoring.password || existing.monitoring?.password || '',
+        webhookSecret: data.monitoring.webhookSecret || existing.monitoring?.webhookSecret || '',
+        webhookEnabled: data.monitoring.webhookEnabled ?? existing.monitoring?.webhookEnabled ?? false,
+      };
+
+      // Reconfigure provider immediately
+      const mc = updatedIntegrations.monitoring;
+      if (mc.type && mc.url) {
+        const provider = this.monitoringFactory.getProvider(mc.type);
+        provider.reconfigure({
+          url: mc.url,
+          apiKey: mc.apiKey,
+          username: mc.username,
+          password: mc.password,
+        });
+      }
+
+      // Also update legacy uptimeKuma field for backward compat
+      if (mc.type === 'uptime_kuma') {
+        updatedIntegrations.uptimeKuma = {
+          url: mc.url,
+          username: mc.username,
+          password: mc.password,
+        };
+      }
+    }
+
+    // Legacy: Update Uptime Kuma config if sent directly (backward compat)
+    if (data.uptimeKuma && !data.monitoring) {
       updatedIntegrations.uptimeKuma = {
         url: data.uptimeKuma.url ?? existing.uptimeKuma?.url ?? '',
         username: data.uptimeKuma.username ?? existing.uptimeKuma?.username ?? '',
-        // Only update password if a non-empty value is provided
         password: data.uptimeKuma.password || existing.uptimeKuma?.password || '',
+      };
+
+      // Also set new monitoring format
+      updatedIntegrations.monitoring = {
+        type: 'uptime_kuma',
+        url: updatedIntegrations.uptimeKuma.url,
+        username: updatedIntegrations.uptimeKuma.username,
+        password: updatedIntegrations.uptimeKuma.password,
       };
 
       // Reconfigure provider immediately
       if (updatedIntegrations.uptimeKuma.url) {
-        this.uptimeKumaProvider.reconfigure(
-          updatedIntegrations.uptimeKuma.url,
-          updatedIntegrations.uptimeKuma.username,
-          updatedIntegrations.uptimeKuma.password,
-        );
+        const provider = this.monitoringFactory.getProvider('uptime_kuma');
+        provider.reconfigure({
+          url: updatedIntegrations.uptimeKuma.url,
+          username: updatedIntegrations.uptimeKuma.username,
+          password: updatedIntegrations.uptimeKuma.password,
+        });
       }
     }
 
@@ -144,15 +229,23 @@ export class IntegrationsService {
   /**
    * Test all integrations connections
    */
-  async testAllConnections() {
-    const results = await Promise.allSettled([
-      this.netboxProvider.testConnection(),
-      this.uptimeKumaProvider.testConnection(),
-    ]);
+  async testAllConnections(tenantId?: string) {
+    const monitoringProvider = tenantId
+      ? await this.getMonitoringProvider(tenantId)
+      : this.monitoringFactory.getActiveProvider(null);
+
+    const tests: Promise<any>[] = [this.netboxProvider.testConnection()];
+    if (monitoringProvider) {
+      tests.push(monitoringProvider.testConnection());
+    }
+
+    const results = await Promise.allSettled(tests);
 
     return {
       netbox: results[0].status === 'fulfilled' ? results[0].value : { success: false, message: 'Test failed' },
-      uptimeKuma: results[1].status === 'fulfilled' ? results[1].value : { success: false, message: 'Test failed' },
+      monitoring: results[1]
+        ? (results[1].status === 'fulfilled' ? results[1].value : { success: false, message: 'Test failed' })
+        : { success: false, message: 'No monitoring provider configured' },
     };
   }
 
@@ -160,15 +253,25 @@ export class IntegrationsService {
    * Test specific provider connection
    * If tenantId is provided, loads DB config first
    */
-  async testConnection(provider: 'netbox' | 'uptime_kuma', tenantId?: string) {
+  async testConnection(provider: 'netbox' | 'uptime_kuma' | 'gatus' | 'monitoring', tenantId?: string) {
     if (tenantId) {
       await this.ensureProvidersConfigured(tenantId);
     }
 
     if (provider === 'netbox') {
       return await this.netboxProvider.testConnection();
-    } else if (provider === 'uptime_kuma') {
-      return await this.uptimeKumaProvider.testConnection();
+    } else if (provider === 'uptime_kuma' || provider === 'gatus') {
+      const monitoringProvider = this.monitoringFactory.getProvider(provider);
+      return await monitoringProvider.testConnection();
+    } else if (provider === 'monitoring') {
+      // Test the currently active monitoring provider
+      const activeProvider = tenantId
+        ? await this.getMonitoringProvider(tenantId)
+        : null;
+      if (!activeProvider) {
+        return { success: false, message: 'No monitoring provider configured' };
+      }
+      return await activeProvider.testConnection();
     } else {
       throw new BadRequestException('Invalid provider');
     }
@@ -177,15 +280,31 @@ export class IntegrationsService {
   /**
    * Get integration status
    */
-  async getStatus() {
+  async getStatus(tenantId?: string) {
+    const kumaProvider = this.monitoringFactory.getProvider('uptime_kuma');
+    const gatusProvider = this.monitoringFactory.getProvider('gatus');
+
     return {
       netbox: {
         name: this.netboxProvider.getName(),
         status: this.netboxProvider.getStatus(),
       },
+      monitoring: {
+        uptimeKuma: {
+          name: kumaProvider.getName(),
+          status: kumaProvider.getStatus(),
+          enabled: kumaProvider.isEnabled(),
+        },
+        gatus: {
+          name: gatusProvider.getName(),
+          status: gatusProvider.getStatus(),
+          enabled: gatusProvider.isEnabled(),
+        },
+      },
+      // Legacy field
       uptimeKuma: {
-        name: this.uptimeKumaProvider.getName(),
-        status: this.uptimeKumaProvider.getStatus(),
+        name: kumaProvider.getName(),
+        status: kumaProvider.getStatus(),
       },
     };
   }
@@ -454,37 +573,52 @@ export class IntegrationsService {
     };
   }
 
-  // ==================== UPTIME KUMA MONITORING ====================
+  // ==================== MONITORING ====================
 
   /**
-   * Get all monitors from Uptime Kuma
+   * Get all monitors from the active monitoring provider
    */
-  async getUptimeKumaMonitors(tenantId?: string) {
-    if (tenantId) {
-      await this.ensureProvidersConfigured(tenantId);
-    }
+  async getMonitors(tenantId?: string) {
+    const provider = tenantId
+      ? await this.getMonitoringProvider(tenantId)
+      : null;
 
-    const isEnabled = this.uptimeKumaProvider.isEnabled();
-    const providerStatus = this.uptimeKumaProvider.getDetailedStatus();
-    this.logger.log(`getUptimeKumaMonitors: provider enabled=${isEnabled}, status=${providerStatus.status}`);
-
-    if (!isEnabled) {
-      this.logger.warn('Uptime Kuma provider is disabled — no URL configured in tenant settings or env vars');
+    if (!provider) {
+      this.logger.warn('No monitoring provider configured');
       return {
         monitors: [],
         status: 'not_configured' as const,
-        message: 'Uptime Kuma non configuré. Ajoutez l\'URL dans Paramètres > Intégrations.',
+        message: 'Monitoring non configuré. Ajoutez la configuration dans Paramètres > Intégrations.',
       };
     }
 
-    const monitors = await this.uptimeKumaProvider.fetchMonitors();
-    this.logger.log(`getUptimeKumaMonitors: returned ${monitors.length} monitors`);
+    const isEnabled = provider.isEnabled();
+    const providerStatus = (provider as any).getDetailedStatus?.() || {
+      status: provider.getStatus(),
+      lastError: null,
+      lastFetch: null,
+    };
+
+    this.logger.log(`getMonitors: provider=${provider.getName()}, enabled=${isEnabled}, status=${providerStatus.status}`);
+
+    if (!isEnabled) {
+      return {
+        monitors: [],
+        status: 'not_configured' as const,
+        provider: provider.getName(),
+        message: `${provider.getName()} non configuré. Ajoutez l'URL dans Paramètres > Intégrations.`,
+      };
+    }
+
+    const monitors = await provider.fetchMonitors();
+    this.logger.log(`getMonitors: returned ${monitors.length} monitors from ${provider.getName()}`);
 
     if (providerStatus.status === 'error') {
       return {
         monitors,
         status: 'error' as const,
-        message: providerStatus.lastError || 'Erreur de connexion à Uptime Kuma',
+        provider: provider.getName(),
+        message: providerStatus.lastError || `Erreur de connexion à ${provider.getName()}`,
         lastFetch: providerStatus.lastFetch,
       };
     }
@@ -492,12 +626,20 @@ export class IntegrationsService {
     return {
       monitors,
       status: 'connected' as const,
+      provider: provider.getName(),
       lastFetch: providerStatus.lastFetch,
     };
   }
 
   /**
-   * Update site health status from Uptime Kuma monitor
+   * @deprecated Use getMonitors() instead. Kept for backward compatibility.
+   */
+  async getUptimeKumaMonitors(tenantId?: string) {
+    return this.getMonitors(tenantId);
+  }
+
+  /**
+   * Update site health status from monitoring provider
    */
   async updateSiteHealthFromMonitor(siteId: string, tenantId: string, monitorIdentifier: string) {
     const site = await this.prisma.site.findFirst({
@@ -508,13 +650,18 @@ export class IntegrationsService {
       throw new NotFoundException('Site not found');
     }
 
-    const monitorStatus = await this.uptimeKumaProvider.getMonitorStatus(monitorIdentifier);
-
-    if (!monitorStatus) {
-      throw new NotFoundException(`Monitor ${monitorIdentifier} not found in Uptime Kuma`);
+    const provider = await this.getMonitoringProvider(tenantId);
+    if (!provider) {
+      throw new BadRequestException('No monitoring provider configured');
     }
 
-    const healthStatus = this.uptimeKumaProvider.mapToHealthStatus(monitorStatus.status);
+    const monitorStatus = await provider.getMonitorStatus(monitorIdentifier);
+
+    if (!monitorStatus) {
+      throw new NotFoundException(`Monitor ${monitorIdentifier} not found in ${provider.getName()}`);
+    }
+
+    const healthStatus = provider.mapToHealthStatus(monitorStatus.status);
 
     await this.prisma.site.update({
       where: { id: siteId },
@@ -524,7 +671,7 @@ export class IntegrationsService {
         connectivity: {
           ...((site.connectivity as any) || {}),
           monitoring: {
-            source: 'uptime_kuma',
+            source: 'monitoring',
             monitor: monitorIdentifier,
             lastCheck: monitorStatus.lastCheck,
             uptime: monitorStatus.uptime,
@@ -534,7 +681,7 @@ export class IntegrationsService {
       },
     });
 
-    this.logger.log(`Site ${siteId} health updated to ${healthStatus} from Uptime Kuma`);
+    this.logger.log(`Site ${siteId} health updated to ${healthStatus} from ${provider.getName()}`);
     return {
       siteId,
       healthStatus: healthStatus as HealthStatus,
@@ -565,7 +712,7 @@ export class IntegrationsService {
       // Assign monitor to site
       connectivity.monitoring = {
         ...(connectivity.monitoring || {}),
-        source: 'uptime_kuma',
+        source: 'monitoring',
         monitor: monitorName,
       };
     } else {
@@ -609,18 +756,22 @@ export class IntegrationsService {
   }
 
   /**
-   * Sync all sites health from Uptime Kuma (V2 — intelligent aggregation)
-   * 1. Fetch ALL monitors from Uptime Kuma in 1 call
+   * Sync all sites health from the active monitoring provider (intelligent aggregation)
+   * 1. Fetch ALL monitors from the active provider in 1 call
    * 2. For each site: normalize connectivity V2, collect monitorNames from links+sdwan+assets
    * 3. Resolve each monitorName → status from fetched monitors
    * 4. Update cached statuses in connectivity and asset networkInfo
    * 5. Calculate intelligent health status → store healthStatus + healthBreakdown
    */
   async syncAllSitesHealth(tenantId: string) {
-    await this.ensureProvidersConfigured(tenantId);
+    const provider = await this.getMonitoringProvider(tenantId);
+    if (!provider) {
+      this.logger.warn('No monitoring provider configured, skipping health sync');
+      return { total: 0, updated: 0, skipped: 0, errors: [] };
+    }
 
     // 1. Fetch all monitors in a single call
-    const allMonitors = await this.uptimeKumaProvider.fetchMonitors();
+    const allMonitors = await provider.fetchMonitors();
     const monitorStatusMap = this.healthAggregation.buildMonitorStatusMap(allMonitors);
 
     this.logger.log(`Fetched ${allMonitors.length} monitors for health sync`);
@@ -653,31 +804,8 @@ export class IntegrationsService {
           a => (a.networkInfo as any)?.monitorName,
         );
 
-        // Also check V1 monitoring.monitor for backward compat
-        const v1Monitor = (site.connectivity as any)?.monitoring?.monitor;
-
-        if (!hasLinkMonitors && !hasSdwanMonitor && !hasAssetMonitors && !v1Monitor) {
+        if (!hasLinkMonitors && !hasSdwanMonitor && !hasAssetMonitors) {
           results.skipped++;
-          continue;
-        }
-
-        // If V1 monitor exists but no V2 link monitors, use V1 approach (backward compat)
-        if (v1Monitor && !hasLinkMonitors) {
-          // Legacy: single monitor for entire site
-          const monitorStatus = monitorStatusMap[v1Monitor];
-          if (monitorStatus) {
-            const healthStatus = monitorStatus.status === 'up' ? 'HEALTHY' : monitorStatus.status === 'down' ? 'CRITICAL' : 'UNKNOWN';
-            await this.prisma.site.update({
-              where: { id: site.id },
-              data: {
-                healthStatus: healthStatus as HealthStatus,
-                lastHealthCheck: new Date(),
-              },
-            });
-            results.updated++;
-          } else {
-            results.skipped++;
-          }
           continue;
         }
 

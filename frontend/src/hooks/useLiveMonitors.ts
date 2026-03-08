@@ -21,15 +21,15 @@ export interface MonitorsResponse {
 }
 
 /**
- * Hook to fetch live monitor statuses from Uptime Kuma.
+ * Hook to fetch live monitor statuses from the active monitoring provider.
  * Shared across pages via the same React Query key.
- * Cache: 60s staleTime, retry: 1 (non-blocking if Uptime Kuma is offline).
+ * Cache: 60s staleTime, retry: 1 (non-blocking if monitoring is offline).
  */
 export function useLiveMonitors() {
   const { data, ...rest } = useQuery<MonitorsResponse>({
-    queryKey: ['uptime-kuma-monitors'],
+    queryKey: ['monitoring-monitors'],
     queryFn: async () => {
-      const result = await integrationsApi.uptimeKuma.getMonitors();
+      const result = await integrationsApi.monitoring.getMonitors();
       // Handle both old format (array) and new format (object with monitors)
       if (Array.isArray(result)) {
         return { monitors: result, status: 'connected' as const };

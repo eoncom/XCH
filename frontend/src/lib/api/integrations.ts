@@ -18,6 +18,18 @@ export interface IntegrationConfigResponse {
     tokenSet: boolean;
     tokenHint: string;
   };
+  monitoring: {
+    type: string;
+    url: string;
+    username: string;
+    apiKeySet: boolean;
+    apiKeyHint: string;
+    passwordSet: boolean;
+    passwordHint: string;
+    webhookSecret: string;
+    webhookEnabled: boolean;
+  };
+  /** @deprecated Use monitoring instead */
   uptimeKuma: {
     url: string;
     username: string;
@@ -114,31 +126,53 @@ export const integrationsApi = {
       apiClient.post<SyncResult>('/api/integrations/netbox/sync/contacts'),
   },
 
-  // Uptime Kuma
-  uptimeKuma: {
+  // Monitoring (generic — supports Uptime Kuma, Gatus, etc.)
+  monitoring: {
     getMonitors: () =>
-      apiClient.get<any>('/api/integrations/uptime-kuma/monitors'),
+      apiClient.get<any>('/api/integrations/monitoring/monitors'),
 
     syncSiteHealth: (siteId: string, monitorName: string) =>
-      apiClient.post(`/api/integrations/uptime-kuma/sync/health/${siteId}?monitor=${encodeURIComponent(monitorName)}`),
+      apiClient.post(`/api/integrations/monitoring/sync/health/${siteId}?monitor=${encodeURIComponent(monitorName)}`),
 
     syncAllHealth: () =>
-      apiClient.post('/api/integrations/uptime-kuma/sync/health-all'),
+      apiClient.post('/api/integrations/monitoring/sync/health-all'),
 
     mapMonitorToSite: (siteId: string, monitorName: string | null) =>
       apiClient.patch<{ siteId: string; monitorName: string | null; mapped: boolean }>(
-        '/api/integrations/uptime-kuma/map-monitor',
+        '/api/integrations/monitoring/map-monitor',
         { siteId, monitorName }
       ),
 
     getMonitorMappings: () =>
       apiClient.get<Record<string, { siteId: string; siteName: string }>>(
-        '/api/integrations/uptime-kuma/monitor-mappings'
+        '/api/integrations/monitoring/monitor-mappings'
       ),
 
     mapMonitorToAsset: (assetId: string, monitorName: string | null) =>
       apiClient.patch<{ assetId: string; monitorName: string | null; mapped: boolean }>(
-        '/api/integrations/uptime-kuma/map-monitor-to-asset',
+        '/api/integrations/monitoring/map-monitor-to-asset',
+        { assetId, monitorName }
+      ),
+  },
+
+  /** @deprecated Use monitoring instead */
+  uptimeKuma: {
+    getMonitors: () =>
+      apiClient.get<any>('/api/integrations/monitoring/monitors'),
+    syncAllHealth: () =>
+      apiClient.post('/api/integrations/monitoring/sync/health-all'),
+    mapMonitorToSite: (siteId: string, monitorName: string | null) =>
+      apiClient.patch<{ siteId: string; monitorName: string | null; mapped: boolean }>(
+        '/api/integrations/monitoring/map-monitor',
+        { siteId, monitorName }
+      ),
+    getMonitorMappings: () =>
+      apiClient.get<Record<string, { siteId: string; siteName: string }>>(
+        '/api/integrations/monitoring/monitor-mappings'
+      ),
+    mapMonitorToAsset: (assetId: string, monitorName: string | null) =>
+      apiClient.patch<{ assetId: string; monitorName: string | null; mapped: boolean }>(
+        '/api/integrations/monitoring/map-monitor-to-asset',
         { assetId, monitorName }
       ),
   },

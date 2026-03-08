@@ -129,10 +129,7 @@ export default function SitesPage() {
           .filter(Boolean)
           .join(' + ');
       }
-      const parts: string[] = [];
-      if (conn.primary?.provider) parts.push(conn.primary.provider);
-      if (conn.backup?.provider) parts.push(conn.backup.provider);
-      return parts.join(' + ');
+      return '';
     };
 
     const exportData = filteredSites.map((site) => ({

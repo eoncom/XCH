@@ -90,13 +90,13 @@ export default function MonitoringPage() {
   // Fetch existing monitor-to-site mappings
   const { data: monitorMappings = {} } = useQuery<Record<string, { siteId: string; siteName: string }>>({
     queryKey: ['monitor-mappings'],
-    queryFn: () => integrationsApi.uptimeKuma.getMonitorMappings(),
+    queryFn: () => integrationsApi.monitoring.getMonitorMappings(),
   });
 
   const syncAllMutation = useMutation({
-    mutationFn: () => integrationsApi.uptimeKuma.syncAllHealth(),
+    mutationFn: () => integrationsApi.monitoring.syncAllHealth(),
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['uptime-kuma-monitors'] });
+      queryClient.invalidateQueries({ queryKey: ['monitoring-monitors'] });
       queryClient.invalidateQueries({ queryKey: ['sites'] });
       showToast.success(`Synchronisation terminée — ${data?.updated || 0} site(s) mis à jour`);
     },
@@ -113,7 +113,7 @@ export default function MonitoringPage() {
 
   const mapMonitorMutation = useMutation({
     mutationFn: ({ siteId, monitorName }: { siteId: string; monitorName: string | null }) =>
-      integrationsApi.uptimeKuma.mapMonitorToSite(siteId, monitorName),
+      integrationsApi.monitoring.mapMonitorToSite(siteId, monitorName),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['monitor-mappings'] });
       queryClient.invalidateQueries({ queryKey: ['sites'] });
@@ -130,7 +130,7 @@ export default function MonitoringPage() {
 
   const mapAssetMutation = useMutation({
     mutationFn: ({ assetId, monitorName }: { assetId: string; monitorName: string | null }) =>
-      integrationsApi.uptimeKuma.mapMonitorToAsset(assetId, monitorName),
+      integrationsApi.monitoring.mapMonitorToAsset(assetId, monitorName),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       if (variables.monitorName) {
@@ -219,7 +219,7 @@ export default function MonitoringPage() {
               Monitoring
             </h1>
             <p className="text-muted-foreground">
-              Uptime Kuma — Surveillance des services en temps réel
+              Surveillance des services en temps réel
             </p>
           </div>
         </div>
@@ -233,7 +233,7 @@ export default function MonitoringPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ['uptime-kuma-monitors'] })}
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['monitoring-monitors'] })}
             disabled={isLoading}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -263,7 +263,7 @@ export default function MonitoringPage() {
               <div>
                 <p className="font-medium text-red-800 dark:text-red-200">Connexion impossible</p>
                 <p className="text-sm text-red-600 dark:text-red-400">
-                  Vérifiez que Uptime Kuma est configuré dans les paramètres d&apos;intégration et que le serveur est accessible.
+                  Vérifiez que le monitoring est configuré dans les paramètres d&apos;intégration et que le serveur est accessible.
                 </p>
               </div>
             </div>
@@ -382,9 +382,8 @@ export default function MonitoringPage() {
                 <p className="text-muted-foreground mb-2">Aucun moniteur détecté</p>
                 <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
                   Vérifiez que :<br />
-                  • L&apos;URL Uptime Kuma est configurée dans Paramètres → Intégrations<br />
+                  • L&apos;URL du monitoring est configurée dans Paramètres → Intégrations<br />
                   • L&apos;instance est accessible depuis le serveur backend<br />
-                  • L&apos;endpoint /metrics est activé dans Uptime Kuma<br />
                   • Des moniteurs sont créés dans votre instance
                 </p>
                 <Button variant="outline" size="sm" asChild>
