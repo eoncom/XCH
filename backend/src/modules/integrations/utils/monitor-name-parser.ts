@@ -18,7 +18,7 @@ export interface ParsedMonitorName {
   componentName: string;
 }
 
-const MONITOR_NAME_REGEX = /^\[(\w+)\]\s+(LINK|SDWAN|ASSET)\s+(.+)$/i;
+const MONITOR_NAME_REGEX = /^\[([\w-]+)\]\s+(LINK|SDWAN|ASSET)\s+(.+)$/i;
 
 /**
  * Parse a monitor name following the [CODE] TYPE LABEL convention.
