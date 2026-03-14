@@ -98,7 +98,8 @@ export class BackupController {
   @Action('read')
   @ApiOperation({ summary: '[ADMIN] List available backups' })
   async listBackups(@Request() req: AuthRequest) {
-    return this.backupService.listBackups(req.user.tenantId);
+    const backups = await this.backupService.listBackups(req.user.tenantId);
+    return { backups, total: backups.length };
   }
 
   @Get(':id/download')

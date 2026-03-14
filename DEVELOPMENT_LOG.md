@@ -4286,3 +4286,24 @@ fix: monitoring config page read-only — canUpdate('settings') always false
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-14
+
+**Date:** 2026-03-14 21:39:16
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix: monitoring per-site toggle 400 + health sync toggle reset
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

@@ -209,7 +209,7 @@ export default function MonitoringPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/dashboard/integrations">
+            <Link href="/dashboard/monitoring">
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
@@ -387,8 +387,8 @@ export default function MonitoringPage() {
                   • Des moniteurs sont créés dans votre instance
                 </p>
                 <Button variant="outline" size="sm" asChild>
-                  <Link href="/dashboard/settings">
-                    Configurer les intégrations
+                  <Link href="/dashboard/monitoring/config">
+                    Configurer le monitoring
                   </Link>
                 </Button>
               </CardContent>

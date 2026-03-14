@@ -84,7 +84,7 @@ export class SetupService {
             floor_plans: true,
             contacts: true,
             integrations_netbox: true,
-            integrations_monitoring: true,
+            monitoring: true,
             qr_codes: true,
           },
         },

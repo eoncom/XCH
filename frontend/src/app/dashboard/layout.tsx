@@ -41,7 +41,7 @@ const navigation = [
   { name: 'Tâches', href: '/dashboard/tasks', icon: CheckSquare, moduleKey: 'tasks' },
   { name: 'Plans', href: '/dashboard/floor-plans', icon: LayoutTemplate, moduleKey: 'floor_plans' },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Contact2, moduleKey: 'contacts' },
-  { name: 'Monitoring', href: '/dashboard/monitoring', icon: Activity, moduleKey: 'monitoring_dashboard' },
+  { name: 'Monitoring', href: '/dashboard/monitoring', icon: Activity, moduleKey: 'monitoring' },
   { name: 'Dashboard TV', href: '/tv', icon: Monitor },
   { name: 'Alertes', href: '/dashboard/alerts', icon: AlertTriangle, moduleKey: 'alerts' },
 ];

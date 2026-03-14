@@ -10,7 +10,7 @@ export class UpdateModulesDto {
       tasks: true,
       contacts: true,
       integrations_netbox: false,
-      integrations_monitoring: false,
+      monitoring: false,
       qr_codes: true,
     },
   })
