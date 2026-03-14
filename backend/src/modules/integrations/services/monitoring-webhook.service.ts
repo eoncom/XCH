@@ -223,10 +223,14 @@ export class MonitoringWebhookService {
     if (!monitorName) return null;
 
     // resolved=true → UP, resolved=false → DOWN, triggered=true → DOWN
+    // Gatus sends booleans as strings ("true"/"false") in custom webhook body
+    const resolved = payload.resolved === true || payload.resolved === 'true';
+    const triggered = payload.triggered === true || payload.triggered === 'true';
+
     let status: 'up' | 'down' | 'unknown' = 'unknown';
-    if (payload.resolved === true) {
+    if (resolved) {
       status = 'up';
-    } else if (payload.resolved === false || payload.triggered === true) {
+    } else if (!resolved || triggered) {
       status = 'down';
     }
 

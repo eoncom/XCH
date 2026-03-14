@@ -22,8 +22,8 @@ alerting:
     body: |
       {
         "endpoint_name": "[ENDPOINT_NAME]",
-        "resolved": [RESOLVED],
-        "triggered": [TRIGGERED],
+        "resolved": "[RESOLVED]",
+        "triggered": "[TRIGGERED]",
         "description": "[ALERT_DESCRIPTION]"
       }
 
