@@ -783,7 +783,8 @@ export default function FloorPlanViewer({
           hCtx.scale(2, 2);
           hCtx.drawImage(currentImage, 0, 0);
 
-          // Render heatmap on separate transparent canvas
+          // Render heatmap on separate transparent canvas (screen composite
+          // only blends AP circles with each other, not the floor plan image)
           const heatOverlay = document.createElement('canvas');
           heatOverlay.width = currentImage.width * 2;
           heatOverlay.height = currentImage.height * 2;
@@ -799,7 +800,12 @@ export default function FloorPlanViewer({
               currentImage.width,
               currentImage.height,
             );
+            // Reset transform before overlay draw — both canvases are 2x pixels,
+            // drawing without transform maps them 1:1 (avoids double-scaling 4x bug)
+            hCtx.save();
+            hCtx.setTransform(1, 0, 0, 1, 0, 0);
             hCtx.drawImage(heatOverlay, 0, 0);
+            hCtx.restore();
           }
 
           drawPinsOnCanvas(hCtx, apPins);
