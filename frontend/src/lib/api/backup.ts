@@ -32,6 +32,12 @@ export interface RestoreResult {
   counts?: Record<string, number>;
 }
 
+export interface CleanupResult {
+  deleted: string[];
+  skipped: string[];
+  errors: string[];
+}
+
 /**
  * Fetch a binary response with 401 retry (token refresh).
  * apiClient.fetch() always parses JSON — this handles blob downloads.
@@ -140,4 +146,8 @@ export const backupApi = {
   /** Delete a backup by ID */
   deleteBackup: (id: string) =>
     apiClient.delete<{ success: boolean; message: string }>(`/api/backup/${id}`),
+
+  /** Clean up orphaned files in storage (files with no DB reference) */
+  cleanupStorage: () =>
+    apiClient.post<CleanupResult>('/api/backup/cleanup-storage'),
 };

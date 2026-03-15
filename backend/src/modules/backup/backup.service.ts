@@ -1286,4 +1286,161 @@ export class BackupService {
       this.logger.warn(`Cleanup failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
+
+  // ==========================================================================
+  // ORPHANED STORAGE CLEANUP
+  // ==========================================================================
+
+  /**
+   * Clean up orphaned files in MinIO xch-storage bucket.
+   * Files that exist in storage but have no matching DB record are considered orphaned.
+   * A grace period (default 24h) prevents deleting files that may be mid-restore.
+   */
+  async cleanupOrphanedStorage(
+    tenantId: string,
+    userId?: string,
+    graceHours = 24,
+  ): Promise<{ deleted: string[]; skipped: string[]; errors: string[] }> {
+    this.logger.log(`Starting orphaned storage cleanup (grace period: ${graceHours}h)...`);
+
+    const client = this.getMinioClient();
+    const storageBucket = this.configService.get('MINIO_BUCKET', 'xch-storage');
+    const cutoff = new Date(Date.now() - graceHours * 60 * 60 * 1000);
+
+    // 1. List ALL objects in storage bucket
+    const storageObjects: { name: string; lastModified: Date; size: number }[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const stream = client.listObjectsV2(storageBucket, '', true);
+      stream.on('data', (obj: any) => {
+        if (obj.name) {
+          storageObjects.push({
+            name: obj.name,
+            lastModified: obj.lastModified || new Date(),
+            size: obj.size || 0,
+          });
+        }
+      });
+      stream.on('end', resolve);
+      stream.on('error', reject);
+    });
+
+    this.logger.log(`Found ${storageObjects.length} objects in ${storageBucket}`);
+
+    if (storageObjects.length === 0) {
+      return { deleted: [], skipped: [], errors: [] };
+    }
+
+    // 2. Get all known file paths from database
+    const knownPaths = new Set<string>();
+
+    // FloorPlan fileUrls → extract the object key in storage
+    const floorPlans = await this.prisma.floorPlan.findMany({
+      select: { fileUrl: true },
+    });
+    for (const fp of floorPlans) {
+      if (fp.fileUrl) {
+        // fileUrl can be: /storage/xch-storage/floor-plans/xxx or /floor-plans/xxx
+        let key = fp.fileUrl;
+        if (key.includes(`/${storageBucket}/`)) {
+          key = key.split(`/${storageBucket}/`).pop() || '';
+        } else if (key.startsWith('/')) {
+          key = key.substring(1); // Remove leading slash
+        }
+        if (key) knownPaths.add(key);
+      }
+    }
+
+    // Attachment paths → extract the object key in storage
+    const attachments = await this.prisma.attachment.findMany({
+      select: { path: true },
+    });
+    for (const att of attachments) {
+      if (att.path) {
+        let key = att.path;
+        // path can be: /storage/xch-storage/attachments/... or attachments/... or /attachments/...
+        if (key.includes(`/${storageBucket}/`)) {
+          key = key.split(`/${storageBucket}/`).pop() || '';
+        } else if (key.startsWith('/')) {
+          key = key.substring(1);
+        }
+        if (key) knownPaths.add(key);
+      }
+    }
+
+    this.logger.log(`Found ${knownPaths.size} known file references in database`);
+
+    // 3. Compare and delete orphaned files
+    const deleted: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+
+    for (const obj of storageObjects) {
+      // Check if this object has a matching DB record
+      if (knownPaths.has(obj.name)) {
+        continue; // File is referenced in DB — keep it
+      }
+
+      // Check grace period — don't delete recent files (may be mid-upload/restore)
+      if (obj.lastModified > cutoff) {
+        skipped.push(obj.name);
+        this.logger.debug(`Skipping recent orphan (grace period): ${obj.name}`);
+        continue;
+      }
+
+      // Delete the orphaned file
+      try {
+        await client.removeObject(storageBucket, obj.name);
+        deleted.push(obj.name);
+        this.logger.log(`Deleted orphaned file: ${storageBucket}/${obj.name}`);
+      } catch (err: unknown) {
+        const msg = `Failed to delete ${obj.name}: ${err instanceof Error ? err.message : 'Unknown error'}`;
+        errors.push(msg);
+        this.logger.warn(msg);
+      }
+    }
+
+    this.logger.log(
+      `Storage cleanup done: ${deleted.length} deleted, ${skipped.length} skipped (grace), ${errors.length} errors`,
+    );
+
+    // Log the action
+    if (deleted.length > 0) {
+      await this.logBackupAction(tenantId, userId, 'STORAGE_CLEANUP', {
+        deletedCount: deleted.length,
+        skippedCount: skipped.length,
+        deletedFiles: deleted,
+      });
+    }
+
+    return { deleted, skipped, errors };
+  }
+
+  /**
+   * Cron job: clean orphaned storage files daily at 3am (after backups at 2am).
+   */
+  @Cron('0 3 * * *')
+  async scheduledStorageCleanup() {
+    if (this.configService.get('AUTO_BACKUP', 'false') !== 'true') return;
+
+    this.logger.log('Starting scheduled storage cleanup...');
+    try {
+      const tenants = await this.prisma.tenant.findMany({ where: { status: 'ACTIVE' } });
+      for (const tenant of tenants) {
+        try {
+          const result = await this.cleanupOrphanedStorage(tenant.id, 'system', 24);
+          if (result.deleted.length > 0) {
+            this.logger.log(
+              `Storage cleanup for tenant ${tenant.name}: ${result.deleted.length} files deleted`,
+            );
+          }
+        } catch (err: unknown) {
+          this.logger.error(
+            `Storage cleanup failed for tenant ${tenant.id}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        }
+      }
+    } catch (err: unknown) {
+      this.logger.error(`Scheduled storage cleanup failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  }
 }

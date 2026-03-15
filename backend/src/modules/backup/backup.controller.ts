@@ -115,6 +115,21 @@ export class BackupController {
     res.end(buffer);
   }
 
+  // ===== Storage Cleanup =====
+
+  @Post('cleanup-storage')
+  @Resource('backup')
+  @Action('delete')
+  @SkipThrottle()
+  @ApiOperation({ summary: '[ADMIN] Clean up orphaned files in storage' })
+  async cleanupStorage(@Request() req: AuthRequest) {
+    return this.backupService.cleanupOrphanedStorage(
+      req.user.tenantId,
+      req.user.id,
+      0, // No grace period when triggered manually — user wants cleanup now
+    );
+  }
+
   // ===== Backup Management =====
 
   @Get('list')

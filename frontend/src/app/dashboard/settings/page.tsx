@@ -982,6 +982,7 @@ export default function SettingsPage() {
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restoreFullFile, setRestoreFullFile] = useState<File | null>(null);
   const [isRestoringFull, setIsRestoringFull] = useState(false);
+  const [isCleaningStorage, setIsCleaningStorage] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [availableSites, setAvailableSites] = useState<{ id: string; name: string; code: string }[]>([]);
 
@@ -1135,6 +1136,25 @@ export default function SettingsPage() {
       backupApi.downloadBackup(id);
     } catch (error: any) {
       toast.error(error.message || 'Erreur lors du téléchargement');
+    }
+  };
+
+  const handleCleanupStorage = async () => {
+    setIsCleaningStorage(true);
+    try {
+      const result = await backupApi.cleanupStorage();
+      if (result.deleted.length > 0) {
+        toast.success(`${result.deleted.length} fichier(s) orphelin(s) supprimé(s)`);
+      } else {
+        toast.success('Aucun fichier orphelin trouvé — le stockage est propre');
+      }
+      if (result.errors.length > 0) {
+        toast.error(`${result.errors.length} erreur(s) lors du nettoyage`);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors du nettoyage du stockage');
+    } finally {
+      setIsCleaningStorage(false);
     }
   };
 
@@ -2243,6 +2263,43 @@ export default function SettingsPage() {
                   <p className="text-xs text-red-700 dark:text-red-400">
                     La restauration complète importe tous les sites du backup.
                     Les sites existants (même code) seront ignorés. Les fichiers (plans, pièces jointes) sont restaurés.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Section E — Nettoyage du stockage */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Trash2 className="h-5 w-5" />
+                  Nettoyage du stockage
+                </CardTitle>
+                <CardDescription>
+                  Supprime les fichiers orphelins dans le stockage MinIO (fichiers sans référence en base de données).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <Button
+                    onClick={handleCleanupStorage}
+                    disabled={isCleaningStorage}
+                    variant="outline"
+                    className="text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/30"
+                  >
+                    {isCleaningStorage ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-2 h-4 w-4" />
+                    )}
+                    {isCleaningStorage ? 'Nettoyage en cours...' : 'Nettoyer les fichiers orphelins'}
+                  </Button>
+                </div>
+                <div className="flex items-start gap-2 p-3 bg-muted/50 border rounded-lg">
+                  <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-muted-foreground">
+                    Les fichiers (plans, pièces jointes) qui n&apos;ont plus de référence dans la base de données seront supprimés.
+                    Un nettoyage automatique avec un délai de grâce de 24h est également effectué chaque nuit.
                   </p>
                 </div>
               </CardContent>
