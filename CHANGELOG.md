@@ -9,15 +9,68 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+---
+
+## [1.0.0-rc1] - 2026-03-15
+
+### Added
+- **Export PDF plans Wi-Fi 4 quadrants** (2.4 GHz, 5 GHz, 6 GHz, Toutes bandes)
+  - Page Wi-Fi auto-incluse dans les exports PDF si le plan est calibre et contient des AP
+  - Fonctionne sans activer le toggle "Couverture Wi-Fi"
+- **Heatmap Wi-Fi sur plans d'etage** — couverture radio avec modele FSPL Friis
+- **Monitoring Gatus** integre au Docker Compose avec webhook alertes
+  - Dashboard TV mode plein ecran
+  - Abstraction provider monitoring (Gatus / Uptime Kuma)
+  - Sante composite SD-WAN depuis firewalls
+  - Sync automatique cron des etats de sante
+- **Sauvegarde / Restauration completes**
+  - Backup complet (DB + fichiers MinIO) avec UI dans Parametres
+  - Restauration site individuel + restauration complete
+  - Nettoyage stockage orphelin (manuel + cron)
+- **Scripts deploiement production**
+  - `scripts/package-release.sh` — packaging archive portable
+  - `scripts/install-airgap.sh` — installation serveur isole
+  - `scripts/backup-full.sh` / `scripts/restore-full.sh`
+- **Docker production optimise**
+  - `docker-compose.prod.yml` avec limites memoire et rotation logs
+  - `.dockerignore` backend + frontend (contexte build reduit)
+  - Dockerfiles optimises (bcrypt pre-compile, pas de python/g++ en prod)
+  - `next.config.ts` converti en `next.config.mjs` (pas de TypeScript en prod)
+  - `.env.production.example` documente
+  - `README-DEPLOY.md` — guide deploiement connecte + air-gapped
+- **Export site ZIP enrichi** — plans PDF avec pins + equipements montes dans baies
+- **Tri colonnes** sur les tableaux assets et sites
+- **Alertes dashboard** compactes + page monitoring et alertes
+
 ### Fixed
-- **RBAC Casbin 403 Forbidden sur toutes les API** (Session 15 - 2026-02-03)
-  - Problème: Erreur 403 sur `/api/providers` et autres endpoints malgré authentification OK
-  - Cause: Policies Casbin manquaient le paramètre `tenant` (colonne `v3` vide/NULL)
-  - Matcher Casbin exige 4 params: `(role, resource, action, tenant)`
-  - Modèle: `casbin/model.conf` définit `r = sub, obj, act, tenant`
-  - Solution: `UPDATE casbin_rule SET v3 = '*' WHERE ptype = 'p'` (wildcard tous tenants)
-  - Impact: Toutes les ressources RBAC accessibles à nouveau (providers, sites, assets, etc.)
-  - Restart backend requis pour recharger policies
+- **RBAC Casbin 403** — policies manquaient le parametre tenant (v3 = '*')
+- **Restauration site 500** — contrainte unique serialNumber (deduplication avec suffixe)
+- **Heatmap PDF invisible** — compositing `screen` sur fond blanc remplace par overlay `source-over`
+- **Heatmap PDF double-scaling** — transform canvas 4x au lieu de 2x corrige
+- **Double scrollbar** page parametres/backup — overflow global corrige
+- **Restauration champs manquants** — GPS, contacts, tous champs site/asset/rack/plan/task
+- **Monitor parser** — codes site avec tirets (DEF-01) rejetes
+- **Gatus webhook** — parsing booleens + guillemets placeholders
+- **Migration table Site** — `@@map` vers `sites`
+- **Types pins manquants** — 7 types ajoutes dans l'enum PostgreSQL
+- **Rack assets API** — tous les champs renvoyes + tous types pins dans editeur
+- **Monitoring per-site toggle 400** — canUpdate('settings') toujours false
+- **5 bugs post-deploiement** — backup 500, dark mode, plans rendus, Kuma, filtres
+
+### Changed
+- **Frontend version** `0.1.0` → `1.0.0`
+- **Menu restructure** — NetBox page autonome, onglet SSO, backup dans Parametres
+- **Labels centralises** pour monitoring et alertes
+
+### Removed
+- **3 migrations orphelines** — 1 fichier SQL isole + 2 repertoires vides
+
+### Infrastructure
+- Images Docker taguees `v1.0.0-rc1`
+- Labels OCI sur images backend/frontend
+- Nginx reverse proxy integre (proxy profile supprime, toujours actif en prod)
+- Redis avec `maxmemory 128mb` et politique `allkeys-lru`
+- MinIO init en mode one-shot (`restart: "no"`)
 
 ---
 

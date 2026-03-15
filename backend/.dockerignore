@@ -1,0 +1,44 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Build output
+dist
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Tests
+tests/
+test/
+coverage/
+jest.config.*
+*.spec.ts
+
+# Environment
+.env*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Prisma Studio
+prisma/studio
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml

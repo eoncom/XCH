@@ -2,7 +2,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies (OpenSSL for Prisma + Python/build-tools for bcrypt + poppler for PDF→PNG conversion)
+# Install build dependencies (OpenSSL for Prisma + Python/build-tools for bcrypt + poppler for PDF)
 RUN apk add --no-cache openssl python3 make g++ poppler-utils
 
 # Copy package files
@@ -24,26 +24,34 @@ RUN npx prisma generate
 # Build application
 RUN npm run build
 
-# Production stage
+# ── Production stage ─────────────────────────────────────────────────────────
 FROM node:20-alpine
+
+LABEL org.opencontainers.image.title="XCH Backend" \
+      org.opencontainers.image.description="XCH IT Management API — NestJS" \
+      org.opencontainers.image.version="1.0.0-rc1" \
+      org.opencontainers.image.vendor="eoncom"
 
 WORKDIR /app
 
-# Install runtime dependencies (OpenSSL for Prisma + Python/build-tools for bcrypt + poppler for PDF→PNG conversion)
-RUN apk add --no-cache openssl python3 make g++ poppler-utils
+ENV NODE_ENV=production
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
+# Runtime dependencies only — bcrypt native addon is copied from builder
+RUN apk add --no-cache openssl poppler-utils
 
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
-
-# Skip Chromium download for puppeteer
-ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Install production dependencies only
 RUN npm install --omit=dev --legacy-peer-deps
 
 # Copy Prisma Client from builder
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
+# Copy bcrypt native addon from builder (avoids python3/make/g++ in prod)
+COPY --from=builder /app/node_modules/bcrypt ./node_modules/bcrypt
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
@@ -55,8 +63,6 @@ COPY --from=builder /app/casbin /casbin
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Expose port (internal Docker port; nginx proxies to this)
 EXPOSE 3000
 
-# Start: run migrations then launch app
 ENTRYPOINT ["/docker-entrypoint.sh"]

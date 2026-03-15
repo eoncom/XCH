@@ -4412,3 +4412,24 @@ fix: restore all site/asset/rack/plan/task fields + GPS coordinates
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-15
+
+**Date:** 2026-03-15 21:09:21
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 4
+
+**Commit message:**
+```
+feat: auto-include WiFi PDF page when plan has APs + calibration
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
