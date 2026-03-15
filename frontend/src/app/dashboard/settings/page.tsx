@@ -1111,9 +1111,9 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDownloadBackup = async (id: string) => {
+  const handleDownloadBackup = (id: string) => {
     try {
-      await backupApi.downloadBackup(id);
+      backupApi.downloadBackup(id);
     } catch (error: any) {
       toast.error(error.message || 'Erreur lors du téléchargement');
     }
@@ -1289,7 +1289,9 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="profile" className="w-full">
+      <Tabs defaultValue="profile" className="w-full" onValueChange={(val) => {
+        if (val === 'backup') { loadBackups(); loadSitesForBackup(); }
+      }}>
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="profile">
             <User className="mr-2 h-4 w-4" />
@@ -1931,7 +1933,7 @@ export default function SettingsPage() {
 
         {/* Backup Tab */}
         {user?.role === 'ADMIN' && (
-          <TabsContent value="backup" className="space-y-6" onFocusCapture={() => { loadBackups(); loadSitesForBackup(); }}>
+          <TabsContent value="backup" className="space-y-6">
 
             {/* Section A — Créer une sauvegarde */}
             <Card>

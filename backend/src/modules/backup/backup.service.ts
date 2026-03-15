@@ -470,6 +470,13 @@ export class BackupService {
       }
     }
 
+    // Delete the audit log entry so the backup disappears from the list
+    try {
+      await this.prisma.auditLog.delete({ where: { id: backupId } });
+    } catch (err: unknown) {
+      this.logger.warn(`Could not delete audit log entry: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+
     return { message: 'Backup supprimé' };
   }
 

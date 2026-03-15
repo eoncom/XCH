@@ -4328,3 +4328,24 @@ fix: monitor name parser rejects site codes with hyphens (DEF-01)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-15
+
+**Date:** 2026-03-15 15:34:31
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 2
+
+**Commit message:**
+```
+feat: restructure menu — NetBox as standalone page, SSO tab, fix backup download
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

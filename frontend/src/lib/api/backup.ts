@@ -78,8 +78,19 @@ async function fetchBinary(
   return response;
 }
 
-/** Trigger a file download from a Response with Content-Disposition */
-function triggerDownload(blob: Blob, response: Response, fallbackName: string): void {
+/** Trigger a file download via direct URL (preserves user-gesture context) */
+function triggerDirectDownload(url: string, fallbackName: string): void {
+  const a = document.createElement('a');
+  a.href = `${API_URL}${url}`;
+  a.download = fallbackName;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+/** Trigger a file download from a Blob response */
+function triggerBlobDownload(blob: Blob, response: Response, fallbackName: string): void {
   const filename = response.headers.get('content-disposition')
     ?.match(/filename="(.+)"/)?.[1] || fallbackName;
 
@@ -87,10 +98,12 @@ function triggerDownload(blob: Blob, response: Response, fallbackName: string): 
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Delay revocation to give browser time to start download
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 export const backupApi = {
@@ -104,7 +117,7 @@ export const backupApi = {
       method: 'POST',
     });
     const blob = await response.blob();
-    triggerDownload(blob, response, `backup-site-${siteId}.zip`);
+    triggerBlobDownload(blob, response, `backup-site-${siteId}.zip`);
   },
 
   /** Restore a site from a backup ZIP */
@@ -115,13 +128,9 @@ export const backupApi = {
   list: () =>
     apiClient.get<BackupListResponse>('/api/backup/list'),
 
-  /** Download a backup file by ID */
-  downloadBackup: async (id: string): Promise<void> => {
-    const response = await fetchBinary(`/api/backup/${id}/download`, {
-      method: 'GET',
-    });
-    const blob = await response.blob();
-    triggerDownload(blob, response, `backup-${id}.zip`);
+  /** Download a backup file by ID — uses direct URL (cookie-auth, same-origin) */
+  downloadBackup: (id: string): void => {
+    triggerDirectDownload(`/api/backup/${id}/download`, `backup-${id}.zip`);
   },
 
   /** Delete a backup by ID */
