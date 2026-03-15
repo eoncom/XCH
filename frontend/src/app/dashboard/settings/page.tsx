@@ -1310,9 +1310,9 @@ export default function SettingsPage() {
             </TabsTrigger>
           )}
           {user?.role === 'ADMIN' && (
-            <TabsTrigger value="integrations">
-              <Plug className="mr-2 h-4 w-4" />
-              Intégrations
+            <TabsTrigger value="sso">
+              <Key className="mr-2 h-4 w-4" />
+              SSO
             </TabsTrigger>
           )}
           {user?.role === 'ADMIN' && (
@@ -1911,116 +1911,19 @@ export default function SettingsPage() {
           <EnumLabelsTabContent />
         </TabsContent>
 
-        {/* Integrations Tab — consolidated NetBox + Monitoring */}
-        <TabsContent value="integrations" className="space-y-6">
+        {/* SSO Tab */}
+        <TabsContent value="sso" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Plug className="h-5 w-5" />
-                Intégrations externes
+                <Key className="h-5 w-5" />
+                Single Sign-On (SSO)
               </CardTitle>
               <CardDescription>
-                Connectez XCH à vos outils existants pour synchroniser les données automatiquement.
-                Les intégrations sont en lecture seule (READ-ONLY).
+                Configurez l'authentification SSO via OpenID Connect pour permettre à vos utilisateurs de se connecter avec leur compte existant.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* NetBox */}
-              <div className="border rounded-lg p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                      <Database className="h-5 w-5 text-green-600 dark:text-green-400" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium">NetBox</h4>
-                      <p className="text-sm text-muted-foreground">DCIM & IPAM — Synchronisation sites, équipements, baies, contacts</p>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/dashboard/integrations/netbox">
-                      Configuration avancée
-                      <ExternalLink className="ml-2 h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="netboxUrl">URL NetBox</Label>
-                    <Input
-                      id="netboxUrl"
-                      placeholder="https://netbox.example.com"
-                      value={netboxUrl}
-                      onChange={(e) => setNetboxUrl(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="netboxToken">Token API</Label>
-                    <Input
-                      id="netboxToken"
-                      type="password"
-                      placeholder="••••••••••••"
-                      value={netboxToken}
-                      onChange={(e) => setNetboxToken(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleTestConnection('NetBox')}
-                    disabled={isTesting === 'NetBox' || !netboxUrl}
-                  >
-                    {isTesting === 'NetBox' ? (
-                      <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
-                    ) : null}
-                    Tester la connexion
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => handleSaveIntegration('netbox')}
-                    disabled={isSavingIntegration === 'netbox' || !netboxUrl}
-                  >
-                    {isSavingIntegration === 'netbox' ? (
-                      <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
-                    ) : (
-                      <Save className="mr-2 h-3 w-3" />
-                    )}
-                    Enregistrer
-                  </Button>
-                </div>
-                {testResult?.provider === 'NetBox' && (
-                  <p className={`text-xs mt-2 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                    {testResult.message}
-                  </p>
-                )}
-              </div>
-
-              {/* Monitoring — Centralized under /dashboard/monitoring/config */}
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                      <Plug className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium">Monitoring</h4>
-                      <p className="text-sm text-muted-foreground">Configuration centralisée dans la section Monitoring</p>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/dashboard/monitoring/config">
-                      Configurer
-                      <ExternalLink className="ml-2 h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-
-              {/* SSO Configuration */}
+            <CardContent>
               <SsoConfigSection />
             </CardContent>
           </Card>

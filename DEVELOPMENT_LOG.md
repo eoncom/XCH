@@ -4307,3 +4307,24 @@ fix: monitoring per-site toggle 400 + health sync toggle reset
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-15
+
+**Date:** 2026-03-15 14:07:19
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 6
+
+**Commit message:**
+```
+fix: monitor name parser rejects site codes with hyphens (DEF-01)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

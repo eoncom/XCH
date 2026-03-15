@@ -48,6 +48,7 @@ async function bootstrap() {
     credentials: true, // ✅ CRITICAL for cookies
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    exposedHeaders: ['Content-Disposition', 'Content-Length'],
   });
 
   // Cookie parser (required for HTTP-only cookies auth)

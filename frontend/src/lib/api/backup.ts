@@ -32,6 +32,67 @@ export interface RestoreResult {
   counts?: Record<string, number>;
 }
 
+/**
+ * Fetch a binary response with 401 retry (token refresh).
+ * apiClient.fetch() always parses JSON — this handles blob downloads.
+ */
+async function fetchBinary(
+  url: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  const config: RequestInit = {
+    ...options,
+    credentials: 'include',
+  };
+
+  let response = await fetch(`${API_URL}${url}`, config);
+
+  // Handle 401 — try refreshing the token
+  if (response.status === 401 && typeof window !== 'undefined') {
+    const refreshRes = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+
+    if (refreshRes.ok) {
+      // Retry with new token
+      response = await fetch(`${API_URL}${url}`, config);
+    } else {
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      throw new Error('Session expirée');
+    }
+  }
+
+  if (!response.ok) {
+    // Try to parse error as JSON, fallback to status text
+    const contentType = response.headers.get('content-type') || '';
+    let message = response.statusText;
+    if (contentType.includes('application/json')) {
+      const error = await response.json().catch(() => ({}));
+      message = error.message || message;
+    }
+    throw new Error(message || `Erreur ${response.status}`);
+  }
+
+  return response;
+}
+
+/** Trigger a file download from a Response with Content-Disposition */
+function triggerDownload(blob: Blob, response: Response, fallbackName: string): void {
+  const filename = response.headers.get('content-disposition')
+    ?.match(/filename="(.+)"/)?.[1] || fallbackName;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export const backupApi = {
   /** Create a full backup (database + MinIO files) */
   createFull: () =>
@@ -39,29 +100,11 @@ export const backupApi = {
 
   /** Create a site-specific backup — returns ZIP as blob download */
   createSiteBackup: async (siteId: string): Promise<void> => {
-    const response = await fetch(`${API_URL}/api/backup/site/${siteId}`, {
+    const response = await fetchBinary(`/api/backup/site/${siteId}`, {
       method: 'POST',
-      credentials: 'include',
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: response.statusText }));
-      throw new Error(error.message || 'Échec du backup site');
-    }
-
-    // Download the ZIP file
     const blob = await response.blob();
-    const filename = response.headers.get('content-disposition')
-      ?.match(/filename="(.+)"/)?.[1] || `backup-site-${siteId}.zip`;
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    triggerDownload(blob, response, `backup-site-${siteId}.zip`);
   },
 
   /** Restore a site from a backup ZIP */
@@ -74,28 +117,11 @@ export const backupApi = {
 
   /** Download a backup file by ID */
   downloadBackup: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_URL}/api/backup/${id}/download`, {
+    const response = await fetchBinary(`/api/backup/${id}/download`, {
       method: 'GET',
-      credentials: 'include',
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: response.statusText }));
-      throw new Error(error.message || 'Échec du téléchargement');
-    }
-
     const blob = await response.blob();
-    const filename = response.headers.get('content-disposition')
-      ?.match(/filename="(.+)"/)?.[1] || `backup-${id}`;
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    triggerDownload(blob, response, `backup-${id}.zip`);
   },
 
   /** Delete a backup by ID */

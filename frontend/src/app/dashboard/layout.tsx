@@ -15,10 +15,10 @@ import {
   Menu,
   LayoutDashboard,
   Contact2,
-  Plug,
   Activity,
   AlertTriangle,
   Monitor,
+  Database,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -42,12 +42,12 @@ const navigation = [
   { name: 'Plans', href: '/dashboard/floor-plans', icon: LayoutTemplate, moduleKey: 'floor_plans' },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Contact2, moduleKey: 'contacts' },
   { name: 'Monitoring', href: '/dashboard/monitoring', icon: Activity, moduleKey: 'monitoring' },
+  { name: 'NetBox', href: '/dashboard/netbox', icon: Database, moduleKey: 'integrations_netbox' },
   { name: 'Dashboard TV', href: '/tv', icon: Monitor },
   { name: 'Alertes', href: '/dashboard/alerts', icon: AlertTriangle, moduleKey: 'alerts' },
 ];
 
 const adminNavigation = [
-  { name: 'Intégrations', href: '/dashboard/integrations', icon: Plug },
   { name: 'Utilisateurs', href: '/dashboard/users', icon: Users },
   { name: 'Paramètres', href: '/dashboard/settings', icon: Settings },
 ];

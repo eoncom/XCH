@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -18,10 +20,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { integrationsApi } from '@/lib/api/integrations';
 import { sitesApi } from '@/lib/api/sites';
 import { contactTypesApi } from '@/lib/api/contacts';
-import { EntityMappingPanel } from './components/EntityMappingPanel';
-import { SyncPanel } from './components/SyncPanel';
+import { EntityMappingPanel } from '../integrations/netbox/components/EntityMappingPanel';
+import { SyncPanel } from '../integrations/netbox/components/SyncPanel';
 import {
-  ArrowLeft,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -31,6 +32,9 @@ import {
   Server,
   SquareStack,
   Users,
+  Database,
+  Save,
+  Settings,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Site, ContactType } from '@/types';
@@ -93,14 +97,14 @@ function ConnectionStatus({ status }: { status: 'connected' | 'disconnected' | '
       return (
         <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
           <CheckCircle2 className="mr-1 h-3 w-3" />
-          Connecte
+          Connecté
         </Badge>
       );
     case 'disconnected':
       return (
         <Badge variant="secondary">
           <XCircle className="mr-1 h-3 w-3" />
-          Non configure
+          Non configuré
         </Badge>
       );
     case 'error':
@@ -115,14 +119,34 @@ function ConnectionStatus({ status }: { status: 'connected' | 'disconnected' | '
   }
 }
 
-export default function NetBoxConfigPage() {
+export default function NetBoxPage() {
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
 
+  // API Config state
+  const [netboxUrl, setNetboxUrl] = useState('');
+  const [netboxToken, setNetboxToken] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
   // Get connection status
-  const { data: statusData, isLoading: isLoadingStatus } = useQuery({
+  const { data: statusData, isLoading: isLoadingStatus, refetch: refetchStatus } = useQuery({
     queryKey: ['integrations', 'status'],
     queryFn: () => integrationsApi.getStatus(),
   });
+
+  // Load existing config
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await integrationsApi.getConfig();
+        if (config.netbox?.url) setNetboxUrl(config.netbox.url);
+        if (config.netbox?.tokenSet) setNetboxToken(config.netbox.tokenHint);
+      } catch {
+        // Config may not exist yet
+      }
+    };
+    loadConfig();
+  }, []);
 
   // Get XCH sites for device sync dropdown
   const { data: xchSites } = useQuery<Site[]>({
@@ -147,29 +171,53 @@ export default function NetBoxConfigPage() {
   const testMutation = useMutation({
     mutationFn: () => integrationsApi.testConnection('netbox'),
     onSuccess: (result) => {
+      setTestResult({ success: result.success, message: result.message });
+      refetchStatus();
       if (result.success) {
-        toast.success('Connexion NetBox reussie', {
+        toast.success('Connexion NetBox réussie', {
           description: result.details?.version
             ? `Version: ${result.details.version}`
             : result.message,
         });
       } else {
-        toast.error('Echec connexion NetBox', {
+        toast.error('Échec connexion NetBox', {
           description: result.message,
         });
       }
     },
     onError: (error: Error) => {
+      setTestResult({ success: false, message: error.message });
       toast.error('Erreur lors du test', {
         description: error.message,
       });
     },
   });
 
+  // Save config
+  const handleSaveConfig = async () => {
+    setIsSaving(true);
+    try {
+      const data = {
+        netbox: {
+          url: netboxUrl,
+          token: netboxToken.startsWith('****') ? '' : netboxToken,
+        },
+      };
+      const result = await integrationsApi.saveConfig(data);
+      if (result.netbox?.tokenSet) setNetboxToken(result.netbox.tokenHint);
+      toast.success('Configuration NetBox enregistrée');
+      refetchStatus();
+    } catch (error: any) {
+      toast.error(`Erreur : ${error?.message || 'Impossible de sauvegarder'}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const netboxStatus = statusData?.netbox?.status || 'disconnected';
 
   // Transform contact groups for mapping panel
-  const contactGroupsSource = netboxContactGroups?.results?.map((group) => ({
+  const contactGroupsSource = netboxContactGroups?.results?.map((group: any) => ({
     id: String(group.id),
     label: group.name,
     count: group.contact_count,
@@ -186,18 +234,14 @@ export default function NetBoxConfigPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/dashboard/netbox">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Configuration NetBox</h1>
-            <p className="text-muted-foreground">
-              Mappez et synchronisez vos donnees depuis NetBox
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <Database className="h-8 w-8 text-green-600" />
+            NetBox
+          </h1>
+          <p className="text-muted-foreground">
+            DCIM & IPAM — Synchronisez vos données depuis NetBox
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {isLoadingStatus ? (
@@ -225,6 +269,75 @@ export default function NetBoxConfigPage() {
         </div>
       </div>
 
+      {/* API Configuration Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            Configuration API
+          </CardTitle>
+          <CardDescription>
+            Configurez l'URL et le token API pour connecter XCH à votre instance NetBox (lecture seule).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="netboxUrl">URL NetBox</Label>
+              <Input
+                id="netboxUrl"
+                placeholder="https://netbox.example.com"
+                value={netboxUrl}
+                onChange={(e) => setNetboxUrl(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="netboxToken">Token API</Label>
+              <Input
+                id="netboxToken"
+                type="password"
+                placeholder="••••••••••••"
+                value={netboxToken}
+                onChange={(e) => setNetboxToken(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            {testResult && (
+              <p className={`text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                {testResult.message}
+              </p>
+            )}
+            <div className="flex gap-2 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => testMutation.mutate()}
+                disabled={testMutation.isPending || !netboxUrl}
+              >
+                {testMutation.isPending ? (
+                  <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                ) : null}
+                Tester la connexion
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveConfig}
+                disabled={isSaving || !netboxUrl}
+              >
+                {isSaving ? (
+                  <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-3 w-3" />
+                )}
+                Enregistrer
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Connection Warning */}
       {netboxStatus !== 'connected' && (
         <Card className="border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-950/20">
@@ -233,10 +346,10 @@ export default function NetBoxConfigPage() {
               <AlertCircle className="h-5 w-5 text-yellow-600" />
               <div>
                 <p className="font-medium text-yellow-800 dark:text-yellow-200">
-                  NetBox non connecte
+                  NetBox non connecté
                 </p>
                 <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                  Configurez l'URL et le token API dans les parametres pour activer l'integration.
+                  Renseignez l'URL et le token API ci-dessus, puis cliquez sur "Tester la connexion" pour vérifier la connectivité.
                 </p>
               </div>
             </div>
@@ -244,7 +357,7 @@ export default function NetBoxConfigPage() {
         </Card>
       )}
 
-      {/* Tabs */}
+      {/* Mapping & Sync Tabs */}
       <Tabs defaultValue="sites" className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="sites" className="flex items-center gap-2">
@@ -253,7 +366,7 @@ export default function NetBoxConfigPage() {
           </TabsTrigger>
           <TabsTrigger value="devices" className="flex items-center gap-2">
             <Server className="h-4 w-4" />
-            <span className="hidden sm:inline">Equipements</span>
+            <span className="hidden sm:inline">Équipements</span>
           </TabsTrigger>
           <TabsTrigger value="racks" className="flex items-center gap-2">
             <SquareStack className="h-4 w-4" />
@@ -280,7 +393,7 @@ export default function NetBoxConfigPage() {
           <SyncPanel
             title="Synchroniser les sites"
             entityLabel="sites"
-            description="Importe les sites depuis NetBox et les cree ou met a jour dans XCH selon le mapping des statuts."
+            description="Importe les sites depuis NetBox et les crée ou met à jour dans XCH selon le mapping des statuts."
             onSync={() =>
               integrationsApi.netbox.syncSites({
                 autoCreate: true,
@@ -288,7 +401,7 @@ export default function NetBoxConfigPage() {
               })
             }
             disabled={netboxStatus !== 'connected'}
-            disabledReason={netboxStatus !== 'connected' ? 'NetBox non connecte' : undefined}
+            disabledReason={netboxStatus !== 'connected' ? 'NetBox non connecté' : undefined}
           />
         </TabsContent>
 
@@ -297,8 +410,8 @@ export default function NetBoxConfigPage() {
           <EntityMappingPanel
             provider="netbox"
             entityType="device_role"
-            title="Mapping des roles d'equipements"
-            sourceLabel="Roles NetBox"
+            title="Mapping des rôles d'équipements"
+            sourceLabel="Rôles NetBox"
             targetLabel="Types d'assets XCH"
             sourceItems={NETBOX_DEVICE_ROLES}
             targetItems={XCH_ASSET_TYPES}
@@ -306,17 +419,17 @@ export default function NetBoxConfigPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Synchroniser les equipements</CardTitle>
+              <CardTitle className="text-lg">Synchroniser les équipements</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Selectionnez un site XCH cible pour importer les equipements NetBox correspondants.
+                Sélectionnez un site XCH cible pour importer les équipements NetBox correspondants.
               </p>
 
               <div className="flex items-center gap-4">
                 <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
                   <SelectTrigger className="w-[300px]">
-                    <SelectValue placeholder="Selectionner un site cible..." />
+                    <SelectValue placeholder="Sélectionner un site cible..." />
                   </SelectTrigger>
                   <SelectContent>
                     {xchSites?.map((site) => (
@@ -330,10 +443,10 @@ export default function NetBoxConfigPage() {
 
               <SyncPanel
                 title="Lancer la synchronisation"
-                entityLabel="equipements"
+                entityLabel="équipements"
                 description={
                   selectedSiteId
-                    ? `Les equipements seront importes dans le site selectionne.`
+                    ? `Les équipements seront importés dans le site sélectionné.`
                     : undefined
                 }
                 onSync={() =>
@@ -345,9 +458,9 @@ export default function NetBoxConfigPage() {
                 disabled={netboxStatus !== 'connected' || !selectedSiteId}
                 disabledReason={
                   netboxStatus !== 'connected'
-                    ? 'NetBox non connecte'
+                    ? 'NetBox non connecté'
                     : !selectedSiteId
-                    ? 'Selectionnez un site cible'
+                    ? 'Sélectionnez un site cible'
                     : undefined
                 }
               />
@@ -370,19 +483,18 @@ export default function NetBoxConfigPage() {
           <SyncPanel
             title="Synchroniser les baies"
             entityLabel="baies"
-            description="Importe les baies (racks) depuis NetBox. Les baies sont associees automatiquement aux sites deja synchronises."
+            description="Importe les baies (racks) depuis NetBox. Les baies sont associées automatiquement aux sites déjà synchronisés."
             onSync={async () => {
-              // Racks sync not implemented in API yet - return mock result
               return {
                 fetched: 0,
                 created: 0,
                 updated: 0,
                 skipped: 0,
-                errors: ['Synchronisation des baies bientot disponible'],
+                errors: ['Synchronisation des baies bientôt disponible'],
               };
             }}
             disabled={netboxStatus !== 'connected'}
-            disabledReason={netboxStatus !== 'connected' ? 'NetBox non connecte' : undefined}
+            disabledReason={netboxStatus !== 'connected' ? 'NetBox non connecté' : undefined}
           />
         </TabsContent>
 
@@ -405,7 +517,7 @@ export default function NetBoxConfigPage() {
             description="Importe les contacts depuis NetBox et les associe aux types selon le mapping des groupes."
             onSync={() => integrationsApi.netbox.syncContacts()}
             disabled={netboxStatus !== 'connected'}
-            disabledReason={netboxStatus !== 'connected' ? 'NetBox non connecte' : undefined}
+            disabledReason={netboxStatus !== 'connected' ? 'NetBox non connecté' : undefined}
           />
         </TabsContent>
       </Tabs>
