@@ -4391,3 +4391,24 @@ fix: correct ContactType and Contact fields in full restore
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-15
+
+**Date:** 2026-03-15 17:51:09
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 4
+
+**Commit message:**
+```
+fix: restore all site/asset/rack/plan/task fields + GPS coordinates
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

@@ -23,7 +23,7 @@ export default function TVLayout({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen h-screen overflow-y-auto bg-background">
       {children}
     </div>
   );
