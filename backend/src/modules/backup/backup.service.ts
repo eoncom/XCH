@@ -218,7 +218,7 @@ export class BackupService {
 
     // Import in transaction
     const result = await this.prisma.$transaction(async (tx) => {
-      // 1. Create site
+      // 1. Create site (ALL fields)
       const newSite = await tx.site.create({
         data: {
           tenantId,
@@ -230,12 +230,36 @@ export class BackupService {
           postalCode: siteData.postalCode,
           country: siteData.country || 'France',
           healthStatus: siteData.healthStatus || 'UNKNOWN',
+          // JSON fields
+          contacts: siteData.contacts || undefined,
+          accessNotes: siteData.accessNotes || undefined,
+          connectivity: siteData.connectivity || undefined,
+          emplacements: siteData.emplacements || undefined,
+          metadata: siteData.metadata || undefined,
+          // String fields
+          governanceDocsRef: siteData.governanceDocsRef || undefined,
+          notes: siteData.notes || undefined,
+          monitoringEnabled: siteData.monitoringEnabled ?? true,
         },
       });
 
+      // Set GPS coordinates via raw SQL (PostGIS geometry not handled by Prisma)
+      if (siteData.latitude != null && siteData.longitude != null) {
+        try {
+          await tx.$executeRawUnsafe(
+            `UPDATE "sites" SET coordinates = ST_SetSRID(ST_MakePoint($2, $3), 4326) WHERE id = $1`,
+            newSite.id,
+            Number(siteData.longitude),
+            Number(siteData.latitude),
+          );
+        } catch (err: unknown) {
+          this.logger.warn(`Could not set coordinates for site ${newSite.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+      }
+
       const counts: Record<string, number> = { sites: 1 };
 
-      // 2. Create assets
+      // 2. Create assets (ALL fields)
       const assetIdMap = new Map<string, string>();
       if (dataFiles['assets']?.length) {
         for (const asset of dataFiles['assets']) {
@@ -251,6 +275,14 @@ export class BackupService {
               serialNumber: asset.serialNumber,
               networkInfo: asset.networkInfo,
               locationText: asset.locationText,
+              inventoryTag: asset.inventoryTag,
+              qrCodeUrl: asset.qrCodeUrl,
+              qrCodeToken: asset.qrCodeToken,
+              purchaseDate: asset.purchaseDate ? new Date(asset.purchaseDate) : undefined,
+              warrantyEnd: asset.warrantyEnd ? new Date(asset.warrantyEnd) : undefined,
+              weight: asset.weight != null ? Number(asset.weight) : undefined,
+              powerConsumption: asset.powerConsumption != null ? Number(asset.powerConsumption) : undefined,
+              notes: asset.notes,
             },
           });
           assetIdMap.set(asset.id, newAsset.id);
@@ -258,7 +290,7 @@ export class BackupService {
         counts.assets = dataFiles['assets'].length;
       }
 
-      // 3. Create racks
+      // 3. Create racks (ALL fields)
       const rackIdMap = new Map<string, string>();
       if (dataFiles['racks']?.length) {
         for (const rack of dataFiles['racks']) {
@@ -271,6 +303,11 @@ export class BackupService {
               location: rack.location,
               specs: rack.specs,
               notes: rack.notes,
+              serialNumber: rack.serialNumber,
+              model: rack.model,
+              manufacturer: rack.manufacturer,
+              rackType: rack.rackType || 'FLOOR_STANDING',
+              status: rack.status || 'IN_SERVICE',
             },
           });
           rackIdMap.set(rack.id, newRack.id);
@@ -286,6 +323,7 @@ export class BackupService {
                     rackId: newRack.id,
                     rackPositionU: asset.rackPositionU,
                     rackHeightU: asset.rackHeightU,
+                    rackNotes: asset.rackNotes,
                   },
                 });
               }
@@ -295,7 +333,7 @@ export class BackupService {
         counts.racks = dataFiles['racks'].length;
       }
 
-      // 4. Create floor plans
+      // 4. Create floor plans (ALL fields)
       const floorPlanIdMap = new Map<string, string>();
       if (dataFiles['floor-plans']?.length) {
         for (const plan of dataFiles['floor-plans']) {
@@ -308,6 +346,10 @@ export class BackupService {
               uploadedBy: plan.uploadedBy || userId || 'restore',
               notes: plan.notes,
               planGroupId: plan.planGroupId,
+              fileSize: plan.fileSize != null ? Number(plan.fileSize) : undefined,
+              mimeType: plan.mimeType,
+              scaleMetersPerPixel: plan.scaleMetersPerPixel != null ? Number(plan.scaleMetersPerPixel) : undefined,
+              scaleRefLine: plan.scaleRefLine || undefined,
             },
           });
           floorPlanIdMap.set(plan.id, newPlan.id);
@@ -337,7 +379,7 @@ export class BackupService {
         counts.pins = dataFiles['pins'].length;
       }
 
-      // 6. Create tasks (requires createdBy)
+      // 6. Create tasks (ALL fields)
       const taskIdMap = new Map<string, string>();
       if (dataFiles['tasks']?.length) {
         for (const task of dataFiles['tasks']) {
@@ -351,6 +393,11 @@ export class BackupService {
               priority: task.priority || 'MEDIUM',
               createdBy: userId || task.createdBy,
               dueDate: task.dueDate ? new Date(task.dueDate) : null,
+              ticketRef: task.ticketRef,
+              ticketUrl: task.ticketUrl,
+              ticketStatus: task.ticketStatus,
+              completedAt: task.completedAt ? new Date(task.completedAt) : undefined,
+              assetId: task.assetId ? assetIdMap.get(task.assetId) : undefined,
             },
           });
           taskIdMap.set(task.id, newTask.id);
@@ -577,6 +624,8 @@ export class BackupService {
       }
 
       // 2. Create sites + related entities
+      const sitesWithCoords: { id: string; lat: number; lng: number }[] = [];
+
       for (const siteData of sitesData) {
         const existingSite = await tx.site.findFirst({ where: { tenantId, code: siteData.code } });
         if (existingSite) {
@@ -595,12 +644,25 @@ export class BackupService {
             postalCode: siteData.postalCode,
             country: siteData.country || 'France',
             healthStatus: siteData.healthStatus || 'UNKNOWN',
+            contacts: siteData.contacts || undefined,
+            accessNotes: siteData.accessNotes || undefined,
+            connectivity: siteData.connectivity || undefined,
+            emplacements: siteData.emplacements || undefined,
+            metadata: siteData.metadata || undefined,
+            governanceDocsRef: siteData.governanceDocsRef || undefined,
+            notes: siteData.notes || undefined,
+            monitoringEnabled: siteData.monitoringEnabled ?? true,
           },
         });
         siteIdMap.set(siteData.id, newSite.id);
         siteIds.push(newSite.id);
 
-        // Assets for this site
+        // Queue GPS coordinates for raw SQL update after transaction content
+        if (siteData.latitude != null && siteData.longitude != null) {
+          sitesWithCoords.push({ id: newSite.id, lat: Number(siteData.latitude), lng: Number(siteData.longitude) });
+        }
+
+        // Assets for this site (ALL fields)
         const siteAssets = (dataFiles['assets'] || []).filter((a: any) => a.siteId === siteData.id);
         for (const asset of siteAssets) {
           const newAsset = await tx.asset.create({
@@ -610,12 +672,20 @@ export class BackupService {
               manufacturer: asset.manufacturer, model: asset.model,
               serialNumber: asset.serialNumber, networkInfo: asset.networkInfo,
               locationText: asset.locationText,
+              inventoryTag: asset.inventoryTag,
+              qrCodeUrl: asset.qrCodeUrl,
+              qrCodeToken: asset.qrCodeToken,
+              purchaseDate: asset.purchaseDate ? new Date(asset.purchaseDate) : undefined,
+              warrantyEnd: asset.warrantyEnd ? new Date(asset.warrantyEnd) : undefined,
+              weight: asset.weight != null ? Number(asset.weight) : undefined,
+              powerConsumption: asset.powerConsumption != null ? Number(asset.powerConsumption) : undefined,
+              notes: asset.notes,
             },
           });
           assetIdMap.set(asset.id, newAsset.id);
         }
 
-        // Racks for this site
+        // Racks for this site (ALL fields)
         const siteRacks = (dataFiles['racks'] || []).filter((r: any) => r.siteId === siteData.id);
         for (const rack of siteRacks) {
           const newRack = await tx.rack.create({
@@ -623,6 +693,11 @@ export class BackupService {
               tenantId, siteId: newSite.id,
               name: rack.name, heightU: rack.heightU || 42,
               location: rack.location, specs: rack.specs, notes: rack.notes,
+              serialNumber: rack.serialNumber,
+              model: rack.model,
+              manufacturer: rack.manufacturer,
+              rackType: rack.rackType || 'FLOOR_STANDING',
+              status: rack.status || 'IN_SERVICE',
             },
           });
           rackIdMap.set(rack.id, newRack.id);
@@ -633,13 +708,13 @@ export class BackupService {
             if (newAssetId) {
               await tx.asset.update({
                 where: { id: newAssetId },
-                data: { rackId: newRack.id, rackPositionU: asset.rackPositionU, rackHeightU: asset.rackHeightU },
+                data: { rackId: newRack.id, rackPositionU: asset.rackPositionU, rackHeightU: asset.rackHeightU, rackNotes: asset.rackNotes },
               });
             }
           }
         }
 
-        // Floor plans for this site
+        // Floor plans for this site (ALL fields)
         const sitePlans = (dataFiles['floor-plans'] || []).filter((fp: any) => fp.siteId === siteData.id);
         for (const plan of sitePlans) {
           const newPlan = await tx.floorPlan.create({
@@ -651,6 +726,10 @@ export class BackupService {
               uploadedBy: plan.uploadedBy || userId || 'restore',
               notes: plan.notes,
               planGroupId: plan.planGroupId,
+              fileSize: plan.fileSize != null ? Number(plan.fileSize) : undefined,
+              mimeType: plan.mimeType,
+              scaleMetersPerPixel: plan.scaleMetersPerPixel != null ? Number(plan.scaleMetersPerPixel) : undefined,
+              scaleRefLine: plan.scaleRefLine || undefined,
             },
           });
           floorPlanIdMap.set(plan.id, newPlan.id);
@@ -674,7 +753,7 @@ export class BackupService {
           }
         }
 
-        // Tasks for this site
+        // Tasks for this site (ALL fields)
         const siteTasks = (dataFiles['tasks'] || []).filter((t: any) => t.siteId === siteData.id);
         for (const task of siteTasks) {
           const newTask = await tx.task.create({
@@ -684,12 +763,27 @@ export class BackupService {
               status: task.status || 'TODO', priority: task.priority || 'MEDIUM',
               createdBy: userId || task.createdBy,
               dueDate: task.dueDate ? new Date(task.dueDate) : null,
+              ticketRef: task.ticketRef,
+              ticketUrl: task.ticketUrl,
+              ticketStatus: task.ticketStatus,
+              completedAt: task.completedAt ? new Date(task.completedAt) : undefined,
+              assetId: task.assetId ? assetIdMap.get(task.assetId) : undefined,
             },
           });
           taskIdMap.set(task.id, newTask.id);
         }
 
         totalCounts[`site:${siteData.code}`] = 1;
+      }
+
+      // Set GPS coordinates via raw SQL (inside transaction)
+      for (const sc of sitesWithCoords) {
+        try {
+          await tx.$executeRawUnsafe(
+            `UPDATE "sites" SET coordinates = ST_SetSRID(ST_MakePoint($2, $3), 4326) WHERE id = $1`,
+            sc.id, sc.lng, sc.lat,
+          );
+        } catch { /* non-critical */ }
       }
 
       totalCounts.sites = siteIds.length;
@@ -901,8 +995,11 @@ export class BackupService {
         this.prisma.attachment.findMany({ where: { tenantId } }),
       ]);
 
+    // Enrich sites with GPS coordinates (PostGIS → lat/lng)
+    const enrichedSites = await this.enrichSitesWithCoordinates(sites);
+
     return {
-      sites, assets, racks,
+      sites: enrichedSites, assets, racks,
       'floor-plans': floorPlans, pins, tasks,
       contacts, 'contact-types': contactTypes, users,
       attachments,
@@ -953,13 +1050,42 @@ export class BackupService {
       }),
     ]);
 
+    // Enrich sites with GPS coordinates (PostGIS → lat/lng)
+    const enrichedSite = await this.enrichSitesWithCoordinates(site);
+
     return {
-      site, assets, racks,
+      site: enrichedSite, assets, racks,
       'floor-plans': floorPlans, pins, tasks,
       'task-checklist': taskChecklist, 'task-comments': taskComments,
       'user-site-access': userSiteAccess, 'audit-logs': auditLogs,
       attachments,
     };
+  }
+
+  /**
+   * Enrich site objects with latitude/longitude from PostGIS coordinates.
+   * Prisma cannot read Unsupported("geometry") fields, so we use raw SQL.
+   */
+  private async enrichSitesWithCoordinates(sites: any[]): Promise<any[]> {
+    if (!sites.length) return sites;
+
+    try {
+      const siteIds = sites.map(s => s.id);
+      const coords = await this.prisma.$queryRawUnsafe<{ id: string; latitude: number; longitude: number }[]>(
+        `SELECT id, ST_Y(coordinates::geometry) as latitude, ST_X(coordinates::geometry) as longitude
+         FROM "sites" WHERE id = ANY($1::text[]) AND coordinates IS NOT NULL`,
+        siteIds,
+      );
+
+      const coordMap = new Map(coords.map(c => [c.id, { latitude: Number(c.latitude), longitude: Number(c.longitude) }]));
+      return sites.map(s => ({
+        ...s,
+        ...(coordMap.get(s.id) || {}),
+      }));
+    } catch (err: unknown) {
+      this.logger.warn(`Could not fetch coordinates: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      return sites;
+    }
   }
 
   // ==========================================================================
