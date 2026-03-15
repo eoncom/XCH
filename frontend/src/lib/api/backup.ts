@@ -124,6 +124,10 @@ export const backupApi = {
   restoreSite: (file: File) =>
     apiClient.upload<RestoreResult>('/api/backup/site/restore', file),
 
+  /** Restore a full backup from a ZIP */
+  restoreFull: (file: File) =>
+    apiClient.upload<RestoreResult>('/api/backup/full/restore', file),
+
   /** List all available backups */
   list: () =>
     apiClient.get<BackupListResponse>('/api/backup/list'),

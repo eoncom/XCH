@@ -41,6 +41,30 @@ export class BackupController {
     return result;
   }
 
+  // ===== Full Restore =====
+
+  @Post('full/restore')
+  @Resource('backup')
+  @Action('create')
+  @SkipThrottle()
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 1024 * 1024 * 1024 }, // 1GB
+    }),
+  )
+  @ApiOperation({ summary: '[ADMIN] Restore full backup from ZIP' })
+  async restoreFullBackup(
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: AuthRequest,
+  ) {
+    return this.backupService.restoreFullBackup(
+      req.user.tenantId,
+      file.buffer,
+      req.user.id,
+    );
+  }
+
   // ===== Site Restore (MUST be before :siteId to avoid route conflict) =====
 
   @Post('site/restore')

@@ -4,7 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { StorageService } from '../../common/services/storage.service';
 import * as archiver from 'archiver';
-import AdmZip from 'adm-zip';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const AdmZip = require('adm-zip');
 import { PassThrough } from 'stream';
 
 // ============================================================================
@@ -471,6 +472,299 @@ export class BackupService {
       message: `Site "${siteData.code}" restauré avec succès`,
       siteId: result.siteId,
       counts: result.counts,
+    };
+  }
+
+  // ==========================================================================
+  // FULL RESTORE
+  // ==========================================================================
+
+  async restoreFullBackup(
+    tenantId: string,
+    zipBuffer: Buffer,
+    userId?: string,
+  ): Promise<{ message: string; counts: Record<string, number>; siteIds: string[] }> {
+    this.logger.log('Starting full restore...');
+
+    const zip = new AdmZip(zipBuffer);
+    const entries = zip.getEntries();
+
+    const metadataEntry = entries.find((e: any) => e.entryName.endsWith('metadata.json'));
+    if (!metadataEntry) throw new BadRequestException('Invalid backup: metadata.json not found');
+
+    const metadata: BackupMetadata = JSON.parse(metadataEntry.getData().toString('utf8'));
+    if (metadata.version !== '1.0') throw new BadRequestException(`Unsupported backup version: ${metadata.version}`);
+
+    // Parse data files
+    const dataFiles: Record<string, any[]> = {};
+    for (const entry of entries) {
+      if (entry.entryName.includes('/data/') && entry.entryName.endsWith('.json')) {
+        const key = entry.entryName.split('/').pop()!.replace('.json', '');
+        try {
+          dataFiles[key] = JSON.parse(entry.getData().toString('utf8'));
+        } catch {
+          this.logger.warn(`Could not parse ${entry.entryName}`);
+        }
+      }
+    }
+
+    // Collect file entries
+    const fileEntries: { entryName: string; data: Buffer }[] = [];
+    for (const entry of entries) {
+      if (entry.entryName.includes('/files/') && !entry.isDirectory) {
+        if (entry.entryName.includes('/rendered/')) continue;
+        fileEntries.push({ entryName: entry.entryName, data: entry.getData() });
+      }
+    }
+
+    const sitesData = dataFiles['sites'] || [];
+    if (!sitesData.length) throw new BadRequestException('Invalid backup: no sites data found');
+
+    const totalCounts: Record<string, number> = {};
+    const siteIds: string[] = [];
+
+    // Import in transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      const assetIdMap = new Map<string, string>();
+      const rackIdMap = new Map<string, string>();
+      const taskIdMap = new Map<string, string>();
+      const floorPlanIdMap = new Map<string, string>();
+      const siteIdMap = new Map<string, string>();
+      const attachmentPathMap = new Map<string, string>();
+
+      // 1. Create contacts + contact types (tenant-level)
+      if (dataFiles['contact-types']?.length) {
+        for (const ct of dataFiles['contact-types']) {
+          const existing = await tx.contactType.findFirst({ where: { tenantId, name: ct.name } });
+          if (!existing) {
+            await tx.contactType.create({
+              data: { tenantId, name: ct.name, icon: ct.icon, color: ct.color },
+            });
+          }
+        }
+        totalCounts['contact-types'] = dataFiles['contact-types'].length;
+      }
+
+      if (dataFiles['contacts']?.length) {
+        for (const contact of dataFiles['contacts']) {
+          const existing = await tx.contact.findFirst({ where: { tenantId, email: contact.email || undefined, name: contact.name } });
+          if (!existing) {
+            await tx.contact.create({
+              data: {
+                tenantId,
+                name: contact.name,
+                email: contact.email,
+                phone: contact.phone,
+                company: contact.company,
+                role: contact.role,
+                notes: contact.notes,
+                contactTypeId: contact.contactTypeId,
+              },
+            });
+          }
+        }
+        totalCounts.contacts = dataFiles['contacts'].length;
+      }
+
+      // 2. Create sites + related entities
+      for (const siteData of sitesData) {
+        const existingSite = await tx.site.findFirst({ where: { tenantId, code: siteData.code } });
+        if (existingSite) {
+          this.logger.warn(`Site "${siteData.code}" already exists — skipping`);
+          continue;
+        }
+
+        const newSite = await tx.site.create({
+          data: {
+            tenantId,
+            code: siteData.code,
+            name: siteData.name,
+            status: siteData.status || 'ACTIVE',
+            address: siteData.address,
+            city: siteData.city,
+            postalCode: siteData.postalCode,
+            country: siteData.country || 'France',
+            healthStatus: siteData.healthStatus || 'UNKNOWN',
+          },
+        });
+        siteIdMap.set(siteData.id, newSite.id);
+        siteIds.push(newSite.id);
+
+        // Assets for this site
+        const siteAssets = (dataFiles['assets'] || []).filter((a: any) => a.siteId === siteData.id);
+        for (const asset of siteAssets) {
+          const newAsset = await tx.asset.create({
+            data: {
+              tenantId, siteId: newSite.id,
+              name: asset.name, type: asset.type, status: asset.status || 'IN_SERVICE',
+              manufacturer: asset.manufacturer, model: asset.model,
+              serialNumber: asset.serialNumber, networkInfo: asset.networkInfo,
+              locationText: asset.locationText,
+            },
+          });
+          assetIdMap.set(asset.id, newAsset.id);
+        }
+
+        // Racks for this site
+        const siteRacks = (dataFiles['racks'] || []).filter((r: any) => r.siteId === siteData.id);
+        for (const rack of siteRacks) {
+          const newRack = await tx.rack.create({
+            data: {
+              tenantId, siteId: newSite.id,
+              name: rack.name, heightU: rack.heightU || 42,
+              location: rack.location, specs: rack.specs, notes: rack.notes,
+            },
+          });
+          rackIdMap.set(rack.id, newRack.id);
+
+          // Link assets to rack
+          for (const asset of siteAssets.filter((a: any) => a.rackId === rack.id)) {
+            const newAssetId = assetIdMap.get(asset.id);
+            if (newAssetId) {
+              await tx.asset.update({
+                where: { id: newAssetId },
+                data: { rackId: newRack.id, rackPositionU: asset.rackPositionU, rackHeightU: asset.rackHeightU },
+              });
+            }
+          }
+        }
+
+        // Floor plans for this site
+        const sitePlans = (dataFiles['floor-plans'] || []).filter((fp: any) => fp.siteId === siteData.id);
+        for (const plan of sitePlans) {
+          const newPlan = await tx.floorPlan.create({
+            data: {
+              siteId: newSite.id,
+              title: plan.title || plan.name || 'Untitled',
+              version: plan.version || 1,
+              fileUrl: plan.fileUrl || '',
+              uploadedBy: plan.uploadedBy || userId || 'restore',
+              notes: plan.notes,
+              planGroupId: plan.planGroupId,
+            },
+          });
+          floorPlanIdMap.set(plan.id, newPlan.id);
+        }
+
+        // Pins
+        const planIds = sitePlans.map((p: any) => p.id);
+        const sitePins = (dataFiles['pins'] || []).filter((p: any) => planIds.includes(p.floorPlanId));
+        for (const pin of sitePins) {
+          const newFloorPlanId = floorPlanIdMap.get(pin.floorPlanId);
+          if (newFloorPlanId) {
+            await tx.pin.create({
+              data: {
+                floorPlanId: newFloorPlanId, pinType: pin.pinType,
+                label: pin.label, description: pin.description,
+                x: pin.x, y: pin.y,
+                assetId: pin.assetId ? assetIdMap.get(pin.assetId) : undefined,
+                rackId: pin.rackId ? rackIdMap.get(pin.rackId) : undefined,
+              },
+            });
+          }
+        }
+
+        // Tasks for this site
+        const siteTasks = (dataFiles['tasks'] || []).filter((t: any) => t.siteId === siteData.id);
+        for (const task of siteTasks) {
+          const newTask = await tx.task.create({
+            data: {
+              tenantId, siteId: newSite.id,
+              title: task.title, description: task.description,
+              status: task.status || 'TODO', priority: task.priority || 'MEDIUM',
+              createdBy: userId || task.createdBy,
+              dueDate: task.dueDate ? new Date(task.dueDate) : null,
+            },
+          });
+          taskIdMap.set(task.id, newTask.id);
+        }
+
+        totalCounts[`site:${siteData.code}`] = 1;
+      }
+
+      totalCounts.sites = siteIds.length;
+      totalCounts.assets = assetIdMap.size;
+      totalCounts.racks = rackIdMap.size;
+      totalCounts.floorPlans = floorPlanIdMap.size;
+      totalCounts.tasks = taskIdMap.size;
+
+      // Attachments (all, re-mapped)
+      if (dataFiles['attachments']?.length) {
+        for (const att of dataFiles['attachments']) {
+          const newAssetId = att.assetId ? assetIdMap.get(att.assetId) : null;
+          const newTaskId = att.taskId ? taskIdMap.get(att.taskId) : null;
+          const newRackId = att.rackId ? rackIdMap.get(att.rackId) : null;
+          const newSiteId = att.siteId ? siteIdMap.get(att.siteId) : null;
+
+          if (!newAssetId && !newTaskId && !newRackId && !newSiteId) continue;
+
+          const entityType = newAssetId ? 'assets' : newTaskId ? 'tasks' : newRackId ? 'racks' : 'sites';
+          const entityId = newAssetId || newTaskId || newRackId || newSiteId;
+          const newPath = `attachments/${tenantId}/${entityType}/${entityId}/${att.filename}`;
+          attachmentPathMap.set(att.filename, newPath);
+
+          await tx.attachment.create({
+            data: {
+              tenantId,
+              assetId: newAssetId || undefined,
+              taskId: newTaskId || undefined,
+              rackId: newRackId || undefined,
+              siteId: newSiteId || undefined,
+              filename: att.filename, originalFilename: att.originalFilename,
+              size: att.size, mimetype: att.mimetype, path: newPath,
+              description: att.description, category: att.category,
+              uploadedBy: att.uploadedBy || userId || 'restore',
+            },
+          });
+        }
+        totalCounts.attachments = dataFiles['attachments'].length;
+      }
+
+      return { attachmentPathMap };
+    }, { timeout: 120000 });
+
+    // Upload files to MinIO
+    let restoredFiles = 0;
+    for (const fileEntry of fileEntries) {
+      try {
+        const parts = fileEntry.entryName.split('/files/');
+        if (parts.length >= 2) {
+          const relativePath = parts[1];
+
+          if (relativePath.startsWith('plans/raw/')) {
+            const fname = relativePath.substring('plans/raw/'.length);
+            await this.storageService.uploadFile(
+              { buffer: fileEntry.data, originalname: fname, mimetype: 'application/octet-stream', size: fileEntry.data.length } as Express.Multer.File,
+              'floor-plans', fname,
+            );
+            restoredFiles++;
+          } else if (relativePath.startsWith('attachments/')) {
+            const attFilename = relativePath.split('/').pop() || '';
+            const newPath = result.attachmentPathMap.get(attFilename);
+            if (newPath) {
+              const pathParts = newPath.split('/');
+              const folder = pathParts.slice(0, -1).join('/');
+              const fname = pathParts[pathParts.length - 1];
+              await this.storageService.uploadFile(
+                { buffer: fileEntry.data, originalname: fname, mimetype: 'application/octet-stream', size: fileEntry.data.length } as Express.Multer.File,
+                folder, fname,
+              );
+              restoredFiles++;
+            }
+          }
+        }
+      } catch (err: unknown) {
+        this.logger.warn(`Could not restore file ${fileEntry.entryName}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+
+    this.logger.log(`Full restore completed: ${siteIds.length} sites, ${restoredFiles} files`);
+    await this.logBackupAction(tenantId, userId, 'RESTORE_FULL', { counts: totalCounts, siteIds });
+
+    return {
+      message: `Restauration complète : ${siteIds.length} site(s) restauré(s)`,
+      counts: totalCounts,
+      siteIds,
     };
   }
 

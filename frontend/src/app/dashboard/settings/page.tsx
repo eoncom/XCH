@@ -980,6 +980,8 @@ export default function SettingsPage() {
   const [isDeletingBackup, setIsDeletingBackup] = useState<string | null>(null);
   const [selectedBackupSiteId, setSelectedBackupSiteId] = useState('');
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [restoreFullFile, setRestoreFullFile] = useState<File | null>(null);
+  const [isRestoringFull, setIsRestoringFull] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [availableSites, setAvailableSites] = useState<{ id: string; name: string; code: string }[]>([]);
 
@@ -1094,6 +1096,23 @@ export default function SettingsPage() {
       toast.error(error.message || 'Erreur lors de la restauration');
     } finally {
       setIsRestoring(false);
+    }
+  };
+
+  const handleRestoreFull = async () => {
+    if (!restoreFullFile) {
+      toast.error('Veuillez sélectionner un fichier ZIP de backup complet');
+      return;
+    }
+    setIsRestoringFull(true);
+    try {
+      const result = await backupApi.restoreFull(restoreFullFile);
+      toast.success(result.message || 'Restauration complète effectuée');
+      setRestoreFullFile(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors de la restauration complète');
+    } finally {
+      setIsRestoringFull(false);
     }
   };
 
@@ -2173,6 +2192,57 @@ export default function SettingsPage() {
                   <p className="text-xs text-amber-700 dark:text-amber-400">
                     La restauration crée un nouveau site avec les données du backup.
                     Les identifiants internes sont régénérés pour éviter les conflits.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Section D — Restaurer un backup complet */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  Restaurer un backup complet
+                </CardTitle>
+                <CardDescription>
+                  Importez un fichier ZIP de backup complet pour restaurer tous les sites et données.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <Label htmlFor="restore-full-file" className="sr-only">Fichier ZIP de backup complet</Label>
+                    <Input
+                      id="restore-full-file"
+                      type="file"
+                      accept=".zip"
+                      onChange={(e) => setRestoreFullFile(e.target.files?.[0] || null)}
+                      className="cursor-pointer"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleRestoreFull}
+                    disabled={isRestoringFull || !restoreFullFile}
+                    variant="outline"
+                  >
+                    {isRestoringFull ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="mr-2 h-4 w-4" />
+                    )}
+                    {isRestoringFull ? 'Restauration...' : 'Restaurer'}
+                  </Button>
+                </div>
+                {restoreFullFile && (
+                  <p className="text-xs text-muted-foreground">
+                    Fichier sélectionné : <span className="font-mono">{restoreFullFile.name}</span> ({formatFileSize(restoreFullFile.size)})
+                  </p>
+                )}
+                <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
+                  <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-red-700 dark:text-red-400">
+                    La restauration complète importe tous les sites du backup.
+                    Les sites existants (même code) seront ignorés. Les fichiers (plans, pièces jointes) sont restaurés.
                   </p>
                 </div>
               </CardContent>
