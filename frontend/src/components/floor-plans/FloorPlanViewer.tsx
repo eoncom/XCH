@@ -715,7 +715,15 @@ export default function FloorPlanViewer({
       const currentHeatmapConfig = heatmapConfigRef.current;
       const currentHeatmapAPs = heatmapAPRef.current;
       const currentScale = scaleRef.current;
-      const heatmapActive = !!(currentHeatmapConfig?.enabled && currentHeatmapAPs && currentHeatmapAPs.length > 0);
+
+      // WiFi page is included when APs exist AND (toggle enabled OR plan is calibrated)
+      const hasAPs = !!(currentHeatmapAPs && currentHeatmapAPs.length > 0);
+      const hasCalibration = currentScale != null && currentScale > 0;
+      const heatmapActive = hasAPs && (currentHeatmapConfig?.enabled || hasCalibration);
+      // Default config when toggle is off but plan qualifies for WiFi page
+      const effectiveHeatmapConfig = currentHeatmapConfig?.enabled
+        ? currentHeatmapConfig
+        : { enabled: true, frequency: 'all' as const, minSignal: -80, opacity: 0.5, hideOtherPins: false };
 
       // Helper: draw pins on a canvas context
       const drawPinsOnCanvas = (ctx: CanvasRenderingContext2D, pinsToRender: typeof currentPins) => {
@@ -791,7 +799,7 @@ export default function FloorPlanViewer({
           const hoCtx = heatOverlay.getContext('2d');
           if (hoCtx) {
             hoCtx.scale(2, 2);
-            const bandConfig = { ...currentHeatmapConfig!, frequency: band.freq };
+            const bandConfig = { ...effectiveHeatmapConfig, frequency: band.freq };
             renderHeatmapToCanvas(
               hoCtx,
               currentHeatmapAPs!,
