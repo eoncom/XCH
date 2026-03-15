@@ -764,43 +764,46 @@ export default function FloorPlanViewer({
       drawPinsOnCanvas(ctx, currentPins);
       const planDataUrl = canvas.toDataURL('image/png');
 
-      // Render Page 2: Heatmap Wi-Fi (only if heatmap is active)
-      let heatmapDataUrl: string | null = null;
+      // Render WiFi heatmaps: 4 quadrants (2.4 GHz, 5 GHz, 6 GHz, All)
+      const wifiBands: { freq: '2.4' | '5' | '6' | 'all'; label: string }[] = [
+        { freq: '2.4', label: '2.4 GHz' },
+        { freq: '5', label: '5 GHz' },
+        { freq: '6', label: '6 GHz' },
+        { freq: 'all', label: 'Toutes bandes' },
+      ];
+      const heatmapQuadrants: { label: string; dataUrl: string }[] = [];
       if (heatmapActive) {
-        const hCanvas = document.createElement('canvas');
-        hCanvas.width = currentImage.width * 2;
-        hCanvas.height = currentImage.height * 2;
-        const hCtx = hCanvas.getContext('2d');
-        if (hCtx) {
+        const apPins = currentPins.filter(p => p.pinType === 'ACCESS_POINT');
+        for (const band of wifiBands) {
+          const hCanvas = document.createElement('canvas');
+          hCanvas.width = currentImage.width * 2;
+          hCanvas.height = currentImage.height * 2;
+          const hCtx = hCanvas.getContext('2d');
+          if (!hCtx) continue;
           hCtx.scale(2, 2);
-          // 1. Draw the floor plan image first (background)
           hCtx.drawImage(currentImage, 0, 0);
 
-          // 2. Render heatmap on SEPARATE transparent canvas (like Konva does)
-          //    so that 'screen' composite only blends overlapping AP circles,
-          //    not the floor plan image (screen + white = white = invisible!)
+          // Render heatmap on separate transparent canvas
           const heatOverlay = document.createElement('canvas');
           heatOverlay.width = currentImage.width * 2;
           heatOverlay.height = currentImage.height * 2;
           const hoCtx = heatOverlay.getContext('2d');
           if (hoCtx) {
             hoCtx.scale(2, 2);
+            const bandConfig = { ...currentHeatmapConfig!, frequency: band.freq };
             renderHeatmapToCanvas(
               hoCtx,
               currentHeatmapAPs!,
-              currentHeatmapConfig!,
+              bandConfig,
               currentScale || null,
               currentImage.width,
               currentImage.height,
             );
-            // 3. Overlay heatmap onto plan using default 'source-over' compositing
             hCtx.drawImage(heatOverlay, 0, 0);
           }
 
-          // Draw only AP pins on heatmap page
-          const apPins = currentPins.filter(p => p.pinType === 'ACCESS_POINT');
           drawPinsOnCanvas(hCtx, apPins);
-          heatmapDataUrl = hCanvas.toDataURL('image/png');
+          heatmapQuadrants.push({ label: band.label, dataUrl: hCanvas.toDataURL('image/png') });
         }
       }
 
@@ -1136,8 +1139,8 @@ export default function FloorPlanViewer({
         }
       }
 
-      // --- Heatmap page (Page 2) ---
-      if (heatmapDataUrl) {
+      // --- WiFi Heatmap page: 4 quadrants (2.4 GHz, 5 GHz, 6 GHz, All) ---
+      if (heatmapQuadrants.length > 0) {
         pdf.addPage(isLandscape ? 'landscape' : 'portrait');
         const p2Y = margin;
 
@@ -1145,8 +1148,7 @@ export default function FloorPlanViewer({
         pdf.setFontSize(14);
         pdf.setFont('helvetica', 'bold');
         pdf.setTextColor(0, 0, 0);
-        const freqLabel = currentHeatmapConfig!.frequency === 'all' ? 'Toutes bandes' : `${currentHeatmapConfig!.frequency} GHz`;
-        pdf.text(`Couverture Wi-Fi — ${freqLabel}`, margin, p2Y + 6);
+        pdf.text('Couverture Wi-Fi — Comparatif par bande', margin, p2Y + 6);
 
         pdf.setFontSize(8);
         pdf.setFont('helvetica', 'normal');
@@ -1154,25 +1156,56 @@ export default function FloorPlanViewer({
         pdf.text(`${planName} — Estimation indicative en espace libre`, margin, p2Y + 11);
         pdf.setTextColor(0, 0, 0);
 
-        // Heatmap image
-        const hImgTop = p2Y + 15;
-        const hAvailH = pageH - hImgTop - margin - 20;
-        let hImgW = availW;
-        let hImgH = hImgW / imgRatio;
-        if (hImgH > hAvailH) {
-          hImgH = hAvailH;
-          hImgW = hImgH * imgRatio;
-        }
-        const hImgX = margin + (availW - hImgW) / 2;
-        pdf.addImage(heatmapDataUrl, 'PNG', hImgX, hImgTop, hImgW, hImgH);
-        pdf.setDrawColor(200, 200, 200);
-        pdf.setLineWidth(0.3);
-        pdf.rect(hImgX, hImgTop, hImgW, hImgH);
+        // 4 quadrants: 2x2 grid
+        const gridTop = p2Y + 15;
+        const gridGap = 3;
+        const labelH = 5; // height for band label above each quadrant
+        const cellW = (availW - gridGap) / 2;
+        const gridAvailH = pageH - gridTop - margin - 16; // reserve 16mm for legend
+        const cellH = (gridAvailH - gridGap - labelH * 2) / 2;
 
-        // Signal legend
-        const sigLegY = hImgTop + hImgH + 4;
+        const positions = [
+          { col: 0, row: 0 }, // top-left: 2.4 GHz
+          { col: 1, row: 0 }, // top-right: 5 GHz
+          { col: 0, row: 1 }, // bottom-left: 6 GHz
+          { col: 1, row: 1 }, // bottom-right: All
+        ];
+
+        heatmapQuadrants.forEach((quad, i) => {
+          if (i >= 4) return;
+          const pos = positions[i];
+          const qx = margin + pos.col * (cellW + gridGap);
+          const qy = gridTop + pos.row * (cellH + gridGap + labelH);
+
+          // Band label
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(50, 50, 50);
+          pdf.text(quad.label, qx + cellW / 2, qy + 3.5, { align: 'center' });
+
+          // Image within quadrant (fit proportionally)
+          const imgAreaY = qy + labelH;
+          const qImgRatio = currentImage.width / currentImage.height;
+          let qImgW = cellW;
+          let qImgH = qImgW / qImgRatio;
+          if (qImgH > cellH) {
+            qImgH = cellH;
+            qImgW = qImgH * qImgRatio;
+          }
+          const qImgX = qx + (cellW - qImgW) / 2;
+          const qImgY = imgAreaY + (cellH - qImgH) / 2;
+
+          pdf.addImage(quad.dataUrl, 'PNG', qImgX, qImgY, qImgW, qImgH);
+          pdf.setDrawColor(200, 200, 200);
+          pdf.setLineWidth(0.2);
+          pdf.rect(qImgX, qImgY, qImgW, qImgH);
+        });
+
+        // Signal legend at bottom
+        const sigLegY = gridTop + 2 * (cellH + gridGap + labelH) + 2;
         pdf.setFontSize(8);
         pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 0, 0);
         pdf.text('Légende signal', margin, sigLegY + 3);
 
         const sigItems = [
