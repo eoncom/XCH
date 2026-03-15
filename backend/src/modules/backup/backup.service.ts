@@ -93,19 +93,23 @@ export class BackupService {
     const filename = `full-backup-${timestamp}.zip`;
 
     const data = await this.exportAllTenantData(tenantId);
+    const pins = data['pins'] || [];
+    const files = await this.collectFiles(data, pins);
 
-    const zipBuffer = await this.createZipFromData(data, {
+    const metadata: BackupMetadata = {
       version: '1.0',
       type: 'full',
       timestamp: new Date().toISOString(),
       tenantId,
       counts: this.countRecords(data),
-    });
+    };
+
+    const zipBuffer = await this.createFullZip(data, files, metadata);
 
     // Upload directly to xch-backups bucket (not via storageService which targets xch-storage)
     await this.uploadToBackupBucket(zipBuffer, filename);
 
-    this.logger.log(`Full backup completed: ${filename} (${zipBuffer.length} bytes)`);
+    this.logger.log(`Full backup completed: ${filename} (${zipBuffer.length} bytes, ${files.length} files)`);
     await this.logBackupAction(tenantId, userId, 'BACKUP_FULL', { filename, size: zipBuffer.length });
 
     return { message: 'Backup complet créé avec succès', filename, size: zipBuffer.length };
@@ -131,7 +135,7 @@ export class BackupService {
 
     const data = await this.exportSiteData(tenantId, siteId);
     const pins = data['pins'] || [];
-    const files = await this.collectSiteFiles(data, pins);
+    const files = await this.collectFiles(data, pins);
 
     const zipBuffer = await this.createSiteZip(data, files, {
       version: '1.0',
@@ -333,6 +337,7 @@ export class BackupService {
       }
 
       // 6. Create tasks (requires createdBy)
+      const taskIdMap = new Map<string, string>();
       if (dataFiles['tasks']?.length) {
         for (const task of dataFiles['tasks']) {
           const newTask = await tx.task.create({
@@ -347,6 +352,7 @@ export class BackupService {
               dueDate: task.dueDate ? new Date(task.dueDate) : null,
             },
           });
+          taskIdMap.set(task.id, newTask.id);
 
           // Checklist items
           if (dataFiles['task-checklist']?.length) {
@@ -365,36 +371,97 @@ export class BackupService {
         counts.tasks = dataFiles['tasks'].length;
       }
 
-      return { siteId: newSite.id, counts };
+      // 7. Create attachments (re-map entity IDs to new IDs)
+      const attachmentPathMap = new Map<string, string>(); // oldFilename -> newMinIOPath
+      if (dataFiles['attachments']?.length) {
+        for (const att of dataFiles['attachments']) {
+          const newAssetId = att.assetId ? assetIdMap.get(att.assetId) : null;
+          const newTaskId = att.taskId ? taskIdMap.get(att.taskId) : null;
+          const newRackId = att.rackId ? rackIdMap.get(att.rackId) : null;
+          const newSiteIdRef = att.siteId ? newSite.id : null;
+
+          // Determine new MinIO path
+          const entityType = newAssetId ? 'assets' : newTaskId ? 'tasks' : newRackId ? 'racks' : 'sites';
+          const entityId = newAssetId || newTaskId || newRackId || newSite.id;
+          const newPath = `attachments/${tenantId}/${entityType}/${entityId}/${att.filename}`;
+
+          attachmentPathMap.set(att.filename, newPath);
+
+          await tx.attachment.create({
+            data: {
+              tenantId,
+              assetId: newAssetId || undefined,
+              taskId: newTaskId || undefined,
+              rackId: newRackId || undefined,
+              siteId: newSiteIdRef || undefined,
+              filename: att.filename,
+              originalFilename: att.originalFilename,
+              size: att.size,
+              mimetype: att.mimetype,
+              path: newPath,
+              description: att.description,
+              category: att.category,
+              uploadedBy: att.uploadedBy || userId || 'restore',
+            },
+          });
+        }
+        counts.attachments = dataFiles['attachments'].length;
+      }
+
+      return { siteId: newSite.id, counts, attachmentPathMap };
     });
 
     // Upload files to MinIO (outside transaction)
+    let restoredFiles = 0;
     for (const fileEntry of fileEntries) {
       try {
         const parts = fileEntry.entryName.split('/files/');
         if (parts.length >= 2) {
-          let relativePath = parts[1];
-          // Strip raw/ prefix for MinIO storage (restore as original path)
-          if (relativePath.startsWith('raw/')) {
-            relativePath = relativePath.substring(4);
+          const relativePath = parts[1];
+
+          // Handle plan files: strip plans/raw/ prefix → upload to floor-plans/
+          if (relativePath.startsWith('plans/raw/')) {
+            const fname = relativePath.substring('plans/raw/'.length);
+            await this.storageService.uploadFile(
+              {
+                buffer: fileEntry.data,
+                originalname: fname,
+                mimetype: 'application/octet-stream',
+                size: fileEntry.data.length,
+              } as Express.Multer.File,
+              'floor-plans',
+              fname,
+            );
+            restoredFiles++;
           }
-          const folder = relativePath.substring(0, relativePath.lastIndexOf('/'));
-          const fname = relativePath.substring(relativePath.lastIndexOf('/') + 1);
-          await this.storageService.uploadFile(
-            {
-              buffer: fileEntry.data,
-              originalname: fname,
-              mimetype: 'application/octet-stream',
-              size: fileEntry.data.length,
-            } as Express.Multer.File,
-            folder,
-            fname,
-          );
+          // Handle attachment files: use attachmentPathMap to determine new MinIO path
+          else if (relativePath.startsWith('attachments/')) {
+            const attFilename = relativePath.split('/').pop() || '';
+            const newPath = result.attachmentPathMap.get(attFilename);
+            if (newPath) {
+              // newPath format: attachments/{tenantId}/{entityType}/{entityId}/{filename}
+              const pathParts = newPath.split('/');
+              const folder = pathParts.slice(0, -1).join('/');
+              const fname = pathParts[pathParts.length - 1];
+              await this.storageService.uploadFile(
+                {
+                  buffer: fileEntry.data,
+                  originalname: fname,
+                  mimetype: 'application/octet-stream',
+                  size: fileEntry.data.length,
+                } as Express.Multer.File,
+                folder,
+                fname,
+              );
+              restoredFiles++;
+            }
+          }
         }
       } catch (err: unknown) {
         this.logger.warn(`Could not restore file ${fileEntry.entryName}: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     }
+    this.logger.log(`Restored ${restoredFiles} files to MinIO`);
 
     await this.logBackupAction(tenantId, userId, 'RESTORE_SITE', {
       siteId: result.siteId, siteCode: siteData.code, counts: result.counts,
@@ -510,7 +577,7 @@ export class BackupService {
   // ==========================================================================
 
   private async exportAllTenantData(tenantId: string): Promise<Record<string, any[]>> {
-    const [sites, assets, racks, floorPlans, pins, tasks, contacts, contactTypes, users] =
+    const [sites, assets, racks, floorPlans, pins, tasks, contacts, contactTypes, users, attachments] =
       await Promise.all([
         this.prisma.site.findMany({ where: { tenantId } }),
         this.prisma.asset.findMany({ where: { tenantId } }),
@@ -527,12 +594,14 @@ export class BackupService {
             active: true, phone: true, authProvider: true,
           },
         }),
+        this.prisma.attachment.findMany({ where: { tenantId } }),
       ]);
 
     return {
       sites, assets, racks,
       'floor-plans': floorPlans, pins, tasks,
       contacts, 'contact-types': contactTypes, users,
+      attachments,
     };
   }
 
@@ -545,10 +614,12 @@ export class BackupService {
       this.prisma.task.findMany({ where: { siteId, tenantId } }),
     ]);
 
+    const assetIds = assets.map(a => a.id);
+    const rackIds = racks.map(r => r.id);
     const floorPlanIds = floorPlans.map(fp => fp.id);
     const taskIds = tasks.map(t => t.id);
 
-    const [pins, taskChecklist, taskComments, userSiteAccess, auditLogs] = await Promise.all([
+    const [pins, taskChecklist, taskComments, userSiteAccess, auditLogs, attachments] = await Promise.all([
       floorPlanIds.length
         ? this.prisma.pin.findMany({ where: { floorPlanId: { in: floorPlanIds } } })
         : [],
@@ -564,6 +635,18 @@ export class BackupService {
         take: 500,
         orderBy: { timestamp: 'desc' },
       }),
+      // Fetch ALL attachments related to this site (site itself + its assets, tasks, racks)
+      this.prisma.attachment.findMany({
+        where: {
+          tenantId,
+          OR: [
+            { siteId },
+            ...(assetIds.length ? [{ assetId: { in: assetIds } }] : []),
+            ...(taskIds.length ? [{ taskId: { in: taskIds } }] : []),
+            ...(rackIds.length ? [{ rackId: { in: rackIds } }] : []),
+          ],
+        },
+      }),
     ]);
 
     return {
@@ -571,6 +654,7 @@ export class BackupService {
       'floor-plans': floorPlans, pins, tasks,
       'task-checklist': taskChecklist, 'task-comments': taskComments,
       'user-site-access': userSiteAccess, 'audit-logs': auditLogs,
+      attachments,
     };
   }
 
@@ -578,13 +662,14 @@ export class BackupService {
   // PRIVATE HELPERS — FILE COLLECTION + PLAN RENDERING
   // ==========================================================================
 
-  private async collectSiteFiles(
+  private async collectFiles(
     data: Record<string, any[]>,
     pins: any[] = [],
   ): Promise<{ path: string; content: Buffer }[]> {
     const files: { path: string; content: Buffer }[] = [];
-    const floorPlans = data['floor-plans'] || [];
 
+    // 1. Floor plan files (raw + rendered with pins)
+    const floorPlans = data['floor-plans'] || [];
     for (const plan of floorPlans) {
       if (plan.fileUrl) {
         try {
@@ -611,6 +696,26 @@ export class BackupService {
       }
     }
 
+    // 2. Attachment files (assets, tasks, racks, sites)
+    const attachments = data['attachments'] || [];
+    for (const att of attachments) {
+      if (att.path) {
+        try {
+          const buffer = await this.downloadFromStorage(att.path);
+          // Determine entity type for folder structure
+          const entityType = att.assetId ? 'assets' : att.taskId ? 'tasks' : att.rackId ? 'racks' : 'sites';
+          const entityId = att.assetId || att.taskId || att.rackId || att.siteId || 'unknown';
+          files.push({
+            path: `attachments/${entityType}/${entityId}/${att.filename}`,
+            content: buffer,
+          });
+        } catch {
+          this.logger.warn(`Could not download attachment: ${att.path}`);
+        }
+      }
+    }
+
+    this.logger.log(`Collected ${files.length} files (${floorPlans.length} plans, ${attachments.length} attachments)`);
     return files;
   }
 
@@ -670,7 +775,13 @@ export class BackupService {
   // PRIVATE HELPERS — ZIP CREATION
   // ==========================================================================
 
-  private async createZipFromData(data: Record<string, any[]>, metadata: BackupMetadata): Promise<Buffer> {
+  private async createFullZip(
+    data: Record<string, any[]>,
+    files: { path: string; content: Buffer }[],
+    metadata: BackupMetadata,
+  ): Promise<Buffer> {
+    const prefix = `full-backup-${metadata.timestamp.replace(/[:.]/g, '-').slice(0, 19)}`;
+
     return new Promise((resolve, reject) => {
       const archive = archiver('zip', { zlib: { level: 9 } });
       const passthrough = new PassThrough();
@@ -684,9 +795,12 @@ export class BackupService {
 
       archive.pipe(passthrough);
 
-      archive.append(JSON.stringify(metadata, null, 2), { name: 'metadata.json' });
+      archive.append(JSON.stringify(metadata, null, 2), { name: `${prefix}/metadata.json` });
       for (const [key, records] of Object.entries(data)) {
-        archive.append(JSON.stringify(records, null, 2), { name: `data/${key}.json` });
+        archive.append(JSON.stringify(records, null, 2), { name: `${prefix}/data/${key}.json` });
+      }
+      for (const file of files) {
+        archive.append(file.content, { name: `${prefix}/files/${file.path}` });
       }
       archive.finalize();
     });
