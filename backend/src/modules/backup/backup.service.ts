@@ -259,10 +259,23 @@ export class BackupService {
 
       const counts: Record<string, number> = { sites: 1 };
 
-      // 2. Create assets (ALL fields)
+      // 2. Create assets (ALL fields) — deduplicate serialNumber to avoid unique constraint
       const assetIdMap = new Map<string, string>();
       if (dataFiles['assets']?.length) {
+        const suffix = `-R${Date.now().toString(36)}`;
         for (const asset of dataFiles['assets']) {
+          // Check if serialNumber already exists for this tenant
+          let serialNumber = asset.serialNumber || null;
+          if (serialNumber) {
+            const existing = await tx.asset.findFirst({
+              where: { tenantId, serialNumber },
+              select: { id: true },
+            });
+            if (existing) {
+              serialNumber = `${serialNumber}${suffix}`;
+            }
+          }
+
           const newAsset = await tx.asset.create({
             data: {
               tenantId,
@@ -272,7 +285,7 @@ export class BackupService {
               status: asset.status || 'IN_SERVICE',
               manufacturer: asset.manufacturer,
               model: asset.model,
-              serialNumber: asset.serialNumber,
+              serialNumber,
               networkInfo: asset.networkInfo,
               locationText: asset.locationText,
               inventoryTag: asset.inventoryTag,

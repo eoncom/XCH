@@ -773,15 +773,30 @@ export default function FloorPlanViewer({
         const hCtx = hCanvas.getContext('2d');
         if (hCtx) {
           hCtx.scale(2, 2);
+          // 1. Draw the floor plan image first (background)
           hCtx.drawImage(currentImage, 0, 0);
-          renderHeatmapToCanvas(
-            hCtx,
-            currentHeatmapAPs!,
-            currentHeatmapConfig!,
-            currentScale || null,
-            currentImage.width,
-            currentImage.height,
-          );
+
+          // 2. Render heatmap on SEPARATE transparent canvas (like Konva does)
+          //    so that 'screen' composite only blends overlapping AP circles,
+          //    not the floor plan image (screen + white = white = invisible!)
+          const heatOverlay = document.createElement('canvas');
+          heatOverlay.width = currentImage.width * 2;
+          heatOverlay.height = currentImage.height * 2;
+          const hoCtx = heatOverlay.getContext('2d');
+          if (hoCtx) {
+            hoCtx.scale(2, 2);
+            renderHeatmapToCanvas(
+              hoCtx,
+              currentHeatmapAPs!,
+              currentHeatmapConfig!,
+              currentScale || null,
+              currentImage.width,
+              currentImage.height,
+            );
+            // 3. Overlay heatmap onto plan using default 'source-over' compositing
+            hCtx.drawImage(heatOverlay, 0, 0);
+          }
+
           // Draw only AP pins on heatmap page
           const apPins = currentPins.filter(p => p.pinType === 'ACCESS_POINT');
           drawPinsOnCanvas(hCtx, apPins);
