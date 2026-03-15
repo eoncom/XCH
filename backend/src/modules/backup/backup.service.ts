@@ -533,13 +533,22 @@ export class BackupService {
       const attachmentPathMap = new Map<string, string>();
 
       // 1. Create contacts + contact types (tenant-level)
+      const contactTypeIdMap = new Map<string, string>();
       if (dataFiles['contact-types']?.length) {
         for (const ct of dataFiles['contact-types']) {
-          const existing = await tx.contactType.findFirst({ where: { tenantId, name: ct.name } });
-          if (!existing) {
-            await tx.contactType.create({
-              data: { tenantId, name: ct.name, icon: ct.icon, color: ct.color },
+          const existing = await tx.contactType.findFirst({ where: { tenantId, slug: ct.slug } });
+          if (existing) {
+            contactTypeIdMap.set(ct.id, existing.id);
+          } else {
+            const newCt = await tx.contactType.create({
+              data: {
+                tenantId, name: ct.name, slug: ct.slug,
+                category: ct.category || 'PROVIDER',
+                icon: ct.icon, color: ct.color,
+                isSystem: ct.isSystem || false, isActive: ct.isActive !== false,
+              },
             });
+            contactTypeIdMap.set(ct.id, newCt.id);
           }
         }
         totalCounts['contact-types'] = dataFiles['contact-types'].length;
@@ -547,20 +556,21 @@ export class BackupService {
 
       if (dataFiles['contacts']?.length) {
         for (const contact of dataFiles['contacts']) {
-          const existing = await tx.contact.findFirst({ where: { tenantId, email: contact.email || undefined, name: contact.name } });
+          const existing = await tx.contact.findFirst({ where: { tenantId, name: contact.name } });
           if (!existing) {
-            await tx.contact.create({
-              data: {
-                tenantId,
-                name: contact.name,
-                email: contact.email,
-                phone: contact.phone,
-                company: contact.company,
-                role: contact.role,
-                notes: contact.notes,
-                contactTypeId: contact.contactTypeId,
-              },
-            });
+            const newTypeId = contact.typeId ? contactTypeIdMap.get(contact.typeId) : undefined;
+            if (newTypeId) {
+              await tx.contact.create({
+                data: {
+                  tenantId, name: contact.name,
+                  typeId: newTypeId,
+                  email: contact.email, phone: contact.phone,
+                  mobile: contact.mobile, address: contact.address,
+                  company: contact.company, role: contact.role,
+                  notes: contact.notes,
+                },
+              });
+            }
           }
         }
         totalCounts.contacts = dataFiles['contacts'].length;
