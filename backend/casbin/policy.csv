@@ -39,6 +39,10 @@ p, ADMIN, contact-types, delete, *
 p, ADMIN, backup, create, *
 p, ADMIN, backup, read, *
 p, ADMIN, backup, delete, *
+p, ADMIN, monitoring, read, *
+p, ADMIN, monitoring, manage, *
+p, ADMIN, netbox, read, *
+p, ADMIN, netbox, manage, *
 
 # MANAGER
 p, MANAGER, tenants, read, *
@@ -56,6 +60,8 @@ p, MANAGER, contacts, create, *
 p, MANAGER, contacts, read, *
 p, MANAGER, contacts, update, *
 p, MANAGER, contact-types, read, *
+p, MANAGER, monitoring, read, *
+p, MANAGER, netbox, read, *
 
 # TECHNICIEN
 p, TECHNICIEN, tenants, read, *
@@ -75,6 +81,8 @@ p, TECHNICIEN, floor-plans, update, *
 p, TECHNICIEN, integrations, read, *
 p, TECHNICIEN, contacts, read, *
 p, TECHNICIEN, contact-types, read, *
+p, TECHNICIEN, monitoring, read, *
+p, TECHNICIEN, netbox, read, *
 
 # VIEWER
 p, VIEWER, tenants, read, *
@@ -86,3 +94,5 @@ p, VIEWER, floor-plans, read, *
 p, VIEWER, integrations, read, *
 p, VIEWER, contacts, read, *
 p, VIEWER, contact-types, read, *
+p, VIEWER, monitoring, read, *
+p, VIEWER, netbox, read, *

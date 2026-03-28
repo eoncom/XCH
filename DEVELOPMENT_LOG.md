@@ -4433,3 +4433,24 @@ feat: auto-include WiFi PDF page when plan has APs + calibration
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-28
+
+**Date:** 2026-03-28 09:12:58
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 4
+
+**Commit message:**
+```
+chore: prepare v1.0.0-rc1 — production Docker, packaging, deploy guide
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

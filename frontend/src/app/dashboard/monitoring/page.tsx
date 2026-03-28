@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useMemo } from 'react';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { Site, Asset } from '@/types';
 
 // Map asset types to icons for visual grouping
@@ -59,9 +60,12 @@ interface MonitorWithContext {
 }
 
 export default function MonitoringOverviewPage() {
+  const { can, hasAnySiteAccess } = usePermissions();
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'by-site' | 'by-type' | 'all'>('by-site');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+
+  const canViewMonitoring = can('monitoring', 'read') && hasAnySiteAccess();
 
   const { monitors, isLoading, refetch, dataUpdatedAt } = useLiveMonitors();
 
@@ -227,6 +231,30 @@ export default function MonitoringOverviewPage() {
     const order: Record<string, number> = { down: 0, unknown: 1, up: 2 };
     return (order[a.status] ?? 1) - (order[b.status] ?? 1);
   };
+
+  // Permission gate: deny access if user cannot view monitoring
+  if (!canViewMonitoring) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+            <Link href="/dashboard"><ArrowLeft className="h-4 w-4" /></Link>
+          </Button>
+          <h1 className="text-2xl font-bold">Monitoring</h1>
+        </div>
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="font-medium">Accès refusé</p>
+            <p className="text-sm mt-1">
+              Vous n&apos;avez pas les permissions nécessaires pour accéder au monitoring.
+              Contactez votre administrateur pour obtenir l&apos;accès à un ou plusieurs sites.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

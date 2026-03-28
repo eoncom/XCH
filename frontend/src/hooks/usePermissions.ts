@@ -17,6 +17,8 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     tasks: ['create', 'read', 'update', 'delete'],
     'floor-plans': ['create', 'read', 'update', 'delete'],
     integrations: ['read', 'create', 'update'],
+    monitoring: ['read', 'manage'],
+    netbox: ['read', 'manage'],
     users: ['create', 'read', 'update', 'delete'],
     tenants: ['read', 'update'],
     contacts: ['create', 'read', 'update', 'delete'],
@@ -29,6 +31,8 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     tasks: ['create', 'read', 'update'],
     'floor-plans': ['read', 'update'],
     integrations: ['read'],
+    monitoring: ['read'],
+    netbox: ['read'],
     users: ['read'],
     contacts: ['create', 'read', 'update'],
     'contact-types': ['read'],
@@ -40,6 +44,8 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     racks: ['create', 'read', 'update'],
     tasks: ['create', 'read', 'update'],
     'floor-plans': ['read', 'create', 'update'],
+    monitoring: ['read'],
+    netbox: ['read'],
     contacts: ['read'],
     'contact-types': ['read'],
   },
@@ -50,6 +56,8 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     racks: ['read'],
     tasks: ['read'],
     'floor-plans': ['read'],
+    monitoring: ['read'],
+    netbox: ['read'],
     contacts: ['read'],
     'contact-types': ['read'],
   },
@@ -157,6 +165,16 @@ export function usePermissions() {
     return can(resource, action, siteId);
   };
 
+  /**
+   * Check if user has access to at least one site.
+   * ADMIN/MANAGER always return true.
+   * TECHNICIEN/VIEWER return true only if they have site access records.
+   */
+  const hasAnySiteAccess = (): boolean => {
+    if (role === 'ADMIN' || role === 'MANAGER') return true;
+    return (myPerms?.siteAccess || []).length > 0;
+  };
+
   return {
     /** Check if the user can perform an action on a resource (with optional siteId context) */
     can,
@@ -193,5 +211,8 @@ export function usePermissions() {
 
     /** Per-site access data (for TECHNICIEN/VIEWER) */
     siteAccess: myPerms?.siteAccess || [],
+
+    /** Does the user have access to at least one site? */
+    hasAnySiteAccess,
   };
 }

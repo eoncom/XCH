@@ -17,13 +17,17 @@ import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource } from '../../common/decorators/permissions.decorator';
 import { Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
+import { SiteAccessService } from '../site-access/site-access.service';
 
 @ApiTags('integrations')
 @ApiBearerAuth()
 @Controller('integrations')
 @UseGuards(JwtAuthGuard, CasbinGuard)
 export class IntegrationsController {
-  constructor(private readonly integrationsService: IntegrationsService) {}
+  constructor(
+    private readonly integrationsService: IntegrationsService,
+    private readonly siteAccessService: SiteAccessService,
+  ) {}
 
   @Get('status')
   @Resource('integrations')
@@ -68,24 +72,24 @@ export class IntegrationsController {
   // ==================== NETBOX ====================
 
   @Post('netbox/sync/sites')
-  @Resource('integrations')
-  @Action('create')
+  @Resource('netbox')
+  @Action('manage')
   @ApiOperation({ summary: 'Sync sites from NetBox to XCH (READ-ONLY)' })
   syncNetBoxSites(@Request() req: AuthRequest, @Body() syncDto: SyncNetBoxSitesDto) {
     return this.integrationsService.syncNetBoxSites(req.user.tenantId, syncDto);
   }
 
   @Post('netbox/sync/devices')
-  @Resource('integrations')
-  @Action('create')
+  @Resource('netbox')
+  @Action('manage')
   @ApiOperation({ summary: 'Sync devices from NetBox for a specific site (READ-ONLY)' })
   syncNetBoxDevices(@Request() req: AuthRequest, @Body() syncDto: SyncNetBoxDevicesDto) {
     return this.integrationsService.syncNetBoxDevices(req.user.tenantId, syncDto);
   }
 
   @Post('netbox/map-asset')
-  @Resource('integrations')
-  @Action('update')
+  @Resource('netbox')
+  @Action('manage')
   @ApiOperation({ summary: 'Manually map XCH asset to NetBox device' })
   mapAssetToNetBox(@Request() req: AuthRequest, @Body() mapDto: MapAssetToNetBoxDto) {
     return this.integrationsService.mapAssetToNetBox(req.user.tenantId, mapDto);
@@ -94,7 +98,7 @@ export class IntegrationsController {
   // ==================== NETBOX CONTACTS ====================
 
   @Get('netbox/contacts')
-  @Resource('integrations')
+  @Resource('netbox')
   @Action('read')
   @ApiOperation({ summary: 'List contacts from NetBox' })
   getNetBoxContacts(
@@ -112,7 +116,7 @@ export class IntegrationsController {
   }
 
   @Get('netbox/contact-groups')
-  @Resource('integrations')
+  @Resource('netbox')
   @Action('read')
   @ApiOperation({ summary: 'List contact groups from NetBox' })
   getNetBoxContactGroups(
@@ -123,8 +127,8 @@ export class IntegrationsController {
   }
 
   @Post('netbox/sync/contacts')
-  @Resource('integrations')
-  @Action('create')
+  @Resource('netbox')
+  @Action('manage')
   @ApiOperation({ summary: 'Sync contacts from NetBox to XCH (READ-ONLY)' })
   syncNetBoxContacts(@Request() req: AuthRequest) {
     return this.integrationsService.syncNetBoxContacts(req.user.tenantId);
@@ -133,16 +137,90 @@ export class IntegrationsController {
   // ==================== MONITORING (generic) ====================
 
   @Get('monitoring/monitors')
-  @Resource('integrations')
+  @Resource('monitoring')
   @Action('read')
-  @ApiOperation({ summary: 'List all monitors from the active monitoring provider' })
-  getMonitors(@Request() req: AuthRequest) {
-    return this.integrationsService.getMonitors(req.user.tenantId);
+  @ApiOperation({ summary: 'List monitors from the active monitoring provider (filtered by site access)' })
+  async getMonitors(@Request() req: AuthRequest) {
+    const result = await this.integrationsService.getMonitors(req.user.tenantId);
+
+    // Site-based filtering for TECHNICIEN/VIEWER
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+
+    // null = all sites (ADMIN/MANAGER) → no filtering needed
+    if (accessibleSiteIds === null) {
+      return result;
+    }
+
+    // No accessible sites → return empty
+    if (accessibleSiteIds.length === 0) {
+      if (Array.isArray(result)) {
+        return [];
+      }
+      return { ...result, monitors: [] };
+    }
+
+    // Filter monitors: get assets and sites to match monitor names
+    // We need to know which monitors belong to which sites
+    // The frontend does enrichment, but we also need to filter server-side
+    // Get all assets for accessible sites to match monitor names
+    const prisma = this.siteAccessService['prisma'];
+    const accessibleAssets = await prisma.asset.findMany({
+      where: {
+        tenantId: req.user.tenantId,
+        siteId: { in: accessibleSiteIds },
+      },
+      select: { id: true, networkInfo: true },
+    });
+
+    // Get accessible sites with connectivity info for link/sdwan monitors
+    const accessibleSites = await prisma.site.findMany({
+      where: {
+        id: { in: accessibleSiteIds },
+        tenantId: req.user.tenantId,
+      },
+      select: { id: true, connectivity: true },
+    });
+
+    // Build set of allowed monitor names
+    const allowedMonitorNames = new Set<string>();
+
+    // From assets
+    for (const asset of accessibleAssets) {
+      const networkInfo = asset.networkInfo as any;
+      if (networkInfo?.monitorName) {
+        allowedMonitorNames.add(networkInfo.monitorName);
+      }
+    }
+
+    // From site connectivity (links + sdwan)
+    for (const site of accessibleSites) {
+      const connectivity = site.connectivity as any;
+      const links = connectivity?.links || connectivity?.v2?.links || [];
+      for (const link of links) {
+        if (link.monitorName) allowedMonitorNames.add(link.monitorName);
+      }
+      const sdwan = connectivity?.sdwan || connectivity?.v2?.sdwan;
+      if (sdwan?.monitorName) allowedMonitorNames.add(sdwan.monitorName);
+    }
+
+    // Filter monitors
+    const monitors = Array.isArray(result) ? result : (result.monitors || []);
+    const filteredMonitors = monitors.filter((m: any) =>
+      allowedMonitorNames.has(m.name),
+    );
+
+    if (Array.isArray(result)) {
+      return filteredMonitors;
+    }
+    return { ...result, monitors: filteredMonitors };
   }
 
   @Patch('monitoring/map-monitor')
-  @Resource('integrations')
-  @Action('update')
+  @Resource('monitoring')
+  @Action('manage')
   @ApiOperation({ summary: 'Map a monitor to a site' })
   mapMonitorToSite(
     @Request() req: AuthRequest,
@@ -156,7 +234,7 @@ export class IntegrationsController {
   }
 
   @Get('monitoring/monitor-mappings')
-  @Resource('integrations')
+  @Resource('monitoring')
   @Action('read')
   @ApiOperation({ summary: 'Get all monitor-to-site mappings' })
   getMonitorMappings(@Request() req: AuthRequest) {
@@ -164,8 +242,8 @@ export class IntegrationsController {
   }
 
   @Post('monitoring/sync/health/:siteId')
-  @Resource('integrations')
-  @Action('update')
+  @Resource('monitoring')
+  @Action('manage')
   @ApiOperation({ summary: 'Update site health status from monitoring provider' })
   updateSiteHealth(
     @Param('siteId') siteId: string,
@@ -180,16 +258,16 @@ export class IntegrationsController {
   }
 
   @Post('monitoring/sync/health-all')
-  @Resource('integrations')
-  @Action('update')
+  @Resource('monitoring')
+  @Action('manage')
   @ApiOperation({ summary: 'Sync all sites health from monitoring provider (intelligent aggregation)' })
   syncAllSitesHealth(@Request() req: AuthRequest) {
     return this.integrationsService.syncAllSitesHealth(req.user.tenantId);
   }
 
   @Patch('monitoring/map-monitor-to-asset')
-  @Resource('integrations')
-  @Action('update')
+  @Resource('monitoring')
+  @Action('manage')
   @ApiOperation({ summary: 'Map a monitor to an asset' })
   mapMonitorToAsset(
     @Request() req: AuthRequest,
@@ -205,23 +283,23 @@ export class IntegrationsController {
   // ==================== LEGACY ALIASES (backward compat) ====================
 
   @Get('uptime-kuma/monitors')
-  @Resource('integrations')
+  @Resource('monitoring')
   @Action('read')
   @ApiOperation({ summary: '[Deprecated] Use /monitoring/monitors instead' })
   getUptimeKumaMonitors(@Request() req: AuthRequest) {
-    return this.integrationsService.getMonitors(req.user.tenantId);
+    return this.getMonitors(req);
   }
 
   @Post('uptime-kuma/sync/health-all')
-  @Resource('integrations')
-  @Action('update')
+  @Resource('monitoring')
+  @Action('manage')
   @ApiOperation({ summary: '[Deprecated] Use /monitoring/sync/health-all instead' })
   syncAllSitesHealthLegacy(@Request() req: AuthRequest) {
     return this.integrationsService.syncAllSitesHealth(req.user.tenantId);
   }
 
   @Get('sites/:siteId/health-breakdown')
-  @Resource('integrations')
+  @Resource('monitoring')
   @Action('read')
   @ApiOperation({ summary: 'Get health breakdown details for a site' })
   getSiteHealthBreakdown(

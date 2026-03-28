@@ -35,8 +35,10 @@ import {
   Database,
   Save,
   Settings,
+  Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { Site, ContactType } from '@/types';
 
 // NetBox site statuses (hardcoded - standard NetBox values)
@@ -120,6 +122,9 @@ function ConnectionStatus({ status }: { status: 'connected' | 'disconnected' | '
 }
 
 export default function NetBoxPage() {
+  const { can, hasAnySiteAccess } = usePermissions();
+  const canViewNetbox = can('netbox', 'read') && hasAnySiteAccess();
+  const canManageNetbox = can('netbox', 'manage');
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
 
   // API Config state
@@ -216,6 +221,28 @@ export default function NetBoxPage() {
 
   const netboxStatus = statusData?.netbox?.status || 'disconnected';
 
+  // Permission gate: deny access if user cannot view NetBox
+  if (!canViewNetbox) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold flex items-center gap-3">
+          <Database className="h-8 w-8 text-green-600" />
+          NetBox
+        </h1>
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="font-medium">Accès refusé</p>
+            <p className="text-sm mt-1">
+              Vous n&apos;avez pas les permissions nécessaires pour accéder à NetBox.
+              Contactez votre administrateur pour obtenir l&apos;accès.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Transform contact groups for mapping panel
   const contactGroupsSource = netboxContactGroups?.results?.map((group: any) => ({
     id: String(group.id),
@@ -269,74 +296,76 @@ export default function NetBoxPage() {
         </div>
       </div>
 
-      {/* API Configuration Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Configuration API
-          </CardTitle>
-          <CardDescription>
-            Configurez l'URL et le token API pour connecter XCH à votre instance NetBox (lecture seule).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="netboxUrl">URL NetBox</Label>
-              <Input
-                id="netboxUrl"
-                placeholder="https://netbox.example.com"
-                value={netboxUrl}
-                onChange={(e) => setNetboxUrl(e.target.value)}
-              />
+      {/* API Configuration Card - only for users with manage permission */}
+      {canManageNetbox && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Configuration API
+            </CardTitle>
+            <CardDescription>
+              Configurez l&apos;URL et le token API pour connecter XCH à votre instance NetBox (lecture seule).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="netboxUrl">URL NetBox</Label>
+                <Input
+                  id="netboxUrl"
+                  placeholder="https://netbox.example.com"
+                  value={netboxUrl}
+                  onChange={(e) => setNetboxUrl(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="netboxToken">Token API</Label>
+                <Input
+                  id="netboxToken"
+                  type="password"
+                  placeholder="••••••••••••"
+                  value={netboxToken}
+                  onChange={(e) => setNetboxToken(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="netboxToken">Token API</Label>
-              <Input
-                id="netboxToken"
-                type="password"
-                placeholder="••••••••••••"
-                value={netboxToken}
-                onChange={(e) => setNetboxToken(e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="flex items-center justify-between">
-            {testResult && (
-              <p className={`text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                {testResult.message}
-              </p>
-            )}
-            <div className="flex gap-2 ml-auto">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => testMutation.mutate()}
-                disabled={testMutation.isPending || !netboxUrl}
-              >
-                {testMutation.isPending ? (
-                  <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
-                ) : null}
-                Tester la connexion
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSaveConfig}
-                disabled={isSaving || !netboxUrl}
-              >
-                {isSaving ? (
-                  <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
-                ) : (
-                  <Save className="mr-2 h-3 w-3" />
-                )}
-                Enregistrer
-              </Button>
+            <div className="flex items-center justify-between">
+              {testResult && (
+                <p className={`text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                  {testResult.message}
+                </p>
+              )}
+              <div className="flex gap-2 ml-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => testMutation.mutate()}
+                  disabled={testMutation.isPending || !netboxUrl}
+                >
+                  {testMutation.isPending ? (
+                    <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                  ) : null}
+                  Tester la connexion
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveConfig}
+                  disabled={isSaving || !netboxUrl}
+                >
+                  {isSaving ? (
+                    <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-3 w-3" />
+                  )}
+                  Enregistrer
+                </Button>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Connection Warning */}
       {netboxStatus !== 'connected' && (

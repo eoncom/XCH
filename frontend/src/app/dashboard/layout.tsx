@@ -31,8 +31,10 @@ import { DashboardSkeleton } from '@/components/ui/skeleton';
 import { useBranding } from '@/components/BrandingProvider';
 import { useMemo } from 'react';
 import { useTenantModules } from '@/hooks/useTenantModules';
+import { usePermissions } from '@/hooks/usePermissions';
 
 // Navigation items with optional moduleKey for feature-flag filtering
+// permResource: if set, requires can(permResource, 'read') to show
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Sites', href: '/dashboard/sites', icon: MapPin, moduleKey: 'sites' },
@@ -41,8 +43,8 @@ const navigation = [
   { name: 'Tâches', href: '/dashboard/tasks', icon: CheckSquare, moduleKey: 'tasks' },
   { name: 'Plans', href: '/dashboard/floor-plans', icon: LayoutTemplate, moduleKey: 'floor_plans' },
   { name: 'Contacts', href: '/dashboard/contacts', icon: Contact2, moduleKey: 'contacts' },
-  { name: 'Monitoring', href: '/dashboard/monitoring', icon: Activity, moduleKey: 'monitoring' },
-  { name: 'NetBox', href: '/dashboard/netbox', icon: Database, moduleKey: 'integrations_netbox' },
+  { name: 'Monitoring', href: '/dashboard/monitoring', icon: Activity, moduleKey: 'monitoring', permResource: 'monitoring' },
+  { name: 'NetBox', href: '/dashboard/netbox', icon: Database, moduleKey: 'integrations_netbox', permResource: 'netbox' },
   { name: 'Dashboard TV', href: '/tv', icon: Monitor },
   { name: 'Alertes', href: '/dashboard/alerts', icon: AlertTriangle, moduleKey: 'alerts' },
 ];
@@ -60,11 +62,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sessionChecked, setSessionChecked] = useState(false);
   const { logoUrl, orgName } = useBranding();
   const { isModuleEnabled } = useTenantModules();
+  const { can, hasAnySiteAccess } = usePermissions();
 
-  // Filter navigation based on enabled modules
+  // Filter navigation based on enabled modules + permissions
   const filteredNavigation = useMemo(
-    () => navigation.filter((item) => !item.moduleKey || isModuleEnabled(item.moduleKey)),
-    [isModuleEnabled],
+    () => navigation.filter((item) => {
+      // Check module is enabled
+      if (item.moduleKey && !isModuleEnabled(item.moduleKey)) return false;
+
+      // Check permission-gated items (monitoring, netbox)
+      if (item.permResource) {
+        // Must have the read permission for this resource
+        if (!can(item.permResource, 'read')) return false;
+        // For TECHNICIEN/VIEWER: must have at least one site assigned
+        if (!hasAnySiteAccess()) return false;
+      }
+
+      return true;
+    }),
+    [isModuleEnabled, can, hasAnySiteAccess],
   );
 
   // Check session on mount (verify HTTP-only cookie is valid)

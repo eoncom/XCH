@@ -50,7 +50,36 @@ import { readFileSync } from 'fs';
           }
         }
 
-        console.log(`✅ Casbin RBAC initialized (${allPolicies.length || 'reloaded'} policies)`);
+        // Sync: add any new policies from CSV that are missing from DB
+        if (allPolicies.length > 0) {
+          const policyPath = join(__dirname, '../../../casbin/policy.csv');
+          try {
+            const csvContent = readFileSync(policyPath, 'utf-8');
+            const lines = csvContent.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+            let added = 0;
+            for (const line of lines) {
+              const parts = line.split(',').map(p => p.trim());
+              if (parts[0] === 'p' && parts.length >= 4) {
+                const [, sub, obj, act, domain] = parts;
+                const d = domain || '*';
+                const exists = await enforcer.hasPolicy(sub, obj, act, d);
+                if (!exists) {
+                  await enforcer.addPolicy(sub, obj, act, d);
+                  added++;
+                }
+              }
+            }
+            if (added > 0) {
+              await enforcer.savePolicy();
+              console.log(`✅ Added ${added} new Casbin policies from CSV`);
+            }
+          } catch (err) {
+            // CSV file may not exist in some environments
+          }
+        }
+
+        const finalCount = (await enforcer.getPolicy()).length;
+        console.log(`✅ Casbin RBAC initialized (${finalCount} policies)`);
         return enforcer;
       },
     },
