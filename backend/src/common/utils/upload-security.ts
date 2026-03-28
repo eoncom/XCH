@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import type { Request } from 'express';
 
 /**
  * Allowed MIME types for file uploads.
@@ -76,8 +77,8 @@ const BLOCKED_EXTENSIONS = [
  * Validates MIME type against allowed list and blocks dangerous extensions.
  */
 export function attachmentFileFilter(
-  _req: any,
-  file: Express.Multer.File,
+  _req: Request,
+  file: { mimetype: string; originalname: string; [key: string]: any },
   callback: (error: Error | null, acceptFile: boolean) => void,
 ) {
   // Check MIME type
@@ -108,8 +109,8 @@ export function attachmentFileFilter(
  * Multer file filter for backup restore (ZIP files only).
  */
 export function backupFileFilter(
-  _req: any,
-  file: Express.Multer.File,
+  _req: Request,
+  file: { mimetype: string; originalname: string; [key: string]: any },
   callback: (error: Error | null, acceptFile: boolean) => void,
 ) {
   if (!ALLOWED_MIME_TYPES.backup.includes(file.mimetype)) {
