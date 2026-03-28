@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { attachmentFileFilter } from '../../common/utils/upload-security';
 import { RacksService } from './racks.service';
 import { CreateRackDto } from './dto/create-rack.dto';
 import { UpdateRackDto } from './dto/update-rack.dto';
@@ -170,7 +172,11 @@ export class RacksController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: attachmentFileFilter,
+  }))
   uploadAttachment(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,

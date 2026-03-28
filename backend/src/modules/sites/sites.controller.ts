@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { attachmentFileFilter } from '../../common/utils/upload-security';
 import { SitesService } from './sites.service';
 import { SiteAccessService } from '../site-access/site-access.service';
 import { CreateSiteDto } from './dto/create-site.dto';
@@ -104,7 +106,11 @@ export class SitesController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: attachmentFileFilter,
+  }))
   uploadAttachment(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,

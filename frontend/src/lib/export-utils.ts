@@ -9,6 +9,20 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
+/**
+ * Sanitize a value for safe Excel/CSV export.
+ * Prevents formula injection (CSV injection / DDE attacks).
+ * Characters =, +, -, @, tab, CR at the start of a cell trigger formula interpretation.
+ */
+export function sanitizeForExcel(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (/^[=+\-@\t\r]/.test(str)) {
+    return "'" + str;
+  }
+  return str;
+}
+
 // Types
 interface ExportColumn {
   header: string;
@@ -171,12 +185,12 @@ export function exportToExcel(options: ExportOptions): void {
   // Add header row
   wsData.push(columns.map((col) => col.header));
 
-  // Add data rows
+  // Add data rows (sanitized to prevent formula injection)
   data.forEach((row) => {
     wsData.push(
       columns.map((col) => {
         const value = row[col.key];
-        return value !== null && value !== undefined ? value : '';
+        return sanitizeForExcel(value);
       })
     );
   });
@@ -218,8 +232,9 @@ export function exportToCSV(options: ExportOptions): void {
       .map((col) => {
         const value = row[col.key];
         if (value === null || value === undefined) return '""';
-        // Escape quotes and wrap in quotes
-        return `"${String(value).replace(/"/g, '""')}"`;
+        // Sanitize for formula injection + escape quotes and wrap in quotes
+        const sanitized = sanitizeForExcel(value);
+        return `"${sanitized.replace(/"/g, '""')}"`;
       })
       .join(',')
   );

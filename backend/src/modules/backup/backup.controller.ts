@@ -21,6 +21,7 @@ import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { BackupService } from './backup.service';
+import { backupFileFilter } from '../../common/utils/upload-security';
 
 @ApiTags('backup')
 @ApiBearerAuth()
@@ -51,6 +52,7 @@ export class BackupController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 1024 * 1024 * 1024 }, // 1GB
+      fileFilter: backupFileFilter,
     }),
   )
   @ApiOperation({ summary: '[ADMIN] Restore full backup from ZIP' })
@@ -75,6 +77,7 @@ export class BackupController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+      fileFilter: backupFileFilter,
     }),
   )
   @ApiOperation({ summary: '[ADMIN] Restore site from backup ZIP' })

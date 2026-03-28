@@ -22,7 +22,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Rack, RackStatus, Site } from '@/types';
 import { ExportMenu } from '@/components/ui/export-menu';
-import { exportToPDF, exportToExcel, exportToCSV } from '@/lib/export-utils';
+import { exportToPDF, exportToExcel, exportToCSV, sanitizeForExcel } from '@/lib/export-utils';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -102,7 +102,7 @@ export default function RacksPage() {
         ['Nom', 'Taille', 'Statut', 'Site', 'Emplacement', 'Occup\u00e9 (U)', 'Dispo (U)', 'Usage', '\u00c9quipements'],
       ];
       for (const r of exportData) {
-        summaryData.push([r.name, r.heightU, r.status, r.site, r.location, r.occupiedU, r.availableU, r.usage, r.assetsCount]);
+        summaryData.push([sanitizeForExcel(r.name), r.heightU, sanitizeForExcel(r.status), sanitizeForExcel(r.site), sanitizeForExcel(r.location), r.occupiedU, r.availableU, r.usage, r.assetsCount]);
       }
       const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
       summaryWs['!cols'] = [
@@ -121,14 +121,14 @@ export default function RacksPage() {
           const sortedAssets = [...rack.assets].sort((a, b) => (b.rackPositionU || 0) - (a.rackPositionU || 0));
           for (const asset of sortedAssets) {
             detailData.push([
-              rack.name,
-              rack.site?.name || '-',
+              sanitizeForExcel(rack.name),
+              sanitizeForExcel(rack.site?.name || '-'),
               asset.rackPositionU ? `U${asset.rackPositionU}` : '-',
               asset.rackHeightU ? `${asset.rackHeightU}U` : '-',
-              asset.type,
-              asset.name || '-',
-              [asset.manufacturer, asset.model].filter(Boolean).join(' ') || '-',
-              asset.serialNumber || '-',
+              sanitizeForExcel(asset.type),
+              sanitizeForExcel(asset.name || '-'),
+              sanitizeForExcel([asset.manufacturer, asset.model].filter(Boolean).join(' ') || '-'),
+              sanitizeForExcel(asset.serialNumber || '-'),
             ]);
           }
         } else {

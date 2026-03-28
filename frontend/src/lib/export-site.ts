@@ -16,6 +16,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { sanitizeForExcel } from './export-utils';
 import { sitesApi } from './api/sites';
 import { assetsApi } from './api/assets';
 import { racksApi } from './api/racks';
@@ -1100,20 +1101,20 @@ function generateAssetsExcel(assets: Asset[], racks: Rack[]): ArrayBuffer {
   for (const a of assets) {
     const net = a.networkInfo as any;
     wsData.push([
-      a.type,
-      a.name || '',
-      a.manufacturer || '',
-      a.model || '',
-      a.serialNumber || '',
-      a.status,
-      net?.ip || '',
-      net?.hostname || '',
-      net?.mac || '',
-      a.inventoryTag || '',
+      sanitizeForExcel(a.type),
+      sanitizeForExcel(a.name),
+      sanitizeForExcel(a.manufacturer),
+      sanitizeForExcel(a.model),
+      sanitizeForExcel(a.serialNumber),
+      sanitizeForExcel(a.status),
+      sanitizeForExcel(net?.ip),
+      sanitizeForExcel(net?.hostname),
+      sanitizeForExcel(net?.mac),
+      sanitizeForExcel(a.inventoryTag),
       formatWarranty(a.warrantyEnd),
       a.purchaseDate ? new Date(a.purchaseDate).toLocaleDateString('fr-FR') : '',
-      a.rackId ? rackMap[a.rackId] || '' : '',
-      a.notes || '',
+      sanitizeForExcel(a.rackId ? rackMap[a.rackId] : ''),
+      sanitizeForExcel(a.notes),
     ]);
   }
 
@@ -1142,7 +1143,7 @@ function generateRacksExcel(racks: Rack[]): ArrayBuffer {
   ];
   for (const r of racks) {
     summaryData.push([
-      r.name, `${r.heightU}U`, r.rackType || '', r.status, r.location || '',
+      sanitizeForExcel(r.name), `${r.heightU}U`, sanitizeForExcel(r.rackType), sanitizeForExcel(r.status), sanitizeForExcel(r.location),
       r.assets?.length || 0,
     ]);
   }
@@ -1163,8 +1164,8 @@ function generateRacksExcel(racks: Rack[]): ArrayBuffer {
       ];
       for (const a of rack.assets.sort((x, y) => (y.rackPositionU || 0) - (x.rackPositionU || 0))) {
         detailData.push([
-          `U${a.rackPositionU}`, `${a.rackHeightU}U`, a.type,
-          a.manufacturer || '', a.model || '', a.serialNumber || '',
+          `U${a.rackPositionU}`, `${a.rackHeightU}U`, sanitizeForExcel(a.type),
+          sanitizeForExcel(a.manufacturer), sanitizeForExcel(a.model), sanitizeForExcel(a.serialNumber),
         ]);
       }
       const detailWs = XLSX.utils.aoa_to_sheet(detailData);
@@ -1188,13 +1189,13 @@ function generateTasksExcel(tasks: Task[]): ArrayBuffer {
 
   for (const t of tasks) {
     wsData.push([
-      t.title,
-      t.status,
-      t.priority,
-      t.assignedUser?.name || '',
+      sanitizeForExcel(t.title),
+      sanitizeForExcel(t.status),
+      sanitizeForExcel(t.priority),
+      sanitizeForExcel(t.assignedUser?.name),
       t.dueDate ? new Date(t.dueDate).toLocaleDateString('fr-FR') : '',
       new Date(t.createdAt).toLocaleDateString('fr-FR'),
-      t.description || '',
+      sanitizeForExcel(t.description),
     ]);
   }
 

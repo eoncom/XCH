@@ -5,14 +5,16 @@ import { TasksController } from './tasks.controller';
 import { StorageService } from '../../common/services/storage.service';
 import { SiteAccessModule } from '../site-access/site-access.module';
 import { memoryStorage } from 'multer';
+import { attachmentFileFilter } from '../../common/utils/upload-security';
 
 @Module({
   imports: [
     MulterModule.register({
       storage: memoryStorage(),
       limits: {
-        fileSize: 10 * 1024 * 1024,
+        fileSize: 10 * 1024 * 1024, // 10 MB
       },
+      fileFilter: attachmentFileFilter,
     }),
     SiteAccessModule,
   ],
