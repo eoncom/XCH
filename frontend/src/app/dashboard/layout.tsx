@@ -35,7 +35,15 @@ import { usePermissions } from '@/hooks/usePermissions';
 
 // Navigation items with optional moduleKey for feature-flag filtering
 // permResource: if set, requires can(permResource, 'read') to show
-const navigation = [
+// external: if true, opens in a new tab
+const navigation: Array<{
+  name: string;
+  href: string;
+  icon: any;
+  moduleKey?: string;
+  permResource?: string;
+  external?: boolean;
+}> = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Sites', href: '/dashboard/sites', icon: MapPin, moduleKey: 'sites' },
   { name: 'Équipements', href: '/dashboard/assets', icon: Package, moduleKey: 'assets' },
@@ -45,7 +53,7 @@ const navigation = [
   { name: 'Contacts', href: '/dashboard/contacts', icon: Contact2, moduleKey: 'contacts' },
   { name: 'Monitoring', href: '/dashboard/monitoring', icon: Activity, moduleKey: 'monitoring', permResource: 'monitoring' },
   { name: 'NetBox', href: '/dashboard/netbox', icon: Database, moduleKey: 'integrations_netbox', permResource: 'netbox' },
-  { name: 'Dashboard TV', href: '/tv', icon: Monitor },
+  { name: 'Dashboard TV', href: '/tv', icon: Monitor, external: true },
   { name: 'Alertes', href: '/dashboard/alerts', icon: AlertTriangle, moduleKey: 'alerts' },
 ];
 
@@ -172,10 +180,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
           {filteredNavigation.map((item) => {
             const isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href);
+            const linkProps = item.external ? { target: '_blank' as const, rel: 'noopener noreferrer' } : {};
             return (
               <Link
                 key={item.name}
                 href={item.href}
+                {...linkProps}
                 className={cn(
                   'group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
                   isActive

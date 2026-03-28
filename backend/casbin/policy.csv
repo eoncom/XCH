@@ -61,7 +61,6 @@ p, MANAGER, contacts, read, *
 p, MANAGER, contacts, update, *
 p, MANAGER, contact-types, read, *
 p, MANAGER, monitoring, read, *
-p, MANAGER, netbox, read, *
 
 # TECHNICIEN
 p, TECHNICIEN, tenants, read, *
@@ -82,7 +81,6 @@ p, TECHNICIEN, integrations, read, *
 p, TECHNICIEN, contacts, read, *
 p, TECHNICIEN, contact-types, read, *
 p, TECHNICIEN, monitoring, read, *
-p, TECHNICIEN, netbox, read, *
 
 # VIEWER
 p, VIEWER, tenants, read, *
@@ -95,4 +93,3 @@ p, VIEWER, integrations, read, *
 p, VIEWER, contacts, read, *
 p, VIEWER, contact-types, read, *
 p, VIEWER, monitoring, read, *
-p, VIEWER, netbox, read, *

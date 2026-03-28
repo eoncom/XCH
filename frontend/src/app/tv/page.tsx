@@ -27,7 +27,10 @@ import {
   Settings2,
   Eye,
   EyeOff,
+  ArrowLeft,
+  ExternalLink,
 } from 'lucide-react';
+import Link from 'next/link';
 import { sitesApi } from '@/lib/api/sites';
 import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import { healthStatusLabels, healthStatusColors, monitorStatusLabels } from '@/lib/status-labels';
@@ -199,6 +202,11 @@ export default function TVDashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <Link href="/dashboard/sites" title="Retour aux sites">
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
           <Activity className="h-7 w-7 text-primary" />
           <div>
             <h1 className="text-2xl font-bold">Dashboard Monitoring</h1>

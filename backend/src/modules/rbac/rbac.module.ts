@@ -50,28 +50,48 @@ import { readFileSync } from 'fs';
           }
         }
 
-        // Sync: add any new policies from CSV that are missing from DB
+        // Full sync: CSV is the source of truth — add missing, remove obsolete
         if (allPolicies.length > 0) {
           const policyPath = join(__dirname, '../../../casbin/policy.csv');
           try {
             const csvContent = readFileSync(policyPath, 'utf-8');
             const lines = csvContent.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
-            let added = 0;
+
+            // Build set of expected policies from CSV
+            const csvPolicies = new Set<string>();
             for (const line of lines) {
               const parts = line.split(',').map(p => p.trim());
               if (parts[0] === 'p' && parts.length >= 4) {
                 const [, sub, obj, act, domain] = parts;
-                const d = domain || '*';
-                const exists = await enforcer.hasPolicy(sub, obj, act, d);
-                if (!exists) {
-                  await enforcer.addPolicy(sub, obj, act, d);
-                  added++;
-                }
+                csvPolicies.add(`${sub}|${obj}|${act}|${domain || '*'}`);
               }
             }
-            if (added > 0) {
+
+            // Add missing policies
+            let added = 0;
+            for (const key of csvPolicies) {
+              const [sub, obj, act, domain] = key.split('|');
+              const exists = await enforcer.hasPolicy(sub, obj, act, domain);
+              if (!exists) {
+                await enforcer.addPolicy(sub, obj, act, domain);
+                added++;
+              }
+            }
+
+            // Remove obsolete policies (in DB but not in CSV)
+            let removed = 0;
+            const dbPolicies = await enforcer.getPolicy();
+            for (const p of dbPolicies) {
+              const key = `${p[0]}|${p[1]}|${p[2]}|${p[3] || '*'}`;
+              if (!csvPolicies.has(key)) {
+                await enforcer.removePolicy(p[0], p[1], p[2], p[3] || '*');
+                removed++;
+              }
+            }
+
+            if (added > 0 || removed > 0) {
               await enforcer.savePolicy();
-              console.log(`✅ Added ${added} new Casbin policies from CSV`);
+              console.log(`✅ Casbin sync: +${added} added, -${removed} removed`);
             }
           } catch (err) {
             // CSV file may not exist in some environments
