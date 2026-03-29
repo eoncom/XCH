@@ -4589,3 +4589,24 @@ fix: TV dashboard auth in new tab via checkSession cookie validation
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-29
+
+**Date:** 2026-03-29 17:14:04
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat: add organization hierarchy, flexible access model, and cost allocation (v1.2.0)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

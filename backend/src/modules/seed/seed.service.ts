@@ -15,7 +15,8 @@ export class SeedService {
 
     // NOTE: Do NOT overwrite tenant name/config here — the user sets those in the setup wizard.
 
-    const sites = await this.createSites(tenantId);
+    const delegations = await this.createOrganization(tenantId);
+    const sites = await this.createSites(tenantId, delegations);
     const users = await this.createUsers(tenantId);
     const racks = await this.createRacks(tenantId, sites);
     const assets = await this.createAssets(tenantId, sites, racks);
@@ -64,7 +65,18 @@ export class SeedService {
       await this.prisma.task.deleteMany({ where: { tenantId } });
       await this.prisma.asset.deleteMany({ where: { tenantId } });
       await this.prisma.rack.deleteMany({ where: { tenantId } });
+      // Cost allocation tables
+      await this.prisma.costAllocation.deleteMany({ where: { expense: { tenantId } } });
+      await this.prisma.expense.deleteMany({ where: { tenantId } });
+      await this.prisma.billingEntity.deleteMany({ where: { tenantId } });
+      // Access model tables
+      await this.prisma.accessGrant.deleteMany({ where: { tenantId } });
+      await this.prisma.userScope.deleteMany({ where: { tenantId } });
+      // Sites (must delete before delegations/divisions)
       await this.prisma.site.deleteMany({ where: { tenantId } });
+      // Organization
+      await this.prisma.delegation.deleteMany({ where: { tenantId } });
+      await this.prisma.division.deleteMany({ where: { tenantId } });
       await this.prisma.contact.deleteMany({ where: { tenantId } });
       await this.prisma.contactType.deleteMany({ where: { tenantId } });
       await this.prisma.integrationMapping.deleteMany({ where: { tenantId } });
@@ -88,10 +100,41 @@ export class SeedService {
   }
 
   // ============================================================================
+  // ORGANIZATION - Divisions & Delegations
+  // ============================================================================
+
+  private async createOrganization(tenantId: string) {
+    const division = await this.prisma.division.upsert({
+      where: { tenantId_code: { tenantId, code: 'IDF' } },
+      update: {},
+      create: {
+        tenantId,
+        name: 'Île-de-France',
+        code: 'IDF',
+        color: '#0070f3',
+      },
+    });
+
+    const delegation = await this.prisma.delegation.upsert({
+      where: { tenantId_code: { tenantId, code: 'IDF-OUEST' } },
+      update: {},
+      create: {
+        tenantId,
+        divisionId: division.id,
+        name: 'IDF Ouest',
+        code: 'IDF-OUEST',
+      },
+    });
+
+    this.logger.log('Organization created: 1 division, 1 delegation');
+    return { default: delegation.id };
+  }
+
+  // ============================================================================
   // SITES - 6 sites réalistes (3 grands, 2 moyens, 1 petit)
   // ============================================================================
 
-  private async createSites(tenantId: string) {
+  private async createSites(tenantId: string, delegations: { default: string }) {
     const sitesData = [
       // === GRANDS CHANTIERS (3-4 baies, équipement complet) ===
       {
@@ -236,6 +279,7 @@ export class SeedService {
         create: {
           ...s,
           tenantId,
+          delegationId: delegations.default,
         },
       });
       sites.push(site);

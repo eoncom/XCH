@@ -218,10 +218,14 @@ export class BackupService {
 
     // Import in transaction
     const result = await this.prisma.$transaction(async (tx) => {
-      // 1. Create site (ALL fields)
+      // 1. Ensure a default delegation exists for imports
+      const defaultDelegationId = await this.getOrCreateDefaultDelegation(tx, tenantId);
+
+      // 2. Create site (ALL fields)
       const newSite = await tx.site.create({
         data: {
           tenantId,
+          delegationId: siteData.delegationId || defaultDelegationId,
           code: siteData.code,
           name: siteData.name,
           status: siteData.status || 'ACTIVE',
@@ -646,9 +650,11 @@ export class BackupService {
           continue;
         }
 
+        const defaultDelegationId = await this.getOrCreateDefaultDelegation(tx, tenantId);
         const newSite = await tx.site.create({
           data: {
             tenantId,
+            delegationId: siteData.delegationId || defaultDelegationId,
             code: siteData.code,
             name: siteData.name,
             status: siteData.status || 'ACTIVE',
@@ -1581,5 +1587,21 @@ export class BackupService {
     } catch (err: unknown) {
       this.logger.error(`Scheduled storage cleanup failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
+  }
+
+  private async getOrCreateDefaultDelegation(tx: any, tenantId: string): Promise<string> {
+    const existing = await tx.delegation.findFirst({ where: { tenantId, code: 'IMPORT' } });
+    if (existing) return existing.id;
+
+    let division = await tx.division.findFirst({ where: { tenantId, code: 'IMPORT' } });
+    if (!division) {
+      division = await tx.division.create({
+        data: { tenantId, name: 'Imports', code: 'IMPORT', notes: 'Division auto-créée pour les imports' },
+      });
+    }
+    const delegation = await tx.delegation.create({
+      data: { tenantId, divisionId: division.id, name: 'Imports', code: 'IMPORT', notes: 'Délégation auto-créée pour les imports' },
+    });
+    return delegation.id;
   }
 }

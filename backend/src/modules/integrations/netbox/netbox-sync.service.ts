@@ -184,10 +184,12 @@ export class NetboxSyncService {
         });
         result.skipped++;
       } else {
-        // Create new site
+        // Create new site — ensure a default delegation exists
+        const defaultDelegationId = await this.getOrCreateDefaultDelegation(tenantId);
         const newSite = await this.prisma.site.create({
           data: {
             tenantId,
+            delegationId: defaultDelegationId,
             ...siteData,
           },
         });
@@ -453,5 +455,21 @@ export class NetboxSyncService {
     this.logger.log(`Full sync completed in ${report.duration}ms`);
 
     return report;
+  }
+
+  private async getOrCreateDefaultDelegation(tenantId: string): Promise<string> {
+    const existing = await this.prisma.delegation.findFirst({ where: { tenantId, code: 'IMPORT' } });
+    if (existing) return existing.id;
+
+    let division = await this.prisma.division.findFirst({ where: { tenantId, code: 'IMPORT' } });
+    if (!division) {
+      division = await this.prisma.division.create({
+        data: { tenantId, name: 'Imports', code: 'IMPORT', notes: 'Division auto-créée pour les imports' },
+      });
+    }
+    const delegation = await this.prisma.delegation.create({
+      data: { tenantId, divisionId: division.id, name: 'Imports', code: 'IMPORT', notes: 'Délégation auto-créée pour les imports' },
+    });
+    return delegation.id;
   }
 }
