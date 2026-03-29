@@ -39,4 +39,8 @@ export const authApi = {
 
   disable2FA: (password: string) =>
     apiClient.post<{ disabled: boolean }>('/api/auth/2fa/disable', { password }),
+
+  /** Admin: disable 2FA for any user */
+  adminDisable2FA: (userId: string) =>
+    apiClient.delete<{ disabled: boolean }>(`/api/auth/2fa/user/${userId}`),
 };

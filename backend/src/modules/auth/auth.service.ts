@@ -68,6 +68,14 @@ export class AuthService {
   }
 
   async login(user: any) {
+    // Get tenant-level security config for session timeouts
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: user.tenantId } });
+    const tenantConfig = (tenant?.config as Record<string, any>) || {};
+    const security = tenantConfig?.security || {};
+
+    const sessionTimeout = security.sessionTimeout || this.config.get('JWT_ACCESS_EXPIRATION', '15m');
+    const refreshLifetime = security.refreshTokenLifetime || this.config.get('JWT_REFRESH_EXPIRATION', '7d');
+
     const payload = {
       sub: user.id,
       email: user.email,
@@ -75,19 +83,23 @@ export class AuthService {
       tenantId: user.tenantId,
     };
 
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: this.config.get('JWT_REFRESH_EXPIRATION', '7d'),
-    });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: sessionTimeout });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: refreshLifetime });
 
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
 
+    // Parse session timeout for cookie maxAge
+    const sessionMs = this.parseTimeToMs(sessionTimeout);
+    const refreshMs = this.parseTimeToMs(refreshLifetime);
+
     return {
       accessToken,
       refreshToken,
+      sessionMs,
+      refreshMs,
       user: {
         id: user.id,
         email: user.email,
@@ -98,6 +110,20 @@ export class AuthService {
         totpEnabled: user.totpEnabled || false,
       },
     };
+  }
+
+  /** Parse time string like '15m', '1h', '7d' to milliseconds */
+  private parseTimeToMs(time: string): number {
+    const match = time.match(/^(\d+)(m|h|d|s)$/);
+    if (!match) return 15 * 60 * 1000; // default 15min
+    const value = parseInt(match[1], 10);
+    switch (match[2]) {
+      case 's': return value * 1000;
+      case 'm': return value * 60 * 1000;
+      case 'h': return value * 60 * 60 * 1000;
+      case 'd': return value * 24 * 60 * 60 * 1000;
+      default: return 15 * 60 * 1000;
+    }
   }
 
   async register(data: { email: string; password: string; name: string; tenantId: string }) {

@@ -4652,3 +4652,24 @@ feat: grouped site selectors, vendor/asset links in costs, 2FA fix
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-29
+
+**Date:** 2026-03-29 22:14:55
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 6
+
+**Commit message:**
+```
+fix: use prisma db push instead of migrate deploy in entrypoint
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

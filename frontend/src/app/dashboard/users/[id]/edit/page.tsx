@@ -35,6 +35,7 @@ import { Switch } from '@/components/ui/switch';
 import { ArrowLeft, MapPin, Lock, Unlock, Info, X, Plus, Globe, Building2, Network, Pin, Shield, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
+import { toast } from 'react-hot-toast';
 import type { User, UserRole } from '@/types';
 
 const userRoleLabels: Record<UserRole, string> = {
@@ -317,6 +318,50 @@ export default function EditUserPage() {
                 Dernière connexion : {new Date(user.lastLoginAt).toLocaleString('fr-FR')}
               </p>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Section: 2FA Status (Admin) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Double authentification
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Badge variant={(user as any)?.totpEnabled ? 'default' : 'secondary'} className={(user as any)?.totpEnabled ? 'bg-green-600' : ''}>
+                  {(user as any)?.totpEnabled ? '2FA Actif' : '2FA Inactif'}
+                </Badge>
+                <p className="text-sm text-muted-foreground">
+                  {(user as any)?.totpEnabled
+                    ? 'La double authentification est activée pour cet utilisateur'
+                    : 'La double authentification n\'est pas activée'}
+                </p>
+              </div>
+              {(user as any)?.totpEnabled && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={async () => {
+                    if (!confirm('Êtes-vous sûr de vouloir désactiver la 2FA pour cet utilisateur ?')) return;
+                    try {
+                      const { authApi } = await import('@/lib/api/auth');
+                      await authApi.adminDisable2FA(userId);
+                      queryClient.invalidateQueries({ queryKey: ['user', userId] });
+                      toast.success('2FA désactivée pour cet utilisateur');
+                    } catch (err: any) {
+                      toast.error(err.message || 'Erreur');
+                    }
+                  }}
+                >
+                  Réinitialiser 2FA
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
 

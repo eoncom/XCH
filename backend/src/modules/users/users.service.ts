@@ -65,7 +65,7 @@ export class UsersService {
       },
     });
 
-    return users.map(({ passwordHash, ...user }) => user);
+    return users.map(({ passwordHash, totpSecret, totpBackupCodes, ...user }) => user);
   }
 
   async findOne(id: string, tenantId: string) {
@@ -83,7 +83,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const { passwordHash, ...result } = user;
+    const { passwordHash, totpSecret, totpBackupCodes, ...result } = user;
     return result;
   }
 

@@ -78,7 +78,12 @@ export class AuthController {
   ) {
     const user = req.user;
 
-    // Check if 2FA is enabled for this user
+    // Check tenant-level 2FA enforcement
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: user.tenantId } });
+    const tenantConfig = (tenant?.config as Record<string, any>) || {};
+    const require2FA = tenantConfig?.security?.require2FA === true;
+
+    // Check if 2FA is enabled for this user OR required by tenant
     if (user.totpEnabled) {
       // Issue a short-lived temp token for 2FA verification
       const tempToken = this.jwtService.sign(
@@ -88,11 +93,19 @@ export class AuthController {
       return { requires2FA: true, tempToken };
     }
 
+    // If tenant requires 2FA but user hasn't set it up, flag it
+    if (require2FA && !user.totpEnabled) {
+      const result = await this.authService.login(user);
+      res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', result.sessionMs));
+      res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', result.refreshMs));
+      return { user: result.user, requires2FASetup: true };
+    }
+
     const result = await this.authService.login(user);
 
-    // Set HTTP-only cookies (environment-aware)
-    res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', 15 * 60 * 1000));
-    res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', 7 * 24 * 60 * 60 * 1000));
+    // Set HTTP-only cookies with tenant-configured timeouts
+    res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', result.sessionMs));
+    res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', result.refreshMs));
 
     // Return only user data (tokens already in cookies)
     return { user: result.user };
@@ -127,8 +140,8 @@ export class AuthController {
 
     const result = await this.authService.refreshAccessToken(refreshToken);
 
-    // Set new accessToken cookie (environment-aware)
-    res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', 15 * 60 * 1000));
+    // Set new accessToken cookie with tenant-configured timeout
+    res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', result.sessionMs));
 
     return { success: true };
   }
@@ -262,10 +275,10 @@ export class AuthController {
       throw new UnauthorizedException('Invalid TOTP code');
     }
 
-    // 2FA verified — issue real tokens
+    // 2FA verified — issue real tokens with tenant-configured timeouts
     const result = await this.authService.login(user);
-    res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', 15 * 60 * 1000));
-    res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', 7 * 24 * 60 * 60 * 1000));
+    res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', result.sessionMs));
+    res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', result.refreshMs));
 
     return { user: result.user };
   }
@@ -311,10 +324,10 @@ export class AuthController {
       data: { totpBackupCodes: remainingCodes },
     });
 
-    // Issue real tokens
+    // Issue real tokens with tenant-configured timeouts
     const result = await this.authService.login(user);
-    res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', 15 * 60 * 1000));
-    res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', 7 * 24 * 60 * 60 * 1000));
+    res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', result.sessionMs));
+    res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', result.refreshMs));
 
     return { user: result.user };
   }

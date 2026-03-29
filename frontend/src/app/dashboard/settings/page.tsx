@@ -705,6 +705,9 @@ function SsoConfigSection() {
 
 function SecurityTabContent() {
   const { user, checkSession } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
+
+  // Personal 2FA state
   const [totpEnabled, setTotpEnabled] = useState(user?.totpEnabled || false);
   const [setupStep, setSetupStep] = useState<'idle' | 'qr' | 'verify' | 'backup' | 'done'>('idle');
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
@@ -717,6 +720,22 @@ function SecurityTabContent() {
   const [disablePassword, setDisablePassword] = useState('');
   const [showDisable, setShowDisable] = useState(false);
   const [error, setError] = useState('');
+
+  // Tenant security config (ADMIN only)
+  const [securityConfig, setSecurityConfig] = useState<{ require2FA: boolean; sessionTimeout: string; refreshTokenLifetime: string } | null>(null);
+  const [isSavingSecurity, setIsSavingSecurity] = useState(false);
+
+  // Sync totpEnabled from user store
+  useEffect(() => {
+    setTotpEnabled(user?.totpEnabled || false);
+  }, [user?.totpEnabled]);
+
+  // Load tenant security config
+  useEffect(() => {
+    if (isAdmin) {
+      tenantsApi.getSecurityConfig().then(setSecurityConfig).catch(() => {});
+    }
+  }, [isAdmin]);
 
   const handleStartSetup = async () => {
     setIsSettingUp(true);
@@ -742,7 +761,6 @@ function SecurityTabContent() {
         setBackupCodes(data.backupCodes);
         setSetupStep('backup');
         setTotpEnabled(true);
-        // Refresh user in store so totpEnabled persists across page reload
         checkSession();
       }
     } catch (err: any) {
@@ -760,7 +778,6 @@ function SecurityTabContent() {
       setTotpEnabled(false);
       setShowDisable(false);
       setDisablePassword('');
-      // Refresh user in store so totpEnabled=false persists
       checkSession();
       toast.success('Double authentification désactivée');
     } catch (err: any) {
@@ -775,189 +792,258 @@ function SecurityTabContent() {
     toast.success('Codes copiés dans le presse-papier');
   };
 
+  const handleSaveSecurityConfig = async () => {
+    if (!securityConfig) return;
+    setIsSavingSecurity(true);
+    try {
+      const updated = await tenantsApi.updateSecurityConfig(securityConfig);
+      setSecurityConfig(updated);
+      toast.success('Configuration sécurité enregistrée');
+    } catch {
+      toast.error('Erreur lors de la sauvegarde');
+    } finally {
+      setIsSavingSecurity(false);
+    }
+  };
+
+  const SESSION_OPTIONS = [
+    { value: '5m', label: '5 minutes' },
+    { value: '15m', label: '15 minutes' },
+    { value: '30m', label: '30 minutes' },
+    { value: '1h', label: '1 heure' },
+    { value: '4h', label: '4 heures' },
+    { value: '8h', label: '8 heures' },
+    { value: '24h', label: '24 heures' },
+  ];
+
+  const REFRESH_OPTIONS = [
+    { value: '1d', label: '1 jour' },
+    { value: '7d', label: '7 jours' },
+    { value: '14d', label: '14 jours' },
+    { value: '30d', label: '30 jours' },
+  ];
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5" />
-          Double authentification (2FA)
-        </CardTitle>
-        <CardDescription>
-          Protégez votre compte avec un code temporaire généré par une application d'authentification (Google Authenticator, Microsoft Authenticator, etc.)
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Status */}
-        <div className="flex items-center justify-between p-4 rounded-lg border">
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              'h-10 w-10 rounded-lg flex items-center justify-center',
-              totpEnabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'
-            )}>
-              <ShieldCheck className={cn('h-5 w-5', totpEnabled ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground')} />
+    <div className="space-y-6">
+      {/* Personal 2FA */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5" />
+            Double authentification (2FA)
+          </CardTitle>
+          <CardDescription>
+            Protégez votre compte avec un code temporaire (Google Authenticator, Microsoft Authenticator, etc.)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Status */}
+          <div className="flex items-center justify-between p-4 rounded-lg border">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                'h-10 w-10 rounded-lg flex items-center justify-center',
+                totpEnabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
+              )}>
+                <ShieldCheck className={cn('h-5 w-5', totpEnabled ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400')} />
+              </div>
+              <div>
+                <p className="font-medium">
+                  {totpEnabled ? 'Double authentification activée' : 'Double authentification désactivée'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {totpEnabled
+                    ? 'Votre compte est protégé par un code TOTP'
+                    : 'Activez la 2FA pour renforcer la sécurité de votre compte'}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-medium">
-                {totpEnabled ? 'Double authentification activée' : 'Double authentification désactivée'}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {totpEnabled
-                  ? 'Votre compte est protégé par un code TOTP'
-                  : 'Activez la 2FA pour renforcer la sécurité de votre compte'}
-              </p>
+            <Badge variant={totpEnabled ? 'default' : 'destructive'} className={totpEnabled ? 'bg-green-600' : ''}>
+              {totpEnabled ? 'Actif' : 'Inactif'}
+            </Badge>
+          </div>
+
+          {error && (
+            <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20">
+              {error}
             </div>
-          </div>
-          <Badge variant={totpEnabled ? 'default' : 'secondary'}>
-            {totpEnabled ? 'Actif' : 'Inactif'}
-          </Badge>
-        </div>
+          )}
 
-        {error && (
-          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20">
-            {error}
-          </div>
-        )}
+          {/* Setup flow */}
+          {!totpEnabled && setupStep === 'idle' && (
+            <Button onClick={handleStartSetup} disabled={isSettingUp}>
+              {isSettingUp ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="mr-2 h-4 w-4" />
+              )}
+              Activer la double authentification
+            </Button>
+          )}
 
-        {/* Setup flow */}
-        {!totpEnabled && setupStep === 'idle' && (
-          <Button onClick={handleStartSetup} disabled={isSettingUp}>
-            {isSettingUp ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <ShieldCheck className="mr-2 h-4 w-4" />
-            )}
-            Activer la double authentification
-          </Button>
-        )}
-
-        {setupStep === 'qr' && (
-          <div className="space-y-4">
-            <div className="p-4 border rounded-lg space-y-4">
-              <h4 className="font-medium">1. Scannez le QR code</h4>
-              <p className="text-sm text-muted-foreground">
-                Ouvrez votre application d'authentification et scannez le QR code ci-dessous.
-              </p>
-              <div className="flex justify-center">
-                {qrCodeDataUrl && (
-                  <img src={qrCodeDataUrl} alt="QR Code TOTP" className="w-48 h-48 rounded-lg border" />
+          {setupStep === 'qr' && (
+            <div className="space-y-4">
+              <div className="p-4 border rounded-lg space-y-4">
+                <h4 className="font-medium">1. Scannez le QR code</h4>
+                <p className="text-sm text-muted-foreground">
+                  Ouvrez votre application d'authentification et scannez le QR code ci-dessous.
+                </p>
+                <div className="flex justify-center">
+                  {qrCodeDataUrl && (
+                    <img src={qrCodeDataUrl} alt="QR Code TOTP" className="w-48 h-48 rounded-lg border" />
+                  )}
+                </div>
+                {totpSecret && (
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Ou entrez manuellement cette clé :</p>
+                    <code className="text-sm font-mono bg-muted px-3 py-1 rounded select-all">
+                      {totpSecret}
+                    </code>
+                  </div>
                 )}
               </div>
-              {totpSecret && (
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground mb-1">Ou entrez manuellement cette clé :</p>
-                  <code className="text-sm font-mono bg-muted px-3 py-1 rounded select-all">
-                    {totpSecret}
-                  </code>
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 border rounded-lg space-y-4">
-              <h4 className="font-medium">2. Entrez le code de vérification</h4>
-              <p className="text-sm text-muted-foreground">
-                Saisissez le code à 6 chiffres affiché dans votre application.
-              </p>
-              <div className="flex gap-3">
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  placeholder="000000"
-                  value={verifyCode}
-                  onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-40 text-center text-lg tracking-widest font-mono"
-                  autoComplete="one-time-code"
-                />
-                <Button
-                  onClick={handleVerifySetup}
-                  disabled={isVerifying || verifyCode.length !== 6}
-                >
-                  {isVerifying ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Check className="mr-2 h-4 w-4" />
-                  )}
-                  Vérifier
-                </Button>
-              </div>
-            </div>
-
-            <Button variant="ghost" onClick={() => { setSetupStep('idle'); setError(''); }}>
-              Annuler
-            </Button>
-          </div>
-        )}
-
-        {setupStep === 'backup' && (
-          <div className="space-y-4">
-            <div className="p-4 border rounded-lg border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 space-y-4">
-              <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
-                <Check className="h-5 w-5" />
-                <h4 className="font-medium">Double authentification activée !</h4>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Sauvegardez ces codes de récupération dans un endroit sûr. Chaque code ne peut être utilisé qu'une seule fois en cas de perte de votre appareil.
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {backupCodes.map((code, i) => (
-                  <code key={i} className="text-sm font-mono bg-muted px-3 py-2 rounded text-center">
-                    {code}
-                  </code>
-                ))}
-              </div>
-              <Button variant="outline" onClick={copyBackupCodes}>
-                <Copy className="mr-2 h-4 w-4" />
-                Copier les codes
-              </Button>
-            </div>
-            <Button onClick={() => setSetupStep('done')}>
-              J'ai sauvegardé mes codes
-            </Button>
-          </div>
-        )}
-
-        {/* Disable 2FA */}
-        {totpEnabled && setupStep !== 'qr' && setupStep !== 'backup' && (
-          <div className="space-y-4">
-            {!showDisable ? (
-              <Button variant="outline" onClick={() => setShowDisable(true)}>
-                Désactiver la double authentification
-              </Button>
-            ) : (
-              <div className="p-4 border rounded-lg border-destructive/30 space-y-4">
-                <h4 className="font-medium text-destructive">Désactiver la 2FA</h4>
+              <div className="p-4 border rounded-lg space-y-4">
+                <h4 className="font-medium">2. Entrez le code de vérification</h4>
                 <p className="text-sm text-muted-foreground">
-                  Confirmez votre mot de passe pour désactiver la double authentification.
+                  Saisissez le code à 6 chiffres affiché dans votre application.
                 </p>
                 <div className="flex gap-3">
                   <Input
-                    type="password"
-                    placeholder="Mot de passe actuel"
-                    value={disablePassword}
-                    onChange={(e) => setDisablePassword(e.target.value)}
-                    className="max-w-xs"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={verifyCode}
+                    onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="w-40 text-center text-lg tracking-widest font-mono"
+                    autoComplete="one-time-code"
                   />
-                  <Button
-                    variant="destructive"
-                    onClick={handleDisable}
-                    disabled={isDisabling || !disablePassword}
-                  >
-                    {isDisabling ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    Désactiver
-                  </Button>
-                  <Button variant="ghost" onClick={() => { setShowDisable(false); setDisablePassword(''); setError(''); }}>
-                    Annuler
+                  <Button onClick={handleVerifySetup} disabled={isVerifying || verifyCode.length !== 6}>
+                    {isVerifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                    Vérifier
                   </Button>
                 </div>
               </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              <Button variant="ghost" onClick={() => { setSetupStep('idle'); setError(''); }}>Annuler</Button>
+            </div>
+          )}
+
+          {setupStep === 'backup' && (
+            <div className="space-y-4">
+              <div className="p-4 border rounded-lg border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 space-y-4">
+                <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                  <Check className="h-5 w-5" />
+                  <h4 className="font-medium">Double authentification activée !</h4>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Sauvegardez ces codes de récupération dans un endroit sûr. Chaque code ne peut être utilisé qu'une seule fois.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {backupCodes.map((code, i) => (
+                    <code key={i} className="text-sm font-mono bg-muted px-3 py-2 rounded text-center">{code}</code>
+                  ))}
+                </div>
+                <Button variant="outline" onClick={copyBackupCodes}>
+                  <Copy className="mr-2 h-4 w-4" /> Copier les codes
+                </Button>
+              </div>
+              <Button onClick={() => setSetupStep('done')}>J'ai sauvegardé mes codes</Button>
+            </div>
+          )}
+
+          {/* Disable 2FA */}
+          {totpEnabled && setupStep !== 'qr' && setupStep !== 'backup' && (
+            <div className="space-y-4">
+              {!showDisable ? (
+                <Button variant="outline" onClick={() => setShowDisable(true)}>
+                  Désactiver la double authentification
+                </Button>
+              ) : (
+                <div className="p-4 border rounded-lg border-destructive/30 space-y-4">
+                  <h4 className="font-medium text-destructive">Désactiver la 2FA</h4>
+                  <p className="text-sm text-muted-foreground">Confirmez votre mot de passe pour désactiver.</p>
+                  <div className="flex gap-3">
+                    <Input type="password" placeholder="Mot de passe actuel" value={disablePassword} onChange={(e) => setDisablePassword(e.target.value)} className="max-w-xs" />
+                    <Button variant="destructive" onClick={handleDisable} disabled={isDisabling || !disablePassword}>
+                      {isDisabling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Désactiver
+                    </Button>
+                    <Button variant="ghost" onClick={() => { setShowDisable(false); setDisablePassword(''); setError(''); }}>Annuler</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Tenant Security Config (ADMIN only) */}
+      {isAdmin && securityConfig && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5" />
+              Politique de sécurité du tenant
+            </CardTitle>
+            <CardDescription>
+              Configuration globale de la sécurité pour tous les utilisateurs
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* 2FA mandatory */}
+            <div className="flex items-center justify-between p-3 rounded-lg border">
+              <div>
+                <p className="font-medium text-sm">2FA obligatoire</p>
+                <p className="text-xs text-muted-foreground">
+                  Tous les utilisateurs devront activer la double authentification
+                </p>
+              </div>
+              <Switch
+                checked={securityConfig.require2FA}
+                onCheckedChange={(v) => setSecurityConfig({ ...securityConfig, require2FA: v })}
+              />
+            </div>
+
+            {/* Session timeout */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Expiration de session</Label>
+                <select
+                  value={securityConfig.sessionTimeout}
+                  onChange={(e) => setSecurityConfig({ ...securityConfig, sessionTimeout: e.target.value })}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  {SESSION_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">Durée avant déconnexion automatique (inactivité)</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Durée du jeton de rafraîchissement</Label>
+                <select
+                  value={securityConfig.refreshTokenLifetime}
+                  onChange={(e) => setSecurityConfig({ ...securityConfig, refreshTokenLifetime: e.target.value })}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  {REFRESH_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">Durée maximale avant de devoir se reconnecter</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button size="sm" onClick={handleSaveSecurityConfig} disabled={isSavingSecurity}>
+                {isSavingSecurity ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : <Save className="mr-2 h-3 w-3" />}
+                Enregistrer
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 

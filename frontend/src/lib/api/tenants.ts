@@ -36,7 +36,13 @@ export interface UpdateSsoConfigData {
   clientId?: string;
   clientSecret?: string;
   callbackUrl?: string;
-  roleMapping?: Record<string, string>;
+  roleMapping?: Record<string, any>;
+}
+
+export interface SecurityConfig {
+  require2FA: boolean;
+  sessionTimeout: string;
+  refreshTokenLifetime: string;
 }
 
 export const tenantsApi = {
@@ -62,4 +68,11 @@ export const tenantsApi = {
 
   updateSsoConfig: (data: UpdateSsoConfigData) =>
     apiClient.patch<SsoConfig>('/api/tenants/sso-config', data),
+
+  // Security Configuration
+  getSecurityConfig: () =>
+    apiClient.get<SecurityConfig>('/api/tenants/security-config'),
+
+  updateSecurityConfig: (data: Partial<SecurityConfig>) =>
+    apiClient.patch<SecurityConfig>('/api/tenants/security-config', data),
 };

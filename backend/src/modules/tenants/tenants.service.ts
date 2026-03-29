@@ -211,4 +211,51 @@ export class TenantsService {
 
     return this.getSsoConfig(tenantId);
   }
+
+  // ============================================================================
+  // SECURITY CONFIGURATION
+  // ============================================================================
+
+  /**
+   * Get security configuration for a tenant.
+   * Includes 2FA enforcement and session timeout settings.
+   */
+  async getSecurityConfig(tenantId: string) {
+    const tenant = await this.findOne(tenantId);
+    const config = tenant.config as Record<string, any> | null;
+    const security = config?.security || {};
+
+    return {
+      require2FA: security.require2FA ?? false,
+      sessionTimeout: security.sessionTimeout ?? '15m',
+      refreshTokenLifetime: security.refreshTokenLifetime ?? '7d',
+    };
+  }
+
+  /**
+   * Update security configuration for a tenant.
+   */
+  async updateSecurityConfig(tenantId: string, securityConfig: Record<string, any>) {
+    const tenant = await this.findOne(tenantId);
+    const config = (tenant.config as Record<string, any>) || {};
+    const existingSecurity = config.security || {};
+
+    const updatedSecurity = {
+      require2FA: securityConfig.require2FA ?? existingSecurity.require2FA ?? false,
+      sessionTimeout: securityConfig.sessionTimeout ?? existingSecurity.sessionTimeout ?? '15m',
+      refreshTokenLifetime: securityConfig.refreshTokenLifetime ?? existingSecurity.refreshTokenLifetime ?? '7d',
+    };
+
+    const updatedConfig = {
+      ...config,
+      security: updatedSecurity,
+    };
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { config: updatedConfig },
+    });
+
+    return this.getSecurityConfig(tenantId);
+  }
 }

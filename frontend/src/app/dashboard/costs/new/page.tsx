@@ -238,10 +238,10 @@ export default function NewExpensePage() {
             </div>
             <div className="space-y-1">
               <Label>Fournisseur</Label>
-              <Select value={vendor} onValueChange={setVendor}>
+              <Select value={vendor || 'none'} onValueChange={(v) => setVendor(v === 'none' ? '' : v)}>
                 <SelectTrigger><SelectValue placeholder="Sélectionner un fournisseur..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Aucun</SelectItem>
+                  <SelectItem value="none">Aucun</SelectItem>
                   {providerContacts.map(c => (
                     <SelectItem key={c.id} value={c.company || c.name}>{c.company || c.name}</SelectItem>
                   ))}

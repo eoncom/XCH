@@ -77,4 +77,25 @@ export class TenantsController {
   ) {
     return this.tenantsService.updateSsoConfig(req.user.tenantId, ssoConfig);
   }
+
+  // ============================================================================
+  // SECURITY CONFIGURATION
+  // ============================================================================
+
+  @Get('security-config')
+  @Resource('tenants') @Action('read')
+  @ApiOperation({ summary: 'Get security configuration (2FA, session timeout)' })
+  getSecurityConfig(@Request() req: AuthRequest) {
+    return this.tenantsService.getSecurityConfig(req.user.tenantId);
+  }
+
+  @Patch('security-config')
+  @Resource('tenants') @Action('update')
+  @ApiOperation({ summary: 'Update security configuration (ADMIN only)' })
+  updateSecurityConfig(
+    @Body() securityConfig: Record<string, any>,
+    @Request() req: AuthRequest,
+  ) {
+    return this.tenantsService.updateSecurityConfig(req.user.tenantId, securityConfig);
+  }
 }
