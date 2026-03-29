@@ -148,6 +148,7 @@ export default function EditExpensePage() {
       dateEnd: dateEnd || undefined,
       bearerId,
       siteId: siteId || undefined,
+      assetId: assetId || undefined,
       externalRef: externalRef || undefined,
       vendor: vendor || undefined,
       invoiceRef: invoiceRef || undefined,
