@@ -20,12 +20,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { assetsApi } from '@/lib/api/assets';
-import { sitesApi } from '@/lib/api/sites';
+import { GroupedSiteSelector } from '@/components/ui/grouped-site-selector';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
 import { ArrowLeft, Info, Wifi, ExternalLink, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import type { AssetType, AssetStatus, CreateAssetDto, Site } from '@/types';
+import type { AssetType, AssetStatus, CreateAssetDto } from '@/types';
 
 const assetTypeLabels: Record<AssetType, string> = {
   PRINTER: 'Imprimante',
@@ -140,11 +140,6 @@ export default function NewAssetPage() {
   });
 
   const { getLabelsForType } = useEnumLabels();
-
-  const { data: sites } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
-  });
 
   const createMutation = useMutation({
     mutationFn: (data: CreateAssetDto) => assetsApi.create(data),
@@ -351,19 +346,12 @@ export default function NewAssetPage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="siteId">Site d'affectation</Label>
-                <Select value={siteId} onValueChange={(value) => setValue('siteId', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner un site" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Aucun</SelectItem>
-                    {sites?.map((site) => (
-                      <SelectItem key={site.id} value={site.id}>
-                        {site.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <GroupedSiteSelector
+                  value={siteId}
+                  onValueChange={(value) => setValue('siteId', value)}
+                  allowNone
+                  placeholder="Sélectionner un site..."
+                />
               </div>
 
               <div className="space-y-2">

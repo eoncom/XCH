@@ -7,20 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { racksApi } from '@/lib/api/racks';
-import { sitesApi } from '@/lib/api/sites';
+import { SiteFilterSelect } from '@/components/ui/grouped-site-selector';
 import { Plus, Search, Server, MapPin } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
-import type { Rack, RackStatus, Site } from '@/types';
+import type { Rack, RackStatus } from '@/types';
 import { ExportMenu } from '@/components/ui/export-menu';
 import { exportToPDF, exportToExcel, exportToCSV, sanitizeForExcel } from '@/lib/export-utils';
 import * as XLSX from 'xlsx';
@@ -47,11 +40,6 @@ export default function RacksPage() {
   const { data: racks, isLoading } = useQuery<Rack[]>({
     queryKey: ['racks', siteFilter],
     queryFn: () => racksApi.getAll(siteFilter !== 'all' ? siteFilter : undefined),
-  });
-
-  const { data: sites } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
   });
 
   const filteredRacks = racks?.filter((rack) => {
@@ -213,19 +201,7 @@ export default function RacksPage() {
           />
         </div>
 
-        <Select value={siteFilter} onValueChange={setSiteFilter}>
-          <SelectTrigger>
-            <SelectValue placeholder="Tous les sites" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les sites</SelectItem>
-            {sites?.map((site) => (
-              <SelectItem key={site.id} value={site.id}>
-                {site.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SiteFilterSelect value={siteFilter} onValueChange={setSiteFilter} />
       </div>
 
       {/* Racks Grid */}

@@ -4610,3 +4610,24 @@ feat: add organization hierarchy, flexible access model, and cost allocation (v1
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-29
+
+**Date:** 2026-03-29 21:06:40
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 10
+
+**Commit message:**
+```
+fix: add delegationId to site creation in seed, backup, and netbox-sync
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

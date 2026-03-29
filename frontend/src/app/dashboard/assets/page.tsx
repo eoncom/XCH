@@ -17,7 +17,7 @@ import {
 import { ExportMenu } from '@/components/ui/export-menu';
 import { CardSkeleton } from '@/components/ui/skeleton';
 import { assetsApi } from '@/lib/api/assets';
-import { sitesApi } from '@/lib/api/sites';
+import { SiteFilterSelect } from '@/components/ui/grouped-site-selector';
 import { exportAssets } from '@/lib/export-utils';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Plus, Search, QrCode, Package, ShieldAlert, MapPin, Activity, LayoutGrid, List, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
@@ -27,7 +27,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import Link from 'next/link';
-import type { Asset, AssetType, AssetStatus, Site } from '@/types';
+import type { Asset, AssetType, AssetStatus } from '@/types';
 
 const assetTypeLabels: Record<AssetType, string> = {
   PRINTER: 'Imprimante',
@@ -80,11 +80,6 @@ export default function AssetsPage() {
   const { statusMap } = useLiveMonitors();
   const { canCreate } = usePermissions();
   const router = useRouter();
-
-  const { data: sites } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: () => sitesApi.getAll(),
-  });
 
   const { data: assets, isLoading } = useQuery<Asset[]>({
     queryKey: ['assets', { status: statusFilter, type: typeFilter, siteId: siteFilter, search }],
@@ -325,19 +320,7 @@ export default function AssetsPage() {
           </SelectContent>
         </Select>
 
-        <Select value={siteFilter} onValueChange={setSiteFilter}>
-          <SelectTrigger>
-            <SelectValue placeholder="Tous les sites" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les sites</SelectItem>
-            {sites?.map((site) => (
-              <SelectItem key={site.id} value={site.id}>
-                {site.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SiteFilterSelect value={siteFilter} onValueChange={setSiteFilter} />
 
         <Select value={warrantyFilter} onValueChange={setWarrantyFilter}>
           <SelectTrigger>

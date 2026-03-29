@@ -11,9 +11,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { expensesApi, billingEntitiesApi, type BillingEntity, type CreateExpenseData } from '@/lib/api/costs';
-import { sitesApi } from '@/lib/api/sites';
-import { ArrowLeft, Plus, X, Percent } from 'lucide-react';
+import { contactsApi } from '@/lib/api/contacts';
+import { assetsApi } from '@/lib/api/assets';
+import { GroupedSiteSelector } from '@/components/ui/grouped-site-selector';
+import { ArrowLeft, Plus, X, Percent, Package } from 'lucide-react';
 import Link from 'next/link';
+import type { Contact, Asset } from '@/types';
 
 const EXPENSE_TYPES = [
   { value: 'EQUIPMENT', label: 'Équipement' },
@@ -54,6 +57,7 @@ export default function NewExpensePage() {
   const [siteId, setSiteId] = useState('');
   const [externalRef, setExternalRef] = useState('');
   const [vendor, setVendor] = useState('');
+  const [assetId, setAssetId] = useState('');
   const [invoiceRef, setInvoiceRef] = useState('');
   const [poNumber, setPoNumber] = useState('');
   const [notes, setNotes] = useState('');
@@ -64,10 +68,17 @@ export default function NewExpensePage() {
     queryFn: () => billingEntitiesApi.getAll(),
   });
 
-  const { data: sites = [] } = useQuery({
-    queryKey: ['sites'],
-    queryFn: () => sitesApi.getAll(),
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ['contacts'],
+    queryFn: () => contactsApi.getAll(),
   });
+
+  const { data: assets = [] } = useQuery<Asset[]>({
+    queryKey: ['assets'],
+    queryFn: () => assetsApi.getAll({}),
+  });
+
+  const providerContacts = contacts.filter(c => c.category === 'PROVIDER');
 
   const createMutation = useMutation({
     mutationFn: (data: CreateExpenseData) => expensesApi.create(data),
@@ -105,6 +116,7 @@ export default function NewExpensePage() {
       dateEnd: dateEnd || undefined,
       bearerId,
       siteId: siteId || undefined,
+      assetId: assetId || undefined,
       externalRef: externalRef || undefined,
       vendor: vendor || undefined,
       invoiceRef: invoiceRef || undefined,
@@ -212,13 +224,13 @@ export default function NewExpensePage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-1">
               <Label>Site</Label>
-              <Select value={siteId} onValueChange={(v) => setSiteId(v === 'none' ? '' : v)}>
-                <SelectTrigger><SelectValue placeholder="Aucun" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Aucun</SelectItem>
-                  {sites.map(s => <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <GroupedSiteSelector
+                value={siteId || 'none'}
+                onValueChange={(v) => setSiteId(v === 'none' ? '' : v)}
+                allowNone
+                noneLabel="Aucun"
+                placeholder="Aucun"
+              />
             </div>
             <div className="space-y-1">
               <Label>Ref. externe</Label>
@@ -226,8 +238,43 @@ export default function NewExpensePage() {
             </div>
             <div className="space-y-1">
               <Label>Fournisseur</Label>
-              <Input value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="Cisco, NetworkPro..." />
+              <Select value={vendor} onValueChange={setVendor}>
+                <SelectTrigger><SelectValue placeholder="Sélectionner un fournisseur..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Aucun</SelectItem>
+                  {providerContacts.map(c => (
+                    <SelectItem key={c.id} value={c.company || c.name}>{c.company || c.name}</SelectItem>
+                  ))}
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground border-t mt-1 pt-1">
+                    Ou saisir manuellement :
+                  </div>
+                </SelectContent>
+              </Select>
+              <Input
+                value={vendor}
+                onChange={(e) => setVendor(e.target.value)}
+                placeholder="Ou saisir un nom..."
+                className="mt-1"
+              />
             </div>
+            {type === 'EQUIPMENT' && (
+              <div className="space-y-1">
+                <Label className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Équipement lié</Label>
+                <Select value={assetId} onValueChange={(v) => setAssetId(v === 'none' ? '' : v)}>
+                  <SelectTrigger><SelectValue placeholder="Aucun" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucun</SelectItem>
+                    {assets
+                      .filter(a => !siteId || a.siteId === siteId)
+                      .map(a => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.manufacturer} {a.model} ({a.serialNumber || a.type})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-1">
               <Label>N° facture</Label>
               <Input value={invoiceRef} onChange={(e) => setInvoiceRef(e.target.value)} placeholder="FAC-2026-001" />

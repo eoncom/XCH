@@ -19,10 +19,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { racksApi } from '@/lib/api/racks';
-import { sitesApi } from '@/lib/api/sites';
+import { GroupedSiteSelector } from '@/components/ui/grouped-site-selector';
 import { ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
-import type { Rack, RackStatus, Site } from '@/types';
+import type { Rack, RackStatus } from '@/types';
 
 const rackStatusLabels: Record<RackStatus, string> = {
   IN_SERVICE: 'En service',
@@ -68,11 +68,6 @@ export default function EditRackPage() {
   const { data: rack, isLoading } = useQuery<Rack>({
     queryKey: ['rack', rackId],
     queryFn: () => racksApi.getById(rackId),
-  });
-
-  const { data: sites } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
   });
 
   const {
@@ -179,12 +174,7 @@ export default function EditRackPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="siteId">Site <span className="text-red-500">*</span></Label>
-                <Select value={siteId} onValueChange={(value) => setValue('siteId', value)}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un site" /></SelectTrigger>
-                  <SelectContent>
-                    {sites?.map((site) => (<SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>))}
-                  </SelectContent>
-                </Select>
+                <GroupedSiteSelector value={siteId} onValueChange={(value) => setValue('siteId', value)} placeholder="Sélectionner un site..." />
                 {errors.siteId && <p className="text-sm text-red-600">{errors.siteId.message}</p>}
               </div>
               <div className="space-y-2">

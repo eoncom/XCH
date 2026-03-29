@@ -555,7 +555,7 @@ function SsoConfigSection() {
 }
 
 function SecurityTabContent() {
-  const { user } = useAuthStore();
+  const { user, checkSession } = useAuthStore();
   const [totpEnabled, setTotpEnabled] = useState(user?.totpEnabled || false);
   const [setupStep, setSetupStep] = useState<'idle' | 'qr' | 'verify' | 'backup' | 'done'>('idle');
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
@@ -593,6 +593,8 @@ function SecurityTabContent() {
         setBackupCodes(data.backupCodes);
         setSetupStep('backup');
         setTotpEnabled(true);
+        // Refresh user in store so totpEnabled persists across page reload
+        checkSession();
       }
     } catch (err: any) {
       setError(err.message || 'Code invalide');
@@ -609,6 +611,8 @@ function SecurityTabContent() {
       setTotpEnabled(false);
       setShowDisable(false);
       setDisablePassword('');
+      // Refresh user in store so totpEnabled=false persists
+      checkSession();
       toast.success('Double authentification désactivée');
     } catch (err: any) {
       setError(err.message || 'Mot de passe incorrect');

@@ -19,11 +19,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { racksApi } from '@/lib/api/racks';
-import { sitesApi } from '@/lib/api/sites';
+import { GroupedSiteSelector } from '@/components/ui/grouped-site-selector';
 import { ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import type { RackStatus, Site } from '@/types';
+import type { RackStatus } from '@/types';
 
 const rackStatusLabels: Record<RackStatus, string> = {
   IN_SERVICE: 'En service',
@@ -79,11 +79,6 @@ export default function NewRackPage() {
       status: 'PREPARATION',
       siteId: defaultSiteId,
     },
-  });
-
-  const { data: sites } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
   });
 
   const createMutation = useMutation({
@@ -156,12 +151,7 @@ export default function NewRackPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="siteId">Site <span className="text-red-500">*</span></Label>
-                <Select value={siteId} onValueChange={(value) => setValue('siteId', value)}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un site" /></SelectTrigger>
-                  <SelectContent>
-                    {sites?.map((site) => (<SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>))}
-                  </SelectContent>
-                </Select>
+                <GroupedSiteSelector value={siteId} onValueChange={(value) => setValue('siteId', value)} placeholder="Sélectionner un site..." />
                 {errors.siteId && <p className="text-sm text-red-600">{errors.siteId.message}</p>}
               </div>
               <div className="space-y-2">
