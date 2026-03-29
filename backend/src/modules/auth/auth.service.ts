@@ -1,11 +1,18 @@
-import { Injectable, UnauthorizedException, Inject } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, UserRole, ScopeType } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 
+interface SsoScopeEntry {
+  type: 'TENANT' | 'DIVISION' | 'DELEGATION' | 'SITE';
+  id?: string;
+}
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaClient,
     private jwtService: JwtService,
@@ -112,7 +119,7 @@ export class AuthService {
     return result;
   }
 
-  async oidcLogin(profile: any, tenantId: string, role?: string) {
+  async oidcLogin(profile: any, tenantId: string, role?: string, scopes?: SsoScopeEntry[]) {
     const mappedRole = (role || 'VIEWER') as UserRole;
 
     let user = await this.prisma.user.findFirst({
@@ -147,7 +154,46 @@ export class AuthService {
       }
     }
 
+    // Sync UserScopes from SSO mapping (IdP is source of truth for scopes too)
+    if (scopes && scopes.length > 0) {
+      await this.syncSsoScopes(tenantId, user.id, scopes);
+    }
+
     return this.login(user);
+  }
+
+  /**
+   * Sync user scopes from SSO group mapping.
+   * Replaces all existing SSO-sourced scopes with the new ones from the IdP.
+   */
+  private async syncSsoScopes(tenantId: string, userId: string, scopes: SsoScopeEntry[]) {
+    try {
+      // Delete existing scopes (IdP is source of truth — full replace)
+      await this.prisma.userScope.deleteMany({
+        where: { userId, tenantId },
+      });
+
+      // Create new scopes from SSO mapping
+      const scopeData = scopes.map((s) => ({
+        tenantId,
+        userId,
+        scopeType: s.type as ScopeType,
+        scopeId: s.id || null,
+        grantedBy: 'sso',
+      }));
+
+      if (scopeData.length > 0) {
+        await this.prisma.userScope.createMany({
+          data: scopeData,
+          skipDuplicates: true,
+        });
+      }
+
+      this.logger.log(`Synced ${scopeData.length} scopes for SSO user ${userId}`);
+    } catch (error) {
+      this.logger.warn(`Failed to sync SSO scopes for user ${userId}: ${error.message}`);
+      // Don't fail login if scope sync fails
+    }
   }
 
   async refreshAccessToken(refreshToken: string) {

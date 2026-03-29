@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network, X } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
@@ -294,6 +294,40 @@ function EnumLabelsTabContent() {
 
 const XCH_ROLES = ['ADMIN', 'MANAGER', 'TECHNICIEN', 'VIEWER'] as const;
 
+const SCOPE_TYPES = [
+  { value: '', label: 'Aucune portée' },
+  { value: 'TENANT', label: 'Tout le tenant' },
+  { value: 'DIVISION', label: 'Division' },
+  { value: 'DELEGATION', label: 'Délégation' },
+] as const;
+
+interface ScopeEntry {
+  type: 'TENANT' | 'DIVISION' | 'DELEGATION' | 'SITE';
+  id?: string;
+}
+
+interface RoleMappingEntry {
+  role: string;
+  scopes: ScopeEntry[];
+}
+
+/**
+ * Normalize mapping entries: supports both legacy string format and new object format.
+ * Legacy:  { "admin": "ADMIN" }
+ * New:     { "admin": { "role": "ADMIN", "scopes": [{ "type": "DIVISION", "id": "xxx" }] } }
+ */
+function normalizeMapping(raw: Record<string, any>): Record<string, RoleMappingEntry> {
+  const result: Record<string, RoleMappingEntry> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === 'string') {
+      result[key] = { role: value, scopes: [] };
+    } else if (typeof value === 'object' && value.role) {
+      result[key] = { role: value.role, scopes: value.scopes || [] };
+    }
+  }
+  return result;
+}
+
 function SsoConfigSection() {
   const [ssoConfig, setSsoConfig] = useState<SsoConfig | null>(null);
   const [isLoadingSso, setIsLoadingSso] = useState(true);
@@ -305,14 +339,22 @@ function SsoConfigSection() {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [callbackUrl, setCallbackUrl] = useState('');
-  const [roleMapping, setRoleMapping] = useState<Record<string, string>>({
-    admin: 'ADMIN',
-    manager: 'MANAGER',
-    technician: 'TECHNICIEN',
-    default: 'VIEWER',
+  const [roleMapping, setRoleMapping] = useState<Record<string, RoleMappingEntry>>({
+    admin: { role: 'ADMIN', scopes: [{ type: 'TENANT' }] },
+    manager: { role: 'MANAGER', scopes: [] },
+    technician: { role: 'TECHNICIEN', scopes: [] },
+    default: { role: 'VIEWER', scopes: [] },
   });
   const [newMappingKey, setNewMappingKey] = useState('');
   const [newMappingRole, setNewMappingRole] = useState('VIEWER');
+
+  // Load org tree for scope selectors
+  const [orgTree, setOrgTree] = useState<any[]>([]);
+  useEffect(() => {
+    import('@/lib/api/organization').then(({ organizationApi }) => {
+      organizationApi.getTree().then(setOrgTree).catch(() => {});
+    });
+  }, []);
 
   useEffect(() => {
     const loadSsoConfig = async () => {
@@ -323,7 +365,9 @@ function SsoConfigSection() {
         setIssuer(config.issuer);
         setClientId(config.clientId);
         setCallbackUrl(config.callbackUrl || `${window.location.origin}/api/auth/oidc/callback`);
-        setRoleMapping(config.roleMapping || { default: 'VIEWER' });
+        if (config.roleMapping) {
+          setRoleMapping(normalizeMapping(config.roleMapping));
+        }
       } catch {
         // Not available — use defaults
         setCallbackUrl(`${window.location.origin}/api/auth/oidc/callback`);
@@ -363,7 +407,7 @@ function SsoConfigSection() {
 
   const handleAddMapping = () => {
     if (newMappingKey.trim()) {
-      setRoleMapping({ ...roleMapping, [newMappingKey.trim()]: newMappingRole });
+      setRoleMapping({ ...roleMapping, [newMappingKey.trim()]: { role: newMappingRole, scopes: [] } });
       setNewMappingKey('');
       setNewMappingRole('VIEWER');
     }
@@ -375,6 +419,42 @@ function SsoConfigSection() {
     delete updated[key];
     setRoleMapping(updated);
   };
+
+  const updateMappingRole = (key: string, role: string) => {
+    setRoleMapping({ ...roleMapping, [key]: { ...roleMapping[key], role } });
+  };
+
+  const addScopeToMapping = (key: string) => {
+    const entry = roleMapping[key];
+    setRoleMapping({
+      ...roleMapping,
+      [key]: { ...entry, scopes: [...entry.scopes, { type: 'TENANT' }] },
+    });
+  };
+
+  const updateScope = (key: string, scopeIndex: number, scopeType: string, scopeId?: string) => {
+    const entry = roleMapping[key];
+    const newScopes = [...entry.scopes];
+    if (!scopeType) {
+      // Remove scope
+      newScopes.splice(scopeIndex, 1);
+    } else {
+      newScopes[scopeIndex] = { type: scopeType as ScopeEntry['type'], ...(scopeId ? { id: scopeId } : {}) };
+    }
+    setRoleMapping({ ...roleMapping, [key]: { ...entry, scopes: newScopes } });
+  };
+
+  const removeScopeFromMapping = (key: string, scopeIndex: number) => {
+    const entry = roleMapping[key];
+    const newScopes = entry.scopes.filter((_, i) => i !== scopeIndex);
+    setRoleMapping({ ...roleMapping, [key]: { ...entry, scopes: newScopes } });
+  };
+
+  // Build flat lists for scope selectors
+  const divisions = orgTree || [];
+  const delegations = divisions.flatMap((d: any) =>
+    (d.delegations || []).map((del: any) => ({ ...del, divisionName: d.name, divisionCode: d.code }))
+  );
 
   if (isLoadingSso) {
     return (
@@ -455,43 +535,112 @@ function SsoConfigSection() {
             </div>
           </div>
 
-          {/* Role mapping */}
+          {/* Role + Scope mapping */}
           <div className="border-t pt-4 space-y-3">
             <div>
-              <h4 className="font-medium text-sm">Mapping des rôles</h4>
+              <h4 className="font-medium text-sm">Mapping des rôles et portées</h4>
               <p className="text-xs text-muted-foreground">
-                Associez les groupes/claims de votre IdP aux rôles XCH. Le rôle &quot;default&quot; est utilisé si aucun groupe ne correspond.
+                Associez les groupes/claims de votre IdP aux rôles et portées XCH. Le &quot;default&quot; est utilisé si aucun groupe ne correspond.
               </p>
             </div>
 
-            <div className="space-y-2">
-              {Object.entries(roleMapping).map(([groupKey, xchRole]) => (
-                <div key={groupKey} className="flex items-center gap-2">
-                  <Input
-                    value={groupKey}
-                    disabled
-                    className="flex-1 h-8 text-sm font-mono bg-muted/50"
-                  />
-                  <span className="text-xs text-muted-foreground">→</span>
-                  <select
-                    value={xchRole}
-                    onChange={(e) => setRoleMapping({ ...roleMapping, [groupKey]: e.target.value })}
-                    className="h-8 px-2 rounded-md border bg-background text-sm"
-                  >
-                    {XCH_ROLES.map((role) => (
-                      <option key={role} value={role}>{role}</option>
+            <div className="space-y-3">
+              {Object.entries(roleMapping).map(([groupKey, entry]) => (
+                <div key={groupKey} className="border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={groupKey}
+                      disabled
+                      className="flex-1 h-8 text-sm font-mono bg-muted/50"
+                    />
+                    <span className="text-xs text-muted-foreground">→</span>
+                    <select
+                      value={entry.role}
+                      onChange={(e) => updateMappingRole(groupKey, e.target.value)}
+                      className="h-8 px-2 rounded-md border bg-background text-sm"
+                    >
+                      {XCH_ROLES.map((role) => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                    {groupKey !== 'default' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-red-500 hover:text-red-700"
+                        onClick={() => handleRemoveMapping(groupKey)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Scopes for this group */}
+                  <div className="pl-4 space-y-1.5">
+                    {entry.scopes.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">Aucune portée (accès selon le rôle seul)</p>
+                    )}
+                    {entry.scopes.map((scope, si) => (
+                      <div key={si} className="flex items-center gap-2">
+                        <select
+                          value={scope.type}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === 'TENANT') updateScope(groupKey, si, 'TENANT');
+                            else updateScope(groupKey, si, val, '');
+                          }}
+                          className="h-7 px-2 rounded border bg-background text-xs"
+                        >
+                          {SCOPE_TYPES.filter(s => s.value).map(s => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                          ))}
+                        </select>
+
+                        {scope.type === 'DIVISION' && (
+                          <select
+                            value={scope.id || ''}
+                            onChange={(e) => updateScope(groupKey, si, 'DIVISION', e.target.value)}
+                            className="h-7 px-2 rounded border bg-background text-xs flex-1"
+                          >
+                            <option value="">-- Choisir --</option>
+                            {divisions.map((d: any) => (
+                              <option key={d.id} value={d.id}>{d.code} - {d.name}</option>
+                            ))}
+                          </select>
+                        )}
+
+                        {scope.type === 'DELEGATION' && (
+                          <select
+                            value={scope.id || ''}
+                            onChange={(e) => updateScope(groupKey, si, 'DELEGATION', e.target.value)}
+                            className="h-7 px-2 rounded border bg-background text-xs flex-1"
+                          >
+                            <option value="">-- Choisir --</option>
+                            {delegations.map((d: any) => (
+                              <option key={d.id} value={d.id}>{d.divisionCode} &gt; {d.code} - {d.name}</option>
+                            ))}
+                          </select>
+                        )}
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => removeScopeFromMapping(groupKey, si)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
                     ))}
-                  </select>
-                  {groupKey !== 'default' && (
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-red-500 hover:text-red-700"
-                      onClick={() => handleRemoveMapping(groupKey)}
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => addScopeToMapping(groupKey)}
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Plus className="h-3 w-3 mr-1" /> Portée
                     </Button>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>

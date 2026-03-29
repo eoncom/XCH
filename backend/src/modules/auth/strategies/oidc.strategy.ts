@@ -17,6 +17,20 @@ const DEFAULT_ROLE_MAPPING: Record<string, string> = {
   viewer: 'VIEWER',
 };
 
+/**
+ * A mapping entry can be a simple string (role only, backward compat)
+ * or an object with role + scopes for the new access model.
+ */
+interface ScopeEntry {
+  type: 'TENANT' | 'DIVISION' | 'DELEGATION' | 'SITE';
+  id?: string; // null for TENANT
+}
+
+interface RoleMappingEntry {
+  role: string;
+  scopes?: ScopeEntry[];
+}
+
 @Injectable()
 export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
   constructor(
@@ -46,11 +60,12 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
       });
 
       const tenantId = tenant?.id || this.config.get('DEFAULT_TENANT_ID') || 'tenant_default';
+      const tenantConfig = tenant?.config as Record<string, any> | null;
 
-      // Determine role from OIDC claims
-      const role = this.mapRole(profile, tenant?.config as Record<string, any> | null);
+      // Determine role + scopes from OIDC claims
+      const { role, scopes } = this.mapRoleAndScopes(profile, tenantConfig);
 
-      const user = await this.authService.oidcLogin(profile, tenantId, role);
+      const user = await this.authService.oidcLogin(profile, tenantId, role, scopes);
       done(null, user);
     } catch (error) {
       done(error, null);
@@ -58,35 +73,69 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
   }
 
   /**
-   * Map OIDC profile claims to an XCH role.
-   * Checks profile.groups, profile._json.roles, profile._json.groups.
-   * Uses tenant-level roleMapping if available, else falls back to defaults.
+   * Map OIDC profile claims to an XCH role + scopes.
+   * Supports both legacy format (string values) and new format (object with role+scopes).
+   *
+   * Legacy:  { "admin": "ADMIN", "tech": "TECHNICIEN" }
+   * New:     { "admin": { "role": "ADMIN", "scopes": [{ "type": "TENANT" }] },
+   *            "tech-idf": { "role": "TECHNICIEN", "scopes": [{ "type": "DIVISION", "id": "div-123" }] } }
    */
-  private mapRole(profile: any, tenantConfig: Record<string, any> | null): string {
-    const roleMapping = tenantConfig?.sso?.roleMapping || DEFAULT_ROLE_MAPPING;
-    const defaultRole = roleMapping.default || 'VIEWER';
+  private mapRoleAndScopes(
+    profile: any,
+    tenantConfig: Record<string, any> | null,
+  ): { role: string; scopes: ScopeEntry[] } {
+    const roleMapping: Record<string, string | RoleMappingEntry> = tenantConfig?.sso?.roleMapping || DEFAULT_ROLE_MAPPING;
+    const defaultEntry = roleMapping.default;
+    const defaultRole = typeof defaultEntry === 'object' ? defaultEntry.role : (defaultEntry || 'VIEWER');
+    const defaultScopes: ScopeEntry[] = typeof defaultEntry === 'object' ? (defaultEntry.scopes || []) : [];
 
-    // Try to find groups/roles from profile
+    // Extract groups/roles from OIDC profile
     const groups: string[] = [
       ...(profile.groups || []),
       ...(profile._json?.groups || []),
       ...(profile._json?.roles || []),
     ];
 
-    // Check each group against mapping
+    // Collect all matching scopes (union from all matched groups)
+    const allScopes: ScopeEntry[] = [];
+    let matchedRole: string | null = null;
+
+    const resolveEntry = (entry: string | RoleMappingEntry): { role: string; scopes: ScopeEntry[] } => {
+      if (typeof entry === 'string') return { role: entry, scopes: [] };
+      return { role: entry.role, scopes: entry.scopes || [] };
+    };
+
     for (const group of groups) {
       const groupLower = (group || '').toLowerCase();
-      // Check exact match first
-      if (roleMapping[group]) return roleMapping[group];
-      if (roleMapping[groupLower]) return roleMapping[groupLower];
-      // Check if group contains a key
-      for (const [key, mappedRole] of Object.entries(roleMapping)) {
+
+      // Check exact match
+      if (roleMapping[group]) {
+        const { role, scopes } = resolveEntry(roleMapping[group]);
+        if (!matchedRole) matchedRole = role;
+        allScopes.push(...scopes);
+        continue;
+      }
+      if (roleMapping[groupLower]) {
+        const { role, scopes } = resolveEntry(roleMapping[groupLower]);
+        if (!matchedRole) matchedRole = role;
+        allScopes.push(...scopes);
+        continue;
+      }
+
+      // Check substring match
+      for (const [key, mappedEntry] of Object.entries(roleMapping)) {
         if (key !== 'default' && groupLower.includes(key.toLowerCase())) {
-          return mappedRole as string;
+          const { role, scopes } = resolveEntry(mappedEntry as string | RoleMappingEntry);
+          if (!matchedRole) matchedRole = role;
+          allScopes.push(...scopes);
+          break;
         }
       }
     }
 
-    return defaultRole;
+    return {
+      role: matchedRole || defaultRole,
+      scopes: allScopes.length > 0 ? allScopes : defaultScopes,
+    };
   }
 }

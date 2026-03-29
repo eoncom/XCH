@@ -4631,3 +4631,24 @@ fix: add delegationId to site creation in seed, backup, and netbox-sync
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-03-29
+
+**Date:** 2026-03-29 21:22:29
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 1
+
+**Commit message:**
+```
+feat: grouped site selectors, vendor/asset links in costs, 2FA fix
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
