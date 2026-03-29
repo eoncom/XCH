@@ -33,10 +33,11 @@ export class SitesService {
     const { latitude, longitude, ...siteData } = createSiteDto;
 
     const result = await this.prisma.$queryRawUnsafe<{id: string}[]>(
-      `INSERT INTO "sites" ("id", "tenantId", "code", "name", "status", "address", "city", "postalCode", "country", "coordinates", "healthStatus", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4::"SiteStatus", $5, $6, $7, $8, ${hasCoordinates ? `ST_SetSRID(ST_MakePoint($9, $10), 4326)` : 'NULL'}, ${hasCoordinates ? '$11' : '$9'}::"HealthStatus", NOW(), NOW())
+      `INSERT INTO "sites" ("id", "tenantId", "delegationId", "code", "name", "status", "address", "city", "postalCode", "country", "coordinates", "healthStatus", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::"SiteStatus", $6, $7, $8, $9, ${hasCoordinates ? `ST_SetSRID(ST_MakePoint($10, $11), 4326)` : 'NULL'}, ${hasCoordinates ? '$12' : '$10'}::"HealthStatus", NOW(), NOW())
        RETURNING id`,
       tenantId,
+      siteData.delegationId,
       siteData.code,
       siteData.name,
       siteData.status || 'ACTIVE',
@@ -105,11 +106,35 @@ export class SitesService {
       paramIndex++;
     }
 
+    if (filter?.delegationId) {
+      whereClause += ` AND s."delegationId" = $${paramIndex}`;
+      params.push(filter.delegationId);
+      paramIndex++;
+    }
+
+    // Division filter: join through delegation
+    let joinClause = '';
+    if (filter?.divisionId) {
+      joinClause = `JOIN "delegations" del ON del.id = s."delegationId"`;
+      whereClause += ` AND del."divisionId" = $${paramIndex}`;
+      params.push(filter.divisionId);
+      paramIndex++;
+    }
+
     // Use raw query to extract latitude/longitude from PostGIS coordinates
-    const sites = await this.prisma.$queryRawUnsafe(`
+    // Always LEFT JOIN delegation and division for org info
+    const orgJoin = filter?.divisionId
+      ? joinClause // Already has the JOIN from division filter
+      : `LEFT JOIN "delegations" del ON del.id = s."delegationId"`;
+    const divJoin = filter?.divisionId
+      ? `LEFT JOIN "divisions" div ON div.id = del."divisionId"` // del already joined
+      : `LEFT JOIN "divisions" div ON div.id = del."divisionId"`;
+
+    const rawSites = await this.prisma.$queryRawUnsafe(`
       SELECT
         s.id,
         s."tenantId",
+        s."delegationId",
         s.code,
         s.name,
         s.status,
@@ -130,13 +155,41 @@ export class SitesService {
         s."createdAt",
         s."updatedAt",
         ST_Y(s.coordinates::geometry) as latitude,
-        ST_X(s.coordinates::geometry) as longitude
+        ST_X(s.coordinates::geometry) as longitude,
+        del.name as "delegation_name",
+        del.code as "delegation_code",
+        div.id as "division_id",
+        div.name as "division_name",
+        div.code as "division_code",
+        div.color as "division_color"
       FROM "sites" s
+      ${orgJoin}
+      ${divJoin}
       WHERE ${whereClause}
       ORDER BY s."updatedAt" DESC
     `, ...params);
 
-    return sites;
+    // Transform org fields into nested objects
+    return (rawSites as any[]).map(site => ({
+      ...site,
+      delegation: site.delegationId ? {
+        id: site.delegationId,
+        name: site.delegation_name,
+        code: site.delegation_code,
+      } : null,
+      division: site.division_id ? {
+        id: site.division_id,
+        name: site.division_name,
+        code: site.division_code,
+        color: site.division_color,
+      } : null,
+      delegation_name: undefined,
+      delegation_code: undefined,
+      division_id: undefined,
+      division_name: undefined,
+      division_code: undefined,
+      division_color: undefined,
+    }));
   }
 
   async findOne(id: string, tenantId: string) {
@@ -145,6 +198,7 @@ export class SitesService {
       SELECT
         s.id,
         s."tenantId",
+        s."delegationId",
         s.code,
         s.name,
         s.status,
@@ -168,8 +222,17 @@ export class SitesService {
         ST_X(s.coordinates::geometry) as longitude,
         (SELECT COUNT(*) FROM "assets" a WHERE a."siteId" = s.id) as "_count_assets",
         (SELECT COUNT(*) FROM "racks" r WHERE r."siteId" = s.id) as "_count_racks",
-        (SELECT COUNT(*) FROM "tasks" t WHERE t."siteId" = s.id) as "_count_tasks"
+        (SELECT COUNT(*) FROM "tasks" t WHERE t."siteId" = s.id) as "_count_tasks",
+        del.id as "delegation_id",
+        del.name as "delegation_name",
+        del.code as "delegation_code",
+        div.id as "division_id",
+        div.name as "division_name",
+        div.code as "division_code",
+        div.color as "division_color"
       FROM "sites" s
+      LEFT JOIN "delegations" del ON del.id = s."delegationId"
+      LEFT JOIN "divisions" div ON div.id = del."divisionId"
       WHERE s.id = $1 AND s."tenantId" = $2
     `, id, tenantId);
 
@@ -179,9 +242,20 @@ export class SitesService {
 
     const site = (sites as any[])[0];
 
-    // Transform counts to match Prisma include format
+    // Transform counts and org info to match structured format
     return {
       ...site,
+      delegation: site.delegation_id ? {
+        id: site.delegation_id,
+        name: site.delegation_name,
+        code: site.delegation_code,
+      } : null,
+      division: site.division_id ? {
+        id: site.division_id,
+        name: site.division_name,
+        code: site.division_code,
+        color: site.division_color,
+      } : null,
       _count: {
         assets: Number(site._count_assets) || 0,
         racks: Number(site._count_racks) || 0,
@@ -190,6 +264,13 @@ export class SitesService {
       _count_assets: undefined,
       _count_racks: undefined,
       _count_tasks: undefined,
+      delegation_id: undefined,
+      delegation_name: undefined,
+      delegation_code: undefined,
+      division_id: undefined,
+      division_name: undefined,
+      division_code: undefined,
+      division_color: undefined,
     };
   }
 

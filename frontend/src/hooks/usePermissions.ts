@@ -2,12 +2,12 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
-import { siteAccessApi, type UserSiteAccess, type ResourcePermissionLevel } from '@/lib/api/site-access';
+import { siteAccessApi, type ResourcePermissionLevel, type ResourcePermissions, type MyPermissionsResponse } from '@/lib/api/site-access';
 import type { UserRole } from '@/types';
 
 /**
  * Permission definitions based on Casbin policy.csv
- * Maps role → resource → allowed actions
+ * Maps role -> resource -> allowed actions
  */
 const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
   ADMIN: {
@@ -23,6 +23,10 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     tenants: ['read', 'update'],
     contacts: ['create', 'read', 'update', 'delete'],
     'contact-types': ['create', 'read', 'update', 'delete'],
+    divisions: ['create', 'read', 'update', 'delete'],
+    delegations: ['create', 'read', 'update', 'delete'],
+    'billing-entities': ['create', 'read', 'update', 'delete'],
+    expenses: ['create', 'read', 'update', 'delete'],
   },
   MANAGER: {
     sites: ['read'],
@@ -35,6 +39,10 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     users: ['read'],
     contacts: ['create', 'read', 'update'],
     'contact-types': ['read'],
+    divisions: ['read'],
+    delegations: ['read'],
+    'billing-entities': ['read'],
+    expenses: ['create', 'read', 'update'],
   },
   TECHNICIEN: {
     sites: ['read'],
@@ -46,6 +54,8 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     monitoring: ['read'],
     contacts: ['read'],
     'contact-types': ['read'],
+    divisions: ['read'],
+    delegations: ['read'],
   },
   VIEWER: {
     sites: ['read'],
@@ -57,6 +67,8 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     monitoring: ['read'],
     contacts: ['read'],
     'contact-types': ['read'],
+    divisions: ['read'],
+    delegations: ['read'],
   },
 };
 
@@ -71,6 +83,8 @@ const RESOURCE_KEY_MAP: Record<string, string> = {
   tasks: 'tasks',
   sites: 'sites',
   contacts: 'contacts',
+  monitoring: 'monitoring',
+  netbox: 'netbox',
 };
 
 /**
@@ -89,74 +103,133 @@ function permLevelToActions(level: ResourcePermissionLevel): string[] {
   }
 }
 
+/**
+ * Map role to default ResourcePermissionLevel for a resource.
+ */
+function roleToPermLevel(role: string, resource: string): ResourcePermissionLevel {
+  const rolePerms = ROLE_PERMISSIONS[role];
+  if (!rolePerms || !rolePerms[resource]) return 'NONE';
+  const actions = rolePerms[resource];
+  if (actions.includes('create') || actions.includes('update') || actions.includes('delete') || actions.includes('manage')) {
+    return 'WRITE';
+  }
+  if (actions.includes('read')) return 'READ';
+  return 'NONE';
+}
+
+function maxPerm(a: ResourcePermissionLevel, b: ResourcePermissionLevel): ResourcePermissionLevel {
+  const order: Record<string, number> = { NONE: 0, READ: 1, WRITE: 2 };
+  return (order[a] || 0) >= (order[b] || 0) ? a : b;
+}
+
+/**
+ * usePermissions hook — Phase B version.
+ *
+ * Uses UserScope + AccessGrant for permission resolution.
+ * ALL roles fetch my-permissions (including ADMIN/MANAGER, since they are now scope-bound).
+ */
 export function usePermissions() {
   const { user } = useAuthStore();
   const role = (user?.role || 'VIEWER') as string;
 
-  // Fetch per-site permissions from backend for TECHNICIEN/VIEWER
-  const { data: myPerms } = useQuery({
+  // Fetch permissions for ALL roles (Phase B: ADMIN/MANAGER are scope-bound too)
+  const { data: myPerms } = useQuery<MyPermissionsResponse>({
     queryKey: ['my-permissions'],
     queryFn: () => siteAccessApi.myPermissions(),
-    enabled: !!user && (role === 'TECHNICIEN' || role === 'VIEWER'),
-    staleTime: 60_000, // Cache for 1 minute
+    enabled: !!user,
+    staleTime: 60_000,
     retry: 1,
   });
 
   /**
    * Check if user can do action on resource.
-   * Without siteId → uses global role-based permissions.
-   * With siteId → uses per-site resourcePermissions if available.
+   *
+   * Without siteId: checks if the user has ANY scope that grants this permission.
+   * With siteId: checks if the specific site is covered by scopes or grants.
+   *
+   * Resolution:
+   * 1. UserScopes: if site is covered -> full role permissions apply
+   * 2. AccessGrants: if site is covered AND resource is listed -> grant's level applies
+   * 3. MAX of both sources
    */
   const can = (resource: string, action: string, siteId?: string): boolean => {
-    // ADMIN and MANAGER always use role-based permissions (they have full access)
-    if (role === 'ADMIN' || role === 'MANAGER') {
+    // Resources that are not site-scoped (org-level) — use pure role-based check
+    const orgResources = ['users', 'tenants', 'divisions', 'delegations', 'contact-types', 'integrations'];
+    if (orgResources.includes(resource)) {
       const rolePerms = ROLE_PERMISSIONS[role];
       if (!rolePerms) return false;
       return rolePerms[resource]?.includes(action) ?? false;
     }
 
-    // TECHNICIEN / VIEWER — check per-site permissions if siteId is provided
-    if (siteId && myPerms?.siteAccess) {
-      const siteAccess = myPerms.siteAccess.find(
-        (sa: UserSiteAccess) => sa.siteId === siteId
-      );
+    // If permissions haven't loaded yet, fallback to role-based (permissive for UX)
+    if (!myPerms) {
+      const rolePerms = ROLE_PERMISSIONS[role];
+      if (!rolePerms) return false;
+      return rolePerms[resource]?.includes(action) ?? false;
+    }
 
-      if (!siteAccess) {
-        // No access to this site at all
-        return false;
-      }
+    // If user has allSitesAccess and no siteId specified, use role-based
+    if (!siteId && myPerms.allSitesAccess) {
+      const rolePerms = ROLE_PERMISSIONS[role];
+      if (!rolePerms) return false;
+      return rolePerms[resource]?.includes(action) ?? false;
+    }
 
-      // Check resourcePermissions override
-      const resourceKey = RESOURCE_KEY_MAP[resource] || resource;
-      const resourcePerms = siteAccess.resourcePermissions as Record<string, ResourcePermissionLevel> | null | undefined;
-
-      if (resourcePerms && resourceKey in resourcePerms) {
-        const level = resourcePerms[resourceKey];
-        const allowedActions = permLevelToActions(level);
-        return allowedActions.includes(action);
-      }
-
-      // No per-resource override → fallback to accessLevel
-      if (siteAccess.accessLevel === 'WRITE') {
-        // User has WRITE on this site, use role-based permissions
+    // If no siteId, check if user has ANY scope (meaning they have access somewhere)
+    if (!siteId) {
+      if (myPerms.scopes.length > 0) {
+        // User has at least one scope — check role-based permission for the resource
         const rolePerms = ROLE_PERMISSIONS[role];
         if (!rolePerms) return false;
         return rolePerms[resource]?.includes(action) ?? false;
-      } else {
-        // READ access level → only allow read
-        return action === 'read';
+      }
+
+      // No scopes — check if any grant covers this resource
+      const resourceKey = RESOURCE_KEY_MAP[resource] || resource;
+      for (const grant of myPerms.accessGrants) {
+        const grantPerms = grant.resourcePermissions as ResourcePermissions;
+        if (grantPerms && resourceKey in grantPerms) {
+          const level = (grantPerms as any)[resourceKey] as ResourcePermissionLevel;
+          if (level && permLevelToActions(level).includes(action)) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    }
+
+    // With siteId: compute effective permission level
+    const resourceKey = RESOURCE_KEY_MAP[resource] || resource;
+    let effectiveLevel: ResourcePermissionLevel = 'NONE';
+
+    // SOURCE 1: UserScopes — if site is in accessibleSiteIds (or allSitesAccess), role applies
+    if (myPerms.allSitesAccess || (myPerms.accessibleSiteIds && myPerms.accessibleSiteIds.includes(siteId))) {
+      // Check if the site is covered by scopes (not just grants)
+      // Since allSitesAccess includes both scopes and grants, we need to check scopes separately
+      // For simplicity: if user has any scope, the role applies on covered sites
+      if (myPerms.scopes.length > 0) {
+        const rolePerm = roleToPermLevel(role, resource);
+        effectiveLevel = maxPerm(effectiveLevel, rolePerm);
       }
     }
 
-    // No siteId context or no permissions loaded → fallback to role-based
-    const rolePerms = ROLE_PERMISSIONS[role];
-    if (!rolePerms) return false;
-    return rolePerms[resource]?.includes(action) ?? false;
+    // SOURCE 2: AccessGrants — additive, only listed resourcePermissions
+    for (const grant of myPerms.accessGrants) {
+      const grantPerms = grant.resourcePermissions as ResourcePermissions;
+      if (grantPerms && resourceKey in grantPerms) {
+        const grantLevel = (grantPerms as any)[resourceKey] as ResourcePermissionLevel;
+        if (grantLevel) {
+          effectiveLevel = maxPerm(effectiveLevel, grantLevel);
+        }
+      }
+    }
+
+    return permLevelToActions(effectiveLevel).includes(action);
   };
 
   /**
-   * Check per-site resource permission. Returns true/false.
-   * This is the site-aware version that should be used on detail pages.
+   * Check per-site resource permission.
    */
   const canForSite = (resource: string, action: string, siteId: string): boolean => {
     return can(resource, action, siteId);
@@ -164,52 +237,30 @@ export function usePermissions() {
 
   /**
    * Check if user has access to at least one site.
-   * ADMIN/MANAGER always return true.
-   * TECHNICIEN/VIEWER return true only if they have site access records.
    */
   const hasAnySiteAccess = (): boolean => {
-    if (role === 'ADMIN' || role === 'MANAGER') return true;
-    return (myPerms?.siteAccess || []).length > 0;
+    if (!myPerms) return role === 'ADMIN'; // Fallback while loading
+    return myPerms.allSitesAccess || (myPerms.accessibleSiteIds !== null && myPerms.accessibleSiteIds.length > 0);
   };
 
   return {
-    /** Check if the user can perform an action on a resource (with optional siteId context) */
     can,
-
-    /** Check permission for a specific site context */
     canForSite,
-
-    /** Shorthand: can create a resource (global role-based) */
     canCreate: (resource: string, siteId?: string) => can(resource, 'create', siteId),
-
-    /** Shorthand: can read a resource */
     canRead: (resource: string, siteId?: string) => can(resource, 'read', siteId),
-
-    /** Shorthand: can update a resource */
     canUpdate: (resource: string, siteId?: string) => can(resource, 'update', siteId),
-
-    /** Shorthand: can delete a resource */
     canDelete: (resource: string, siteId?: string) => can(resource, 'delete', siteId),
-
-    /** Is the user an admin */
     isAdmin: role === 'ADMIN',
-
-    /** Is the user a manager or admin */
     isManagerOrAbove: role === 'ADMIN' || role === 'MANAGER',
-
-    /** Is the user a technician */
     isTechnicien: role === 'TECHNICIEN',
-
-    /** Is the user a viewer */
     isViewer: role === 'VIEWER',
-
-    /** The user's role */
     role: role as UserRole,
-
-    /** Per-site access data (for TECHNICIEN/VIEWER) */
-    siteAccess: myPerms?.siteAccess || [],
-
-    /** Does the user have access to at least one site? */
+    /** User scopes (for display) */
+    scopes: myPerms?.scopes || [],
+    /** User access grants (for display) */
+    accessGrants: myPerms?.accessGrants || [],
+    /** All sites access flag */
+    allSitesAccess: myPerms?.allSitesAccess ?? false,
     hasAnySiteAccess,
   };
 }

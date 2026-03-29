@@ -16,4 +16,14 @@ export class FilterSiteDto {
   @IsEnum(['OK', 'WARNING', 'CRITICAL', 'UNKNOWN'])
   @IsOptional()
   healthStatus?: string;
+
+  @ApiProperty({ required: false, description: 'Filter by division ID' })
+  @IsString()
+  @IsOptional()
+  divisionId?: string;
+
+  @ApiProperty({ required: false, description: 'Filter by delegation ID' })
+  @IsString()
+  @IsOptional()
+  delegationId?: string;
 }

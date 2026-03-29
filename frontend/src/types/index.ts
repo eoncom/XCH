@@ -138,6 +138,7 @@ export interface SiteAccessNotes {
 export interface Site {
   id: string;
   tenantId: string;
+  delegationId?: string;
   code: string;
   name: string;
   status: SiteStatus;
@@ -156,6 +157,9 @@ export interface Site {
   monitoringEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
+  // Organization info (populated by backend)
+  delegation?: { id: string; name: string; code: string };
+  division?: { id: string; name: string; code: string; color?: string };
 }
 
 // Asset types

@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   Monitor,
   Database,
+  Receipt,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -55,6 +56,7 @@ const navigation: Array<{
   { name: 'NetBox', href: '/dashboard/netbox', icon: Database, moduleKey: 'integrations_netbox', permResource: 'netbox' },
   { name: 'Dashboard TV', href: '/tv', icon: Monitor, external: true },
   { name: 'Alertes', href: '/dashboard/alerts', icon: AlertTriangle, moduleKey: 'alerts' },
+  { name: 'Coûts', href: '/dashboard/costs', icon: Receipt, permResource: 'expenses' },
 ];
 
 const adminNavigation = [

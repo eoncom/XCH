@@ -18,10 +18,15 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ContactTypesModule } from './modules/contact-types/contact-types.module';
 import { SiteAccessModule } from './modules/site-access/site-access.module';
+import { UserScopesModule } from './modules/user-scopes/user-scopes.module';
+import { AccessGrantsModule } from './modules/access-grants/access-grants.module';
+import { BillingEntitiesModule } from './modules/billing-entities/billing-entities.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
 import { SeedModule } from './modules/seed/seed.module';
 import { SetupModule } from './modules/setup/setup.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BackupModule } from './modules/backup/backup.module';
+import { OrganizationModule } from './modules/organization/organization.module';
 
 @Module({
   imports: [
@@ -61,6 +66,7 @@ import { BackupModule } from './modules/backup/backup.module';
     UsersModule,
 
     // Business modules
+    OrganizationModule,
     SitesModule,
     AssetsModule,
     RacksModule,
@@ -70,6 +76,10 @@ import { BackupModule } from './modules/backup/backup.module';
     ContactTypesModule,
     IntegrationsModule,
     SiteAccessModule,
+    UserScopesModule,
+    AccessGrantsModule,
+    BillingEntitiesModule,
+    ExpensesModule,
     SeedModule,
     SetupModule,
     AdminModule,

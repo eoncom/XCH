@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
@@ -31,6 +31,7 @@ import { authApi } from '@/lib/api/auth';
 import { integrationsApi, type IntegrationConfigResponse } from '@/lib/api/integrations';
 import { backupApi, type BackupMetadata } from '@/lib/api/backup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { OrganizationTab } from './organization-tab';
 
 interface SecurityReminder {
   id: string;
@@ -1345,9 +1346,15 @@ export default function SettingsPage() {
             Apparence
           </TabsTrigger>
           {user?.role === 'ADMIN' && (
+            <TabsTrigger value="org-structure">
+              <Network className="mr-2 h-4 w-4" />
+              Structure
+            </TabsTrigger>
+          )}
+          {user?.role === 'ADMIN' && (
             <TabsTrigger value="tenant">
               <Building2 className="mr-2 h-4 w-4" />
-              Organisation
+              Tenant
             </TabsTrigger>
           )}
           {user?.role === 'ADMIN' && (
@@ -1620,6 +1627,11 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Organization Structure Tab */}
+        <TabsContent value="org-structure" className="space-y-6">
+          <OrganizationTab />
         </TabsContent>
 
         {/* Tenant Tab */}

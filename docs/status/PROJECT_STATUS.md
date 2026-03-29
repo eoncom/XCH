@@ -1,22 +1,23 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-03-28 15:02:12 (Auto-update)
-**Version actuelle :** 1.1.0
-**Statut global :** ✅ MVP Production-Ready (100%)
+**Dernière mise à jour :** 2026-03-29 17:07:42 (Auto-update)
+**Version actuelle :** 1.2.0
+**Statut global :** ✅ MVP Production-Ready (100%) + Organisation + Accès flexible + Coûts
 
 ---
 
 ## 📊 PROGRESSION GLOBALE
 
 ```
-Backend      ████████████████████ 100% (10/10 modules)
-Frontend     ████████████████████ 100% (7/7 modules)
+Backend      ████████████████████ 100% (15/15 modules)
+Frontend     ████████████████████ 100% (11/11 modules)
 Tests        ███░░░░░░░░░░░░░░░░░  15% (Manuels + E2E Playwright)
 Docs         ████████████████████ 100% (Installation + Guides + Architecture + Testing)
 CI/CD        ██████████░░░░░░░░░░  50% (GitHub Actions workflow fonctionnel)
 Deploy       ████████████████████ 100% (Prod OK + Seed data + CORS fix)
 
 MVP TOTAL    ████████████████████ 100% (PRODUCTION READY)
+POST-MVP     ████████████████████ 100% (Organisation + Accès flexible + Coûts)
 ```
 
 ---
@@ -41,13 +42,18 @@ MVP TOTAL    ████████████████████ 100% (
 | 8 | **Tasks** | ✅ | ~10 | Manuel |
 | 9 | **FloorPlans** | ✅ | ~10 | Manuel |
 | 10 | **Integrations** | ✅ | ~8 | Manuel |
+| 11 | **Organization** | ✅ | ~8 | Manuel |
+| 12 | **UserScopes** | ✅ | ~5 | Manuel |
+| 13 | **AccessGrants** | ✅ | ~5 | Manuel |
+| 14 | **BillingEntities** | ✅ | ~6 | Manuel |
+| 15 | **Expenses** | ✅ | ~10 | Manuel |
 
 **Infrastructure :**
 - ✅ PostgreSQL 15 + PostGIS (recherche géospatiale)
 - ✅ Redis 7 (cache + sessions)
 - ✅ MinIO (stockage S3-compatible)
 - ✅ Docker Compose (orchestration)
-- ✅ Prisma ORM (15 modèles)
+- ✅ Prisma ORM (25+ modèles)
 - ✅ NestJS 10 (framework)
 
 **Sécurité :**
@@ -58,12 +64,12 @@ MVP TOTAL    ████████████████████ 100% (
 - ✅ Multi-tenant isolation (tenantId)
 
 **Métriques :**
-- ~110+ endpoints REST
-- ~9000+ lignes de code TypeScript
-- 18 modèles Prisma (dont ContactType, Contact, IntegrationMapping)
-- 83 policies Casbin (ADMIN=40, MANAGER=16, TECHNICIEN=20, VIEWER=7)
+- ~145+ endpoints REST
+- ~12000+ lignes de code TypeScript
+- 25+ modèles Prisma (dont Division, Delegation, UserScope, AccessGrant, BillingEntity, Expense, CostAllocation)
+- 95 policies Casbin (ADMIN=46, MANAGER=20, TECHNICIEN=22, VIEWER=7)
 - 4 rôles (Admin, Manager, Technicien, Viewer)
-- 10 ressources RBAC (sites, assets, racks, tasks, floor-plans, integrations, users, tenants, contacts, contact-types)
+- 14 ressources RBAC (+ divisions, delegations, billing-entities, expenses)
 
 **Documentation :**
 - ✅ Swagger API (http://localhost:3000/api)
@@ -87,10 +93,11 @@ MVP TOTAL    ████████████████████ 100% (
 | 6 | **FloorPlans** | 3 | Viewer Konva, pins avec formes distinctives, légende export PNG, association équipement |
 | 7 | **Contacts** | 4 | CRUD contacts, types personnalisables, catégories, import depuis intégrations |
 | 8 | **Intégrations** | 3 | Dashboard providers, NetBox config (4 tabs), mapping drag-drop, monitoring placeholder |
-| 9 | **Users** | 1 | Liste utilisateurs, statistiques par rôle |
-| 10 | **Settings** | 2 | Profil utilisateur, config tenant |
+| 9 | **Users** | 1 | Liste utilisateurs, statistiques par rôle, gestion portées + grants |
+| 10 | **Settings** | 3 | Profil utilisateur, config tenant, organisation (divisions/délégations) |
+| 11 | **Coûts** | 4 | Liste dépenses, création/édition, centres de coût, rapports |
 
-**Total pages :** 25 pages fonctionnelles
+**Total pages :** 30+ pages fonctionnelles
 
 **Stack technique :**
 - Next.js 15.1.3 (App Router)
@@ -247,6 +254,46 @@ MVP TOTAL    ████████████████████ 100% (
 ---
 
 ## 📅 HISTORIQUE DES VERSIONS
+
+### v1.2.0 (2026-03-29) - Organisation + Accès flexible + Répartition des coûts
+
+**Phase A — Structure organisationnelle :**
+- ✅ Modèles Prisma : Division, Delegation + Site.delegationId obligatoire
+- ✅ Backend module `organization/` (CRUD divisions, délégations, arbre)
+- ✅ Filtres divisionId/delegationId dans sites
+- ✅ Frontend : onglet Organisation dans Settings (CRUD arbre)
+- ✅ Frontend : filtres Division/Délégation sur liste sites + formulaire site
+
+**Phase B — UserScope + AccessGrant (accès flexible non-hiérarchique) :**
+- ✅ Modèle UserScope (N portées par user : TENANT, DIVISION, DELEGATION, SITE)
+- ✅ Modèle AccessGrant (exceptions additives avec expiration)
+- ✅ Backend modules `user-scopes/` et `access-grants/` (CRUD)
+- ✅ Réécriture complète `site-access.service.ts` : résolution UserScope + AccessGrant uniquement (UserSiteAccess déprécié)
+- ✅ Ajout monitoring/netbox à ResourcePermissions
+- ✅ Frontend : réécriture `usePermissions` hook
+- ✅ Frontend : UI gestion portées + grants sur page user edit
+
+**Phase C — Répartition des coûts :**
+- ✅ Modèles Prisma : BillingEntity, Expense, CostAllocation
+- ✅ Backend module `billing-entities/` (CRUD + summary)
+- ✅ Backend module `expenses/` (CRUD + allocations + rapports + export CSV)
+- ✅ Frontend : page liste dépenses avec filtres et cards résumé
+- ✅ Frontend : formulaire dépense (new/edit) avec refacturation dynamique
+- ✅ Frontend : page centres de coût (CRUD)
+- ✅ Frontend : page rapports (par porteur / par cible)
+- ✅ Nav item "Coûts" avec permissions
+
+**Casbin :**
+- ✅ 12 nouvelles policies (divisions, delegations, billing-entities, expenses)
+
+**Architecture :**
+- Principe : la hiérarchie organise, elle ne contrôle PAS l'accès
+- ADMIN/MANAGER soumis à leurs portées (UserScope)
+- AccessGrants purement additifs (jamais restrictifs)
+- BillingEntity = centre de coût générique (pas limité à la hiérarchie org)
+- Allocation ≤ 100% (reste à la charge du porteur)
+
+---
 
 ### v1.1.0 (2026-02-06) - Refactoring Contacts + Intégrations + Plans améliorés
 

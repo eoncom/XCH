@@ -38,6 +38,7 @@ import {
 import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
+import { organizationApi } from '@/lib/api/organization';
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2, MapPin, UserPlus, FolderOpen, Globe, FileText, Shield, Search, Users, ExternalLink, Wifi, Network } from 'lucide-react';
 import Link from 'next/link';
 import type { Site, SiteContact, Contact, ContactType, ContactCategory, Asset, ConnectivityLink, SdwanConfig } from '@/types';
@@ -56,6 +57,7 @@ const CONNECTIVITY_TYPES = [
 ];
 
 const siteSchema = z.object({
+  delegationId: z.string().min(1, 'La délégation est requise'),
   code: z.string().min(1, 'Le code est requis'),
   name: z.string().min(1, 'Le nom est requis'),
   status: z.enum(['PREPARATION', 'ACTIVE', 'CLOSED']),
@@ -133,6 +135,7 @@ function EditSitePage({
     resolver: zodResolver(siteSchema),
     values: site
       ? {
+          delegationId: site.delegationId || '',
           code: site.code,
           name: site.name,
           status: site.status,
@@ -363,6 +366,15 @@ function EditSitePage({
   };
 
   const status = watch('status');
+  const selectedDelegationId = watch('delegationId');
+
+  // Organization tree for delegation selector
+  const { data: orgTree } = useQuery({
+    queryKey: ['organization-tree'],
+    queryFn: () => organizationApi.getTree(),
+  });
+
+  const selectedDelegation = orgTree?.flatMap(d => d.delegations.map(del => ({ ...del, division: d }))).find(d => d.id === selectedDelegationId);
 
   if (isLoading) {
     return <div className="text-center py-12">Chargement...</div>;
@@ -428,6 +440,42 @@ function EditSitePage({
             {/* Étape 1: Informations de base */}
             {currentStep === 1 && (
               <div className="space-y-6">
+                {/* Delegation selector */}
+                <div className="space-y-2">
+                  <Label>Délégation *</Label>
+                  <Select
+                    value={selectedDelegationId || ''}
+                    onValueChange={(value) => setValue('delegationId', value, { shouldValidate: true })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionner une délégation..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orgTree?.map((division) => (
+                        <div key={division.id}>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                            {division.color && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: division.color }} />}
+                            {division.name}
+                          </div>
+                          {division.delegations.map((del) => (
+                            <SelectItem key={del.id} value={del.id} className="pl-6">
+                              {del.name} ({del.code})
+                            </SelectItem>
+                          ))}
+                        </div>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedDelegation && (
+                    <p className="text-xs text-muted-foreground">
+                      Division : {selectedDelegation.division.name} ({selectedDelegation.division.code})
+                    </p>
+                  )}
+                  {errors.delegationId && (
+                    <p className="text-sm text-red-600">{errors.delegationId.message}</p>
+                  )}
+                </div>
+
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="code">Code *</Label>

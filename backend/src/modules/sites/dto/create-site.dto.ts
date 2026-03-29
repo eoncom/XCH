@@ -3,6 +3,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { SiteStatus, HealthStatus } from '@prisma/client';
 
 export class CreateSiteDto {
+  @ApiProperty({ description: 'ID of the delegation this site belongs to' })
+  @IsString()
+  delegationId: string;
+
   @ApiProperty()
   @IsString()
   code: string;

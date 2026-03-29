@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, SiteStatus, AssetType, AssetStatus, TaskStatus, TaskPriority, RackType, RackStatus, ContactCategory } from '@prisma/client';
+import { PrismaClient, UserRole, SiteStatus, AssetType, AssetStatus, TaskStatus, TaskPriority, RackType, RackStatus, ContactCategory, ScopeType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -134,10 +134,106 @@ async function main() {
 
   console.log('✅ Users created: 5 total (1 admin, 1 manager, 2 techs, 1 viewer)');
 
+  // 2b. Create organizational structure: Divisions → Delegations
+  const divIDF = await prisma.division.create({
+    data: {
+      tenantId: tenant.id,
+      name: 'Île-de-France',
+      code: 'IDF',
+      color: '#0070f3',
+      notes: 'Division couvrant la région parisienne et ses environs',
+    },
+  });
+
+  const divRA = await prisma.division.create({
+    data: {
+      tenantId: tenant.id,
+      name: 'Rhône-Alpes',
+      code: 'RA',
+      color: '#10b981',
+      notes: 'Division couvrant la région Rhône-Alpes',
+    },
+  });
+
+  const divPACA = await prisma.division.create({
+    data: {
+      tenantId: tenant.id,
+      name: 'PACA',
+      code: 'PACA',
+      color: '#f59e0b',
+      notes: 'Division Provence-Alpes-Côte d\'Azur',
+    },
+  });
+
+  const divSO = await prisma.division.create({
+    data: {
+      tenantId: tenant.id,
+      name: 'Sud-Ouest',
+      code: 'SO',
+      color: '#8b5cf6',
+      notes: 'Division couvrant le grand Sud-Ouest',
+    },
+  });
+
+  console.log('✅ Divisions created: 4 (IDF, RA, PACA, SO)');
+
+  const delParisOuest = await prisma.delegation.create({
+    data: {
+      tenantId: tenant.id,
+      divisionId: divIDF.id,
+      name: 'Paris Ouest',
+      code: 'PAR-O',
+      notes: 'Délégation couvrant Paris ouest et La Défense',
+    },
+  });
+
+  const delLyon = await prisma.delegation.create({
+    data: {
+      tenantId: tenant.id,
+      divisionId: divRA.id,
+      name: 'Lyon Métropole',
+      code: 'LYN-M',
+      notes: 'Délégation Grand Lyon',
+    },
+  });
+
+  const delMarseille = await prisma.delegation.create({
+    data: {
+      tenantId: tenant.id,
+      divisionId: divPACA.id,
+      name: 'Marseille',
+      code: 'MRS',
+      notes: 'Délégation Marseille et environs',
+    },
+  });
+
+  const delBordeaux = await prisma.delegation.create({
+    data: {
+      tenantId: tenant.id,
+      divisionId: divSO.id,
+      name: 'Bordeaux',
+      code: 'BDX',
+      notes: 'Délégation Bordeaux Métropole',
+    },
+  });
+
+  const delToulouse = await prisma.delegation.create({
+    data: {
+      tenantId: tenant.id,
+      divisionId: divSO.id,
+      name: 'Toulouse',
+      code: 'TLS',
+      notes: 'Délégation Toulouse Métropole',
+    },
+  });
+
+  console.log('✅ Delegations created: 5 (PAR-O, LYN-M, MRS, BDX, TLS)');
+
   // 3. Create 5 demo sites with realistic data
   const site1 = await prisma.site.create({
     data: {
       tenantId: tenant.id,
+      delegationId: delParisOuest.id,
       code: 'PAR-001',
       name: 'Site Paris La Défense',
       status: SiteStatus.ACTIVE,
@@ -170,6 +266,7 @@ async function main() {
   const site2 = await prisma.site.create({
     data: {
       tenantId: tenant.id,
+      delegationId: delLyon.id,
       code: 'LYN-002',
       name: 'Site Lyon Part-Dieu',
       status: SiteStatus.ACTIVE,
@@ -195,6 +292,7 @@ async function main() {
   const site3 = await prisma.site.create({
     data: {
       tenantId: tenant.id,
+      delegationId: delMarseille.id,
       code: 'MRS-003',
       name: 'Site Marseille Vieux-Port',
       status: SiteStatus.PREPARATION,
@@ -219,6 +317,7 @@ async function main() {
   const site4 = await prisma.site.create({
     data: {
       tenantId: tenant.id,
+      delegationId: delBordeaux.id,
       code: 'BDX-004',
       name: 'Datacenter Bordeaux Mérignac',
       status: SiteStatus.ACTIVE,
@@ -244,6 +343,7 @@ async function main() {
   const site5 = await prisma.site.create({
     data: {
       tenantId: tenant.id,
+      delegationId: delToulouse.id,
       code: 'TLS-005',
       name: 'Bureau Toulouse Aerospace',
       status: SiteStatus.ACTIVE,
@@ -285,6 +385,155 @@ async function main() {
   }
 
   console.log('✅ Sites created: 5 total (with GPS coordinates)');
+
+  // 3b. Create UserScopes (who can access where)
+  // Admin → TENANT scope (full access)
+  await prisma.userScope.create({
+    data: { tenantId: tenant.id, userId: admin.id, scopeType: 'TENANT', scopeId: null, grantedBy: admin.id },
+  });
+  // Manager → DIVISION IDF + DELEGATION Bordeaux (cross-division)
+  await prisma.userScope.create({
+    data: { tenantId: tenant.id, userId: manager.id, scopeType: 'DIVISION', scopeId: divIDF.id, grantedBy: admin.id },
+  });
+  await prisma.userScope.create({
+    data: { tenantId: tenant.id, userId: manager.id, scopeType: 'DELEGATION', scopeId: delBordeaux.id, grantedBy: admin.id },
+  });
+  // Tech1 → DELEGATION Lyon + SITE Marseille (cross-division)
+  await prisma.userScope.create({
+    data: { tenantId: tenant.id, userId: tech1.id, scopeType: 'DELEGATION', scopeId: delLyon.id, grantedBy: admin.id },
+  });
+  await prisma.userScope.create({
+    data: { tenantId: tenant.id, userId: tech1.id, scopeType: 'SITE', scopeId: site3.id, grantedBy: admin.id },
+  });
+  // Tech2 → DIVISION Sud-Ouest (Bordeaux + Toulouse)
+  await prisma.userScope.create({
+    data: { tenantId: tenant.id, userId: tech2.id, scopeType: 'DIVISION', scopeId: divSO.id, grantedBy: admin.id },
+  });
+  // Viewer → TENANT scope (read-only on everything)
+  await prisma.userScope.create({
+    data: { tenantId: tenant.id, userId: viewer.id, scopeType: 'TENANT', scopeId: null, grantedBy: admin.id },
+  });
+
+  console.log('✅ UserScopes created: 7 (admin=tenant, manager=IDF+BDX, tech1=LYN+MRS, tech2=SO, viewer=tenant)');
+
+  // 3c. Create BillingEntities (cost centers)
+  const beDSI = await prisma.billingEntity.create({
+    data: { tenantId: tenant.id, name: 'DSI Centrale', code: 'DSI', type: 'DIRECTION', description: 'Direction des Systèmes d\'Information' },
+  });
+  const beDOP = await prisma.billingEntity.create({
+    data: { tenantId: tenant.id, name: 'Direction des Opérations', code: 'DOP', type: 'DIRECTION', description: 'Direction opérationnelle terrain' },
+  });
+  const beDelNord = await prisma.billingEntity.create({
+    data: { tenantId: tenant.id, name: 'Délégation Paris Ouest', code: 'BE-PAR', type: 'DELEGATION', delegationId: delParisOuest.id },
+  });
+  const beDelLyon = await prisma.billingEntity.create({
+    data: { tenantId: tenant.id, name: 'Délégation Lyon Métropole', code: 'BE-LYN', type: 'DELEGATION', delegationId: delLyon.id },
+  });
+  const beSiteBDX = await prisma.billingEntity.create({
+    data: { tenantId: tenant.id, name: 'Site Bordeaux', code: 'BE-BDX', type: 'SITE', siteId: site4.id },
+  });
+  const beBUIT = await prisma.billingEntity.create({
+    data: { tenantId: tenant.id, name: 'BU IT Services', code: 'BU-IT', type: 'BU', description: 'Business Unit IT interne' },
+  });
+
+  // 3d. Create sample Expenses with CostAllocations
+  const expense1 = await prisma.expense.create({
+    data: {
+      tenantId: tenant.id,
+      label: 'Achat Switch Cisco 3850 x10',
+      type: 'EQUIPMENT',
+      totalAmount: 10000,
+      currency: 'EUR',
+      frequency: 'ONE_TIME',
+      dateIncurred: new Date('2026-01-15'),
+      bearerId: beDSI.id,
+      siteId: site1.id,
+      vendor: 'Cisco',
+      invoiceRef: 'FAC-2026-001',
+      createdBy: admin.id,
+      allocations: {
+        create: [
+          { targetId: beDelNord.id, percentage: 40, amount: 4000 },
+          { targetId: beDelLyon.id, percentage: 30, amount: 3000 },
+          { targetId: beSiteBDX.id, percentage: 30, amount: 3000 },
+        ],
+      },
+    },
+  });
+
+  const expense2 = await prisma.expense.create({
+    data: {
+      tenantId: tenant.id,
+      label: 'Contrat support réseau annuel',
+      type: 'SERVICE',
+      totalAmount: 24000,
+      currency: 'EUR',
+      frequency: 'YEARLY',
+      dateIncurred: new Date('2026-01-01'),
+      dateStart: new Date('2026-01-01'),
+      dateEnd: new Date('2026-12-31'),
+      bearerId: beDSI.id,
+      vendor: 'NetworkPro',
+      externalRef: 'CTR-NET-2026',
+      createdBy: admin.id,
+      allocations: {
+        create: [
+          { targetId: beDelNord.id, percentage: 25, amount: 6000 },
+          { targetId: beDelLyon.id, percentage: 25, amount: 6000 },
+          { targetId: beSiteBDX.id, percentage: 25, amount: 6000 },
+          { targetId: beBUIT.id, percentage: 25, amount: 6000 },
+        ],
+      },
+    },
+  });
+
+  const expense3 = await prisma.expense.create({
+    data: {
+      tenantId: tenant.id,
+      label: 'Licence monitoring Zabbix Enterprise',
+      type: 'LICENSE',
+      totalAmount: 5400,
+      currency: 'EUR',
+      frequency: 'YEARLY',
+      dateIncurred: new Date('2026-02-01'),
+      dateStart: new Date('2026-02-01'),
+      dateEnd: new Date('2027-01-31'),
+      bearerId: beBUIT.id,
+      createdBy: admin.id,
+      allocations: {
+        create: [
+          { targetId: beDSI.id, percentage: 50, amount: 2700 },
+          { targetId: beDOP.id, percentage: 50, amount: 2700 },
+        ],
+      },
+    },
+  });
+
+  const expense4 = await prisma.expense.create({
+    data: {
+      tenantId: tenant.id,
+      label: 'Prestation câblage datacenter Bordeaux',
+      type: 'PROJECT',
+      totalAmount: 8500,
+      currency: 'EUR',
+      frequency: 'ONE_TIME',
+      dateIncurred: new Date('2026-03-01'),
+      bearerId: beDOP.id,
+      siteId: site4.id,
+      vendor: 'CableTech',
+      poNumber: 'PO-2026-042',
+      createdBy: admin.id,
+      allocations: {
+        create: [
+          { targetId: beSiteBDX.id, percentage: 70, amount: 5950 },
+          { targetId: beDSI.id, percentage: 30, amount: 2550 },
+        ],
+      },
+    },
+  });
+
+  console.log('✅ BillingEntities created: 6 (DSI, DOP, 2 delegations, 1 site, 1 BU)');
+  console.log('✅ Expenses created: 4 with allocations');
 
   // 4. Create racks (6 total across sites)
   const rack1 = await prisma.rack.create({
@@ -1738,6 +1987,12 @@ async function main() {
   console.log('  🏢 Contacts: 8 (telecom, cloud, security, network, energy, CVC, integrator, FAI)');
   console.log('  📎 Attachments: 5 (3 on assets, 2 on tasks)\n');
 
+  console.log('🏢 ORGANISATION:');
+  console.log('  Division IDF → Délégation Paris Ouest → PAR-001');
+  console.log('  Division RA → Délégation Lyon Métropole → LYN-002');
+  console.log('  Division PACA → Délégation Marseille → MRS-003');
+  console.log('  Division SO → Délégation Bordeaux → BDX-004');
+  console.log('  Division SO → Délégation Toulouse → TLS-005\n');
   console.log('📍 SITES DETAILS:');
   console.log('  1. Paris La Défense (PAR-001) - ACTIVE');
   console.log('     → 12 assets, 2 racks, 6 tasks');
@@ -1750,6 +2005,13 @@ async function main() {
   console.log('  5. Bureau Toulouse (TLS-005) - ACTIVE');
   console.log('     → 5 assets, 1 rack, 2 tasks (R&D)\n');
 
+  console.log('💰 BILLING:');
+  console.log('  6 BillingEntities: DSI, DOP, BE-PAR, BE-LYN, BE-BDX, BU-IT');
+  console.log('  4 Expenses with CostAllocations');
+  console.log('    - Switch Cisco 10000€ (DSI→PAR 40%, LYN 30%, BDX 30%)');
+  console.log('    - Support réseau 24000€/an (DSI→PAR/LYN/BDX/BU-IT 25% each)');
+  console.log('    - Licence Zabbix 5400€/an (BU-IT→DSI 50%, DOP 50%)');
+  console.log('    - Câblage BDX 8500€ (DOP→BDX 70%, DSI 30%)\n');
   console.log('✨ Ready for comprehensive demo and testing!');
 }
 

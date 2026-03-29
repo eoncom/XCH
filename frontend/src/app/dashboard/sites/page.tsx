@@ -9,7 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { sitesApi } from '@/lib/api/sites';
-import { Plus, MapPin, Search, List, Map, LayoutGrid, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { organizationApi } from '@/lib/api/organization';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, MapPin, Search, List, Map, LayoutGrid, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
@@ -61,6 +63,8 @@ export default function SitesPage() {
   const [siteViewMode, setSiteViewMode] = useState<'grid' | 'list'>('grid');
   const [sortField, setSortField] = useState<string>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [filterDivisionId, setFilterDivisionId] = useState<string>('');
+  const [filterDelegationId, setFilterDelegationId] = useState<string>('');
   const router = useRouter();
   const { canCreate } = usePermissions();
 
@@ -69,12 +73,27 @@ export default function SitesPage() {
     queryFn: sitesApi.getAll,
   });
 
-  const filteredSites = sites?.filter(
-    (site) =>
+  const { data: divisions } = useQuery({
+    queryKey: ['divisions'],
+    queryFn: () => organizationApi.getDivisions(),
+  });
+
+  const { data: delegations } = useQuery({
+    queryKey: ['delegations', filterDivisionId],
+    queryFn: () => organizationApi.getDelegations(filterDivisionId || undefined),
+  });
+
+  const filteredSites = sites?.filter((site) => {
+    const matchesSearch = !search ||
       site.name.toLowerCase().includes(search.toLowerCase()) ||
       site.code.toLowerCase().includes(search.toLowerCase()) ||
-      site.city?.toLowerCase().includes(search.toLowerCase())
-  );
+      site.city?.toLowerCase().includes(search.toLowerCase());
+
+    const matchesDivision = !filterDivisionId || site.division?.id === filterDivisionId;
+    const matchesDelegation = !filterDelegationId || site.delegationId === filterDelegationId;
+
+    return matchesSearch && matchesDivision && matchesDelegation;
+  });
 
   // Sort sites for table view
   const sortedSites = useMemo(() => {
@@ -175,15 +194,44 @@ export default function SitesPage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher un site..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10"
-        />
+      {/* Search & Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher un site..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={filterDivisionId} onValueChange={(v) => { setFilterDivisionId(v === 'all' ? '' : v); setFilterDelegationId(''); }}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Division" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les divisions</SelectItem>
+            {divisions?.map((d) => (
+              <SelectItem key={d.id} value={d.id}>
+                <span className="flex items-center gap-2">
+                  {d.color && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />}
+                  {d.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterDelegationId} onValueChange={(v) => setFilterDelegationId(v === 'all' ? '' : v)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Délégation" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les délégations</SelectItem>
+            {delegations?.map((d) => (
+              <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Tabs: List / Map */}
@@ -298,6 +346,13 @@ export default function SitesPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2 text-sm">
+                        {site.division && (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            {site.division.color && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: site.division.color }} />}
+                            <span>{site.division.name}</span>
+                            {site.delegation && <span> &gt; {site.delegation.name}</span>}
+                          </div>
+                        )}
                         {site.city && (
                           <div className="flex items-center text-muted-foreground">
                             <MapPin className="mr-2 h-4 w-4" />

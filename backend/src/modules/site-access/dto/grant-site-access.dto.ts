@@ -19,6 +19,8 @@ export interface ResourcePermissions {
   tasks?: ResourcePermissionLevel;
   floorPlans?: ResourcePermissionLevel;
   contacts?: ResourcePermissionLevel;
+  monitoring?: ResourcePermissionLevel;
+  netbox?: ResourcePermissionLevel;
 }
 
 export class GrantSiteAccessDto {

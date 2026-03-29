@@ -17,6 +17,78 @@ Ce fichier track toutes les sessions de développement.
 
 ---
 
+## 2026-03-29
+
+### Session 16-17 : Organisation + Accès flexible + Répartition des coûts (v1.2.0)
+**Durée :** ~8h (2 sessions continues)
+**Status :** ✅ Terminée - 3 Phases implémentées
+
+**Actions principales :**
+
+1. **Phase A — Structure organisationnelle**
+   - Modèles Prisma : Division, Delegation + Site.delegationId obligatoire
+   - Backend module `organization/` : CRUD divisions, délégations, arbre complet
+   - Filtres divisionId/delegationId dans `sites.service.ts`
+   - Casbin : 4 policies divisions/delegations
+   - Frontend : onglet Organisation dans Settings (CRUD arbre Division > Délégation)
+   - Frontend : filtres Division/Délégation sur liste sites + formulaire site
+   - Seed data : 3 divisions, 6 délégations, sites rattachés
+
+2. **Phase B — UserScope + AccessGrant**
+   - Modèle UserScope (1-to-many User, ScopeType: TENANT/DIVISION/DELEGATION/SITE)
+   - Modèle AccessGrant (exceptions additives, AccessScope, expiration, resourcePermissions JSON)
+   - Backend modules : `user-scopes/` et `access-grants/` (CRUD complet)
+   - Réécriture complète `site-access.service.ts` :
+     - `getAccessibleSiteIds()` : UserScope + AccessGrant uniquement
+     - `getResourcePermission()` : MAX(rolePermissions via scopes, grantPermissions)
+     - UserSiteAccess conservé en DB mais NON utilisé dans la résolution
+   - Ajout monitoring/netbox à ResourcePermissions
+   - `/my-permissions` : retourne scopes[] + accessGrants[] enrichis
+   - Frontend : réécriture complète `usePermissions` hook
+   - Frontend : UI portées + grants sur page user edit (add/remove scopes, modal grants)
+   - Seed data : 6 users avec portées variées (admin tenant, admin division, manager multi-délégations, tech division+site, viewer transverse, partenaire plans)
+
+3. **Phase C — Répartition des coûts**
+   - Modèles Prisma : BillingEntity, Expense (6 types, 4 fréquences), CostAllocation
+   - Backend module `billing-entities/` : CRUD + summary (totalBorne/totalRefactured/netBorne/totalImputed)
+   - Backend module `expenses/` : CRUD + allocations inline + rapports (by-bearer, by-target, chargeback) + export CSV
+   - Validation : somme allocations ≤ 100%, auto-calcul montants
+   - Casbin : 8 policies billing-entities/expenses
+   - Frontend : 4 nouvelles pages costs (liste, new, edit, rapports, entities)
+   - Frontend API : `costs.ts` (billingEntitiesApi + expensesApi)
+   - Nav item "Coûts" (Receipt icon) avec permResource expenses
+   - Seed data : 6 BillingEntities + 4 Expenses avec allocations
+
+**Fichiers créés :** ~30 fichiers
+- Backend : 15 fichiers (5 modules × ~3 fichiers chacun)
+- Frontend : 7 fichiers (5 pages + 2 API/hooks)
+- Prisma : schema.prisma + seed.ts modifiés
+
+**Fichiers modifiés :** ~15 fichiers
+- `backend/prisma/schema.prisma` — 7 nouveaux modèles + 3 enums
+- `backend/src/app.module.ts` — 4 nouveaux imports
+- `backend/casbin/policy.csv` — 12 nouvelles policies
+- `backend/src/modules/site-access/site-access.service.ts` — réécriture complète
+- `backend/src/modules/site-access/site-access.controller.ts` — réécriture /my-permissions
+- `frontend/src/hooks/usePermissions.ts` — réécriture complète
+- `frontend/src/lib/api/site-access.ts` — types + API scopes/grants
+- `frontend/src/lib/api/costs.ts` — nouveau
+- `frontend/src/app/dashboard/layout.tsx` — nav Coûts
+- `frontend/src/app/dashboard/users/[id]/edit/page.tsx` — UI portées + grants
+
+**Décisions architecturales clés :**
+- Rôle = quoi, UserScope = où (N portées), AccessGrant = ajustements additifs
+- ADMIN/MANAGER soumis à leurs portées (plus de bypass global)
+- BillingEntity = centre de coût générique (pas limité à la hiérarchie org)
+- 3 axes financiers : porteur (qui paie), dépense (quoi), cibles (à qui c'est imputé)
+
+**Prochaine session attendue :**
+- Commit des changements + déploiement serveur (migration Prisma + seed)
+- Tests E2E des 3 phases sur le serveur
+- Mise à jour repo XCH-deploy pour production
+
+---
+
 ## 2026-02-01
 
 ### Session 15 : Development Team aitmpl.com - Finalisation MVP Frontend
@@ -4490,6 +4562,27 @@ fix(rbac): enforce granular permissions for Monitoring and NetBox modules
 **Commit message:**
 ```
 fix(rbac): NetBox admin-only, TV dashboard back button, policy sync cleanup
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-03-29
+
+**Date:** 2026-03-29 17:07:42
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 33
+- Frontend files modified: 17
+
+**Commit message:**
+```
+fix: TV dashboard auth in new tab via checkSession cookie validation
 ```
 
 **Auto-updated files:**

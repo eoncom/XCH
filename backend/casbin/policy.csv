@@ -43,6 +43,14 @@ p, ADMIN, monitoring, read, *
 p, ADMIN, monitoring, manage, *
 p, ADMIN, netbox, read, *
 p, ADMIN, netbox, manage, *
+p, ADMIN, divisions, create, *
+p, ADMIN, divisions, read, *
+p, ADMIN, divisions, update, *
+p, ADMIN, divisions, delete, *
+p, ADMIN, delegations, create, *
+p, ADMIN, delegations, read, *
+p, ADMIN, delegations, update, *
+p, ADMIN, delegations, delete, *
 
 # MANAGER
 p, MANAGER, tenants, read, *
@@ -61,6 +69,8 @@ p, MANAGER, contacts, read, *
 p, MANAGER, contacts, update, *
 p, MANAGER, contact-types, read, *
 p, MANAGER, monitoring, read, *
+p, MANAGER, divisions, read, *
+p, MANAGER, delegations, read, *
 
 # TECHNICIEN
 p, TECHNICIEN, tenants, read, *
@@ -81,6 +91,8 @@ p, TECHNICIEN, integrations, read, *
 p, TECHNICIEN, contacts, read, *
 p, TECHNICIEN, contact-types, read, *
 p, TECHNICIEN, monitoring, read, *
+p, TECHNICIEN, divisions, read, *
+p, TECHNICIEN, delegations, read, *
 
 # VIEWER
 p, VIEWER, tenants, read, *
@@ -93,3 +105,19 @@ p, VIEWER, integrations, read, *
 p, VIEWER, contacts, read, *
 p, VIEWER, contact-types, read, *
 p, VIEWER, monitoring, read, *
+p, VIEWER, divisions, read, *
+p, VIEWER, delegations, read, *
+
+# COST ALLOCATION
+p, ADMIN, billing-entities, create, *
+p, ADMIN, billing-entities, read, *
+p, ADMIN, billing-entities, update, *
+p, ADMIN, billing-entities, delete, *
+p, ADMIN, expenses, create, *
+p, ADMIN, expenses, read, *
+p, ADMIN, expenses, update, *
+p, ADMIN, expenses, delete, *
+p, MANAGER, billing-entities, read, *
+p, MANAGER, expenses, create, *
+p, MANAGER, expenses, read, *
+p, MANAGER, expenses, update, *

@@ -41,6 +41,8 @@ model Tenant {
   // Relations
   users               User[]
   authProviders        AuthProvider[]
+  divisions            Division[]
+  delegations          Delegation[]
   sites                Site[]
   assets               Asset[]
   racks                Rack[]
@@ -50,6 +52,8 @@ model Tenant {
   integrationMappings  IntegrationMapping[]
   auditLogs            AuditLog[]
   enumLabels           EnumLabel[]
+  billingEntities      BillingEntity[]
+  expenses             Expense[]
 
   @@index([status])
   @@map("tenants")
@@ -104,7 +108,9 @@ model User {
   taskComments   TaskComment[]   @relation("TaskComments")
   auditLogs      AuditLog[]
   photos         Photo[]
-  siteAccess     UserSiteAccess[]
+  siteAccess     UserSiteAccess[] // DEPRECATED — replaced by scopes + accessGrants
+  scopes         UserScope[]
+  accessGrants   AccessGrant[]
   assetMovements AssetMovement[]
 
   @@unique([tenantId, email])
@@ -148,6 +154,57 @@ model AuthProvider {
 }
 
 // ============================================================================
+// ORGANISATION (Division → Délégation → Site)
+// ============================================================================
+
+model Division {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name     String @db.VarChar(100)
+  code     String @db.VarChar(20)
+  color    String? @db.VarChar(7) // Hex color for visual grouping
+  notes    String? @db.Text
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  delegations Delegation[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("divisions")
+}
+
+model Delegation {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  divisionId String
+  division   Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+
+  name     String @db.VarChar(100)
+  code     String @db.VarChar(20)
+  notes    String? @db.Text
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  sites Site[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([divisionId])
+  @@map("delegations")
+}
+
+// ============================================================================
 // SITES (CHANTIERS)
 // ============================================================================
 
@@ -168,6 +225,10 @@ model Site {
   id       String     @id @default(cuid())
   tenantId String
   tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  delegationId String
+  delegation   Delegation @relation(fields: [delegationId], references: [id], onDelete: Restrict)
+
   code     String
   name     String
   status   SiteStatus @default(ACTIVE)
@@ -224,6 +285,7 @@ model Site {
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([tenantId, healthStatus])
+  @@index([delegationId])
   @@map("sites")
 }
 
@@ -865,6 +927,61 @@ model UserSiteAccess {
 }
 
 // ============================================================================
+// USER SCOPES & ACCESS GRANTS (replaces UserSiteAccess for permission resolution)
+// ============================================================================
+
+enum ScopeType {
+  TENANT     // All sites in the tenant
+  DIVISION   // All sites in a division
+  DELEGATION // All sites in a delegation
+  SITE       // A specific site
+}
+
+model UserScope {
+  id       String    @id @default(cuid())
+  tenantId String
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  scopeType ScopeType
+  scopeId   String?   // null if TENANT, otherwise divisionId/delegationId/siteId
+
+  grantedBy String?
+  grantedAt DateTime  @default(now())
+
+  @@unique([userId, scopeType, scopeId])
+  @@index([tenantId, userId])
+  @@map("user_scopes")
+}
+
+enum AccessScope {
+  ALL_SITES  // All sites in the tenant
+  DIVISION   // All sites in a division
+  DELEGATION // All sites in a delegation
+  SITE       // A specific site
+}
+
+model AccessGrant {
+  id       String      @id @default(cuid())
+  tenantId String
+  userId   String
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  scope    AccessScope
+  scopeId  String?     // divisionId, delegationId, or siteId depending on scope
+
+  resourcePermissions Json @db.JsonB // {"floorPlans":"READ","tasks":"READ",...} — ADDITIVE ONLY
+  label    String?     @db.VarChar(100) // e.g. "Partenaire plans"
+
+  grantedBy String?
+  grantedAt DateTime   @default(now())
+  expiresAt DateTime?  // Temporary access
+
+  @@index([tenantId, userId])
+  @@map("access_grants")
+}
+
+// ============================================================================
 // CASBIN (RBAC/ABAC)
 // ============================================================================
 
@@ -905,4 +1022,119 @@ model EnumLabel {
   @@index([tenantId])
   @@index([tenantId, enumType])
   @@map("enum_labels")
+}
+
+// ============================================================================
+// COST ALLOCATION (Phase C)
+// ============================================================================
+
+enum ExpenseType {
+  EQUIPMENT
+  SERVICE
+  PROJECT
+  CONSUMABLE
+  LICENSE
+  OTHER
+}
+
+enum ExpenseFrequency {
+  ONE_TIME
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+model BillingEntity {
+  id          String  @id @default(cuid())
+  tenantId    String
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String  @db.VarChar(100)
+  code        String  @db.VarChar(20)
+  type        String  @db.VarChar(50) // "DIRECTION", "BU", "DELEGATION", "SITE", "SERVICE", "OTHER"
+  description String? @db.Text
+  isActive    Boolean @default(true)
+
+  // Optional links to org hierarchy (informational, not constraining)
+  divisionId   String?
+  delegationId String?
+  siteId       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  expensesBorne       Expense[]        @relation("bearer")
+  allocationsReceived CostAllocation[] @relation("target")
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("billing_entities")
+}
+
+model Expense {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // What
+  label       String       @db.VarChar(200)
+  description String?      @db.Text
+  type        ExpenseType  @default(OTHER)
+
+  // How much
+  totalAmount Float
+  currency    String           @default("EUR") @db.VarChar(3)
+  frequency   ExpenseFrequency @default(ONE_TIME)
+
+  // When
+  dateIncurred DateTime
+  dateStart    DateTime?
+  dateEnd      DateTime?
+
+  // Who pays (bearer)
+  bearerId String
+  bearer   BillingEntity @relation("bearer", fields: [bearerId], references: [id])
+
+  // Optional links to XCH entities
+  siteId      String?
+  assetId     String?
+  externalRef String? @db.VarChar(200)
+
+  // Vendor reference
+  vendor     String? @db.VarChar(100)
+  invoiceRef String? @db.VarChar(100)
+  poNumber   String? @db.VarChar(50)
+
+  notes     String? @db.Text
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Allocations
+  allocations CostAllocation[]
+
+  @@index([tenantId])
+  @@index([tenantId, type])
+  @@index([bearerId])
+  @@map("expenses")
+}
+
+model CostAllocation {
+  id        String  @id @default(cuid())
+  expenseId String
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  // Target
+  targetId String
+  target   BillingEntity @relation("target", fields: [targetId], references: [id])
+
+  // Allocation
+  percentage Float
+  amount     Float
+
+  notes String? @db.Text
+
+  @@index([expenseId])
+  @@index([targetId])
+  @@map("cost_allocations")
 }
