@@ -1,6 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Proxy /api/* requests to the backend service
+  async rewrites() {
+    const backendUrl = process.env.BACKEND_INTERNAL_URL || 'http://xch-backend:3000';
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
+      },
+    ];
+  },
   typescript: {
     // Allow production builds to complete even with type errors
     ignoreBuildErrors: true,
