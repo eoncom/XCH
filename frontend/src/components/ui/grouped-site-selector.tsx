@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Select,
@@ -8,7 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { organizationApi } from '@/lib/api/organization';
+import { Search } from 'lucide-react';
 
 interface GroupedSiteSelectorProps {
   value: string;
@@ -27,7 +30,8 @@ interface GroupedSiteSelectorProps {
 
 /**
  * Reusable site selector grouped by Division > Délégation.
- * Uses the organization tree API to display sites hierarchically.
+ * Uses the organization tree API (already scope-filtered by backend).
+ * Includes search for long lists.
  */
 export function GroupedSiteSelector({
   value,
@@ -40,11 +44,45 @@ export function GroupedSiteSelector({
   disabled = false,
   className,
 }: GroupedSiteSelectorProps) {
+  const [search, setSearch] = useState('');
+
   const { data: orgTree } = useQuery({
     queryKey: ['organization-tree'],
     queryFn: () => organizationApi.getTree(),
     staleTime: 60_000,
   });
+
+  // Count total sites for search threshold
+  const totalSites = useMemo(() => {
+    if (!orgTree) return 0;
+    return orgTree.reduce((sum, div) =>
+      sum + div.delegations.reduce((s, del) => s + (del.sites?.length || 0), 0), 0);
+  }, [orgTree]);
+
+  // Filter tree by search
+  const filteredTree = useMemo(() => {
+    if (!orgTree || !search.trim()) return orgTree;
+    const q = search.toLowerCase();
+    return orgTree
+      .map(div => ({
+        ...div,
+        delegations: div.delegations
+          .map(del => ({
+            ...del,
+            sites: (del.sites || []).filter(site =>
+              site.name.toLowerCase().includes(q) ||
+              site.code.toLowerCase().includes(q) ||
+              del.code.toLowerCase().includes(q) ||
+              del.name.toLowerCase().includes(q) ||
+              (site.city && site.city.toLowerCase().includes(q))
+            ),
+          }))
+          .filter(del => del.sites.length > 0),
+      }))
+      .filter(div => div.delegations.length > 0);
+  }, [orgTree, search]);
+
+  const showSearch = totalSites > 5;
 
   return (
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
@@ -52,10 +90,24 @@ export function GroupedSiteSelector({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
+        {showSearch && (
+          <div className="px-2 pb-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher un site..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-8 pl-7 text-sm"
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        )}
         {allowNone && (
           <SelectItem value={noneValue}>{noneLabel}</SelectItem>
         )}
-        {orgTree?.map((division) => {
+        {filteredTree?.map((division) => {
           const allSites = division.delegations.flatMap((d) => d.sites || []);
           if (allSites.length === 0 && !showCount) return null;
           return (
@@ -86,6 +138,11 @@ export function GroupedSiteSelector({
             </div>
           );
         })}
+        {filteredTree && filteredTree.length === 0 && search && (
+          <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+            Aucun site trouvé
+          </div>
+        )}
       </SelectContent>
     </Select>
   );

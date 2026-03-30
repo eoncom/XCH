@@ -224,7 +224,18 @@ export class OrganizationService {
   // ORGANIZATION TREE
   // ============================================================================
 
-  async getTree(tenantId: string, includeInactive = false) {
+  /**
+   * Get organization tree, optionally filtered by accessible site IDs.
+   * If accessibleSiteIds is null, returns all sites (full tenant access).
+   * If accessibleSiteIds is an array, only includes those sites and prunes empty branches.
+   */
+  async getTree(tenantId: string, includeInactive = false, accessibleSiteIds?: string[] | null) {
+    const siteFilter: any = {};
+    if (accessibleSiteIds !== null && accessibleSiteIds !== undefined) {
+      if (accessibleSiteIds.length === 0) return [];
+      siteFilter.id = { in: accessibleSiteIds };
+    }
+
     const divisions = await this.prisma.division.findMany({
       where: {
         tenantId,
@@ -235,6 +246,7 @@ export class OrganizationService {
           where: includeInactive ? {} : { isActive: true },
           include: {
             sites: {
+              where: siteFilter,
               select: { id: true, code: true, name: true, status: true, city: true },
               orderBy: { name: 'asc' },
             },
@@ -244,6 +256,16 @@ export class OrganizationService {
       },
       orderBy: { name: 'asc' },
     });
+
+    // Prune empty branches: remove delegations with no sites, divisions with no delegations
+    if (accessibleSiteIds !== null && accessibleSiteIds !== undefined) {
+      return divisions
+        .map(div => ({
+          ...div,
+          delegations: div.delegations.filter(del => del.sites.length > 0),
+        }))
+        .filter(div => div.delegations.length > 0);
+    }
 
     return divisions;
   }

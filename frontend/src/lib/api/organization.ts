@@ -27,7 +27,7 @@ export interface Delegation {
   updatedAt: string;
   division?: { id: string; name: string; code: string; color?: string };
   _count?: { sites: number };
-  sites?: { id: string; code: string; name: string; status: string }[];
+  sites?: { id: string; code: string; name: string; status: string; city?: string }[];
 }
 
 export interface OrganizationTree extends Division {

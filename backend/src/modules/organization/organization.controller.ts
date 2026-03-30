@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
+import { SiteAccessService } from '../site-access/site-access.service';
 import { CreateDivisionDto } from './dto/create-division.dto';
 import { UpdateDivisionDto } from './dto/update-division.dto';
 import { CreateDelegationDto } from './dto/create-delegation.dto';
@@ -15,7 +16,10 @@ import { AuthRequest } from '../../types/request.interface';
 @UseGuards(JwtAuthGuard, CasbinGuard)
 @ApiBearerAuth()
 export class OrganizationController {
-  constructor(private readonly organizationService: OrganizationService) {}
+  constructor(
+    private readonly organizationService: OrganizationService,
+    private readonly siteAccessService: SiteAccessService,
+  ) {}
 
   // ============================================================================
   // DIVISIONS
@@ -111,12 +115,16 @@ export class OrganizationController {
 
   @Get('organization/tree')
   @Resource('divisions') @Action('read')
-  @ApiOperation({ summary: 'Get full organization tree: Divisions → Delegations → Sites' })
+  @ApiOperation({ summary: 'Get organization tree filtered by user scope' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
-  getTree(
+  async getTree(
     @Query('includeInactive') includeInactive: string,
     @Request() req: AuthRequest,
   ) {
-    return this.organizationService.getTree(req.user.tenantId, includeInactive === 'true');
+    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.organizationService.getTree(req.user.tenantId, includeInactive === 'true', accessibleSiteIds);
   }
 }
