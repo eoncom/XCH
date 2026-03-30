@@ -117,9 +117,25 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current session status (checks accessToken cookie)' })
   @ApiResponse({ status: 200, description: 'Returns current user if authenticated' })
   @ApiResponse({ status: 401, description: 'Unauthorized - no valid session' })
-  getSession(@Request() req: AuthRequest) {
+  async getSession(@Request() req: AuthRequest) {
+    // Enrich JWT data with full user info from DB (includes totpEnabled, name, tenant, etc.)
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: req.user.userId || req.user.id },
+      include: { tenant: { select: { id: true, name: true, subdomain: true } } },
+    });
+    if (!dbUser) {
+      throw new UnauthorizedException('User not found');
+    }
     return {
-      user: req.user,
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        name: dbUser.name,
+        role: dbUser.role,
+        tenantId: dbUser.tenantId,
+        tenant: dbUser.tenant,
+        totpEnabled: dbUser.totpEnabled || false,
+      },
       isAuthenticated: true,
     };
   }
