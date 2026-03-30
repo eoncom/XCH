@@ -330,6 +330,81 @@ export class SiteAccessService {
     return perm !== ResourcePermissionLevel.NONE;
   }
 
+  /**
+   * Get user IDs that are visible to a scoped user.
+   * A user is visible if any of their scopes overlap with the requesting user's scope.
+   * Returns null if the requesting user has TENANT scope (sees all users).
+   */
+  async getVisibleUserIds(tenantId: string, requestingUserId: string): Promise<string[] | null> {
+    // Get requesting user's accessible site IDs
+    const accessibleSiteIds = await this.getAccessibleSiteIds(tenantId, requestingUserId);
+
+    // null = TENANT scope, sees all users
+    if (accessibleSiteIds === null) return null;
+
+    // Empty access = see no one (except self)
+    if (accessibleSiteIds.length === 0) return [requestingUserId];
+
+    // Find all users in the tenant who have scopes overlapping with the requesting user's sites
+    const allScopes = await this.prisma.userScope.findMany({
+      where: { tenantId },
+      select: { userId: true, scopeType: true, scopeId: true },
+    });
+
+    const visibleUserIds = new Set<string>();
+    visibleUserIds.add(requestingUserId); // Always see yourself
+
+    for (const scope of allScopes) {
+      if (visibleUserIds.has(scope.userId)) continue;
+
+      // TENANT scope users are visible to everyone (they manage the whole tenant)
+      if (scope.scopeType === 'TENANT') {
+        visibleUserIds.add(scope.userId);
+        continue;
+      }
+
+      // Resolve the target user's scope to site IDs
+      const scopeSiteIds = await this.resolveScopeSiteIds(tenantId, scope.scopeType, scope.scopeId);
+      if (scopeSiteIds === null) {
+        visibleUserIds.add(scope.userId);
+        continue;
+      }
+
+      // Check overlap
+      const hasOverlap = scopeSiteIds.some(id => accessibleSiteIds.includes(id));
+      if (hasOverlap) {
+        visibleUserIds.add(scope.userId);
+      }
+    }
+
+    // Also include users with access grants that overlap
+    const allGrants = await this.prisma.accessGrant.findMany({
+      where: {
+        tenantId,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      select: { userId: true, scope: true, scopeId: true },
+    });
+
+    for (const grant of allGrants) {
+      if (visibleUserIds.has(grant.userId)) continue;
+
+      const grantScopeType = grant.scope === 'ALL_SITES' ? 'TENANT' : grant.scope;
+      const grantSiteIds = await this.resolveScopeSiteIds(tenantId, grantScopeType, grant.scopeId);
+      if (grantSiteIds === null) {
+        visibleUserIds.add(grant.userId);
+        continue;
+      }
+
+      const hasOverlap = grantSiteIds.some(id => accessibleSiteIds.includes(id));
+      if (hasOverlap) {
+        visibleUserIds.add(grant.userId);
+      }
+    }
+
+    return Array.from(visibleUserIds);
+  }
+
   // ==========================================================================
   // LEGACY METHODS (UserSiteAccess CRUD — kept for backward compat)
   // These do NOT affect permission resolution.

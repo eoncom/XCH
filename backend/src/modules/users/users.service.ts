@@ -49,9 +49,14 @@ export class UsersService {
     return result;
   }
 
-  async findAll(tenantId: string) {
+  async findAll(tenantId: string, visibleUserIds?: string[] | null) {
+    const where: any = { tenantId };
+    // If visibleUserIds is an array, filter to only those users
+    if (visibleUserIds !== null && visibleUserIds !== undefined) {
+      where.id = { in: visibleUserIds };
+    }
     const users = await this.prisma.user.findMany({
-      where: { tenantId },
+      where,
       include: {
         tenant: {
           select: {

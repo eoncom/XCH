@@ -232,6 +232,13 @@ export class RacksService {
       throw new NotFoundException('Asset not found or not on the same site as the rack');
     }
 
+    // Check if asset is already mounted in another rack
+    if (asset.rackId && asset.rackId !== rackId) {
+      throw new BadRequestException(
+        `Asset is already mounted in another rack. Unmount it first.`,
+      );
+    }
+
     // Validate position and height
     if (mountDto.positionU < 1 || mountDto.positionU > rack.heightU) {
       throw new BadRequestException(`Position U must be between 1 and ${rack.heightU}`);

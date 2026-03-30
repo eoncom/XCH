@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { SiteAccessService } from '../site-access/site-access.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -15,7 +16,10 @@ import { AuthRequest } from '../../types/request.interface';
 @UseGuards(JwtAuthGuard, CasbinGuard)
 @ApiBearerAuth()
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly siteAccessService: SiteAccessService,
+  ) {}
 
   @Post()
   @Resource('users') @Action('create')
@@ -29,9 +33,13 @@ export class UsersController {
 
   @Get()
   @Resource('users') @Action('read')
-  @ApiOperation({ summary: 'Get all users' })
-  findAll(@Request() req: AuthRequest) {
-    return this.usersService.findAll(req.user.tenantId);
+  @ApiOperation({ summary: 'Get all users (filtered by requesting user scope)' })
+  async findAll(@Request() req: AuthRequest) {
+    const visibleUserIds = await this.siteAccessService.getVisibleUserIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.usersService.findAll(req.user.tenantId, visibleUserIds);
   }
 
   @Get(':id')

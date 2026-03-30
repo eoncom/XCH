@@ -1,7 +1,6 @@
 // @ts-nocheck - Temporary fix for Radix UI + React 19 type incompatibility
 'use client';
 
-import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -77,7 +76,7 @@ const assetSchema = z.object({
     'OTHER',
   ]),
   status: z.enum(['IN_SERVICE', 'OUT_OF_SERVICE', 'IN_TRANSIT', 'STOCK', 'RETIRED']),
-  siteId: z.string().optional(),
+  siteId: z.string().min(1, 'Le site est obligatoire'),
   name: z.string().optional(),
   manufacturer: z.string().optional(),
   model: z.string().optional(),
@@ -198,7 +197,7 @@ export default function EditAssetPage() {
     if (!cleaned.notes) delete cleaned.notes;
     if (cleaned.weight === undefined || cleaned.weight === null) delete cleaned.weight;
     if (cleaned.powerConsumption === undefined || cleaned.powerConsumption === null) delete cleaned.powerConsumption;
-    if (cleaned.siteId === 'none' || !cleaned.siteId) cleaned.siteId = null;
+    // siteId is required - keep it
 
     // Clean networkInfo: remove empty subfields, remove entire object if all empty
     if (cleaned.networkInfo) {
@@ -225,13 +224,6 @@ export default function EditAssetPage() {
   const type = watch('type');
   const status = watch('status');
   const siteId = watch('siteId');
-
-  // Auto-clear site when status changes to RETIRED or STOCK
-  useEffect(() => {
-    if (status === 'RETIRED' || status === 'STOCK') {
-      setValue('siteId', 'none');
-    }
-  }, [status, setValue]);
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
@@ -366,24 +358,23 @@ export default function EditAssetPage() {
           </CardContent>
         </Card>
 
-        {/* Section 3: Localisation (optional) */}
+        {/* Section 3: Localisation */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Localisation
-              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
-            </CardTitle>
+            <CardTitle>Localisation</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="siteId">Site d'affectation</Label>
+                <Label htmlFor="siteId">Site d'affectation <span className="text-destructive">*</span></Label>
                 <GroupedSiteSelector
                   value={siteId}
                   onValueChange={(value) => setValue('siteId', value)}
-                  allowNone
                   placeholder="Sélectionner un site..."
                 />
+                {errors.siteId && (
+                  <p className="text-sm text-destructive">{errors.siteId.message}</p>
+                )}
               </div>
 
               <div className="space-y-2">
