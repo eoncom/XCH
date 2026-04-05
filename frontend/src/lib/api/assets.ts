@@ -2,12 +2,12 @@ import { apiClient } from '../api-client';
 import type { Asset, AssetMovement, CreateAssetDto, UpdateAssetDto } from '@/types';
 
 export const assetsApi = {
-  getAll: (params?: {
+  getAll: async (params?: {
     siteId?: string;
     status?: string;
     type?: string;
     search?: string;
-  }) => {
+  }): Promise<Asset[]> => {
     const searchParams = new URLSearchParams();
     if (params?.siteId) searchParams.append('siteId', params.siteId);
     if (params?.status) searchParams.append('status', params.status);
@@ -15,7 +15,8 @@ export const assetsApi = {
     if (params?.search) searchParams.append('search', params.search);
 
     const query = searchParams.toString();
-    return apiClient.get<Asset[]>(`/api/assets${query ? `?${query}` : ''}`);
+    const res = await apiClient.get<{ data: Asset[]; meta: any }>(`/api/assets${query ? `?${query}` : ''}`);
+    return res.data;
   },
 
   getAllPaginated: (params?: {

@@ -3,7 +3,8 @@ import type { Site } from '@/types';
 
 export const sitesApi = {
   getAll: async (): Promise<Site[]> => {
-    return apiClient.get<Site[]>('/api/sites');
+    const res = await apiClient.get<{ data: Site[]; meta: any }>('/api/sites');
+    return res.data;
   },
 
   getAllPaginated: async (params?: {

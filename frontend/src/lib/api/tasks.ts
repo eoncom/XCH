@@ -2,12 +2,12 @@ import { apiClient } from '../api-client';
 import type { Task, TaskComment, CreateTaskDto, UpdateTaskDto } from '@/types';
 
 export const tasksApi = {
-  getAll: (params?: {
+  getAll: async (params?: {
     status?: string;
     priority?: string;
     siteId?: string;
     assignedTo?: string;
-  }) => {
+  }): Promise<Task[]> => {
     const searchParams = new URLSearchParams();
     if (params?.status) searchParams.append('status', params.status);
     if (params?.priority) searchParams.append('priority', params.priority);
@@ -15,7 +15,8 @@ export const tasksApi = {
     if (params?.assignedTo) searchParams.append('assignedTo', params.assignedTo);
 
     const query = searchParams.toString();
-    return apiClient.get<Task[]>(`/api/tasks${query ? `?${query}` : ''}`);
+    const res = await apiClient.get<{ data: Task[]; meta: any }>(`/api/tasks${query ? `?${query}` : ''}`);
+    return res.data;
   },
 
   getAllPaginated: (params?: {

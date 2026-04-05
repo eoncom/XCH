@@ -4757,3 +4757,24 @@ fix: add data migration for ACCESS_POINT → WIFI_AP unification
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-05
+
+**Date:** 2026-04-05 23:31:04
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 4
+
+**Commit message:**
+```
+fix: getAll API functions return arrays, getAllPaginated for list pages
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

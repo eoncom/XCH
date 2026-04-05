@@ -2,12 +2,12 @@ import { apiClient } from '../api-client';
 import type { Contact, ContactType, CreateContactDto, UpdateContactDto, CreateContactTypeDto, UpdateContactTypeDto } from '@/types';
 
 export const contactsApi = {
-  getAll: (params?: {
+  getAll: async (params?: {
     typeId?: string;
     category?: string;
     search?: string;
     isActive?: boolean;
-  }) => {
+  }): Promise<Contact[]> => {
     const searchParams = new URLSearchParams();
     if (params?.typeId) searchParams.append('typeId', params.typeId);
     if (params?.category) searchParams.append('category', params.category);
@@ -15,7 +15,8 @@ export const contactsApi = {
     if (params?.isActive !== undefined) searchParams.append('isActive', String(params.isActive));
 
     const query = searchParams.toString();
-    return apiClient.get<Contact[]>(`/api/contacts${query ? `?${query}` : ''}`);
+    const res = await apiClient.get<{ data: Contact[]; meta: any }>(`/api/contacts${query ? `?${query}` : ''}`);
+    return res.data;
   },
 
   getAllPaginated: (params?: {
