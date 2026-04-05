@@ -121,7 +121,22 @@ export interface TargetReport {
 }
 
 export const expensesApi = {
-  getAll: (params?: { type?: string; bearerId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; page?: number; pageSize?: number }) => {
+  getAll: async (params?: { type?: string; bearerId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; page?: number; pageSize?: number }): Promise<Expense[]> => {
+    const qs = new URLSearchParams();
+    if (params?.type) qs.set('type', params.type);
+    if (params?.bearerId) qs.set('bearerId', params.bearerId);
+    if (params?.targetId) qs.set('targetId', params.targetId);
+    if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params?.dateTo) qs.set('dateTo', params.dateTo);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+    const query = qs.toString();
+    const res = await apiClient.get<PaginatedResponse<Expense>>(`/api/expenses${query ? `?${query}` : ''}`);
+    return res.data;
+  },
+
+  getAllPaginated: (params?: { type?: string; bearerId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; page?: number; pageSize?: number }): Promise<PaginatedResponse<Expense>> => {
     const qs = new URLSearchParams();
     if (params?.type) qs.set('type', params.type);
     if (params?.bearerId) qs.set('bearerId', params.bearerId);

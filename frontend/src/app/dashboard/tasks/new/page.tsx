@@ -90,11 +90,10 @@ export default function NewTaskPage() {
     queryFn: () => assetsApi.getAll(),
   });
 
-  const { data: usersResponse } = useQuery({
+  const { data: users } = useQuery({
     queryKey: ['users'],
     queryFn: () => usersApi.getAll(),
   });
-  const users = usersResponse?.data;
 
   const createMutation = useMutation({
     mutationFn: (data: CreateTaskDto) => tasksApi.create(data),

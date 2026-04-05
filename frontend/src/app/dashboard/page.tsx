@@ -46,11 +46,10 @@ export default function DashboardPage() {
     queryFn: () => assetsApi.getAll(),
   });
 
-  const { data: racksResponse, isLoading: racksLoading } = useQuery({
+  const { data: racks = [], isLoading: racksLoading } = useQuery({
     queryKey: ['racks'],
     queryFn: () => racksApi.getAll(),
   });
-  const racks = racksResponse?.data ?? [];
 
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['tasks'],

@@ -47,7 +47,7 @@ export default function RacksPage() {
 
   const { data: response, isLoading } = useQuery({
     queryKey: ['racks', siteFilter, page, pageSize],
-    queryFn: () => racksApi.getAll({
+    queryFn: () => racksApi.getAllPaginated({
       siteId: siteFilter !== 'all' ? siteFilter : undefined,
       page,
       pageSize,

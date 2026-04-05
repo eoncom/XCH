@@ -198,12 +198,11 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
     enabled: isAdmin,
   });
 
-  const { data: allUsersResponse } = useQuery({
+  const { data: allUsers = [] } = useQuery({
     queryKey: ['users'],
     queryFn: () => usersApi.getAll(),
     enabled: isAdmin,
   });
-  const allUsers = allUsersResponse?.data ?? [];
 
   // Filter out users that already have access
   const availableUsers = allUsers.filter(
@@ -1112,12 +1111,11 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   }, [site?.metadata?.healthBreakdown, monitorStatusMap]);
 
   // Load site racks
-  const { data: racksResponse } = useQuery({
+  const { data: racks = [] } = useQuery({
     queryKey: ['racks', { siteId: id }],
     queryFn: () => racksApi.getAll({ siteId: id }),
     enabled: !!id,
   });
-  const racks = racksResponse?.data ?? [];
 
   // Load site tasks (filter by siteId)
   const {data: allTasks = []} = useQuery<Task[]>({
@@ -1129,12 +1127,11 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const activeTasks = tasks.filter(t => t.status !== 'DONE');
 
   // Load site floor plans
-  const { data: floorPlansResponse } = useQuery({
+  const { data: floorPlans = [] } = useQuery({
     queryKey: ['floor-plans', { siteId: id }],
     queryFn: () => floorPlansApi.getAll({ siteId: id }),
     enabled: !!id,
   });
-  const floorPlans = floorPlansResponse?.data ?? [];
 
   // Compute latest version per plan group (for display in Plans tab)
   const latestFloorPlans = useMemo(() => {

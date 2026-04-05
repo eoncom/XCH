@@ -8,11 +8,22 @@ export interface PaginatedResponse<T> {
 }
 
 export const racksApi = {
-  getAll: (params?: { siteId?: string; page?: number; pageSize?: number }) => {
+  getAll: async (params?: { siteId?: string; page?: number; pageSize?: number }): Promise<Rack[]> => {
     const qs = new URLSearchParams();
     if (params?.siteId) qs.set('siteId', params.siteId);
     if (params?.page) qs.set('page', String(params.page));
     if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+    const query = qs.toString();
+    const res = await apiClient.get<PaginatedResponse<Rack>>(`/api/racks${query ? `?${query}` : ''}`);
+    return res.data;
+  },
+
+  getAllPaginated: (params?: { siteId?: string; page?: number; pageSize?: number; status?: string }): Promise<PaginatedResponse<Rack>> => {
+    const qs = new URLSearchParams();
+    if (params?.siteId) qs.set('siteId', params.siteId);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params?.status) qs.set('status', params.status);
     const query = qs.toString();
     return apiClient.get<PaginatedResponse<Rack>>(`/api/racks${query ? `?${query}` : ''}`);
   },

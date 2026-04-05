@@ -198,12 +198,11 @@ export default function FloorPlanDetailPage({
   });
 
   // Load racks from the site for RACK pin association
-  const { data: racksResponse } = useQuery({
+  const { data: racks } = useQuery({
     queryKey: ['racks', floorPlan?.site?.id],
     queryFn: () => racksApi.getAll({ siteId: floorPlan?.site?.id }),
     enabled: !!floorPlan?.site?.id,
   });
-  const racks = racksResponse?.data;
 
   // Version history
   const { data: versionHistory } = useQuery<FloorPlan[]>({

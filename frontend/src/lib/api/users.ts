@@ -8,7 +8,18 @@ export interface PaginatedResponse<T> {
 }
 
 export const usersApi = {
-  getAll: async (params?: { page?: number; pageSize?: number; search?: string; role?: string }): Promise<PaginatedResponse<User>> => {
+  getAll: async (params?: { page?: number; pageSize?: number; search?: string; role?: string }): Promise<User[]> => {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params?.search) qs.set('search', params.search);
+    if (params?.role) qs.set('role', params.role);
+    const query = qs.toString();
+    const res = await apiClient.get<PaginatedResponse<User>>(`/api/users${query ? `?${query}` : ''}`);
+    return res.data;
+  },
+
+  getAllPaginated: async (params?: { page?: number; pageSize?: number; search?: string; role?: string }): Promise<PaginatedResponse<User>> => {
     const qs = new URLSearchParams();
     if (params?.page) qs.set('page', String(params.page));
     if (params?.pageSize) qs.set('pageSize', String(params.pageSize));

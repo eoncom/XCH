@@ -63,7 +63,7 @@ export default function UsersPage() {
 
   const { data: response, isLoading, error } = useQuery({
     queryKey: ['users', page, pageSize, search, roleFilter],
-    queryFn: () => usersApi.getAll({
+    queryFn: () => usersApi.getAllPaginated({
       page,
       pageSize,
       search: search || undefined,

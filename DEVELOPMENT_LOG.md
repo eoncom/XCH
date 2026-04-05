@@ -4736,3 +4736,24 @@ fix: session endpoint returns full user data from DB including totpEnabled
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-05
+
+**Date:** 2026-04-05 23:19:57
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 14
+
+**Commit message:**
+```
+fix: add data migration for ACCESS_POINT → WIFI_AP unification
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

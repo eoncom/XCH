@@ -69,7 +69,7 @@ export default function FloorPlansPage() {
 
   const { data: response, isLoading } = useQuery({
     queryKey: ['floor-plans', siteFilter, page, pageSize],
-    queryFn: () => floorPlansApi.getAll({
+    queryFn: () => floorPlansApi.getAllPaginated({
       siteId: siteFilter !== 'all' ? siteFilter : undefined,
       page,
       pageSize,

@@ -70,7 +70,7 @@ export default function CostsPage() {
 
   const { data: response, isLoading } = useQuery({
     queryKey: ['expenses', filterType, filterBearerId, page, pageSize],
-    queryFn: () => expensesApi.getAll({
+    queryFn: () => expensesApi.getAllPaginated({
       type: filterType || undefined,
       bearerId: filterBearerId || undefined,
       page,

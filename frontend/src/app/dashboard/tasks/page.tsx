@@ -230,11 +230,10 @@ export default function TasksPage() {
     queryFn: sitesApi.getAll,
   });
 
-  const { data: usersResponse } = useQuery({
-    queryKey: ['users', { page: 1, pageSize: 200 }],
-    queryFn: () => usersApi.getAll({ page: 1, pageSize: 200 }),
+  const { data: usersList = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => usersApi.getAll({ pageSize: 200 }),
   });
-  const usersList = usersResponse?.data ?? [];
 
   // Apply filters
   const filteredTasks = tasks.filter((task) => {

@@ -13,7 +13,17 @@ export interface PdfInspectResult {
 }
 
 export const floorPlansApi = {
-  getAll: (params?: { siteId?: string; page?: number; pageSize?: number }) => {
+  getAll: async (params?: { siteId?: string; page?: number; pageSize?: number }): Promise<FloorPlan[]> => {
+    const qs = new URLSearchParams();
+    if (params?.siteId) qs.set('siteId', params.siteId);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+    const query = qs.toString();
+    const res = await apiClient.get<PaginatedResponse<FloorPlan>>(`/api/floor-plans${query ? `?${query}` : ''}`);
+    return res.data;
+  },
+
+  getAllPaginated: (params?: { siteId?: string; page?: number; pageSize?: number }): Promise<PaginatedResponse<FloorPlan>> => {
     const qs = new URLSearchParams();
     if (params?.siteId) qs.set('siteId', params.siteId);
     if (params?.page) qs.set('page', String(params.page));
