@@ -30,8 +30,12 @@ export class StorageService {
     try {
       const endpoint = this.configService.get('MINIO_ENDPOINT', 'minio');
       const port = parseInt(this.configService.get('MINIO_PORT', '9000'), 10);
-      const accessKey = this.configService.get('MINIO_ACCESS_KEY', 'minioadmin');
-      const secretKey = this.configService.get('MINIO_SECRET_KEY', 'minioadmin');
+      const accessKey = this.configService.get('MINIO_ACCESS_KEY');
+      const secretKey = this.configService.get('MINIO_SECRET_KEY');
+      if (!accessKey || !secretKey) {
+        this.logger.error('MINIO_ACCESS_KEY and MINIO_SECRET_KEY must be set in environment');
+        return;
+      }
       const useSSL = this.configService.get('MINIO_USE_SSL', 'false') === 'true';
 
       this.minioClient = new Minio.Client({
@@ -210,6 +214,76 @@ export class StorageService {
       this.logger.log(`File deleted from MinIO: ${objectName}`);
     } catch (error) {
       this.logger.error(`Failed to delete from MinIO: ${filePath}`, error);
+    }
+  }
+
+  /**
+   * Delete all files under a given prefix (folder path).
+   * Best-effort: logs errors but does not throw.
+   */
+  async deleteByPrefix(prefix: string): Promise<number> {
+    if (this.storageType === 'minio') {
+      return this.deleteMinioPrefix(prefix);
+    } else {
+      return this.deleteFilesystemPrefix(prefix);
+    }
+  }
+
+  private async deleteMinioPrefix(prefix: string): Promise<number> {
+    if (!this.minioClient) {
+      this.logger.error('MinIO client not initialized, cannot delete by prefix');
+      return 0;
+    }
+
+    const normalizedPrefix = prefix.startsWith('/') ? prefix.substring(1) : prefix;
+    let deletedCount = 0;
+
+    try {
+      const objectsList: string[] = [];
+      const stream = this.minioClient.listObjectsV2(this.minioBucket, normalizedPrefix, true);
+
+      await new Promise<void>((resolve, reject) => {
+        stream.on('data', (obj) => {
+          if (obj.name) {
+            objectsList.push(obj.name);
+          }
+        });
+        stream.on('error', (err) => reject(err));
+        stream.on('end', () => resolve());
+      });
+
+      if (objectsList.length === 0) {
+        this.logger.log(`No objects found with prefix: ${normalizedPrefix}`);
+        return 0;
+      }
+
+      // Delete objects one by one for reliable error handling
+      for (const objectName of objectsList) {
+        try {
+          await this.minioClient.removeObject(this.minioBucket, objectName);
+          deletedCount++;
+        } catch (error) {
+          this.logger.error(`Failed to delete MinIO object: ${objectName}`, error);
+        }
+      }
+
+      this.logger.log(`Deleted ${deletedCount}/${objectsList.length} objects with prefix: ${normalizedPrefix}`);
+    } catch (error) {
+      this.logger.error(`Failed to list/delete objects with prefix: ${normalizedPrefix}`, error);
+    }
+
+    return deletedCount;
+  }
+
+  private async deleteFilesystemPrefix(prefix: string): Promise<number> {
+    try {
+      const folderPath = path.join(this.uploadDir, prefix);
+      await fs.rm(folderPath, { recursive: true, force: true });
+      this.logger.log(`Deleted filesystem folder: ${folderPath}`);
+      return 1;
+    } catch (error) {
+      this.logger.error(`Failed to delete filesystem folder for prefix: ${prefix}`, error);
+      return 0;
     }
   }
 

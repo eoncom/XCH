@@ -1,21 +1,23 @@
 import { IsString, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { AssetType, AssetStatus } from '@prisma/client';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
-export class FilterAssetDto {
+export class FilterAssetDto extends PaginationDto {
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
   search?: string;
 
-  @ApiProperty({ enum: ['PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'ROUTER', 'WIFI_AP', 'ACCESS_POINT', 'TEAMS_ROOM', 'WEBCAM', 'DISPLAY', 'CAMERA', 'SERVER', 'CABLE', 'PATCH_PANEL', 'PDU', 'BOX_5G', 'OTHER'], required: false })
-  @IsEnum(['PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'ROUTER', 'WIFI_AP', 'ACCESS_POINT', 'TEAMS_ROOM', 'WEBCAM', 'DISPLAY', 'CAMERA', 'SERVER', 'CABLE', 'PATCH_PANEL', 'PDU', 'BOX_5G', 'OTHER'])
+  @ApiProperty({ enum: AssetType, required: false })
+  @IsEnum(AssetType)
   @IsOptional()
-  type?: string;
+  type?: AssetType;
 
-  @ApiProperty({ enum: ['IN_SERVICE', 'OUT_OF_SERVICE', 'IN_TRANSIT', 'STOCK', 'RETIRED'], required: false })
-  @IsEnum(['IN_SERVICE', 'OUT_OF_SERVICE', 'IN_TRANSIT', 'STOCK', 'RETIRED'])
+  @ApiProperty({ enum: AssetStatus, required: false })
+  @IsEnum(AssetStatus)
   @IsOptional()
-  status?: string;
+  status?: AssetStatus;
 
   @ApiProperty({ required: false })
   @IsString()

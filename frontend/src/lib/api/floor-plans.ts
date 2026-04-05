@@ -1,5 +1,11 @@
 import { apiClient } from '../api-client';
 import type { FloorPlan, Pin, HeatmapData } from '@/types';
+import type { PaginationMeta } from '@/components/ui/pagination';
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: PaginationMeta;
+}
 
 export interface PdfInspectResult {
   pageCount: number;
@@ -7,9 +13,13 @@ export interface PdfInspectResult {
 }
 
 export const floorPlansApi = {
-  getAll: (siteId?: string) => {
-    const query = siteId ? `?siteId=${siteId}` : '';
-    return apiClient.get<FloorPlan[]>(`/api/floor-plans${query}`);
+  getAll: (params?: { siteId?: string; page?: number; pageSize?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.siteId) qs.set('siteId', params.siteId);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+    const query = qs.toString();
+    return apiClient.get<PaginatedResponse<FloorPlan>>(`/api/floor-plans${query ? `?${query}` : ''}`);
   },
 
   getById: (id: string) => apiClient.get<FloorPlan>(`/api/floor-plans/${id}`),

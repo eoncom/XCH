@@ -15,7 +15,7 @@ export class SeedController {
 
   @Post('demo')
   @Resource('tenants')
-  @Action('update')
+  @Action('delete')
   @ApiOperation({
     summary: '[ADMIN ONLY] Load demo data',
     description: 'Loads comprehensive demo data (sites, assets, racks, tasks). Idempotent - can be run multiple times safely.',
@@ -26,7 +26,7 @@ export class SeedController {
 
   @Post('reset')
   @Resource('tenants')
-  @Action('update')
+  @Action('delete')
   @ApiOperation({
     summary: '[ADMIN ONLY] Reset all data',
     description: 'Deletes all data EXCEPT admin user and tenant. Use with caution!',

@@ -1,7 +1,6 @@
-// @ts-nocheck - Temporary fix for Radix UI + React 19 type incompatibility
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,8 +16,12 @@ import {
 } from '@/components/ui/select';
 import { tasksApi } from '@/lib/api/tasks';
 import { sitesApi } from '@/lib/api/sites';
+import { usersApi } from '@/lib/api/users';
 import { Plus, Calendar, User, AlertCircle, Clock, AlertTriangle, Search, X, ClipboardList } from 'lucide-react';
+import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ExportMenu } from '@/components/ui/export-menu';
+import { exportTasks } from '@/lib/export-utils';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Task, TaskStatus, TaskPriority, Site } from '@/types';
@@ -40,27 +43,7 @@ function isTaskDueSoon(task: Task): boolean {
   return diffDays <= 2;
 }
 
-const taskStatusLabels: Record<TaskStatus, string> = {
-  TODO: 'À faire',
-  IN_PROGRESS: 'En cours',
-  BLOCKED: 'Bloqué',
-  DONE: 'Terminé',
-  CANCELLED: 'Annulé',
-};
-
-const taskPriorityColors = {
-  LOW: 'secondary',
-  MEDIUM: 'default',
-  HIGH: 'warning',
-  URGENT: 'error',
-} as const;
-
-const taskPriorityLabels: Record<TaskPriority, string> = {
-  LOW: 'Faible',
-  MEDIUM: 'Moyenne',
-  HIGH: 'Haute',
-  URGENT: 'Urgente',
-};
+import { taskStatusLabels, taskPriorityLabels, taskPriorityColors } from '@/lib/status-labels';
 
 const kanbanColumns: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE'];
 
@@ -148,7 +131,7 @@ function TaskCard({ task, onClick }: TaskCardProps) {
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
           <h4 className="font-medium flex-1">{task.title}</h4>
-          <Badge variant={taskPriorityColors[task.priority]}>
+          <Badge variant={taskPriorityColors[task.priority] as 'secondary' | 'default' | 'warning' | 'error'}>
             {taskPriorityLabels[task.priority]}
           </Badge>
         </div>
@@ -219,20 +202,42 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
+  const [assignedFilter, setAssignedFilter] = useState<string>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(200);
   const { canCreate } = usePermissions();
 
-  const { data: tasks, isLoading } = useQuery<Task[]>({
-    queryKey: ['tasks'],
-    queryFn: () => tasksApi.getAll(),
+  const { data: response, isLoading } = useQuery<{ data: Task[]; meta: PaginationMeta }>({
+    queryKey: ['tasks', { page, pageSize, status: statusFilter, priority: priorityFilter, siteId: siteFilter, assignedTo: assignedFilter, search }],
+    queryFn: () => tasksApi.getAllPaginated({
+      page,
+      pageSize,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      priority: priorityFilter !== 'all' ? priorityFilter : undefined,
+      siteId: siteFilter !== 'all' ? siteFilter : undefined,
+      assignedTo: assignedFilter !== 'all' ? assignedFilter : undefined,
+      search: search || undefined,
+    }),
   });
+  const tasks = response?.data ?? [];
+  const meta = response?.meta;
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [search, statusFilter, priorityFilter, siteFilter, assignedFilter]);
 
   const { data: sites } = useQuery<Site[]>({
     queryKey: ['sites'],
     queryFn: sitesApi.getAll,
   });
 
+  const { data: usersResponse } = useQuery({
+    queryKey: ['users', { page: 1, pageSize: 200 }],
+    queryFn: () => usersApi.getAll({ page: 1, pageSize: 200 }),
+  });
+  const usersList = usersResponse?.data ?? [];
+
   // Apply filters
-  const filteredTasks = tasks?.filter((task) => {
+  const filteredTasks = tasks.filter((task) => {
     if (search) {
       const s = search.toLowerCase();
       const matchTitle = task.title.toLowerCase().includes(s);
@@ -243,15 +248,17 @@ export default function TasksPage() {
     if (statusFilter !== 'all' && task.status !== statusFilter) return false;
     if (priorityFilter !== 'all' && task.priority !== priorityFilter) return false;
     if (siteFilter !== 'all' && task.siteId !== siteFilter) return false;
+    if (assignedFilter !== 'all' && task.assignedTo !== assignedFilter) return false;
     return true;
   }) || [];
 
-  const hasFilters = search || statusFilter !== 'all' || priorityFilter !== 'all' || siteFilter !== 'all';
+  const hasFilters = search || statusFilter !== 'all' || priorityFilter !== 'all' || siteFilter !== 'all' || assignedFilter !== 'all';
   const clearFilters = () => {
     setSearch('');
     setStatusFilter('all');
     setPriorityFilter('all');
     setSiteFilter('all');
+    setAssignedFilter('all');
   };
 
   const updateStatusMutation = useMutation({
@@ -274,6 +281,21 @@ export default function TasksPage() {
     return filteredTasks.filter((task) => task.status === status);
   };
 
+  const handleExport = (format: 'excel' | 'pdf' | 'csv' | 'json') => {
+    if (!filteredTasks.length) return;
+
+    const exportData = filteredTasks.map((task) => ({
+      title: task.title,
+      status: taskStatusLabels[task.status] || task.status,
+      priority: taskPriorityLabels[task.priority] || task.priority,
+      siteName: task.site?.name || '',
+      assignedTo: task.assignedUser?.name || '',
+      dueDate: task.dueDate ? new Date(task.dueDate).toLocaleDateString('fr-FR') : '',
+      createdAt: task.createdAt ? new Date(task.createdAt).toLocaleDateString('fr-FR') : '',
+    }));
+    exportTasks(exportData, format);
+  };
+
   const overdueTasks = filteredTasks.filter(isTaskOverdue);
   const blockedTasks = filteredTasks.filter((t) => t.status === 'BLOCKED');
   const dueSoonTasks = filteredTasks.filter(isTaskDueSoon);
@@ -289,18 +311,25 @@ export default function TasksPage() {
           <h1 className="text-3xl font-bold">Tâches</h1>
           <p className="text-muted-foreground">Gérez vos tâches et interventions ({filteredTasks.length}{hasFilters ? ` / ${tasks?.length || 0}` : ''})</p>
         </div>
-        {canCreate('tasks') && (
-          <Button asChild data-testid="create-task-btn">
-            <Link href="/dashboard/tasks/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Nouvelle tâche
-            </Link>
-          </Button>
-        )}
+        <div className="flex items-center gap-4">
+          <ExportMenu
+            onExport={handleExport}
+            disabled={!filteredTasks.length}
+            label="Exporter"
+          />
+          {canCreate('tasks') && (
+            <Button asChild data-testid="create-task-btn">
+              <Link href="/dashboard/tasks/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Nouvelle tâche
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-6">
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
@@ -340,6 +369,17 @@ export default function TasksPage() {
             <SelectItem value="all">Tous les sites</SelectItem>
             {sites?.map((site) => (
               <SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={assignedFilter} onValueChange={setAssignedFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Tous les utilisateurs" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les utilisateurs</SelectItem>
+            {usersList.map((user) => (
+              <SelectItem key={user.id} value={user.id}>{user.name || user.email}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -387,6 +427,8 @@ export default function TasksPage() {
           />
         ))}
       </div>
+
+      {meta && <Pagination meta={meta} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />}
 
       {filteredTasks.length === 0 && (
         <EmptyState

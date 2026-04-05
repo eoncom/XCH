@@ -12,45 +12,7 @@ import { PassThrough } from 'stream';
 // Pin rendering constants (mirror from frontend FloorPlanViewer.tsx)
 // ============================================================================
 
-const PIN_COLORS: Record<string, string> = {
-  SWITCH: '#3b82f6',
-  FIREWALL: '#ef4444',
-  ACCESS_POINT: '#10b981',
-  PRINTER: '#6366f1',
-  RACK: '#8b5cf6',
-  CAMERA: '#f59e0b',
-  PATCH_PANEL: '#06b6d4',
-  RJ45: '#14b8a6',
-  NRO: '#a855f7',
-  ROUTER: '#f97316',
-  TEAMS_ROOM: '#0ea5e9',
-  WEBCAM: '#ec4899',
-  DISPLAY: '#84cc16',
-  SERVER: '#475569',
-  PDU: '#d97706',
-  BOX_5G: '#e11d48',
-  OTHER: '#6b7280',
-};
-
-const PIN_LABELS: Record<string, string> = {
-  SWITCH: 'SW',
-  FIREWALL: 'FW',
-  ACCESS_POINT: 'AP',
-  PRINTER: 'PR',
-  RACK: 'RK',
-  CAMERA: 'CA',
-  PATCH_PANEL: 'PP',
-  RJ45: 'RJ',
-  NRO: 'NR',
-  ROUTER: 'RT',
-  TEAMS_ROOM: 'TR',
-  WEBCAM: 'WC',
-  DISPLAY: 'EC',
-  SERVER: 'SV',
-  PDU: 'PD',
-  BOX_5G: '5G',
-  OTHER: '??',
-};
+import { PIN_COLORS, PIN_LABELS } from '../../common/constants/pin-config';
 
 interface BackupMetadata {
   version: string;

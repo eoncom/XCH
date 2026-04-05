@@ -18,6 +18,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { usersApi } from '@/lib/api/users';
 import {
   userScopesApi,
@@ -100,6 +110,8 @@ export default function EditUserPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const userId = params.id as string;
+
+  const [showDisable2FADialog, setShowDisable2FADialog] = useState(false);
 
   // State for adding scope/grant
   const [showAddScope, setShowAddScope] = useState(false);
@@ -346,17 +358,7 @@ export default function EditUserPage() {
                   type="button"
                   variant="destructive"
                   size="sm"
-                  onClick={async () => {
-                    if (!confirm('Êtes-vous sûr de vouloir désactiver la 2FA pour cet utilisateur ?')) return;
-                    try {
-                      const { authApi } = await import('@/lib/api/auth');
-                      await authApi.adminDisable2FA(userId);
-                      queryClient.invalidateQueries({ queryKey: ['user', userId] });
-                      toast.success('2FA désactivée pour cet utilisateur');
-                    } catch (err: any) {
-                      toast.error(err.message || 'Erreur');
-                    }
-                  }}
+                  onClick={() => setShowDisable2FADialog(true)}
                 >
                   Réinitialiser 2FA
                 </Button>
@@ -693,6 +695,36 @@ export default function EditUserPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={showDisable2FADialog} onOpenChange={setShowDisable2FADialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Désactiver la double authentification</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir désactiver la 2FA pour cet utilisateur ? Il devra la reconfigurer manuellement.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                try {
+                  const { authApi } = await import('@/lib/api/auth');
+                  await authApi.adminDisable2FA(userId);
+                  queryClient.invalidateQueries({ queryKey: ['user', userId] });
+                  toast.success('2FA désactivée pour cet utilisateur');
+                } catch (err: any) {
+                  toast.error(err.message || 'Erreur');
+                }
+                setShowDisable2FADialog(false);
+              }}
+            >
+              Désactiver
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

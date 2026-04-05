@@ -21,6 +21,7 @@ import { CreateFloorPlanDto } from './dto/create-floor-plan.dto';
 import { UpdateFloorPlanDto } from './dto/update-floor-plan.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
+import { FilterFloorPlanDto } from './dto/filter-floor-plan.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { ModuleGuard } from '../../common/guards/module.guard';
@@ -161,13 +162,13 @@ export class FloorPlansController {
   @Resource('floor-plans')
   @Action('read')
   @ApiOperation({ summary: 'Get all floor plans (filtered by user site access + resource permissions)' })
-  async findAll(@Request() req: AuthRequest, @Query('siteId') siteId?: string) {
+  async findAll(@Query() filters: FilterFloorPlanDto, @Request() req: AuthRequest) {
     const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
       'floorPlans',
     );
-    return this.floorPlansService.findAll(req.user.tenantId, siteId, accessibleSiteIds);
+    return this.floorPlansService.findAll(req.user.tenantId, filters, accessibleSiteIds);
   }
 
   @Get('site/:siteId/latest')

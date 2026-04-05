@@ -908,7 +908,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       siteId: site1.id,
-      type: AssetType.ACCESS_POINT,
+      type: AssetType.WIFI_AP,
       model: 'Cisco Meraki MR46',
       manufacturer: 'Cisco',
       serialNumber: 'AP-PAR-001',
@@ -1035,7 +1035,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       siteId: site2.id,
-      type: AssetType.ACCESS_POINT,
+      type: AssetType.WIFI_AP,
       model: 'Ubiquiti UniFi AP AC Pro',
       manufacturer: 'Ubiquiti',
       serialNumber: 'AP-LYN-001',
@@ -1057,7 +1057,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       siteId: site2.id,
-      type: AssetType.ACCESS_POINT,
+      type: AssetType.WIFI_AP,
       model: 'Ubiquiti UniFi AP AC Pro',
       manufacturer: 'Ubiquiti',
       serialNumber: 'AP-LYN-002',
@@ -1415,7 +1415,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       siteId: site5.id,
-      type: AssetType.ACCESS_POINT,
+      type: AssetType.WIFI_AP,
       model: 'TP-Link EAP660 HD',
       manufacturer: 'TP-Link',
       serialNumber: 'AP-TLS-001',

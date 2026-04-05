@@ -25,7 +25,6 @@ const typeIcons: Record<string, any> = {
   FIREWALL: Shield,
   SERVER: Server,
   WIFI_AP: Wifi,
-  ACCESS_POINT: Wifi,
   BOX_5G: Globe,
   OTHER: MonitorSmartphone,
 };
@@ -36,7 +35,6 @@ const typeLabels: Record<string, string> = {
   FIREWALL: 'Firewall',
   SERVER: 'Serveur',
   WIFI_AP: 'Point d\'accès WiFi',
-  ACCESS_POINT: 'Point d\'accès',
   BOX_5G: 'Box 5G',
   LINK: 'Lien / Connectivité',
   SDWAN: 'SD-WAN',

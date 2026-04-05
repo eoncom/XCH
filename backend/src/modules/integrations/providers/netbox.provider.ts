@@ -274,7 +274,7 @@ export class NetBoxProviderService implements NetBoxProvider {
       externalSystem: 'netbox',
       name: netboxSite.name,
       code: netboxSite.slug || netboxSite.name.toLowerCase().replace(/\s+/g, '-'),
-      status: netboxSite.status?.value === 'active' ? 'ACTIVE' : 'INACTIVE',
+      status: netboxSite.status?.value === 'active' ? 'ACTIVE' : 'CLOSED',
       address: netboxSite.physical_address || null,
       // Map coordinates if available (NetBox custom fields or lat/long)
       latitude: netboxSite.latitude || netboxSite.custom_fields?.latitude || null,
@@ -311,7 +311,7 @@ export class NetBoxProviderService implements NetBoxProvider {
       brand: netboxDevice.device_type?.manufacturer?.name || null,
       model: netboxDevice.device_type?.model || null,
       serialNumber: netboxDevice.serial || null,
-      status: netboxDevice.status?.value === 'active' ? 'ACTIVE' : 'INACTIVE',
+      status: netboxDevice.status?.value === 'active' ? 'IN_SERVICE' : 'OUT_OF_SERVICE',
       metadata: {
         netbox_id: netboxDevice.id,
         netbox_url: netboxDevice.url,

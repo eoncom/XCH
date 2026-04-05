@@ -132,7 +132,7 @@ export class TasksController {
         throw new ForbiddenException('Insufficient permissions to modify tasks on this site');
       }
     }
-    return this.tasksService.update(id, req.user.tenantId, updateTaskDto);
+    return this.tasksService.update(id, req.user.tenantId, updateTaskDto, req.user.userId);
   }
 
   @Patch(':id/checklist')
@@ -168,7 +168,7 @@ export class TasksController {
         throw new ForbiddenException('Insufficient permissions to delete tasks on this site');
       }
     }
-    return this.tasksService.remove(id, req.user.tenantId);
+    return this.tasksService.remove(id, req.user.tenantId, req.user.userId);
   }
 
   // ============================================================================

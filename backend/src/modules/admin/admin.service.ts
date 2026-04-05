@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { UpdateEnumLabelDto } from './dto/update-enum-label.dto';
+import { PIN_TYPE_DEFAULTS } from '../../common/constants/pin-config';
 
 // Default labels for all enum types — MUST match Prisma schema enums exactly
 const DEFAULT_LABELS: Record<string, Record<string, { label: string; color: string; icon?: string }>> = {
@@ -12,7 +13,6 @@ const DEFAULT_LABELS: Record<string, Record<string, { label: string; color: stri
     FIREWALL:     { label: 'Pare-feu',             color: '#ef4444' },
     ROUTER:       { label: 'Routeur',              color: '#6366f1' },
     WIFI_AP:      { label: 'Point d\'accès WiFi',  color: '#10b981' },
-    ACCESS_POINT: { label: 'Point d\'accès',       color: '#22c55e' },
     TEAMS_ROOM:   { label: 'Teams Room',           color: '#7c3aed' },
     WEBCAM:       { label: 'Webcam',               color: '#14b8a6' },
     DISPLAY:      { label: 'Écran',                color: '#6b7280' },
@@ -31,25 +31,7 @@ const DEFAULT_LABELS: Record<string, Record<string, { label: string; color: stri
     STOCK:          { label: 'En stock',     color: '#f59e0b' },
     RETIRED:        { label: 'Retiré',       color: '#9ca3af' },
   },
-  PinType: {
-    SWITCH:       { label: 'Switch',               color: '#3b82f6' },
-    FIREWALL:     { label: 'Pare-feu',             color: '#ef4444' },
-    ACCESS_POINT: { label: 'AP WiFi',              color: '#10b981' },
-    PRINTER:      { label: 'Imprimante',           color: '#a855f7' },
-    RACK:         { label: 'Baie',                 color: '#6366f1' },
-    CAMERA:       { label: 'Caméra',               color: '#64748b' },
-    PATCH_PANEL:  { label: 'Panneau de brassage',  color: '#06b6d4' },
-    RJ45:         { label: 'Prise RJ45',           color: '#0ea5e9' },
-    NRO:          { label: 'Arrivée Fibre NRO',    color: '#dc2626' },
-    ROUTER:       { label: 'Routeur',              color: '#7c3aed' },
-    TEAMS_ROOM:   { label: 'Teams Room',           color: '#7c3aed' },
-    WEBCAM:       { label: 'Webcam',               color: '#14b8a6' },
-    DISPLAY:      { label: 'Écran',                color: '#6b7280' },
-    SERVER:       { label: 'Serveur',              color: '#8b5cf6' },
-    PDU:          { label: 'PDU',                  color: '#f97316' },
-    BOX_5G:       { label: 'Box 5G',               color: '#84cc16' },
-    OTHER:        { label: 'Autre',                color: '#9ca3af' },
-  },
+  PinType: PIN_TYPE_DEFAULTS,
 };
 
 @Injectable()

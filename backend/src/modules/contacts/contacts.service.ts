@@ -3,6 +3,7 @@ import { PrismaClient, ContactCategory } from '@prisma/client';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { QueryContactDto } from './dto/query-contact.dto';
+import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
 @Injectable()
 export class ContactsService {
@@ -34,7 +35,11 @@ export class ContactsService {
     });
   }
 
-  async findAll(tenantId: string, query: QueryContactDto) {
+  async findAll(tenantId: string, query: QueryContactDto): Promise<PaginatedResponse<any>> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 25;
+    const skip = (page - 1) * pageSize;
+
     const { typeId, category, search, isActive } = query;
 
     // Build where clause
@@ -68,15 +73,28 @@ export class ContactsService {
       ];
     }
 
-    return this.prisma.contact.findMany({
-      where,
-      include: {
-        type: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    });
+    // Determine sort order (default: name asc)
+    const allowedSortFields = ['name', 'createdAt', 'updatedAt', 'isActive'];
+    const hasExplicitSort = query.sortBy && allowedSortFields.includes(query.sortBy);
+    const sortBy: string = hasExplicitSort ? query.sortBy! : 'name';
+    const sortOrder = hasExplicitSort ? (query.sortOrder ?? 'desc') : 'asc';
+
+    const [contacts, total] = await Promise.all([
+      this.prisma.contact.findMany({
+        where,
+        include: {
+          type: true,
+        },
+        orderBy: {
+          [sortBy]: sortOrder,
+        },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.contact.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(contacts, total, page, pageSize);
   }
 
   async findOne(tenantId: string, id: string) {

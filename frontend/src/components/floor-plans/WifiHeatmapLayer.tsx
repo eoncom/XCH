@@ -21,7 +21,7 @@ interface WifiHeatmapLayerProps {
 }
 
 /**
- * Konva layer that renders Wi-Fi coverage heatmap circles for each ACCESS_POINT pin.
+ * Konva layer that renders Wi-Fi coverage heatmap circles for each WIFI_AP pin.
  * Uses offscreen canvas with radial gradients for smooth rendering.
  */
 export default function WifiHeatmapLayer({

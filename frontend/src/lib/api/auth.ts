@@ -43,4 +43,46 @@ export const authApi = {
   /** Admin: disable 2FA for any user */
   adminDisable2FA: (userId: string) =>
     apiClient.delete<{ disabled: boolean }>(`/api/auth/2fa/user/${userId}`),
+
+  /** Invite a user (admin/manager) */
+  invite: (data: { email: string; name: string; role?: string }) =>
+    apiClient.post('/api/auth/invite', data),
+
+  /** Accept invitation and set password (public) */
+  acceptInvite: async (token: string, password: string) => {
+    const res = await fetch(`${API_URL}/api/auth/accept-invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Erreur lors de l\'activation');
+    }
+    return res.json();
+  },
+
+  /** Request password reset (public) */
+  forgotPassword: async (email: string) => {
+    const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    return res.json();
+  },
+
+  /** Reset password with token (public) */
+  resetPassword: async (token: string, password: string) => {
+    const res = await fetch(`${API_URL}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Erreur lors de la réinitialisation');
+    }
+    return res.json();
+  },
 };

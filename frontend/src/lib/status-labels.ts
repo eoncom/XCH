@@ -105,8 +105,13 @@ export const taskPriorityColors: Record<string, string> = {
 // ============================================================================
 
 export const siteStatusLabels: Record<string, string> = {
+  PREPARATION: 'Préparation',
   ACTIVE: 'Actif',
-  PLANNED: 'Planifié',
-  COMPLETED: 'Terminé',
-  ARCHIVED: 'Archivé',
+  CLOSED: 'Fermé',
+};
+
+export const siteStatusColors: Record<string, string> = {
+  PREPARATION: 'warning',
+  ACTIVE: 'success',
+  CLOSED: 'secondary',
 };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { racksApi } from '@/lib/api/racks';
 import { SiteFilterSelect } from '@/components/ui/grouped-site-selector';
+import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Server, MapPin } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -34,21 +36,34 @@ const rackStatusLabels: Record<RackStatus, string> = {
 export default function RacksPage() {
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
   const router = useRouter();
 
-  const { data: racks, isLoading } = useQuery<Rack[]>({
-    queryKey: ['racks', siteFilter],
-    queryFn: () => racksApi.getAll(siteFilter !== 'all' ? siteFilter : undefined),
-  });
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [siteFilter, search, statusFilter]);
 
-  const filteredRacks = racks?.filter((rack) => {
+  const { data: response, isLoading } = useQuery({
+    queryKey: ['racks', siteFilter, page, pageSize],
+    queryFn: () => racksApi.getAll({
+      siteId: siteFilter !== 'all' ? siteFilter : undefined,
+      page,
+      pageSize,
+    }),
+  });
+  const racks = response?.data ?? [];
+  const meta = response?.meta;
+
+  const filteredRacks = racks.filter((rack) => {
     const searchLower = search.toLowerCase();
-    return (
+    const matchesSearch =
       rack.name.toLowerCase().includes(searchLower) ||
       rack.location?.toLowerCase().includes(searchLower) ||
-      rack.site?.name.toLowerCase().includes(searchLower)
-    );
+      rack.site?.name.toLowerCase().includes(searchLower);
+    const matchesStatus = statusFilter === 'all' || rack.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
 
   const handleExport = (format: 'excel' | 'pdf' | 'csv') => {
@@ -175,7 +190,7 @@ export default function RacksPage() {
         <div className="flex items-center gap-4">
           <ExportMenu
             onExport={handleExport}
-            disabled={!filteredRacks?.length}
+            disabled={!filteredRacks.length}
             label="Exporter"
           />
           {canCreate('racks') && (
@@ -190,7 +205,7 @@ export default function RacksPage() {
       </div>
 
       {/* Filters */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
@@ -202,11 +217,23 @@ export default function RacksPage() {
         </div>
 
         <SiteFilterSelect value={siteFilter} onValueChange={setSiteFilter} />
+
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Tous les statuts" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les statuts</SelectItem>
+            {Object.entries(rackStatusLabels).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Racks Grid */}
       <div data-testid="racks-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {filteredRacks?.map((rack) => {
+        {filteredRacks.map((rack) => {
           const occupiedUnits = rack.assets?.reduce(
             (sum, asset) => sum + (asset.rackHeightU || 0),
             0
@@ -286,15 +313,17 @@ export default function RacksPage() {
         })}
       </div>
 
-      {filteredRacks?.length === 0 && (
+      {filteredRacks.length === 0 && (
         <EmptyState
           icon={Server}
           title="Aucune baie trouvée"
-          description={search || siteFilter !== 'all'
+          description={search || siteFilter !== 'all' || statusFilter !== 'all'
             ? 'Essayez de modifier vos filtres de recherche'
             : undefined}
         />
       )}
+
+      {meta && <Pagination meta={meta} onPageChange={setPage} onPageSizeChange={setPageSize} />}
     </div>
   );
 }

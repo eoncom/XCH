@@ -7,6 +7,7 @@ import { RacksService } from './racks.service';
 import { CreateRackDto } from './dto/create-rack.dto';
 import { UpdateRackDto } from './dto/update-rack.dto';
 import { MountEquipmentDto } from './dto/mount-equipment.dto';
+import { FilterRackDto } from './dto/filter-rack.dto';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
@@ -40,19 +41,19 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions for racks on this site');
       }
     }
-    return this.racksService.create(req.user.tenantId, createRackDto);
+    return this.racksService.create(req.user.tenantId, createRackDto, req.user.userId);
   }
 
   @Get()
   @Resource('racks') @Action('read')
   @ApiOperation({ summary: 'Get all racks (filtered by user site access + resource permissions)' })
-  async findAll(@Query('siteId') siteId: string, @Request() req: AuthRequest) {
+  async findAll(@Query() filters: FilterRackDto, @Request() req: AuthRequest) {
     const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
       req.user.tenantId,
       req.user.userId,
       'racks',
     );
-    return this.racksService.findAll(req.user.tenantId, siteId, accessibleSiteIds);
+    return this.racksService.findAll(req.user.tenantId, filters, accessibleSiteIds);
   }
 
   @Get(':id')
@@ -99,7 +100,7 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions to modify racks on this site');
       }
     }
-    return this.racksService.mountEquipment(id, req.user.tenantId, mountDto);
+    return this.racksService.mountEquipment(id, req.user.tenantId, mountDto, req.user.userId);
   }
 
   @Delete(':id/unmount/:assetId')
@@ -119,7 +120,7 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions to modify racks on this site');
       }
     }
-    return this.racksService.unmountEquipment(id, assetId, req.user.tenantId);
+    return this.racksService.unmountEquipment(id, assetId, req.user.tenantId, req.user.userId);
   }
 
   @Patch(':id')
@@ -135,7 +136,7 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions to modify racks on this site');
       }
     }
-    return this.racksService.update(id, req.user.tenantId, updateRackDto);
+    return this.racksService.update(id, req.user.tenantId, updateRackDto, req.user.userId);
   }
 
   @Delete(':id')
@@ -151,7 +152,7 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions to delete racks on this site');
       }
     }
-    return this.racksService.remove(id, req.user.tenantId);
+    return this.racksService.remove(id, req.user.tenantId, req.user.userId);
   }
 
   // ============================================================================

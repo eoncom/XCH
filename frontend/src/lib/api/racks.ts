@@ -1,10 +1,20 @@
 import { apiClient } from '../api-client';
 import type { Rack } from '@/types';
+import type { PaginationMeta } from '@/components/ui/pagination';
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: PaginationMeta;
+}
 
 export const racksApi = {
-  getAll: (siteId?: string) => {
-    const query = siteId ? `?siteId=${siteId}` : '';
-    return apiClient.get<Rack[]>(`/api/racks${query}`);
+  getAll: (params?: { siteId?: string; page?: number; pageSize?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.siteId) qs.set('siteId', params.siteId);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+    const query = qs.toString();
+    return apiClient.get<PaginatedResponse<Rack>>(`/api/racks${query ? `?${query}` : ''}`);
   },
 
   getById: (id: string) => apiClient.get<Rack>(`/api/racks/${id}`),

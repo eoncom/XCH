@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -35,7 +35,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
 import { Plus, Search, Eye, Pencil, Trash2, Users, Settings } from 'lucide-react';
+import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ExportMenu } from '@/components/ui/export-menu';
+import { exportContacts } from '@/lib/export-utils';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { Contact, ContactType, ContactCategory } from '@/types';
@@ -62,15 +65,28 @@ export default function ContactsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const { canCreate, canUpdate, canDelete, isManagerOrAbove } = usePermissions();
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const { data: contacts, isLoading, error } = useQuery<Contact[]>({
-    queryKey: ['contacts'],
-    queryFn: () => contactsApi.getAll(),
+  const { data: response, isLoading, error } = useQuery<{ data: Contact[]; meta: PaginationMeta }>({
+    queryKey: ['contacts', { search, categoryFilter, typeFilter, page, pageSize }],
+    queryFn: () => contactsApi.getAllPaginated({
+      search: search || undefined,
+      category: categoryFilter !== 'ALL' ? categoryFilter : undefined,
+      typeId: typeFilter !== 'ALL' ? typeFilter : undefined,
+      page,
+      pageSize,
+    }),
     retry: false,
   });
+  const contacts = response?.data ?? [];
+  const meta = response?.meta;
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [search, categoryFilter, typeFilter]);
 
   const { data: contactTypes } = useQuery<ContactType[]>({
     queryKey: ['contact-types'],
@@ -89,7 +105,7 @@ export default function ContactsPage() {
     },
   });
 
-  const filteredContacts = contacts?.filter((contact) => {
+  const filteredContacts = contacts.filter((contact) => {
     const searchLower = search.toLowerCase();
     const matchesSearch =
       contact.name.toLowerCase().includes(searchLower) ||
@@ -106,6 +122,21 @@ export default function ContactsPage() {
   const filteredTypes = contactTypes?.filter(
     (t) => categoryFilter === 'ALL' || t.category === categoryFilter
   );
+
+  const handleExport = (format: 'excel' | 'pdf' | 'csv' | 'json') => {
+    if (!filteredContacts.length) return;
+
+    const exportData = filteredContacts.map((contact) => ({
+      name: contact.name,
+      email: contact.email || '',
+      phone: contact.phone || contact.mobile || '',
+      company: contact.company || '',
+      category: contact.type?.category ? categoryLabels[contact.type.category as ContactCategory] || contact.type.category : '',
+      type: contact.type?.name || '',
+      active: contact.isActive ? 'Oui' : 'Non',
+    }));
+    exportContacts(exportData, format);
+  };
 
   const handleDelete = () => {
     if (deleteId) {
@@ -145,23 +176,30 @@ export default function ContactsPage() {
             Gerez vos contacts : fournisseurs, internes, partenaires, technique et urgence
           </p>
         </div>
-        <div className="flex gap-2">
-          {isManagerOrAbove && (
-            <Button variant="outline" asChild>
-              <Link href="/dashboard/contacts/types">
-                <Settings className="mr-2 h-4 w-4" />
-                Types
-              </Link>
-            </Button>
-          )}
-          {canCreate('contacts') && (
-            <Button asChild data-testid="create-contact-btn">
-              <Link href="/dashboard/contacts/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Nouveau contact
-              </Link>
-            </Button>
-          )}
+        <div className="flex items-center gap-4">
+          <ExportMenu
+            onExport={handleExport}
+            disabled={!filteredContacts.length}
+            label="Exporter"
+          />
+          <div className="flex gap-2">
+            {isManagerOrAbove && (
+              <Button variant="outline" asChild>
+                <Link href="/dashboard/contacts/types">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Types
+                </Link>
+              </Button>
+            )}
+            {canCreate('contacts') && (
+              <Button asChild data-testid="create-contact-btn">
+                <Link href="/dashboard/contacts/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nouveau contact
+                </Link>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -329,6 +367,8 @@ export default function ContactsPage() {
           )}
         </CardContent>
       </Card>
+
+      {meta && <Pagination meta={meta} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />}
 
       {/* Delete confirmation dialog */}
       <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>

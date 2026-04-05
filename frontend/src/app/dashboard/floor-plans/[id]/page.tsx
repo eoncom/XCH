@@ -28,6 +28,16 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { showToast } from '@/lib/toast';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -75,7 +85,7 @@ const ScaleCalibration = dynamic(
 const pinTypeLabels: Record<PinType, string> = {
   SWITCH: 'Switch',
   FIREWALL: 'Firewall',
-  ACCESS_POINT: 'AP WiFi',
+  WIFI_AP: 'AP WiFi',
   PRINTER: 'Imprimante',
   RACK: 'Baie',
   CAMERA: 'Caméra',
@@ -92,26 +102,8 @@ const pinTypeLabels: Record<PinType, string> = {
   OTHER: 'Autre',
 };
 
-const assetTypeLabels: Record<AssetType, string> = {
-  PRINTER: 'Imprimante',
-  IPAD: 'iPad',
-  TABLET: 'Tablette',
-  SWITCH: 'Switch',
-  FIREWALL: 'Firewall',
-  ROUTER: 'Routeur',
-  WIFI_AP: 'Point d\'accès WiFi',
-  ACCESS_POINT: 'Point d\'accès',
-  TEAMS_ROOM: 'Teams Room',
-  WEBCAM: 'Webcam',
-  DISPLAY: 'Écran',
-  CAMERA: 'Caméra',
-  SERVER: 'Serveur',
-  CABLE: 'Câble',
-  PATCH_PANEL: 'Panneau de brassage',
-  PDU: 'PDU',
-  BOX_5G: 'Box 5G',
-  OTHER: 'Autre',
-};
+// assetTypeLabels imported from centralized source
+import { assetTypeLabels } from '@/lib/asset-labels';
 
 /**
  * Build a readable label for an asset.
@@ -144,6 +136,7 @@ export default function FloorPlanDetailPage({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [pendingDeleteVersionId, setPendingDeleteVersionId] = useState<string | null>(null);
   const { canUpdate, canDelete } = usePermissions();
   const { getLabelsForType, getLabel } = useEnumLabels();
 
@@ -205,11 +198,12 @@ export default function FloorPlanDetailPage({
   });
 
   // Load racks from the site for RACK pin association
-  const { data: racks } = useQuery<Rack[]>({
+  const { data: racksResponse } = useQuery({
     queryKey: ['racks', floorPlan?.site?.id],
-    queryFn: () => racksApi.getAll(floorPlan?.site?.id),
+    queryFn: () => racksApi.getAll({ siteId: floorPlan?.site?.id }),
     enabled: !!floorPlan?.site?.id,
   });
+  const racks = racksResponse?.data;
 
   // Version history
   const { data: versionHistory } = useQuery<FloorPlan[]>({
@@ -414,7 +408,7 @@ export default function FloorPlanDetailPage({
   const heatmapAccessPoints: HeatmapAccessPoint[] = useMemo(() => {
     if (!floorPlan?.pins) return [];
     return floorPlan.pins
-      .filter(pin => pin.pinType === 'ACCESS_POINT')
+      .filter(pin => pin.pinType === 'WIFI_AP')
       .map(pin => ({
         pinId: pin.id,
         x: pin.x,
@@ -687,9 +681,7 @@ export default function FloorPlanDetailPage({
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          if (confirm(`Supprimer la version ${version.version} ? Cette action est irréversible.`)) {
-                            deleteVersionMutation.mutate(version.id);
-                          }
+                          setPendingDeleteVersionId(version.id);
                         }}
                         disabled={deleteVersionMutation.isPending}
                       >
@@ -1294,6 +1286,29 @@ export default function FloorPlanDetailPage({
           setCalibrationMode(true);
         }}
       />
+
+      <AlertDialog open={!!pendingDeleteVersionId} onOpenChange={(open: boolean) => !open && setPendingDeleteVersionId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              Supprimer cette version ? Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (pendingDeleteVersionId) deleteVersionMutation.mutate(pendingDeleteVersionId);
+                setPendingDeleteVersionId(null);
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -171,7 +171,6 @@ export type AssetType =
   | 'FIREWALL'
   | 'ROUTER'
   | 'WIFI_AP'
-  | 'ACCESS_POINT'
   | 'TEAMS_ROOM'
   | 'WEBCAM'
   | 'DISPLAY'
@@ -318,7 +317,7 @@ export interface TaskComment {
 }
 
 // FloorPlan types
-export type PinType = 'SWITCH' | 'FIREWALL' | 'ACCESS_POINT' | 'PRINTER' | 'RACK' | 'CAMERA' | 'PATCH_PANEL' | 'RJ45' | 'NRO' | 'ROUTER' | 'TEAMS_ROOM' | 'WEBCAM' | 'DISPLAY' | 'SERVER' | 'PDU' | 'BOX_5G' | 'OTHER';
+export type PinType = 'SWITCH' | 'FIREWALL' | 'WIFI_AP' | 'PRINTER' | 'RACK' | 'CAMERA' | 'PATCH_PANEL' | 'RJ45' | 'NRO' | 'ROUTER' | 'TEAMS_ROOM' | 'WEBCAM' | 'DISPLAY' | 'SERVER' | 'PDU' | 'BOX_5G' | 'OTHER';
 
 export interface Pin {
   id: string;

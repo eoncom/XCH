@@ -36,6 +36,7 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     'floor-plans': ['read', 'update'],
     integrations: ['read'],
     monitoring: ['read'],
+    tenants: ['read'],
     users: ['read'],
     contacts: ['create', 'read', 'update'],
     'contact-types': ['read'],
@@ -51,6 +52,7 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     racks: ['create', 'read', 'update'],
     tasks: ['create', 'read', 'update'],
     'floor-plans': ['read', 'create', 'update'],
+    integrations: ['read'],
     monitoring: ['read'],
     contacts: ['read'],
     'contact-types': ['read'],
@@ -64,6 +66,7 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     racks: ['read'],
     tasks: ['read'],
     'floor-plans': ['read'],
+    integrations: ['read'],
     monitoring: ['read'],
     contacts: ['read'],
     'contact-types': ['read'],
@@ -85,6 +88,8 @@ const RESOURCE_KEY_MAP: Record<string, string> = {
   contacts: 'contacts',
   monitoring: 'monitoring',
   netbox: 'netbox',
+  'billing-entities': 'billingEntities',
+  expenses: 'expenses',
 };
 
 /**
@@ -154,7 +159,7 @@ export function usePermissions() {
    */
   const can = (resource: string, action: string, siteId?: string): boolean => {
     // Resources that are not site-scoped (org-level) — use pure role-based check
-    const orgResources = ['users', 'tenants', 'divisions', 'delegations', 'contact-types', 'integrations'];
+    const orgResources = ['users', 'tenants', 'divisions', 'delegations', 'contact-types', 'integrations', 'billing-entities', 'expenses'];
     if (orgResources.includes(resource)) {
       const rolePerms = ROLE_PERMISSIONS[role];
       if (!rolePerms) return false;

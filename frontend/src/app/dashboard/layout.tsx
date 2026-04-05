@@ -56,7 +56,7 @@ const navigation: Array<{
   { name: 'NetBox', href: '/dashboard/netbox', icon: Database, moduleKey: 'integrations_netbox', permResource: 'netbox' },
   { name: 'Dashboard TV', href: '/tv', icon: Monitor, external: true },
   { name: 'Alertes', href: '/dashboard/alerts', icon: AlertTriangle, moduleKey: 'alerts' },
-  { name: 'Coûts', href: '/dashboard/costs', icon: Receipt, permResource: 'expenses' },
+  { name: 'Coûts', href: '/dashboard/costs', icon: Receipt, moduleKey: 'costs', permResource: 'expenses' },
 ];
 
 const adminNavigation = [
@@ -80,12 +80,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // Check module is enabled
       if (item.moduleKey && !isModuleEnabled(item.moduleKey)) return false;
 
-      // Check permission-gated items (monitoring, netbox)
+      // Check permission-gated items (monitoring, netbox, expenses)
       if (item.permResource) {
         // Must have the read permission for this resource
         if (!can(item.permResource, 'read')) return false;
-        // For TECHNICIEN/VIEWER: must have at least one site assigned
-        if (!hasAnySiteAccess()) return false;
+        // For site-scoped resources: must have at least one site assigned
+        const orgLevelResources = ['expenses', 'billing-entities'];
+        if (!orgLevelResources.includes(item.permResource) && !hasAnySiteAccess()) return false;
       }
 
       return true;

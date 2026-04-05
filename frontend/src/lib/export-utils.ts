@@ -455,6 +455,104 @@ export function exportSiteReport(
   doc.save(`rapport-${site.code}-${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
+// ==================== TASKS EXPORT ====================
+
+interface TaskExportData {
+  title: string;
+  status: string;
+  priority: string;
+  siteName?: string;
+  assignedTo?: string;
+  dueDate?: string;
+  createdAt?: string;
+}
+
+/**
+ * Export tasks list
+ */
+export function exportTasks(tasks: TaskExportData[], format: 'pdf' | 'excel' | 'csv' | 'json' = 'excel'): void {
+  const options: ExportOptions = {
+    filename: `xch-taches-${new Date().toISOString().split('T')[0]}`,
+    title: 'Liste des Tâches',
+    subtitle: `${tasks.length} tâche(s)`,
+    columns: [
+      { header: 'Titre', key: 'title', width: 30 },
+      { header: 'Statut', key: 'status', width: 12 },
+      { header: 'Priorité', key: 'priority', width: 12 },
+      { header: 'Site', key: 'siteName', width: 18 },
+      { header: 'Assigné à', key: 'assignedTo', width: 18 },
+      { header: 'Échéance', key: 'dueDate', width: 12 },
+      { header: 'Créée le', key: 'createdAt', width: 12 },
+    ],
+    data: tasks,
+  };
+
+  switch (format) {
+    case 'pdf':
+      exportToPDF(options);
+      break;
+    case 'csv':
+      exportToCSV(options);
+      break;
+    case 'json':
+      exportToJSON(options);
+      break;
+    case 'excel':
+    default:
+      exportToExcel(options);
+      break;
+  }
+}
+
+// ==================== CONTACTS EXPORT ====================
+
+interface ContactExportData {
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  category?: string;
+  type?: string;
+  active?: string;
+}
+
+/**
+ * Export contacts list
+ */
+export function exportContacts(contacts: ContactExportData[], format: 'pdf' | 'excel' | 'csv' | 'json' = 'excel'): void {
+  const options: ExportOptions = {
+    filename: `xch-contacts-${new Date().toISOString().split('T')[0]}`,
+    title: 'Liste des Contacts',
+    subtitle: `${contacts.length} contact(s)`,
+    columns: [
+      { header: 'Nom', key: 'name', width: 20 },
+      { header: 'Email', key: 'email', width: 25 },
+      { header: 'Téléphone', key: 'phone', width: 15 },
+      { header: 'Entreprise', key: 'company', width: 20 },
+      { header: 'Catégorie', key: 'category', width: 14 },
+      { header: 'Type', key: 'type', width: 14 },
+      { header: 'Actif', key: 'active', width: 8 },
+    ],
+    data: contacts,
+  };
+
+  switch (format) {
+    case 'pdf':
+      exportToPDF(options);
+      break;
+    case 'csv':
+      exportToCSV(options);
+      break;
+    case 'json':
+      exportToJSON(options);
+      break;
+    case 'excel':
+    default:
+      exportToExcel(options);
+      break;
+  }
+}
+
 /**
  * Export rack diagram to PDF
  */

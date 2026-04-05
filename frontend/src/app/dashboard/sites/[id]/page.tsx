@@ -56,42 +56,7 @@ const healthStatusColors = {
   UNKNOWN: 'secondary' as const,
 };
 
-const assetStatusColors: Record<string, 'success' | 'secondary' | 'warning' | 'error'> = {
-  IN_SERVICE: 'success',
-  OUT_OF_SERVICE: 'secondary',
-  IN_TRANSIT: 'warning',
-  STOCK: 'secondary',
-  RETIRED: 'error',
-};
-
-const assetStatusLabels: Record<string, string> = {
-  IN_SERVICE: 'En service',
-  OUT_OF_SERVICE: 'Hors service',
-  IN_TRANSIT: 'En transit',
-  STOCK: 'En stock',
-  RETIRED: 'Retiré',
-};
-
-const assetTypeLabels: Record<string, string> = {
-  PRINTER: 'Imprimante',
-  IPAD: 'iPad',
-  TABLET: 'Tablette',
-  SWITCH: 'Switch',
-  FIREWALL: 'Firewall',
-  ROUTER: 'Routeur',
-  WIFI_AP: 'Point d\'accès WiFi',
-  ACCESS_POINT: 'Point d\'accès',
-  TEAMS_ROOM: 'Teams Room',
-  WEBCAM: 'Webcam',
-  DISPLAY: 'Écran',
-  CAMERA: 'Caméra',
-  SERVER: 'Serveur',
-  CABLE: 'Câble',
-  PATCH_PANEL: 'Panneau de brassage',
-  PDU: 'PDU',
-  BOX_5G: 'Box 5G',
-  OTHER: 'Autre',
-};
+import { assetTypeLabels, assetStatusLabels, assetStatusColors } from '@/lib/asset-labels';
 
 const sourceLabels: Record<string, string> = {
   site: 'Site',
@@ -233,11 +198,12 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
     enabled: isAdmin,
   });
 
-  const { data: allUsers = [] } = useQuery<UserType[]>({
+  const { data: allUsersResponse } = useQuery({
     queryKey: ['users'],
     queryFn: () => usersApi.getAll(),
     enabled: isAdmin,
   });
+  const allUsers = allUsersResponse?.data ?? [];
 
   // Filter out users that already have access
   const availableUsers = allUsers.filter(
@@ -1146,11 +1112,12 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   }, [site?.metadata?.healthBreakdown, monitorStatusMap]);
 
   // Load site racks
-  const { data: racks = [] } = useQuery<Rack[]>({
+  const { data: racksResponse } = useQuery({
     queryKey: ['racks', { siteId: id }],
-    queryFn: () => racksApi.getAll(id),
+    queryFn: () => racksApi.getAll({ siteId: id }),
     enabled: !!id,
   });
+  const racks = racksResponse?.data ?? [];
 
   // Load site tasks (filter by siteId)
   const {data: allTasks = []} = useQuery<Task[]>({
@@ -1162,11 +1129,12 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const activeTasks = tasks.filter(t => t.status !== 'DONE');
 
   // Load site floor plans
-  const { data: floorPlans = [] } = useQuery<FloorPlan[]>({
+  const { data: floorPlansResponse } = useQuery({
     queryKey: ['floor-plans', { siteId: id }],
-    queryFn: () => floorPlansApi.getAll(id),
+    queryFn: () => floorPlansApi.getAll({ siteId: id }),
     enabled: !!id,
   });
+  const floorPlans = floorPlansResponse?.data ?? [];
 
   // Compute latest version per plan group (for display in Plans tab)
   const latestFloorPlans = useMemo(() => {

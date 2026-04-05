@@ -12,14 +12,16 @@ import { sitesApi } from '@/lib/api/sites';
 import { organizationApi } from '@/lib/api/organization';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, MapPin, Search, List, Map, LayoutGrid, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import type { Site } from '@/types';
 import { ExportMenu } from '@/components/ui/export-menu';
 import { exportSites } from '@/lib/export-utils';
+import { siteStatusLabels } from '@/lib/status-labels';
 
 // Dynamically import map component (client-side only)
 const SitesMap = dynamic(() => import('@/components/maps/SitesMap'), {
@@ -65,13 +67,33 @@ export default function SitesPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [filterDivisionId, setFilterDivisionId] = useState<string>('');
   const [filterDelegationId, setFilterDelegationId] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [activeTab, setActiveTab] = useState<string>('list');
   const router = useRouter();
   const { canCreate } = usePermissions();
 
-  const { data: sites, isLoading } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
+  // Use large pageSize for map view so all sites are loaded
+  const effectivePageSize = activeTab === 'map' ? 200 : pageSize;
+  const effectivePage = activeTab === 'map' ? 1 : page;
+
+  const { data: response, isLoading } = useQuery<{ data: Site[]; meta: PaginationMeta }>({
+    queryKey: ['sites', { search, filterDivisionId, filterDelegationId, filterStatus, page: effectivePage, pageSize: effectivePageSize }],
+    queryFn: () => sitesApi.getAllPaginated({
+      search: search || undefined,
+      divisionId: filterDivisionId || undefined,
+      delegationId: filterDelegationId || undefined,
+      status: filterStatus || undefined,
+      page: effectivePage,
+      pageSize: effectivePageSize,
+    }),
   });
+  const sites = response?.data ?? [];
+  const meta = response?.meta;
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [search, filterDivisionId, filterDelegationId, filterStatus]);
 
   const { data: divisions } = useQuery({
     queryKey: ['divisions'],
@@ -83,7 +105,7 @@ export default function SitesPage() {
     queryFn: () => organizationApi.getDelegations(filterDivisionId || undefined),
   });
 
-  const filteredSites = sites?.filter((site) => {
+  const filteredSites = sites.filter((site) => {
     const matchesSearch = !search ||
       site.name.toLowerCase().includes(search.toLowerCase()) ||
       site.code.toLowerCase().includes(search.toLowerCase()) ||
@@ -232,10 +254,21 @@ export default function SitesPage() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v === 'all' ? '' : v)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Statut" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les statuts</SelectItem>
+            {Object.entries(siteStatusLabels).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Tabs: List / Map */}
-      <Tabs defaultValue="list" className="w-full">
+      <Tabs defaultValue="list" value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList>
           <TabsTrigger value="list">
             <List className="mr-2 h-4 w-4" />
@@ -378,6 +411,8 @@ export default function SitesPage() {
               description={search ? 'Essayez de modifier votre recherche' : undefined}
             />
           )}
+
+          {meta && <Pagination meta={meta} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />}
         </TabsContent>
 
         {/* Map View */}

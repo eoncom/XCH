@@ -1,8 +1,9 @@
-import { Injectable, Inject, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateSiteDto } from './dto/create-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
 import { FilterSiteDto } from './dto/filter-site.dto';
+import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { StorageService } from '../../common/services/storage.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
@@ -10,6 +11,8 @@ import { createId } from '@paralleldrive/cuid2';
 
 @Injectable()
 export class SitesService {
+  private readonly logger = new Logger(SitesService.name);
+
   constructor(
     private prisma: PrismaClient,
     private storageService: StorageService,
@@ -64,7 +67,19 @@ export class SitesService {
     return site;
   }
 
-  async findAll(tenantId: string, filter?: FilterSiteDto, accessibleSiteIds?: string[] | null) {
+  // Allowed sort fields mapping for raw SQL
+  private static readonly SORT_FIELD_MAP: Record<string, string> = {
+    updatedAt: 's."updatedAt"',
+    createdAt: 's."createdAt"',
+    name: 's."name"',
+    code: 's."code"',
+    status: 's."status"',
+  };
+
+  async findAll(tenantId: string, filter?: FilterSiteDto, accessibleSiteIds?: string[] | null): Promise<PaginatedResponse<any>> {
+    const page = filter?.page ?? 1;
+    const pageSize = filter?.pageSize ?? 25;
+
     // Build WHERE clause for raw query
     let whereClause = `s."tenantId" = $1`;
     const params: any[] = [tenantId];
@@ -75,7 +90,7 @@ export class SitesService {
     if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
       if (accessibleSiteIds.length === 0) {
         // No accessible sites — return empty
-        return [];
+        return buildPaginatedResponse([], 0, page, pageSize);
       }
       const placeholders = accessibleSiteIds.map((_, i) => `$${paramIndex + i}`).join(', ');
       whereClause += ` AND s.id IN (${placeholders})`;
@@ -120,6 +135,28 @@ export class SitesService {
       params.push(filter.divisionId);
       paramIndex++;
     }
+
+    // Build COUNT query — needs the delegation JOIN only when divisionId filter is active
+    const countJoin = filter?.divisionId ? joinClause : '';
+    const countResult = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(
+      `SELECT COUNT(*) as count FROM "sites" s ${countJoin} WHERE ${whereClause}`,
+      ...params,
+    );
+    const total = Number(countResult[0]?.count ?? 0);
+
+    // Short-circuit if no results
+    if (total === 0) {
+      return buildPaginatedResponse([], 0, page, pageSize);
+    }
+
+    // Sort handling
+    const sortColumn = (filter?.sortBy && SitesService.SORT_FIELD_MAP[filter.sortBy]) ?? 's."updatedAt"';
+    const sortDirection = filter?.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+    // Pagination params
+    const offset = (page - 1) * pageSize;
+    const paginationParams = [...params, pageSize, offset];
+    const limitClause = `LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
 
     // Use raw query to extract latitude/longitude from PostGIS coordinates
     // Always LEFT JOIN delegation and division for org info
@@ -166,11 +203,12 @@ export class SitesService {
       ${orgJoin}
       ${divJoin}
       WHERE ${whereClause}
-      ORDER BY s."updatedAt" DESC
-    `, ...params);
+      ORDER BY ${sortColumn} ${sortDirection}
+      ${limitClause}
+    `, ...paginationParams);
 
     // Transform org fields into nested objects
-    return (rawSites as any[]).map(site => ({
+    const transformedResults = (rawSites as any[]).map(site => ({
       ...site,
       delegation: site.delegationId ? {
         id: site.delegationId,
@@ -190,6 +228,8 @@ export class SitesService {
       division_code: undefined,
       division_color: undefined,
     }));
+
+    return buildPaginatedResponse(transformedResults, total, page, pageSize);
   }
 
   async findOne(id: string, tenantId: string) {
@@ -335,6 +375,13 @@ export class SitesService {
   async remove(id: string, tenantId: string, userId?: string) {
     const site = await this.findOne(id, tenantId);
 
+    // ---- Best-effort MinIO cleanup before DB deletion ----
+    try {
+      await this.cleanupSiteFiles(id, tenantId);
+    } catch (error) {
+      this.logger.error(`Failed to clean up storage files for site ${id}, proceeding with DB deletion`, error);
+    }
+
     await this.prisma.site.delete({
       where: { id },
     });
@@ -350,6 +397,93 @@ export class SitesService {
     });
 
     return { message: 'Site deleted successfully' };
+  }
+
+  /**
+   * Clean up all MinIO files associated with a site and its children
+   * (attachments for site/assets/racks/tasks + floor plan images).
+   * Best-effort: errors are logged but do not prevent deletion.
+   */
+  private async cleanupSiteFiles(siteId: string, tenantId: string): Promise<void> {
+    // Collect child entity IDs for attachment lookups
+    const [assets, racks, tasks] = await Promise.all([
+      this.prisma.asset.findMany({ where: { siteId, tenantId }, select: { id: true } }),
+      this.prisma.rack.findMany({ where: { siteId, tenantId }, select: { id: true } }),
+      this.prisma.task.findMany({ where: { siteId, tenantId }, select: { id: true } }),
+    ]);
+    const assetIds = assets.map(a => a.id);
+    const rackIds = racks.map(r => r.id);
+    const taskIds = tasks.map(t => t.id);
+
+    // 1. Delete all attachment files tracked in the DB for this site and its children
+    const attachments = await this.prisma.attachment.findMany({
+      where: {
+        tenantId,
+        OR: [
+          { siteId },
+          ...(assetIds.length > 0 ? [{ assetId: { in: assetIds } }] : []),
+          ...(rackIds.length > 0 ? [{ rackId: { in: rackIds } }] : []),
+          ...(taskIds.length > 0 ? [{ taskId: { in: taskIds } }] : []),
+        ],
+      },
+      select: { path: true },
+    });
+
+    for (const attachment of attachments) {
+      try {
+        await this.storageService.deleteFile(attachment.path);
+      } catch (error) {
+        this.logger.error(`Failed to delete attachment file: ${attachment.path}`, error);
+      }
+    }
+
+    if (attachments.length > 0) {
+      this.logger.log(`Cleaned up ${attachments.length} attachment files for site ${siteId}`);
+    }
+
+    // 2. Delete floor plan image files
+    const floorPlans = await this.prisma.floorPlan.findMany({
+      where: { siteId },
+      select: { id: true, fileUrl: true },
+    });
+
+    for (const plan of floorPlans) {
+      if (plan.fileUrl) {
+        try {
+          await this.storageService.deleteByPrefix(`floor-plans/plan-${plan.id}`);
+        } catch (error) {
+          this.logger.error(`Failed to delete floor plan files for plan ${plan.id}`, error);
+        }
+      }
+    }
+
+    if (floorPlans.length > 0) {
+      this.logger.log(`Cleaned up files for ${floorPlans.length} floor plans on site ${siteId}`);
+    }
+
+    // 3. Clean up entire attachment folder prefixes for this site's entities
+    // This catches any orphaned files not tracked in the DB
+    try {
+      await this.storageService.deleteByPrefix(`attachments/${tenantId}/sites/${siteId}`);
+    } catch (error) {
+      this.logger.error(`Failed to delete site attachment prefix for site ${siteId}`, error);
+    }
+
+    for (const asset of assets) {
+      try {
+        await this.storageService.deleteByPrefix(`attachments/${tenantId}/assets/${asset.id}`);
+      } catch (error) {
+        this.logger.error(`Failed to delete asset attachment prefix for asset ${asset.id}`, error);
+      }
+    }
+
+    for (const rack of racks) {
+      try {
+        await this.storageService.deleteByPrefix(`attachments/${tenantId}/racks/${rack.id}`);
+      } catch (error) {
+        this.logger.error(`Failed to delete rack attachment prefix for rack ${rack.id}`, error);
+      }
+    }
   }
 
   async findNearby(latitude: number, longitude: number, radiusKm: number, tenantId: string) {

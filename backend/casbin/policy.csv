@@ -22,6 +22,8 @@ p, ADMIN, floor-plans, delete, *
 p, ADMIN, integrations, read, *
 p, ADMIN, integrations, create, *
 p, ADMIN, integrations, update, *
+p, ADMIN, integrations, delete, *
+p, ADMIN, tenants, delete, *
 p, ADMIN, users, create, *
 p, ADMIN, users, read, *
 p, ADMIN, users, update, *

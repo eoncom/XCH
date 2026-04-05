@@ -7,7 +7,64 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [Unreleased]
+## [1.1.0] - 2026-04-05
+
+### Stabilisation pre-production — 6 phases
+
+#### Securite et integrite
+- **AllExceptionsFilter** global — Prisma P2002/P2025/P2003 retournent 409/404/400 au lieu de 500
+- Endpoint seed securise (`@Action('delete')`) — MANAGER ne peut plus reset la base
+- `integrations.delete` + `tenants.delete` ajoutes dans Casbin
+- Validation: asset RETIRED bloque le montage en rack
+- NetBox provider: INACTIVE remplace par CLOSED/OUT_OF_SERVICE (valeurs Prisma valides)
+- MinIO credentials: fallback hardcode supprime, variables env obligatoires
+
+#### Unification types, labels, permissions
+- **WIFI_AP / ACCESS_POINT unifie** — 48 occurrences dans 22 fichiers, heatmap WiFi corrige
+- `assetTypeLabels` centralise dans `@/lib/asset-labels` (6 doublons supprimes)
+- Pin colors/labels centralises dans `backend/src/common/constants/pin-config.ts`
+- `siteStatusLabels` corrige (PREPARATION/ACTIVE/CLOSED)
+- ROLE_PERMISSIONS frontend aligne avec Casbin (MANAGER+tenants, TECH/VIEWER+integrations)
+- DTOs corriges avec `@IsEnum()` (expenses, contacts, users, assets)
+- `@ts-nocheck` retire de 4 fichiers modifies (tasks, assets/new, assets/[id], assets/[id]/edit)
+- Navigation Couts avec `moduleKey`, expenses hors `hasAnySiteAccess`
+
+#### Pagination serveur
+- `PaginationDto` + `PaginatedResponse<T>` generiques
+- 8 modules backend pagines (assets, sites, tasks, contacts, expenses, racks, users, floor-plans)
+- Sites: raw SQL avec COUNT + LIMIT/OFFSET parametrise
+- Composant `<Pagination>` frontend (page, pageSize, navigation)
+- 8 pages frontend integrees avec pagination + selecteur taille page
+
+#### Import et onboarding
+- **Import CSV assets** — endpoint multipart, papaparse, headers FR/EN, validation ligne par ligne, rapport erreurs
+- **Page import frontend** — drag & drop, preview tableau, template telechargebale, rapport resultats
+- **Service email** (Nodemailer) — SMTP configurable, fallback console log en dev
+- **Invitation par email** — token 72h, page `/invite` pour definir mot de passe
+- **Mot de passe oublie** — endpoints forgot/reset, token 1h, pages frontend
+
+#### UX production
+- 5x `window.confirm()` remplaces par AlertDialog
+- **Verification avant fermeture site** — alerte si assets actifs ou taches ouvertes
+- Filtres ajoutes: statut sites, assigne tasks, statut racks, recherche/role users
+- **Export Tasks + Contacts** (CSV/Excel/PDF/JSON)
+- **Batch update assets** — selection multiple, changement statut/site en lot
+
+#### Nettoyage et robustesse
+- **MinIO cleanup** a la suppression (sites cascade → assets/racks/floor-plans, `deleteByPrefix`)
+- **Audit logs etendus** aux assets, tasks, racks (create/update/delete/mount/unmount)
+
+### Migration requise
+```bash
+npx prisma migrate deploy   # Ajoute tokens invitation/reset sur User
+npx prisma generate
+```
+
+### Variables env ajoutees (optionnelles)
+```env
+SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM
+FRONTEND_URL
+```
 
 ---
 

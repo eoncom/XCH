@@ -4715,3 +4715,24 @@ feat: scope-filtered org tree, searchable site selector, fix Radix UI types
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-05
+
+**Date:** 2026-04-05 22:09:12
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 55
+- Frontend files modified: 46
+
+**Commit message:**
+```
+fix: session endpoint returns full user data from DB including totpEnabled
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,51 +20,17 @@ import { assetsApi } from '@/lib/api/assets';
 import { SiteFilterSelect } from '@/components/ui/grouped-site-selector';
 import { exportAssets } from '@/lib/export-utils';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Plus, Search, QrCode, Package, ShieldAlert, MapPin, Activity, LayoutGrid, List, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Plus, Search, QrCode, Package, ShieldAlert, MapPin, Activity, LayoutGrid, List, ArrowUpDown, ArrowUp, ArrowDown, Upload, X } from 'lucide-react';
 import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds, type WarrantyStatus } from '@/lib/warranty';
+import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import Link from 'next/link';
+import { assetTypeLabels, assetStatusLabels, assetStatusColors } from '@/lib/asset-labels';
 import type { Asset, AssetType, AssetStatus } from '@/types';
-
-const assetTypeLabels: Record<AssetType, string> = {
-  PRINTER: 'Imprimante',
-  IPAD: 'iPad',
-  TABLET: 'Tablette',
-  SWITCH: 'Switch',
-  FIREWALL: 'Firewall',
-  ROUTER: 'Routeur',
-  WIFI_AP: 'Point d\'accès WiFi',
-  ACCESS_POINT: 'Point d\'accès',
-  TEAMS_ROOM: 'Teams Room',
-  WEBCAM: 'Webcam',
-  DISPLAY: 'Écran',
-  CAMERA: 'Caméra',
-  SERVER: 'Serveur',
-  CABLE: 'Câble',
-  PATCH_PANEL: 'Panneau de brassage',
-  PDU: 'PDU',
-  BOX_5G: 'Box 5G',
-  OTHER: 'Autre',
-};
-
-const assetStatusColors = {
-  IN_SERVICE: 'success',
-  OUT_OF_SERVICE: 'secondary',
-  IN_TRANSIT: 'warning',
-  STOCK: 'secondary',
-  RETIRED: 'error',
-} as const;
-
-const assetStatusLabels: Record<AssetStatus, string> = {
-  IN_SERVICE: 'En service',
-  OUT_OF_SERVICE: 'Hors service',
-  IN_TRANSIT: 'En transit',
-  STOCK: 'En stock',
-  RETIRED: 'Retiré',
-};
 
 export default function AssetsPage() {
   const [search, setSearch] = useState('');
@@ -74,23 +40,53 @@ export default function AssetsPage() {
   const [warrantyFilter, setWarrantyFilter] = useState<string>('all');
   const [monitorFilter, setMonitorFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [sortField, setSortField] = useState<string>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const warrantyThresholds = useWarrantyThresholds();
   const { statusMap } = useLiveMonitors();
-  const { canCreate } = usePermissions();
+  const { canCreate, canUpdate } = usePermissions();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
-  const { data: assets, isLoading } = useQuery<Asset[]>({
-    queryKey: ['assets', { status: statusFilter, type: typeFilter, siteId: siteFilter, search }],
+  // Batch selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchStatus, setBatchStatus] = useState<string>('');
+  const [batchSiteId, setBatchSiteId] = useState<string>('');
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setBatchStatus('');
+    setBatchSiteId('');
+  }, []);
+
+  const { data: response, isLoading } = useQuery<{ data: Asset[]; meta: PaginationMeta }>({
+    queryKey: ['assets', { status: statusFilter, type: typeFilter, siteId: siteFilter, search, page, pageSize }],
     queryFn: () =>
-      assetsApi.getAll({
+      assetsApi.getAllPaginated({
         status: statusFilter !== 'all' ? statusFilter : undefined,
         type: typeFilter !== 'all' ? typeFilter : undefined,
         siteId: siteFilter !== 'all' ? siteFilter : undefined,
         search: search || undefined,
+        page,
+        pageSize,
       }),
   });
+  const assets = response?.data ?? [];
+  const meta = response?.meta;
+
+  // Reset page and selection when filters change
+  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [search, statusFilter, typeFilter, siteFilter, warrantyFilter, monitorFilter]);
 
   // Resolve live monitoring status: live data takes priority over cached DB value
   const getLiveStatus = (asset: Asset): 'up' | 'down' | 'unknown' | undefined => {
@@ -100,7 +96,7 @@ export default function AssetsPage() {
     return (asset.networkInfo as any)?.monitorStatus;
   };
 
-  const filteredAssets = assets?.filter((asset) => {
+  const filteredAssets = assets.filter((asset) => {
     const searchLower = search.toLowerCase();
     const matchesSearch = (
       asset.model?.toLowerCase().includes(searchLower) ||
@@ -137,6 +133,31 @@ export default function AssetsPage() {
       if (monitorFilter === 'not_monitored' && net?.monitorName) return false;
     }
     return matchesSearch;
+  });
+
+  // Batch selection helpers (after filteredAssets is defined)
+  const allSelected = filteredAssets.length > 0 && selectedIds.size === filteredAssets.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < filteredAssets.length;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredAssets.map(a => a.id)));
+    }
+  };
+
+  const batchMutation = useMutation({
+    mutationFn: () => {
+      const update: { status?: string; siteId?: string } = {};
+      if (batchStatus) update.status = batchStatus;
+      if (batchSiteId) update.siteId = batchSiteId;
+      return assetsApi.batchUpdate(Array.from(selectedIds), update);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      clearSelection();
+    },
   });
 
   // Sort assets for table view
@@ -270,12 +291,20 @@ export default function AssetsPage() {
             </Link>
           </Button>
           {canCreate('assets') && (
-            <Button asChild className="press-effect" data-testid="create-asset-btn">
-              <Link href="/dashboard/assets/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Nouvel équipement
-              </Link>
-            </Button>
+            <>
+              <Button variant="outline" asChild>
+                <Link href="/dashboard/assets/import">
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import CSV
+                </Link>
+              </Button>
+              <Button asChild className="press-effect" data-testid="create-asset-btn">
+                <Link href="/dashboard/assets/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nouvel équipement
+                </Link>
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -358,6 +387,17 @@ export default function AssetsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {canUpdate('assets') && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allSelected}
+                        ref={undefined}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Tout sélectionner"
+                        {...(someSelected ? { 'data-state': 'indeterminate' } : {})}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('type')}>
                     <span className="inline-flex items-center">Type<SortIcon field="type" /></span>
                   </TableHead>
@@ -386,7 +426,16 @@ export default function AssetsPage() {
                 {sortedAssets?.map((asset) => {
                   const liveStatus = getLiveStatus(asset);
                   return (
-                    <TableRow key={asset.id}>
+                    <TableRow key={asset.id} className={selectedIds.has(asset.id) ? 'bg-muted/50' : ''}>
+                      {canUpdate('assets') && (
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(asset.id)}
+                            onCheckedChange={() => toggleSelect(asset.id)}
+                            aria-label={`Sélectionner ${asset.name || asset.serialNumber || 'équipement'}`}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="font-medium text-xs">
                         {assetTypeLabels[asset.type] || asset.type}
                       </TableCell>
@@ -444,12 +493,21 @@ export default function AssetsPage() {
               <Card
                 key={asset.id}
                 data-testid="asset-card"
-                className="hover-lift cursor-pointer border-border"
+                className={`hover-lift cursor-pointer border-border ${selectedIds.has(asset.id) ? 'ring-2 ring-primary' : ''}`}
               >
                 <Link href={`/dashboard/assets/${asset.id}`}>
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
+                        {canUpdate('assets') && (
+                          <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(asset.id); }}>
+                            <Checkbox
+                              checked={selectedIds.has(asset.id)}
+                              onCheckedChange={() => {}}
+                              aria-label={`Sélectionner ${asset.name || asset.serialNumber || 'équipement'}`}
+                            />
+                          </div>
+                        )}
                         <Package className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <CardTitle className="text-lg text-foreground">
@@ -515,6 +573,8 @@ export default function AssetsPage() {
         </div>
       )}
 
+      {meta && <Pagination meta={meta} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />}
+
       {filteredAssets?.length === 0 && (
         <EmptyState
           icon={Package}
@@ -523,6 +583,54 @@ export default function AssetsPage() {
             ? 'Essayez de modifier vos filtres de recherche'
             : undefined}
         />
+      )}
+
+      {/* Batch action bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-lg">
+          <div className="container mx-auto flex flex-wrap items-center gap-3 px-4 py-3">
+            <span className="text-sm font-medium whitespace-nowrap">
+              {selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''}
+            </span>
+
+            <Select value={batchStatus} onValueChange={setBatchStatus}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Changer le statut" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(assetStatusLabels).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <SiteFilterSelect
+              value={batchSiteId || 'all'}
+              onValueChange={(v) => setBatchSiteId(v === 'all' ? '' : v)}
+            />
+
+            <Button
+              size="sm"
+              disabled={(!batchStatus && !batchSiteId) || batchMutation.isPending}
+              onClick={() => batchMutation.mutate()}
+            >
+              {batchMutation.isPending ? 'Application...' : 'Appliquer'}
+            </Button>
+
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              <X className="mr-1 h-4 w-4" />
+              Désélectionner
+            </Button>
+
+            {batchMutation.isError && (
+              <span className="text-sm text-destructive">
+                Erreur lors de la mise à jour
+              </span>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

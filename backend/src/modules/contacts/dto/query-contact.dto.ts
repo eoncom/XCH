@@ -1,9 +1,10 @@
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsEnum } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { ContactCategory } from '@prisma/client';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
-export class QueryContactDto {
+export class QueryContactDto extends PaginationDto {
   @ApiPropertyOptional({
     description: 'Filter by contact type ID',
     example: 'clxxxxxxxxxxxxx',
@@ -18,7 +19,7 @@ export class QueryContactDto {
     example: ContactCategory.PROVIDER,
   })
   @IsOptional()
-  @IsString()
+  @IsEnum(ContactCategory)
   category?: ContactCategory;
 
   @ApiPropertyOptional({

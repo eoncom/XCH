@@ -1,4 +1,3 @@
-// @ts-nocheck - Temporary fix for Radix UI + React 19 type incompatibility
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -23,36 +22,8 @@ import { GroupedSiteSelector } from '@/components/ui/grouped-site-selector';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
 import { ArrowLeft, Info, Wifi, ExternalLink, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
+import { assetTypeLabels, assetStatusLabels } from '@/lib/asset-labels';
 import type { Asset, AssetType, AssetStatus, UpdateAssetDto } from '@/types';
-
-const assetTypeLabels: Record<AssetType, string> = {
-  PRINTER: 'Imprimante',
-  IPAD: 'iPad',
-  TABLET: 'Tablette',
-  SWITCH: 'Switch',
-  FIREWALL: 'Firewall',
-  ROUTER: 'Routeur',
-  WIFI_AP: 'Point d\'accès WiFi',
-  ACCESS_POINT: 'Point d\'accès',
-  TEAMS_ROOM: 'Teams Room',
-  WEBCAM: 'Webcam',
-  DISPLAY: 'Écran',
-  CAMERA: 'Caméra',
-  SERVER: 'Serveur',
-  CABLE: 'Câble',
-  PATCH_PANEL: 'Panneau de brassage',
-  PDU: 'PDU',
-  BOX_5G: 'Box 5G',
-  OTHER: 'Autre',
-};
-
-const assetStatusLabels: Record<AssetStatus, string> = {
-  IN_SERVICE: 'En service',
-  OUT_OF_SERVICE: 'Hors service',
-  IN_TRANSIT: 'En transit',
-  STOCK: 'En stock',
-  RETIRED: 'Retiré',
-};
 
 const assetSchema = z.object({
   type: z.enum([
@@ -63,7 +34,6 @@ const assetSchema = z.object({
     'FIREWALL',
     'ROUTER',
     'WIFI_AP',
-    'ACCESS_POINT',
     'TEAMS_ROOM',
     'WEBCAM',
     'DISPLAY',

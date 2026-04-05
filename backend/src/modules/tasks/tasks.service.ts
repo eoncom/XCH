@@ -6,7 +6,9 @@ import { FilterTaskDto } from './dto/filter-task.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { StorageService } from '../../common/services/storage.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { createId } from '@paralleldrive/cuid2';
+import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
 @Injectable()
 export class TasksService {
@@ -15,6 +17,7 @@ export class TasksService {
   constructor(
     private prisma: PrismaClient,
     private storageService: StorageService,
+    private auditLogService: AuditLogService,
   ) {}
 
   async create(tenantId: string, userId: string, createTaskDto: CreateTaskDto) {
@@ -80,15 +83,33 @@ export class TasksService {
       },
     });
 
+    // Audit log
+    try {
+      await this.auditLogService.log({
+        tenantId,
+        userId,
+        action: 'CREATE',
+        entityType: 'task',
+        entityId: task.id,
+        changes: { after: { title: task.title, status: task.status, priority: task.priority, siteId: task.siteId, assignedTo: task.assignedTo } },
+      });
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for task ${task.id}: ${e.message}`);
+    }
+
     return task;
   }
 
-  async findAll(tenantId: string, filter?: FilterTaskDto, accessibleSiteIds?: string[] | null) {
+  async findAll(tenantId: string, filter?: FilterTaskDto, accessibleSiteIds?: string[] | null): Promise<PaginatedResponse<any>> {
+    const page = filter?.page ?? 1;
+    const pageSize = filter?.pageSize ?? 25;
+    const skip = (page - 1) * pageSize;
+
     const where: any = { tenantId };
 
     // Site access filtering
     if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
-      if (accessibleSiteIds.length === 0) return [];
+      if (accessibleSiteIds.length === 0) return buildPaginatedResponse([], 0, page, pageSize);
       where.siteId = { in: accessibleSiteIds };
     }
 
@@ -101,7 +122,7 @@ export class TasksService {
     }
 
     if (filter?.siteId) {
-      if (accessibleSiteIds && !accessibleSiteIds.includes(filter.siteId)) return [];
+      if (accessibleSiteIds && !accessibleSiteIds.includes(filter.siteId)) return buildPaginatedResponse([], 0, page, pageSize);
       where.siteId = filter.siteId;
     }
 
@@ -133,43 +154,54 @@ export class TasksService {
       ];
     }
 
-    const tasks = await this.prisma.task.findMany({
-      where,
-      include: {
-        site: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
+    // Determine sort order (default: createdAt desc)
+    const allowedSortFields = ['createdAt', 'updatedAt', 'priority', 'status', 'dueDate', 'title'];
+    const hasExplicitSort = filter?.sortBy && allowedSortFields.includes(filter.sortBy);
+    const sortBy: string = hasExplicitSort ? filter.sortBy! : 'createdAt';
+    const sortOrder = hasExplicitSort ? (filter?.sortOrder ?? 'desc') : 'desc';
+
+    const [tasks, total] = await Promise.all([
+      this.prisma.task.findMany({
+        where,
+        include: {
+          site: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          asset: {
+            select: {
+              id: true,
+              type: true,
+              model: true,
+            },
+          },
+          assignedUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          checklistItems: {
+            orderBy: {
+              order: 'asc',
+            },
           },
         },
-        asset: {
-          select: {
-            id: true,
-            type: true,
-            model: true,
-          },
+        orderBy: {
+          [sortBy]: sortOrder,
         },
-        assignedUser: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        checklistItems: {
-          orderBy: {
-            order: 'asc',
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.task.count({ where }),
+    ]);
 
     // Format checklist pour compatibilité frontend
-    return tasks.map(task => ({
+    const data = tasks.map(task => ({
       ...task,
       checklist: task.checklistItems.map(item => ({
         id: item.id,
@@ -178,6 +210,8 @@ export class TasksService {
         order: item.order,
       })),
     }));
+
+    return buildPaginatedResponse(data, total, page, pageSize);
   }
 
   async findOne(id: string, tenantId: string) {
@@ -244,8 +278,11 @@ export class TasksService {
     };
   }
 
-  async update(id: string, tenantId: string, updateTaskDto: UpdateTaskDto) {
-    await this.findOne(id, tenantId);
+  async update(id: string, tenantId: string, updateTaskDto: UpdateTaskDto, userId?: string) {
+    const before = await this.prisma.task.findFirst({ where: { id, tenantId } });
+    if (!before) {
+      throw new NotFoundException('Task not found');
+    }
 
     // Auto-complete task if status is DONE and no completedAt
     const data: any = { ...updateTaskDto };
@@ -299,15 +336,49 @@ export class TasksService {
       },
     });
 
+    // Audit log with diff
+    try {
+      const changes = this.auditLogService.diffChanges(
+        before as Record<string, any>,
+        updateTaskDto as Record<string, any>,
+      );
+      if (changes) {
+        await this.auditLogService.log({
+          tenantId,
+          userId,
+          action: 'UPDATE',
+          entityType: 'task',
+          entityId: id,
+          changes,
+        });
+      }
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for task ${id}: ${e.message}`);
+    }
+
     return task;
   }
 
-  async remove(id: string, tenantId: string) {
-    await this.findOne(id, tenantId);
+  async remove(id: string, tenantId: string, userId?: string) {
+    const task = await this.findOne(id, tenantId);
 
     await this.prisma.task.delete({
       where: { id },
     });
+
+    // Audit log
+    try {
+      await this.auditLogService.log({
+        tenantId,
+        userId,
+        action: 'DELETE',
+        entityType: 'task',
+        entityId: id,
+        changes: { before: { title: task.title, status: task.status, priority: task.priority, siteId: task.siteId, assignedTo: task.assignedTo } },
+      });
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for task ${id}: ${e.message}`);
+    }
 
     return { message: 'Task deleted successfully' };
   }

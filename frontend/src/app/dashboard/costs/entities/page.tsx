@@ -10,6 +10,16 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { billingEntitiesApi, type BillingEntity } from '@/lib/api/costs';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ArrowLeft, Plus, Pencil, Trash2, Building2 } from 'lucide-react';
@@ -31,6 +41,7 @@ export default function BillingEntitiesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', code: '', type: 'OTHER', description: '' });
+  const [pendingDeleteEntity, setPendingDeleteEntity] = useState<BillingEntity | null>(null);
 
   const { data: entities = [], isLoading } = useQuery<BillingEntity[]>({
     queryKey: ['billing-entities'],
@@ -185,9 +196,7 @@ export default function BillingEntitiesPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-destructive"
-                            onClick={() => {
-                              if (confirm(`Supprimer "${entity.name}" ?`)) deleteMutation.mutate(entity.id);
-                            }}
+                            onClick={() => setPendingDeleteEntity(entity)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -209,6 +218,29 @@ export default function BillingEntitiesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!pendingDeleteEntity} onOpenChange={(open) => !open && setPendingDeleteEntity(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              Supprimer &laquo;&nbsp;{pendingDeleteEntity?.name}&nbsp;&raquo; ? Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (pendingDeleteEntity) deleteMutation.mutate(pendingDeleteEntity.id);
+                setPendingDeleteEntity(null);
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

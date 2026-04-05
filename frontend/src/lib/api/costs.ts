@@ -1,4 +1,10 @@
 import { apiClient } from '../api-client';
+import type { PaginationMeta } from '@/components/ui/pagination';
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: PaginationMeta;
+}
 
 // ========== BILLING ENTITIES ==========
 
@@ -115,7 +121,7 @@ export interface TargetReport {
 }
 
 export const expensesApi = {
-  getAll: (params?: { type?: string; bearerId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string }) => {
+  getAll: (params?: { type?: string; bearerId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; page?: number; pageSize?: number }) => {
     const qs = new URLSearchParams();
     if (params?.type) qs.set('type', params.type);
     if (params?.bearerId) qs.set('bearerId', params.bearerId);
@@ -123,8 +129,10 @@ export const expensesApi = {
     if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
     if (params?.dateTo) qs.set('dateTo', params.dateTo);
     if (params?.search) qs.set('search', params.search);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
     const query = qs.toString();
-    return apiClient.get<Expense[]>(`/api/expenses${query ? `?${query}` : ''}`);
+    return apiClient.get<PaginatedResponse<Expense>>(`/api/expenses${query ? `?${query}` : ''}`);
   },
   getById: (id: string) => apiClient.get<Expense>(`/api/expenses/${id}`),
   create: (data: CreateExpenseData) => apiClient.post<Expense>('/api/expenses', data),

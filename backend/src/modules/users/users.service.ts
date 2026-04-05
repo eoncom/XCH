@@ -5,6 +5,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { FilterUserDto } from './dto/filter-user.dto';
+import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
 @Injectable()
 export class UsersService {
@@ -49,28 +51,58 @@ export class UsersService {
     return result;
   }
 
-  async findAll(tenantId: string, visibleUserIds?: string[] | null) {
+  async findAll(tenantId: string, filters: FilterUserDto = {}, visibleUserIds?: string[] | null) {
     const where: any = { tenantId };
     // If visibleUserIds is an array, filter to only those users
     if (visibleUserIds !== null && visibleUserIds !== undefined) {
       where.id = { in: visibleUserIds };
     }
-    const users = await this.prisma.user.findMany({
-      where,
-      include: {
-        tenant: {
-          select: {
-            id: true,
-            name: true,
+
+    // Search filter (name or email)
+    if (filters.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { email: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Role filter
+    if (filters.role) {
+      where.role = filters.role;
+    }
+
+    // Active filter
+    if (filters.active !== undefined) {
+      where.active = filters.active;
+    }
+
+    const page = filters.page ?? 1;
+    const pageSize = filters.pageSize ?? 25;
+    const sortField = filters.sortBy || 'createdAt';
+    const sortOrder = filters.sortOrder || 'desc';
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        include: {
+          tenant: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          [sortField]: sortOrder,
+        },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
 
-    return users.map(({ passwordHash, totpSecret, totpBackupCodes, ...user }) => user);
+    const data = users.map(({ passwordHash, totpSecret, totpBackupCodes, ...user }) => user);
+    return buildPaginatedResponse(data, total, page, pageSize);
   }
 
   async findOne(id: string, tenantId: string) {

@@ -11,9 +11,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { expensesApi, billingEntitiesApi, type Expense, type BillingEntity } from '@/lib/api/costs';
 import { usePermissions } from '@/hooks/usePermissions';
+import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Plus, Search, Receipt, Building2, TrendingUp, DollarSign, Trash2, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 const EXPENSE_TYPE_LABELS: Record<string, string> = {
   EQUIPMENT: 'Équipement',
@@ -48,21 +59,32 @@ export default function CostsPage() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterBearerId, setFilterBearerId] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { canCreate, canDelete } = usePermissions();
 
-  const { data: expenses = [], isLoading } = useQuery<Expense[]>({
-    queryKey: ['expenses', filterType, filterBearerId],
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [filterType, filterBearerId]);
+
+  const { data: response, isLoading } = useQuery({
+    queryKey: ['expenses', filterType, filterBearerId, page, pageSize],
     queryFn: () => expensesApi.getAll({
       type: filterType || undefined,
       bearerId: filterBearerId || undefined,
+      page,
+      pageSize,
     }),
   });
+  const expenses = response?.data ?? [];
+  const paginationMeta = response?.meta;
 
-  const { data: entities = [] } = useQuery<BillingEntity[]>({
+  const { data: entitiesResponse } = useQuery<BillingEntity[]>({
     queryKey: ['billing-entities'],
     queryFn: () => billingEntitiesApi.getAll(),
   });
+  const entities = entitiesResponse ?? [];
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => expensesApi.delete(id),
@@ -258,11 +280,7 @@ export default function CostsPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive"
-                          onClick={() => {
-                            if (confirm('Supprimer cette dépense ?')) {
-                              deleteMutation.mutate(expense.id);
-                            }
-                          }}
+                          onClick={() => setPendingDeleteId(expense.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -280,8 +298,33 @@ export default function CostsPage() {
               )}
             </TableBody>
           </Table>
+
+          {paginationMeta && <Pagination meta={paginationMeta} onPageChange={setPage} onPageSizeChange={setPageSize} />}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!pendingDeleteId} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              Supprimer cette dépense ? Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (pendingDeleteId) deleteMutation.mutate(pendingDeleteId);
+                setPendingDeleteId(null);
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

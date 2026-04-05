@@ -1,8 +1,10 @@
-import { Injectable, UnauthorizedException, Inject, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient, UserRole, ScopeType } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import { EmailService } from '../../common/services/email.service';
 
 interface SsoScopeEntry {
   type: 'TENANT' | 'DIVISION' | 'DELEGATION' | 'SITE';
@@ -17,6 +19,7 @@ export class AuthService {
     private prisma: PrismaClient,
     private jwtService: JwtService,
     private config: ConfigService,
+    private emailService: EmailService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -238,5 +241,121 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
+  }
+
+  // ===== Invite =====
+
+  async invite(adminTenantId: string, email: string, name: string, role?: string) {
+    // Check if user already exists in this tenant
+    const existing = await this.prisma.user.findFirst({
+      where: { tenantId: adminTenantId, email },
+    });
+    if (existing) {
+      throw new ConflictException('Un utilisateur avec cet email existe déjà dans ce tenant');
+    }
+
+    const token = crypto.randomUUID();
+    const expiry = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72h
+
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        name,
+        role: (role as UserRole) || 'VIEWER',
+        active: false,
+        tenantId: adminTenantId,
+        authProvider: 'local',
+        inviteToken: token,
+        inviteTokenExpiry: expiry,
+      },
+      include: { tenant: true },
+    });
+
+    // Send invitation email
+    await this.emailService.sendInvitation(email, name, token, user.tenant?.name);
+
+    const { passwordHash, totpSecret, totpBackupCodes, inviteToken, resetToken, ...result } = user;
+    return result;
+  }
+
+  async acceptInvite(token: string, password: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        inviteToken: token,
+        inviteTokenExpiry: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Token invalide ou expiré');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: hashedPassword,
+        active: true,
+        inviteToken: null,
+        inviteTokenExpiry: null,
+      },
+    });
+
+    return { success: true, message: 'Compte activé avec succès' };
+  }
+
+  // ===== Forgot / Reset Password =====
+
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { email, active: true, authProvider: 'local' },
+    });
+
+    // Always return success to avoid revealing user existence
+    if (!user) {
+      return { success: true, message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.' };
+    }
+
+    const token = crypto.randomUUID();
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1h
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken: token,
+        resetTokenExpiry: expiry,
+      },
+    });
+
+    await this.emailService.sendPasswordReset(email, user.name, token);
+
+    return { success: true, message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.' };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        resetToken: token,
+        resetTokenExpiry: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Token invalide ou expiré');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: hashedPassword,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+
+    return { success: true, message: 'Mot de passe réinitialisé avec succès' };
   }
 }

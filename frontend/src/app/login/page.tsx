@@ -10,6 +10,7 @@ import { authApi } from '@/lib/api/auth';
 import { showToast } from '@/lib/toast';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Loader2, Key, ShieldCheck, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -215,6 +216,15 @@ export default function LoginPage() {
                   )}
                 </Button>
               </form>
+
+              <div className="mt-4 text-center">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  Mot de passe oublié ?
+                </Link>
+              </div>
 
               {ssoEnabled && ssoChecked && (
                 <>

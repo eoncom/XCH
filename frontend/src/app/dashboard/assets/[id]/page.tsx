@@ -1,4 +1,3 @@
-// @ts-nocheck - Temporary fix for Radix UI + React 19 type incompatibility
 'use client';
 
 import { use, useState } from 'react';
@@ -59,44 +58,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { assetTypeLabels, assetStatusLabels, assetStatusColors } from '@/lib/asset-labels';
 import type { Asset, AssetType, AssetStatus, AssetMovement, AssetMovementType } from '@/types';
-
-const assetTypeLabels: Record<AssetType, string> = {
-  PRINTER: 'Imprimante',
-  IPAD: 'iPad',
-  TABLET: 'Tablette',
-  SWITCH: 'Switch',
-  FIREWALL: 'Firewall',
-  ROUTER: 'Routeur',
-  WIFI_AP: 'Point d\'accès WiFi',
-  ACCESS_POINT: 'Point d\'accès',
-  TEAMS_ROOM: 'Teams Room',
-  WEBCAM: 'Webcam',
-  DISPLAY: 'Écran',
-  CAMERA: 'Caméra',
-  SERVER: 'Serveur',
-  CABLE: 'Câble',
-  PATCH_PANEL: 'Panneau de brassage',
-  PDU: 'PDU',
-  BOX_5G: 'Box 5G',
-  OTHER: 'Autre',
-};
-
-const assetStatusColors = {
-  IN_SERVICE: 'success',
-  OUT_OF_SERVICE: 'secondary',
-  IN_TRANSIT: 'warning',
-  STOCK: 'secondary',
-  RETIRED: 'error',
-} as const;
-
-const assetStatusLabels: Record<AssetStatus, string> = {
-  IN_SERVICE: 'En service',
-  OUT_OF_SERVICE: 'Hors service',
-  IN_TRANSIT: 'En transit',
-  STOCK: 'En stock',
-  RETIRED: 'Retiré',
-};
 
 const taskStatusConfig: Record<string, { label: string; variant: 'secondary' | 'default' | 'error' | 'success' | 'warning'; icon: typeof Circle }> = {
   TODO: { label: 'À faire', variant: 'secondary', icon: Circle },

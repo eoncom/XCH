@@ -18,6 +18,26 @@ export const assetsApi = {
     return apiClient.get<Asset[]>(`/api/assets${query ? `?${query}` : ''}`);
   },
 
+  getAllPaginated: (params?: {
+    siteId?: string;
+    status?: string;
+    type?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.siteId) searchParams.append('siteId', params.siteId);
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.type) searchParams.append('type', params.type);
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.page) searchParams.append('page', String(params.page));
+    if (params?.pageSize) searchParams.append('pageSize', String(params.pageSize));
+
+    const query = searchParams.toString();
+    return apiClient.get<{ data: Asset[]; meta: { total: number; page: number; pageSize: number; totalPages: number } }>(`/api/assets${query ? `?${query}` : ''}`);
+  },
+
   getById: (id: string) => apiClient.get<Asset>(`/api/assets/${id}`),
 
   create: (data: CreateAssetDto) => apiClient.post<Asset>('/api/assets', data),
@@ -39,6 +59,10 @@ export const assetsApi = {
     apiClient.get<{ valid: boolean; asset?: Asset }>(
       `/api/assets/${assetId}/verify-qr?token=${token}`
     ),
+
+  batchUpdate: async (ids: string[], update: { status?: string; siteId?: string }) => {
+    return apiClient.patch<{ updated: number }>('/api/assets/batch', { ids, ...update });
+  },
 
   // Attachments
   uploadAttachment: async (id: string, formData: FormData) => {

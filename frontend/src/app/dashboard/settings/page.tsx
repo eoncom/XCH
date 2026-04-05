@@ -26,6 +26,16 @@ import { useEnumLabels } from '@/hooks/useEnumLabels';
 import { tenantsApi, type SsoConfig } from '@/lib/api/tenants';
 import { useQueryClient } from '@tanstack/react-query';
 import { THEME_PRESET_LIST, type ThemePreset } from '@/lib/themes';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { authApi } from '@/lib/api/auth';
 import { integrationsApi, type IntegrationConfigResponse } from '@/lib/api/integrations';
@@ -137,6 +147,7 @@ function EnumLabelsTabContent() {
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editColor, setEditColor] = useState('');
+  const [showResetDialog, setShowResetDialog] = useState(false);
 
   if (isLoading) {
     return (
@@ -167,11 +178,14 @@ function EnumLabelsTabContent() {
   };
 
   const handleReset = () => {
-    if (confirm(`Réinitialiser tous les labels "${ENUM_TYPE_LABELS[activeType]}" aux valeurs par défaut ?`)) {
-      resetLabels(activeType, {
-        onSuccess: () => toast.success('Labels réinitialisés'),
-      });
-    }
+    setShowResetDialog(true);
+  };
+
+  const confirmReset = () => {
+    resetLabels(activeType, {
+      onSuccess: () => toast.success('Labels réinitialisés'),
+    });
+    setShowResetDialog(false);
   };
 
   return (
@@ -288,6 +302,26 @@ function EnumLabelsTabContent() {
           </p>
         </div>
       </CardContent>
+
+      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la réinitialisation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Réinitialiser tous les labels &laquo;&nbsp;{ENUM_TYPE_LABELS[activeType]}&nbsp;&raquo; aux valeurs par défaut ?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmReset}
+            >
+              Réinitialiser
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

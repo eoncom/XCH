@@ -28,6 +28,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Table,
   TableBody,
   TableCell,
@@ -37,6 +47,7 @@ import {
 } from '@/components/ui/table';
 import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
+import { tasksApi } from '@/lib/api/tasks';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
 import { organizationApi } from '@/lib/api/organization';
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2, MapPin, UserPlus, FolderOpen, Globe, FileText, Shield, Search, Users, ExternalLink, Wifi, Network } from 'lucide-react';
@@ -214,6 +225,11 @@ function EditSitePage({
   });
   const [isGeocoding, setIsGeocoding] = useState(false);
 
+  // Close site warning dialog state
+  const [showCloseWarning, setShowCloseWarning] = useState(false);
+  const [closeWarningInfo, setCloseWarningInfo] = useState<{ activeAssets: number; openTasks: number }>({ activeAssets: 0, openTasks: 0 });
+  const [pendingSubmitData, setPendingSubmitData] = useState<any>(null);
+
   // Update serverInfo state when site data loads
   useEffect(() => {
     if (site?.metadata?.serverInfo) {
@@ -331,12 +347,7 @@ function EditSitePage({
     return () => clearTimeout(timeoutId);
   }, [watch('address'), watch('city'), watch('postalCode')]);
 
-  const onSubmit = (data: SiteFormData) => {
-    // Ne soumettre que si on est à la dernière étape ET qu'on n'est pas en train de changer d'étape
-    if (currentStep !== STEPS.length || isChangingStep) {
-      return;
-    }
-
+  const buildPayload = (data: SiteFormData) => {
     const cleanedData = { ...data };
 
     // Build V2 connectivity
@@ -355,13 +366,64 @@ function EditSitePage({
       ? { ...(site?.metadata || {}), serverInfo }
       : site?.metadata || undefined;
 
-    const payload = {
+    return {
       ...cleanedData,
       connectivity: Object.keys(connectivity).length > 0 ? connectivity : undefined,
       contacts: contacts.filter(c => c.name && c.email),
       accessNotes,
       ...(metadata ? { metadata } : {}),
     };
+  };
+
+  const confirmCloseAndSubmit = () => {
+    if (pendingSubmitData) {
+      updateMutation.mutate(pendingSubmitData);
+      setPendingSubmitData(null);
+    }
+    setShowCloseWarning(false);
+  };
+
+  const onSubmit = async (data: SiteFormData) => {
+    // Ne soumettre que si on est à la dernière étape ET qu'on n'est pas en train de changer d'étape
+    if (currentStep !== STEPS.length || isChangingStep) {
+      return;
+    }
+
+    const payload = buildPayload(data);
+
+    // Check if status is being changed to CLOSED
+    const isClosing = data.status === 'CLOSED' && site?.status !== 'CLOSED';
+
+    if (isClosing) {
+      try {
+        // Fetch active assets and open tasks for this site
+        const [activeAssets, openTasks] = await Promise.all([
+          assetsApi.getAll({ siteId: id, status: 'IN_SERVICE' })
+            .then(assets => assets.length)
+            .catch(() => 0),
+          tasksApi.getAll({ siteId: id })
+            .then(tasks => tasks.filter(t => ['TODO', 'IN_PROGRESS', 'BLOCKED'].includes(t.status)).length)
+            .catch(() => 0),
+        ]);
+
+        // Also count IN_TRANSIT assets
+        const inTransitCount = await assetsApi.getAll({ siteId: id, status: 'IN_TRANSIT' })
+          .then(assets => assets.length)
+          .catch(() => 0);
+
+        const totalActiveAssets = activeAssets + inTransitCount;
+
+        if (totalActiveAssets > 0 || openTasks > 0) {
+          setCloseWarningInfo({ activeAssets: totalActiveAssets, openTasks });
+          setPendingSubmitData(payload);
+          setShowCloseWarning(true);
+          return;
+        }
+      } catch {
+        // If checks fail, proceed with save anyway
+      }
+    }
+
     updateMutation.mutate(payload);
   };
 
@@ -1309,6 +1371,39 @@ function EditSitePage({
           </form>
         </CardContent>
       </Card>
+
+      {/* Warning dialog when closing a site with active assets/tasks */}
+      <AlertDialog open={showCloseWarning} onOpenChange={setShowCloseWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la fermeture du site</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Ce site a encore{' '}
+                  {closeWarningInfo.activeAssets > 0 && (
+                    <strong>{closeWarningInfo.activeAssets} {closeWarningInfo.activeAssets === 1 ? 'equipement actif' : 'equipements actifs'}</strong>
+                  )}
+                  {closeWarningInfo.activeAssets > 0 && closeWarningInfo.openTasks > 0 && ' et '}
+                  {closeWarningInfo.openTasks > 0 && (
+                    <strong>{closeWarningInfo.openTasks} {closeWarningInfo.openTasks === 1 ? 'tache ouverte' : 'taches ouvertes'}</strong>
+                  )}
+                  .
+                </p>
+                <p>Voulez-vous vraiment fermer ce site ?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingSubmitData(null)}>
+              Annuler
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmCloseAndSubmit}>
+              Fermer le site
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

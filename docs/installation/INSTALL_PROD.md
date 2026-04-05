@@ -292,6 +292,20 @@ OIDC_CLIENT_SECRET=CHANGEZ_MOI_OIDC_CLIENT_SECRET
 OIDC_CALLBACK_URL=https://xch.votre-domaine.com/auth/oidc/callback
 
 # ==========================================
+# SMTP (Email — invitations, reset password)
+# ==========================================
+# Laisser SMTP_HOST vide pour loguer les emails en console (mode dev)
+SMTP_HOST=smtp.votre-domaine.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=noreply@votre-domaine.com
+SMTP_PASS=CHANGEZ_MOI_SMTP_PASSWORD
+SMTP_FROM=noreply@votre-domaine.com
+
+# URL frontend (pour les liens dans les emails)
+FRONTEND_URL=https://xch.votre-domaine.com
+
+# ==========================================
 # CORS
 # ==========================================
 CORS_ORIGIN=https://xch.votre-domaine.com

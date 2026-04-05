@@ -4,6 +4,7 @@ import { AssetsService } from './assets.service';
 import { AssetsController } from './assets.controller';
 import { QRCodeService } from '../../common/services/qrcode.service';
 import { StorageService } from '../../common/services/storage.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { SiteAccessModule } from '../site-access/site-access.module';
 import { memoryStorage } from 'multer';
 import { attachmentFileFilter } from '../../common/utils/upload-security';
@@ -20,7 +21,7 @@ import { attachmentFileFilter } from '../../common/utils/upload-security';
     SiteAccessModule,
   ],
   controllers: [AssetsController],
-  providers: [AssetsService, QRCodeService, StorageService],
+  providers: [AssetsService, QRCodeService, StorageService, AuditLogService],
   exports: [AssetsService],
 })
 export class AssetsModule {}

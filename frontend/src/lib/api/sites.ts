@@ -6,6 +6,25 @@ export const sitesApi = {
     return apiClient.get<Site[]>('/api/sites');
   },
 
+  getAllPaginated: async (params?: {
+    search?: string;
+    divisionId?: string;
+    delegationId?: string;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ data: Site[]; meta: { total: number; page: number; pageSize: number; totalPages: number } }> => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.divisionId) searchParams.append('divisionId', params.divisionId);
+    if (params?.delegationId) searchParams.append('delegationId', params.delegationId);
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.page) searchParams.append('page', String(params.page));
+    if (params?.pageSize) searchParams.append('pageSize', String(params.pageSize));
+    const query = searchParams.toString();
+    return apiClient.get<{ data: Site[]; meta: { total: number; page: number; pageSize: number; totalPages: number } }>(`/api/sites${query ? `?${query}` : ''}`);
+  },
+
   getById: async (id: string): Promise<Site> => {
     return apiClient.get<Site>(`/api/sites/${id}`);
   },

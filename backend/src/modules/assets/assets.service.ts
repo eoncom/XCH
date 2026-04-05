@@ -1,13 +1,18 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, AssetType, AssetStatus } from '@prisma/client';
+import * as Papa from 'papaparse';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
 import { FilterAssetDto } from './dto/filter-asset.dto';
+import { BatchUpdateAssetsDto } from './dto/batch-update-asset.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
+import { ImportResultDto } from './dto/import-asset.dto';
 import { QRCodeService } from '../../common/services/qrcode.service';
 import { ConfigService } from '@nestjs/config';
 import { StorageService } from '../../common/services/storage.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { createId } from '@paralleldrive/cuid2';
+import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
 @Injectable()
 export class AssetsService {
@@ -19,6 +24,7 @@ export class AssetsService {
     private qrCodeService: QRCodeService,
     private configService: ConfigService,
     private storageService: StorageService,
+    private auditLogService: AuditLogService,
   ) {}
 
   async create(tenantId: string, createAssetDto: CreateAssetDto, userId?: string) {
@@ -83,15 +89,33 @@ export class AssetsService {
       this.logger.warn(`Failed to log CREATED movement for asset ${asset.id}: ${e.message}`);
     }
 
+    // Audit log
+    try {
+      await this.auditLogService.log({
+        tenantId,
+        userId,
+        action: 'CREATE',
+        entityType: 'asset',
+        entityId: asset.id,
+        changes: { after: { type: asset.type, status: asset.status, serialNumber: asset.serialNumber, siteId: asset.siteId, model: asset.model, manufacturer: asset.manufacturer } },
+      });
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for asset ${asset.id}: ${e.message}`);
+    }
+
     return asset;
   }
 
-  async findAll(tenantId: string, filter?: FilterAssetDto, accessibleSiteIds?: string[] | null) {
+  async findAll(tenantId: string, filter?: FilterAssetDto, accessibleSiteIds?: string[] | null): Promise<PaginatedResponse<any>> {
+    const page = filter?.page ?? 1;
+    const pageSize = filter?.pageSize ?? 25;
+    const skip = (page - 1) * pageSize;
+
     const where: any = { tenantId };
 
     // Site access filtering: restrict to accessible sites for TECHNICIEN/VIEWER
     if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
-      if (accessibleSiteIds.length === 0) return [];
+      if (accessibleSiteIds.length === 0) return buildPaginatedResponse([], 0, page, pageSize);
       where.siteId = { in: accessibleSiteIds };
     }
 
@@ -105,7 +129,7 @@ export class AssetsService {
 
     if (filter?.siteId) {
       // Override with specific siteId filter (already validated by site access if array)
-      if (accessibleSiteIds && !accessibleSiteIds.includes(filter.siteId)) return [];
+      if (accessibleSiteIds && !accessibleSiteIds.includes(filter.siteId)) return buildPaginatedResponse([], 0, page, pageSize);
       where.siteId = filter.siteId;
     }
 
@@ -133,29 +157,40 @@ export class AssetsService {
       ];
     }
 
-    const assets = await this.prisma.asset.findMany({
-      where,
-      include: {
-        site: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
-        rack: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: {
-        updatedAt: 'desc',
-      },
-    });
+    // Determine sort order (default: updatedAt desc)
+    const allowedSortFields = ['updatedAt', 'createdAt', 'type', 'status', 'serialNumber', 'manufacturer', 'model'];
+    const hasExplicitSort = filter?.sortBy && allowedSortFields.includes(filter.sortBy);
+    const sortBy: string = hasExplicitSort ? filter.sortBy! : 'updatedAt';
+    const sortOrder = hasExplicitSort ? (filter?.sortOrder ?? 'desc') : 'desc';
 
-    return assets;
+    const [assets, total] = await Promise.all([
+      this.prisma.asset.findMany({
+        where,
+        include: {
+          site: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          rack: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          [sortBy]: sortOrder,
+        },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.asset.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(assets, total, page, pageSize);
   }
 
   async findOne(id: string, tenantId: string) {
@@ -237,7 +272,76 @@ export class AssetsService {
       this.logger.warn(`Failed to log movement for asset ${id}: ${e.message}`);
     }
 
+    // Audit log with diff
+    try {
+      const changes = this.auditLogService.diffChanges(
+        currentAsset as Record<string, any>,
+        updateAssetDto as Record<string, any>,
+      );
+      if (changes) {
+        await this.auditLogService.log({
+          tenantId,
+          userId,
+          action: 'UPDATE',
+          entityType: 'asset',
+          entityId: id,
+          changes,
+        });
+      }
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for asset ${id}: ${e.message}`);
+    }
+
     return asset;
+  }
+
+  async batchUpdate(tenantId: string, dto: BatchUpdateAssetsDto) {
+    if (!dto.ids || dto.ids.length === 0) {
+      throw new BadRequestException('At least one asset ID is required');
+    }
+
+    // Build the update data from provided fields
+    const updateData: any = {};
+    if (dto.status) updateData.status = dto.status;
+    if (dto.siteId) updateData.siteId = dto.siteId;
+
+    if (Object.keys(updateData).length === 0) {
+      throw new BadRequestException('At least one field to update is required (status or siteId)');
+    }
+
+    // Validate all asset IDs belong to the tenant
+    const count = await this.prisma.asset.count({
+      where: {
+        id: { in: dto.ids },
+        tenantId,
+      },
+    });
+
+    if (count !== dto.ids.length) {
+      throw new BadRequestException(
+        `Some asset IDs were not found or do not belong to this tenant (found ${count} of ${dto.ids.length})`,
+      );
+    }
+
+    // If siteId is provided, validate it belongs to the tenant
+    if (dto.siteId) {
+      const site = await this.prisma.site.findFirst({
+        where: { id: dto.siteId, tenantId },
+      });
+      if (!site) {
+        throw new BadRequestException(`Site ${dto.siteId} not found or does not belong to this tenant`);
+      }
+    }
+
+    const result = await this.prisma.asset.updateMany({
+      where: {
+        id: { in: dto.ids },
+        tenantId,
+      },
+      data: updateData,
+    });
+
+    return { updated: result.count };
   }
 
   /**
@@ -334,12 +438,51 @@ export class AssetsService {
     }
   }
 
-  async remove(id: string, tenantId: string) {
-    await this.findOne(id, tenantId);
+  async remove(id: string, tenantId: string, userId?: string) {
+    const asset = await this.findOne(id, tenantId);
+
+    // Best-effort cleanup of attachment files from storage
+    try {
+      const attachments = await this.prisma.attachment.findMany({
+        where: { tenantId, assetId: id },
+        select: { path: true },
+      });
+
+      for (const attachment of attachments) {
+        try {
+          await this.storageService.deleteFile(attachment.path);
+        } catch (error) {
+          this.logger.warn(`Failed to delete attachment file: ${attachment.path} - ${error.message}`);
+        }
+      }
+
+      // Also clean up the entire folder prefix to catch any orphaned files
+      await this.storageService.deleteByPrefix(`attachments/${tenantId}/assets/${id}`);
+
+      if (attachments.length > 0) {
+        this.logger.log(`Cleaned up ${attachments.length} attachment files for asset ${id}`);
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to clean up storage files for asset ${id}, proceeding with DB deletion: ${error.message}`);
+    }
 
     await this.prisma.asset.delete({
       where: { id },
     });
+
+    // Audit log
+    try {
+      await this.auditLogService.log({
+        tenantId,
+        userId,
+        action: 'DELETE',
+        entityType: 'asset',
+        entityId: id,
+        changes: { before: { type: asset.type, status: asset.status, serialNumber: asset.serialNumber, siteId: asset.siteId, model: asset.model } },
+      });
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for asset ${id}: ${e.message}`);
+    }
 
     return { message: 'Asset deleted successfully' };
   }
@@ -386,6 +529,256 @@ export class AssetsService {
     }
 
     return qrCodes;
+  }
+
+  // ============================================================================
+  // CSV IMPORT
+  // ============================================================================
+
+  /**
+   * Header mapping: supports English and French column names.
+   * Keys are lowercased, trimmed header names. Values are the canonical field names.
+   */
+  private static readonly HEADER_MAP: Record<string, string> = {
+    type: 'type',
+    statut: 'status',
+    status: 'status',
+    nom: 'name',
+    name: 'name',
+    'numéro_série': 'serialNumber',
+    numero_serie: 'serialNumber',
+    serial_number: 'serialNumber',
+    serialnumber: 'serialNumber',
+    fabricant: 'manufacturer',
+    manufacturer: 'manufacturer',
+    'modèle': 'model',
+    modele: 'model',
+    model: 'model',
+    site: 'siteId',
+    siteid: 'siteId',
+    emplacement: 'location',
+    location: 'location',
+    ip: 'ipAddress',
+    ipaddress: 'ipAddress',
+    ip_address: 'ipAddress',
+    mac: 'macAddress',
+    macaddress: 'macAddress',
+    mac_address: 'macAddress',
+    firmware: 'firmwareVersion',
+    firmwareversion: 'firmwareVersion',
+    firmware_version: 'firmwareVersion',
+    garantie: 'warrantyEnd',
+    warrantyend: 'warrantyEnd',
+    warranty_end: 'warrantyEnd',
+    achat: 'purchaseDate',
+    purchasedate: 'purchaseDate',
+    purchase_date: 'purchaseDate',
+    notes: 'notes',
+  };
+
+  private static readonly ASSET_TYPES = new Set(Object.values(AssetType));
+  private static readonly ASSET_STATUSES = new Set(Object.values(AssetStatus));
+
+  /**
+   * Import assets from CSV content.
+   *
+   * @param tenantId  Tenant ID from the authenticated user
+   * @param csvContent  Raw CSV string (may include BOM)
+   * @param siteId  Optional override: all imported rows will be assigned to this site
+   */
+  async importFromCsv(
+    tenantId: string,
+    csvContent: string,
+    siteId?: string,
+  ): Promise<ImportResultDto> {
+    // Strip BOM if present
+    const cleanCsv = csvContent.replace(/^\uFEFF/, '');
+
+    const parsed = Papa.parse(cleanCsv, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header: string) => header.trim(),
+    });
+
+    if (parsed.errors.length > 0 && parsed.data.length === 0) {
+      throw new BadRequestException(
+        `CSV parsing failed: ${parsed.errors.map((e) => e.message).join(', ')}`,
+      );
+    }
+
+    const errors: ImportResultDto['errors'] = [];
+    const validRows: any[] = [];
+
+    // If siteId override is provided, verify it belongs to the tenant
+    if (siteId) {
+      const site = await this.prisma.site.findFirst({
+        where: { id: siteId, tenantId },
+      });
+      if (!site) {
+        throw new BadRequestException(
+          `Site ${siteId} not found or does not belong to this tenant`,
+        );
+      }
+    }
+
+    // Cache site lookups by code for rows that reference a site by code
+    const siteCodeCache = new Map<string, string | null>();
+
+    for (let i = 0; i < parsed.data.length; i++) {
+      const rawRow = parsed.data[i] as Record<string, string>;
+      const rowNum = i + 2; // +2 because row 1 is the header, data starts at row 2
+
+      // Map headers to canonical field names
+      const mapped: Record<string, string> = {};
+      for (const [rawHeader, value] of Object.entries(rawRow)) {
+        const key = rawHeader.toLowerCase().trim();
+        const canonical = AssetsService.HEADER_MAP[key];
+        if (canonical && value !== undefined && value !== null && value.trim() !== '') {
+          mapped[canonical] = value.trim();
+        }
+      }
+
+      // --- Validate type (required) ---
+      if (!mapped.type) {
+        errors.push({ row: rowNum, field: 'type', message: 'Type is required' });
+        continue;
+      }
+      const typeUpper = mapped.type.toUpperCase();
+      if (!AssetsService.ASSET_TYPES.has(typeUpper as AssetType)) {
+        errors.push({
+          row: rowNum,
+          field: 'type',
+          message: `Invalid type "${mapped.type}". Valid values: ${[...AssetsService.ASSET_TYPES].join(', ')}`,
+        });
+        continue;
+      }
+
+      // --- Validate status (optional, defaults to STOCK) ---
+      let status: AssetStatus = AssetStatus.STOCK;
+      if (mapped.status) {
+        const statusUpper = mapped.status.toUpperCase();
+        if (!AssetsService.ASSET_STATUSES.has(statusUpper as AssetStatus)) {
+          errors.push({
+            row: rowNum,
+            field: 'status',
+            message: `Invalid status "${mapped.status}". Valid values: ${[...AssetsService.ASSET_STATUSES].join(', ')}`,
+          });
+          continue;
+        }
+        status = statusUpper as AssetStatus;
+      }
+
+      // --- Resolve siteId ---
+      let resolvedSiteId: string | null = siteId || null;
+      if (!resolvedSiteId && mapped.siteId) {
+        // Try to resolve: could be an ID or a site code
+        const siteValue = mapped.siteId;
+        // Check cache first
+        if (siteCodeCache.has(siteValue)) {
+          resolvedSiteId = siteCodeCache.get(siteValue) || null;
+        } else {
+          // Try as ID first
+          let site = await this.prisma.site.findFirst({
+            where: { id: siteValue, tenantId },
+          });
+          if (!site) {
+            // Try as code
+            site = await this.prisma.site.findFirst({
+              where: { code: siteValue, tenantId },
+            });
+          }
+          if (site) {
+            siteCodeCache.set(siteValue, site.id);
+            resolvedSiteId = site.id;
+          } else {
+            siteCodeCache.set(siteValue, null);
+            errors.push({
+              row: rowNum,
+              field: 'siteId',
+              message: `Site "${siteValue}" not found in this tenant`,
+            });
+            continue;
+          }
+        }
+      }
+
+      // --- Validate date fields ---
+      let purchaseDate: Date | undefined;
+      if (mapped.purchaseDate) {
+        const d = new Date(mapped.purchaseDate);
+        if (isNaN(d.getTime())) {
+          errors.push({ row: rowNum, field: 'purchaseDate', message: `Invalid date "${mapped.purchaseDate}"` });
+          continue;
+        }
+        purchaseDate = d;
+      }
+
+      let warrantyEnd: Date | undefined;
+      if (mapped.warrantyEnd) {
+        const d = new Date(mapped.warrantyEnd);
+        if (isNaN(d.getTime())) {
+          errors.push({ row: rowNum, field: 'warrantyEnd', message: `Invalid date "${mapped.warrantyEnd}"` });
+          continue;
+        }
+        warrantyEnd = d;
+      }
+
+      // Build networkInfo if IP or MAC provided
+      let networkInfo: any = undefined;
+      if (mapped.ipAddress || mapped.macAddress || mapped.firmwareVersion) {
+        networkInfo = {};
+        if (mapped.ipAddress) networkInfo.ip = mapped.ipAddress;
+        if (mapped.macAddress) networkInfo.mac = mapped.macAddress;
+        if (mapped.firmwareVersion) networkInfo.firmware = mapped.firmwareVersion;
+      }
+
+      validRows.push({
+        tenantId,
+        type: typeUpper as AssetType,
+        status,
+        name: mapped.name || null,
+        serialNumber: mapped.serialNumber || null,
+        manufacturer: mapped.manufacturer || null,
+        model: mapped.model || null,
+        siteId: resolvedSiteId,
+        locationText: mapped.location || null,
+        networkInfo: networkInfo || undefined,
+        purchaseDate: purchaseDate || undefined,
+        warrantyEnd: warrantyEnd || undefined,
+        notes: mapped.notes || null,
+      });
+    }
+
+    // Batch create valid rows
+    let importedCount = 0;
+    if (validRows.length > 0) {
+      // Use individual creates for better error handling (serial uniqueness, etc.)
+      for (let i = 0; i < validRows.length; i++) {
+        const row = validRows[i];
+        try {
+          await this.prisma.asset.create({ data: row });
+          importedCount++;
+        } catch (e) {
+          // Find the original CSV row number for this valid row
+          // Since we skipped error rows, we need to track the row index
+          const message = e.message || 'Database error';
+          const isUnique = message.includes('Unique constraint');
+          errors.push({
+            row: 0, // row number is approximate in batch context
+            field: isUnique ? 'serialNumber' : 'unknown',
+            message: isUnique
+              ? `Duplicate serial number "${row.serialNumber}"`
+              : `Failed to create asset: ${message}`,
+          });
+        }
+      }
+    }
+
+    return {
+      total: parsed.data.length,
+      imported: importedCount,
+      errors,
+    };
   }
 
   async getStatsByType(tenantId: string, accessibleSiteIds?: string[] | null) {

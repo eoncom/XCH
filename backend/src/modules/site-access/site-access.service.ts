@@ -36,7 +36,7 @@ function roleToPermission(role: string, resource: string): ResourcePermissionLev
       return ResourcePermissionLevel.WRITE;
 
     case 'MANAGER': {
-      const managerWrite = ['tasks', 'contacts', 'floorPlans'];
+      const managerWrite = ['tasks', 'contacts'];
       return managerWrite.includes(resource)
         ? ResourcePermissionLevel.WRITE
         : ResourcePermissionLevel.READ;

@@ -4,6 +4,8 @@ import { CreateFloorPlanDto } from './dto/create-floor-plan.dto';
 import { UpdateFloorPlanDto } from './dto/update-floor-plan.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
+import { FilterFloorPlanDto } from './dto/filter-floor-plan.dto';
+import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { StorageService } from '../../common/services/storage.service';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
@@ -252,35 +254,51 @@ export class FloorPlansService {
   /**
    * Find all floor plans for tenant (with optional filters)
    */
-  async findAll(tenantId: string, siteId?: string, accessibleSiteIds?: string[] | null) {
+  async findAll(tenantId: string, filters: FilterFloorPlanDto = {}, accessibleSiteIds?: string[] | null) {
     const where: any = {
       site: { tenantId }  // Filter via site relation
     };
 
     // Site access filtering
     if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
-      if (accessibleSiteIds.length === 0) return [];
+      if (accessibleSiteIds.length === 0) return buildPaginatedResponse([], 0, filters.page ?? 1, filters.pageSize ?? 25);
       where.siteId = { in: accessibleSiteIds };
     }
 
-    if (siteId) {
-      if (accessibleSiteIds && !accessibleSiteIds.includes(siteId)) return [];
-      where.siteId = siteId;
+    if (filters.siteId) {
+      if (accessibleSiteIds && !accessibleSiteIds.includes(filters.siteId)) return buildPaginatedResponse([], 0, filters.page ?? 1, filters.pageSize ?? 25);
+      where.siteId = filters.siteId;
     }
 
-    return await this.prisma.floorPlan.findMany({
-      where,
-      include: {
-        site: true,
-        pins: {
-          include: {
-            asset: true,
-            rack: { include: { assets: true } },
+    const page = filters.page ?? 1;
+    const pageSize = filters.pageSize ?? 25;
+    const sortOrder = filters.sortOrder || 'desc';
+
+    // Default multi-column sort or single-column if sortBy specified
+    const orderBy = filters.sortBy
+      ? { [filters.sortBy]: sortOrder }
+      : [{ siteId: 'asc' as const }, { version: 'desc' as const }];
+
+    const [data, total] = await Promise.all([
+      this.prisma.floorPlan.findMany({
+        where,
+        include: {
+          site: true,
+          pins: {
+            include: {
+              asset: true,
+              rack: { include: { assets: true } },
+            },
           },
         },
-      },
-      orderBy: [{ siteId: 'asc' }, { version: 'desc' }],
-    });
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.floorPlan.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(data, total, page, pageSize);
   }
 
   /**
@@ -355,11 +373,23 @@ export class FloorPlansService {
   async remove(id: string, tenantId: string) {
     const floorPlan = await this.findOne(id, tenantId);
 
-    // Delete file from storage
+    // Best-effort cleanup of floor plan files from storage
+    try {
+      // Delete by prefix to catch all files associated with this plan
+      await this.storageService.deleteByPrefix(`floor-plans/plan-${id}`);
+    } catch (error) {
+      this.logger.warn(`Failed to delete floor plan files by prefix for plan ${id}: ${error.message}`);
+    }
+
+    // Also try the legacy path extraction as fallback
     if (floorPlan.fileUrl) {
-      const filePath = floorPlan.fileUrl.split('/uploads')[1];
-      if (filePath) {
-        await this.storageService.deleteFile(filePath);
+      try {
+        const filePath = floorPlan.fileUrl.split('/uploads')[1];
+        if (filePath) {
+          await this.storageService.deleteFile(filePath);
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to delete floor plan file via legacy path for plan ${id}: ${error.message}`);
       }
     }
 
@@ -373,7 +403,7 @@ export class FloorPlansService {
   // ==================== HEATMAP ====================
 
   /**
-   * Get heatmap data: ACCESS_POINT pins with their linked assets and scale info
+   * Get heatmap data: WIFI_AP pins with their linked assets and scale info
    */
   async getHeatmapData(id: string, tenantId: string) {
     const floorPlan = await this.prisma.floorPlan.findFirst({
@@ -384,7 +414,7 @@ export class FloorPlansService {
         scaleRefLine: true,
         pins: {
           where: {
-            pinType: 'ACCESS_POINT',
+            pinType: 'WIFI_AP',
           },
           select: {
             id: true,

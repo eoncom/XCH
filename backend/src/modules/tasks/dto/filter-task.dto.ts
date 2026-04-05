@@ -1,8 +1,9 @@
 import { IsString, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { TaskStatus, TaskPriority } from '@prisma/client';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
-export class FilterTaskDto {
+export class FilterTaskDto extends PaginationDto {
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()

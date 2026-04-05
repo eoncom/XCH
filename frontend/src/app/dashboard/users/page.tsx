@@ -1,22 +1,77 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { usersApi } from '@/lib/api/users';
-import { Users, UserPlus, Mail, Phone, Shield } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
+import { showToast } from '@/lib/toast';
+import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
+import { Users, UserPlus, Mail, Phone, Shield, Send, Loader2, Search, X } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import Link from 'next/link';
 import type { User } from '@/types';
 
+const roleLabels: Record<string, string> = {
+  ADMIN: 'Administrateur',
+  MANAGER: 'Manager',
+  TECHNICIEN: 'Technicien',
+  VIEWER: 'Observateur',
+};
+
 export default function UsersPage() {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
   const queryClient = useQueryClient();
 
-  const { data: users = [], isLoading, error } = useQuery({
-    queryKey: ['users'],
-    queryFn: usersApi.getAll,
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [search, roleFilter]);
+
+  // Invite dialog state
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState('VIEWER');
+
+  const inviteMutation = useMutation({
+    mutationFn: (data: { email: string; name: string; role: string }) =>
+      apiClient.post('/api/auth/invite', data),
+    onSuccess: () => {
+      showToast.success('Invitation envoyée avec succès !');
+      setInviteOpen(false);
+      setInviteEmail('');
+      setInviteName('');
+      setInviteRole('VIEWER');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err: any) => {
+      showToast.error(err.message || 'Erreur lors de l\'envoi de l\'invitation');
+    },
   });
+
+  const handleInvite = (e: React.FormEvent) => {
+    e.preventDefault();
+    inviteMutation.mutate({ email: inviteEmail, name: inviteName, role: inviteRole });
+  };
+
+  const { data: response, isLoading, error } = useQuery({
+    queryKey: ['users', page, pageSize, search, roleFilter],
+    queryFn: () => usersApi.getAll({
+      page,
+      pageSize,
+      search: search || undefined,
+      role: roleFilter !== 'all' ? roleFilter : undefined,
+    }),
+  });
+  const users = response?.data ?? [];
+  const meta = response?.meta;
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
@@ -73,12 +128,115 @@ export default function UsersPage() {
           </h1>
           <p className="text-muted-foreground">Gestion des utilisateurs de la plateforme</p>
         </div>
-        <Button asChild data-testid="create-user-btn">
-          <Link href="/dashboard/users/new">
-            <UserPlus className="h-4 w-4 mr-2" />
-            Ajouter un utilisateur
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" data-testid="invite-user-btn">
+                <Send className="h-4 w-4 mr-2" />
+                Inviter
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Inviter un utilisateur</DialogTitle>
+                <DialogDescription>
+                  Un email d'invitation sera envoyé pour activer le compte.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleInvite} className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="invite-name" className="text-sm font-medium">Nom</label>
+                  <Input
+                    id="invite-name"
+                    placeholder="Jean Dupont"
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="invite-email" className="text-sm font-medium">Email</label>
+                  <Input
+                    id="invite-email"
+                    type="email"
+                    placeholder="email@example.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="invite-role" className="text-sm font-medium">Rôle</label>
+                  <Select value={inviteRole} onValueChange={setInviteRole}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ADMIN">Administrateur</SelectItem>
+                      <SelectItem value="MANAGER">Manager</SelectItem>
+                      <SelectItem value="TECHNICIEN">Technicien</SelectItem>
+                      <SelectItem value="VIEWER">Observateur</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>
+                    Annuler
+                  </Button>
+                  <Button type="submit" disabled={inviteMutation.isPending}>
+                    {inviteMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Envoi...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="mr-2 h-4 w-4" />
+                        Envoyer l'invitation
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+          <Button asChild data-testid="create-user-btn">
+            <Link href="/dashboard/users/new">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Ajouter un utilisateur
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par nom ou email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Tous les rôles" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les rôles</SelectItem>
+            {Object.entries(roleLabels).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {(search || roleFilter !== 'all') && (
+          <Button variant="ghost" onClick={() => { setSearch(''); setRoleFilter('all'); }} className="flex items-center gap-2">
+            <X className="h-4 w-4" />
+            Effacer les filtres
+          </Button>
+        )}
       </div>
 
       {/* Stats */}
@@ -193,6 +351,8 @@ export default function UsersPage() {
               action={{ label: 'Ajouter un utilisateur', href: '/dashboard/users/new', icon: UserPlus }}
             />
           )}
+
+          {meta && <Pagination meta={meta} onPageChange={setPage} onPageSizeChange={setPageSize} />}
         </CardContent>
       </Card>
     </div>

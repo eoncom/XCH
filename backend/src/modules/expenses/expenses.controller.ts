@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, 
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ExpensesService } from './expenses.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
+import { FilterExpenseDto } from './dto/filter-expense.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
@@ -25,22 +26,11 @@ export class ExpensesController {
   @Get()
   @Resource('expenses') @Action('read')
   @ApiOperation({ summary: 'List all expenses' })
-  @ApiQuery({ name: 'type', required: false })
-  @ApiQuery({ name: 'bearerId', required: false })
-  @ApiQuery({ name: 'targetId', required: false })
-  @ApiQuery({ name: 'dateFrom', required: false })
-  @ApiQuery({ name: 'dateTo', required: false })
-  @ApiQuery({ name: 'search', required: false })
   findAll(
-    @Query('type') type: string,
-    @Query('bearerId') bearerId: string,
-    @Query('targetId') targetId: string,
-    @Query('dateFrom') dateFrom: string,
-    @Query('dateTo') dateTo: string,
-    @Query('search') search: string,
+    @Query() filters: FilterExpenseDto,
     @Request() req: AuthRequest,
   ) {
-    return this.expensesService.findAll(req.user.tenantId, { type, bearerId, targetId, dateFrom, dateTo, search });
+    return this.expensesService.findAll(req.user.tenantId, filters);
   }
 
   @Get('reports/by-bearer')
@@ -95,7 +85,8 @@ export class ExpensesController {
     @Request() req: AuthRequest,
     @Res() res: Response,
   ) {
-    const expenses = await this.expensesService.findAll(req.user.tenantId, { type, dateFrom, dateTo });
+    const result = await this.expensesService.findAll(req.user.tenantId, { type, dateFrom, dateTo, page: 1, pageSize: 100 } as FilterExpenseDto);
+    const expenses = result.data;
 
     // Build CSV export (simple, no external dependency needed)
     const headers = ['Label', 'Type', 'Montant', 'Devise', 'Fréquence', 'Date', 'Porteur', 'Vendor', 'Facture', 'PO', 'Cibles (%)'];

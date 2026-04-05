@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
 import { FilterAssetDto } from './dto/filter-asset.dto';
+import { BatchUpdateAssetsDto } from './dto/batch-update-asset.dto';
 import { BulkQRCodeDto } from './dto/bulk-qrcode.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -38,6 +39,42 @@ export class AssetsController {
       }
     }
     return this.assetsService.create(req.user.tenantId, createAssetDto, req.user.userId);
+  }
+
+  @Post('import')
+  @Resource('assets') @Action('create')
+  @ApiOperation({ summary: 'Import assets from CSV file' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary', description: 'CSV file to import' },
+        siteId: { type: 'string', description: 'Optional site ID to assign all imported assets to' },
+      },
+      required: ['file'],
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async importCsv(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('siteId') siteId: string,
+    @Request() req: AuthRequest,
+  ) {
+    if (!file) {
+      throw new BadRequestException('CSV file is required');
+    }
+    // Validate site access if siteId is provided
+    if (siteId) {
+      const perm = await this.siteAccessService.getResourcePermission(
+        req.user.tenantId, req.user.userId, siteId, 'assets',
+      );
+      if (perm !== ResourcePermissionLevel.WRITE) {
+        throw new ForbiddenException('Insufficient permissions for assets on this site');
+      }
+    }
+    const csvContent = file.buffer.toString('utf-8');
+    return this.assetsService.importFromCsv(req.user.tenantId, csvContent, siteId);
   }
 
   @Get()
@@ -74,6 +111,13 @@ export class AssetsController {
       'assets',
     );
     return this.assetsService.getStatsBySite(req.user.tenantId, accessibleSiteIds);
+  }
+
+  @Patch('batch')
+  @Resource('assets') @Action('update')
+  @ApiOperation({ summary: 'Batch update multiple assets (status and/or site)' })
+  async batchUpdate(@Body() body: BatchUpdateAssetsDto, @Request() req: AuthRequest) {
+    return this.assetsService.batchUpdate(req.user.tenantId, body);
   }
 
   @Get(':id')
@@ -137,7 +181,7 @@ export class AssetsController {
         throw new ForbiddenException('Insufficient permissions to delete assets on this site');
       }
     }
-    return this.assetsService.remove(id, req.user.tenantId);
+    return this.assetsService.remove(id, req.user.tenantId, req.user.userId);
   }
 
   // ============================================================================

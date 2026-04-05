@@ -18,6 +18,26 @@ export const contactsApi = {
     return apiClient.get<Contact[]>(`/api/contacts${query ? `?${query}` : ''}`);
   },
 
+  getAllPaginated: (params?: {
+    typeId?: string;
+    category?: string;
+    search?: string;
+    isActive?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.typeId) searchParams.append('typeId', params.typeId);
+    if (params?.category) searchParams.append('category', params.category);
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.isActive !== undefined) searchParams.append('isActive', String(params.isActive));
+    if (params?.page) searchParams.append('page', String(params.page));
+    if (params?.pageSize) searchParams.append('pageSize', String(params.pageSize));
+
+    const query = searchParams.toString();
+    return apiClient.get<{ data: Contact[]; meta: { total: number; page: number; pageSize: number; totalPages: number } }>(`/api/contacts${query ? `?${query}` : ''}`);
+  },
+
   getById: (id: string) => apiClient.get<Contact>(`/api/contacts/${id}`),
 
   create: (data: CreateContactDto) => apiClient.post<Contact>('/api/contacts', data),

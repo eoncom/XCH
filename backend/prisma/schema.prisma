@@ -93,6 +93,12 @@ model User {
   totpEnabled     Boolean   @default(false)
   totpBackupCodes String[]
 
+  // Invite & password reset tokens
+  inviteToken        String?   @unique
+  inviteTokenExpiry  DateTime?
+  resetToken         String?   @unique
+  resetTokenExpiry   DateTime?
+
   // Account lockout
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
@@ -301,7 +307,6 @@ enum AssetType {
   FIREWALL
   ROUTER
   WIFI_AP
-  ACCESS_POINT
   TEAMS_ROOM
   WEBCAM
   DISPLAY
@@ -517,7 +522,7 @@ model FloorPlan {
 enum PinType {
   SWITCH
   FIREWALL
-  ACCESS_POINT
+  WIFI_AP
   PRINTER
   RACK
   CAMERA
@@ -600,7 +605,7 @@ model Task {
   assignedTo   String?
   assignedUser User?   @relation("AssignedTo", fields: [assignedTo], references: [id], onDelete: SetNull)
   createdBy    String
-  creator      User    @relation("CreatedBy", fields: [createdBy], references: [id])
+  creator      User    @relation("CreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
 
   // Scheduling
   dueDate DateTime?

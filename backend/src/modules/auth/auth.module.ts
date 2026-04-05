@@ -8,6 +8,7 @@ import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { OidcStrategy } from './strategies/oidc.strategy';
 import { TotpService } from './totp.service';
+import { EmailService } from '../../common/services/email.service';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -25,7 +26,7 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, TotpService, LocalStrategy, JwtStrategy, OidcStrategy],
-  exports: [AuthService, TotpService],
+  providers: [AuthService, TotpService, EmailService, LocalStrategy, JwtStrategy, OidcStrategy],
+  exports: [AuthService, TotpService, EmailService],
 })
 export class AuthModule {}

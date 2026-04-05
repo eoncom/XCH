@@ -1,20 +1,26 @@
-import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateRackDto } from './dto/create-rack.dto';
 import { UpdateRackDto } from './dto/update-rack.dto';
 import { MountEquipmentDto } from './dto/mount-equipment.dto';
+import { FilterRackDto } from './dto/filter-rack.dto';
+import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { StorageService } from '../../common/services/storage.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { createId } from '@paralleldrive/cuid2';
 
 @Injectable()
 export class RacksService {
+  private readonly logger = new Logger(RacksService.name);
+
   constructor(
     private prisma: PrismaClient,
     private storageService: StorageService,
+    private auditLogService: AuditLogService,
   ) {}
 
-  async create(tenantId: string, createRackDto: CreateRackDto) {
+  async create(tenantId: string, createRackDto: CreateRackDto, userId?: string) {
     const existing = await this.prisma.rack.findFirst({
       where: {
         tenantId,
@@ -43,54 +49,78 @@ export class RacksService {
       },
     });
 
+    // Audit log
+    try {
+      await this.auditLogService.log({
+        tenantId,
+        userId,
+        action: 'CREATE',
+        entityType: 'rack',
+        entityId: rack.id,
+        changes: { after: { name: rack.name, siteId: rack.siteId, heightU: rack.heightU, rackType: rack.rackType, location: rack.location } },
+      });
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for rack ${rack.id}: ${e.message}`);
+    }
+
     return rack;
   }
 
-  async findAll(tenantId: string, siteId?: string, accessibleSiteIds?: string[] | null) {
+  async findAll(tenantId: string, filters: FilterRackDto = {}, accessibleSiteIds?: string[] | null) {
     const where: any = { tenantId };
 
     // Site access filtering
     if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
-      if (accessibleSiteIds.length === 0) return [];
+      if (accessibleSiteIds.length === 0) return buildPaginatedResponse([], 0, filters.page ?? 1, filters.pageSize ?? 25);
       where.siteId = { in: accessibleSiteIds };
     }
 
-    if (siteId) {
-      if (accessibleSiteIds && !accessibleSiteIds.includes(siteId)) return [];
-      where.siteId = siteId;
+    if (filters.siteId) {
+      if (accessibleSiteIds && !accessibleSiteIds.includes(filters.siteId)) return buildPaginatedResponse([], 0, filters.page ?? 1, filters.pageSize ?? 25);
+      where.siteId = filters.siteId;
     }
 
-    const racks = await this.prisma.rack.findMany({
-      where,
-      include: {
-        site: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
+    const page = filters.page ?? 1;
+    const pageSize = filters.pageSize ?? 25;
+    const sortField = filters.sortBy === 'totalU' ? 'heightU' : (filters.sortBy || 'updatedAt');
+    const sortOrder = filters.sortOrder || 'desc';
+
+    const [racks, total] = await Promise.all([
+      this.prisma.rack.findMany({
+        where,
+        include: {
+          site: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          assets: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              manufacturer: true,
+              model: true,
+              serialNumber: true,
+              status: true,
+              rackHeightU: true,
+              rackPositionU: true,
+            },
           },
         },
-        assets: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            manufacturer: true,
-            model: true,
-            serialNumber: true,
-            status: true,
-            rackHeightU: true,
-            rackPositionU: true,
-          },
+        orderBy: {
+          [sortField]: sortOrder,
         },
-      },
-      orderBy: {
-        updatedAt: 'desc',
-      },
-    });
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.rack.count({ where }),
+    ]);
 
     // Calculate occupation for each rack
-    return racks.map(rack => {
+    const data = racks.map(rack => {
       const usedU = rack.assets.reduce((sum, asset) => sum + (asset.rackHeightU || 0), 0);
       const freeU = rack.heightU - usedU;
       const occupationPercent = Math.round((usedU / rack.heightU) * 100);
@@ -108,6 +138,8 @@ export class RacksService {
         },
       };
     });
+
+    return buildPaginatedResponse(data, total, page, pageSize);
   }
 
   async findOne(id: string, tenantId: string) {
@@ -158,8 +190,11 @@ export class RacksService {
     };
   }
 
-  async update(id: string, tenantId: string, updateRackDto: UpdateRackDto) {
-    await this.findOne(id, tenantId);
+  async update(id: string, tenantId: string, updateRackDto: UpdateRackDto, userId?: string) {
+    const before = await this.prisma.rack.findFirst({ where: { id, tenantId } });
+    if (!before) {
+      throw new NotFoundException('Rack not found');
+    }
 
     const rack = await this.prisma.rack.update({
       where: { id },
@@ -169,10 +204,30 @@ export class RacksService {
       },
     });
 
+    // Audit log with diff
+    try {
+      const changes = this.auditLogService.diffChanges(
+        before as Record<string, any>,
+        updateRackDto as Record<string, any>,
+      );
+      if (changes) {
+        await this.auditLogService.log({
+          tenantId,
+          userId,
+          action: 'UPDATE',
+          entityType: 'rack',
+          entityId: id,
+          changes,
+        });
+      }
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for rack ${id}: ${e.message}`);
+    }
+
     return rack;
   }
 
-  async remove(id: string, tenantId: string) {
+  async remove(id: string, tenantId: string, userId?: string) {
     // Check if rack exists and has equipment
     const rack = await this.prisma.rack.findFirst({
       where: { id, tenantId },
@@ -191,14 +246,53 @@ export class RacksService {
       throw new BadRequestException('Cannot delete rack with mounted equipment. Unmount all equipment first.');
     }
 
+    // Best-effort cleanup of attachment files from storage
+    try {
+      const attachments = await this.prisma.attachment.findMany({
+        where: { tenantId, rackId: id },
+        select: { path: true },
+      });
+
+      for (const attachment of attachments) {
+        try {
+          await this.storageService.deleteFile(attachment.path);
+        } catch (error) {
+          this.logger.warn(`Failed to delete attachment file: ${attachment.path} - ${error.message}`);
+        }
+      }
+
+      // Also clean up the entire folder prefix to catch any orphaned files
+      await this.storageService.deleteByPrefix(`attachments/${tenantId}/racks/${id}`);
+
+      if (attachments.length > 0) {
+        this.logger.log(`Cleaned up ${attachments.length} attachment files for rack ${id}`);
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to clean up storage files for rack ${id}, proceeding with DB deletion: ${error.message}`);
+    }
+
     await this.prisma.rack.delete({
       where: { id },
     });
 
+    // Audit log
+    try {
+      await this.auditLogService.log({
+        tenantId,
+        userId,
+        action: 'DELETE',
+        entityType: 'rack',
+        entityId: id,
+        changes: { before: { name: rack.name, siteId: rack.siteId, heightU: rack.heightU } },
+      });
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for rack ${id}: ${e.message}`);
+    }
+
     return { message: 'Rack deleted successfully' };
   }
 
-  async mountEquipment(rackId: string, tenantId: string, mountDto: MountEquipmentDto) {
+  async mountEquipment(rackId: string, tenantId: string, mountDto: MountEquipmentDto, userId?: string) {
     // Get rack with assets for validation
     const rack = await this.prisma.rack.findFirst({
       where: { id: rackId, tenantId },
@@ -230,6 +324,11 @@ export class RacksService {
 
     if (!asset) {
       throw new NotFoundException('Asset not found or not on the same site as the rack');
+    }
+
+    // Check asset is not retired
+    if (asset.status === 'RETIRED') {
+      throw new BadRequestException('Cannot mount a retired asset. Change its status first.');
     }
 
     // Check if asset is already mounted in another rack
@@ -289,13 +388,27 @@ export class RacksService {
       },
     });
 
+    // Audit log
+    try {
+      await this.auditLogService.log({
+        tenantId,
+        userId,
+        action: 'UPDATE',
+        entityType: 'rack',
+        entityId: rackId,
+        changes: { after: { action: 'MOUNT_EQUIPMENT', assetId: mountDto.assetId, positionU: mountDto.positionU, heightU: mountDto.heightU } },
+      });
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for rack mount ${rackId}: ${e.message}`);
+    }
+
     return {
       message: 'Equipment mounted successfully',
       asset: updatedAsset,
     };
   }
 
-  async unmountEquipment(rackId: string, assetId: string, tenantId: string) {
+  async unmountEquipment(rackId: string, assetId: string, tenantId: string, userId?: string) {
     // Verify rack exists and asset is mounted in it
     const rack = await this.prisma.rack.findFirst({
       where: { id: rackId, tenantId },
@@ -323,6 +436,20 @@ export class RacksService {
         rackHeightU: null,
       },
     });
+
+    // Audit log
+    try {
+      await this.auditLogService.log({
+        tenantId,
+        userId,
+        action: 'UPDATE',
+        entityType: 'rack',
+        entityId: rackId,
+        changes: { before: { action: 'UNMOUNT_EQUIPMENT', assetId } },
+      });
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for rack unmount ${rackId}: ${e.message}`);
+    }
 
     return {
       message: 'Equipment unmounted successfully',

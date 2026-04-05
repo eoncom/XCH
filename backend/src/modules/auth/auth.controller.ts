@@ -16,6 +16,10 @@ import { Resource, Action } from '../../common/decorators/permissions.decorator'
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { InviteUserDto } from './dto/invite-user.dto';
+import { AcceptInviteDto } from './dto/accept-invite.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('auth')
@@ -405,6 +409,43 @@ export class AuthController {
     });
 
     return { disabled: true };
+  }
+
+  // ===== Invite & Password Reset Endpoints =====
+
+  @Post('invite')
+  @UseGuards(JwtAuthGuard, CasbinGuard)
+  @ApiBearerAuth()
+  @Resource('users')
+  @Action('create')
+  @ApiOperation({ summary: 'Invite a new user by email (ADMIN/MANAGER)' })
+  @ApiResponse({ status: 201, description: 'Invitation sent' })
+  async invite(@Body() body: InviteUserDto, @Request() req: AuthRequest) {
+    return this.authService.invite(req.user.tenantId, body.email, body.name, body.role);
+  }
+
+  @Post('accept-invite')
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @ApiOperation({ summary: 'Accept invitation and set password (public)' })
+  @ApiResponse({ status: 200, description: 'Account activated' })
+  async acceptInvite(@Body() body: AcceptInviteDto) {
+    return this.authService.acceptInvite(body.token, body.password);
+  }
+
+  @Post('forgot-password')
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
+  @ApiOperation({ summary: 'Request password reset email (public)' })
+  @ApiResponse({ status: 200, description: 'Reset email sent if account exists' })
+  async forgotPassword(@Body() body: ForgotPasswordDto) {
+    return this.authService.forgotPassword(body.email);
+  }
+
+  @Post('reset-password')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @ApiOperation({ summary: 'Reset password using token (public)' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  async resetPassword(@Body() body: ResetPasswordDto) {
+    return this.authService.resetPassword(body.token, body.password);
   }
 
   // ===== SSO / OIDC Endpoints =====

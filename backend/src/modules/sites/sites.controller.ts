@@ -9,6 +9,7 @@ import { CreateSiteDto } from './dto/create-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
 import { FilterSiteDto } from './dto/filter-site.dto';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
+import { PaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
@@ -34,7 +35,7 @@ export class SitesController {
   @Get()
   @Resource('sites') @Action('read')
   @ApiOperation({ summary: 'Get all sites (filtered by user access for TECHNICIEN/VIEWER)' })
-  async findAll(@Query() filter: FilterSiteDto, @Request() req: AuthRequest) {
+  async findAll(@Query() filter: FilterSiteDto, @Request() req: AuthRequest): Promise<PaginatedResponse<any>> {
     // Get accessible site IDs (null = all sites for ADMIN/MANAGER)
     const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
       req.user.tenantId,

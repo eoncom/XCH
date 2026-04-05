@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateExpenseDto, UpdateExpenseDto, AllocationDto } from './dto/create-expense.dto';
+import { FilterExpenseDto } from './dto/filter-expense.dto';
+import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
 @Injectable()
 export class ExpensesService {
@@ -50,43 +52,48 @@ export class ExpensesService {
     });
   }
 
-  async findAll(tenantId: string, filters?: {
-    type?: string;
-    bearerId?: string;
-    targetId?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    search?: string;
-  }) {
+  async findAll(tenantId: string, filters: FilterExpenseDto = {}) {
     const where: any = { tenantId };
-    if (filters?.type) where.type = filters.type;
-    if (filters?.bearerId) where.bearerId = filters.bearerId;
-    if (filters?.search) {
+    if (filters.type) where.type = filters.type;
+    if (filters.bearerId) where.bearerId = filters.bearerId;
+    if (filters.search) {
       where.OR = [
         { label: { contains: filters.search, mode: 'insensitive' } },
         { vendor: { contains: filters.search, mode: 'insensitive' } },
         { externalRef: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
-    if (filters?.dateFrom || filters?.dateTo) {
+    if (filters.dateFrom || filters.dateTo) {
       where.dateIncurred = {};
       if (filters.dateFrom) where.dateIncurred.gte = new Date(filters.dateFrom);
       if (filters.dateTo) where.dateIncurred.lte = new Date(filters.dateTo);
     }
-    if (filters?.targetId) {
+    if (filters.targetId) {
       where.allocations = { some: { targetId: filters.targetId } };
     }
 
-    return this.prisma.expense.findMany({
-      where,
-      include: {
-        bearer: { select: { id: true, name: true, code: true, type: true } },
-        allocations: {
-          include: { target: { select: { id: true, name: true, code: true, type: true } } },
+    const page = filters.page ?? 1;
+    const pageSize = filters.pageSize ?? 25;
+    const sortField = filters.sortBy || 'dateIncurred';
+    const sortOrder = filters.sortOrder || 'desc';
+
+    const [data, total] = await Promise.all([
+      this.prisma.expense.findMany({
+        where,
+        include: {
+          bearer: { select: { id: true, name: true, code: true, type: true } },
+          allocations: {
+            include: { target: { select: { id: true, name: true, code: true, type: true } } },
+          },
         },
-      },
-      orderBy: { dateIncurred: 'desc' },
-    });
+        orderBy: { [sortField]: sortOrder },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.expense.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(data, total, page, pageSize);
   }
 
   async findOne(tenantId: string, id: string) {

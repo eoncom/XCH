@@ -39,7 +39,7 @@ type OnProgress = (progress: ExportProgress) => void;
 const PIN_COLORS: Record<PinType, string> = {
   SWITCH: '#3b82f6',
   FIREWALL: '#ef4444',
-  ACCESS_POINT: '#10b981',
+  WIFI_AP: '#10b981',
   PRINTER: '#6366f1',
   RACK: '#8b5cf6',
   CAMERA: '#f59e0b',
@@ -59,7 +59,7 @@ const PIN_COLORS: Record<PinType, string> = {
 const PIN_LABELS: Record<PinType, string> = {
   SWITCH: 'SW',
   FIREWALL: 'FW',
-  ACCESS_POINT: 'AP',
+  WIFI_AP: 'AP',
   PRINTER: 'PRN',
   RACK: 'RK',
   CAMERA: 'CAM',
@@ -79,7 +79,7 @@ const PIN_LABELS: Record<PinType, string> = {
 const PIN_TYPE_NAMES: Record<PinType, string> = {
   SWITCH: 'Switch',
   FIREWALL: 'Firewall',
-  ACCESS_POINT: 'AP WiFi',
+  WIFI_AP: 'AP WiFi',
   PRINTER: 'Imprimante',
   RACK: 'Baie',
   CAMERA: 'Cam\u00e9ra',
@@ -138,7 +138,7 @@ function drawPinShapeCanvas(ctx: CanvasRenderingContext2D, pinType: PinType, col
       drawRegularPolygon(ctx, 6, 14);
       ctx.fill(); ctx.stroke();
       break;
-    case 'ACCESS_POINT':
+    case 'WIFI_AP':
       drawRegularPolygon(ctx, 4, 14);
       ctx.fill(); ctx.stroke();
       break;
@@ -667,9 +667,9 @@ export async function exportSiteZip(
   onProgress?.({ step: 'Chargement des donn\u00e9es associ\u00e9es...', percent: 15 });
   const [allAssets, racks, allTasks, floorPlans, documents] = await Promise.all([
     assetsApi.getAll().catch(() => [] as Asset[]),
-    racksApi.getAll(siteId).catch(() => [] as Rack[]),
+    racksApi.getAll({ siteId }).then(r => r.data).catch(() => [] as Rack[]),
     tasksApi.getAll().catch(() => [] as Task[]),
-    floorPlansApi.getAll(siteId).catch(() => [] as FloorPlan[]),
+    floorPlansApi.getAll({ siteId }).then(r => r.data).catch(() => [] as FloorPlan[]),
     sitesApi.listAllDocuments(siteId).catch(() => []),
   ]);
 

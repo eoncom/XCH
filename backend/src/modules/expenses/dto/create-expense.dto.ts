@@ -1,6 +1,7 @@
 import { IsString, IsEnum, IsOptional, IsNumber, IsArray, IsDateString, ValidateNested, Min, Max } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { ExpenseType, ExpenseFrequency } from '@prisma/client';
 
 export class AllocationDto {
   @ApiProperty() @IsString()
@@ -20,9 +21,9 @@ export class CreateExpenseDto {
   @ApiProperty({ required: false }) @IsString() @IsOptional()
   description?: string;
 
-  @ApiProperty({ enum: ['EQUIPMENT', 'SERVICE', 'PROJECT', 'CONSUMABLE', 'LICENSE', 'OTHER'] })
-  @IsString()
-  type: string;
+  @ApiProperty({ enum: ExpenseType })
+  @IsEnum(ExpenseType)
+  type: ExpenseType;
 
   @ApiProperty() @IsNumber()
   totalAmount: number;
@@ -30,9 +31,9 @@ export class CreateExpenseDto {
   @ApiProperty({ required: false, default: 'EUR' }) @IsString() @IsOptional()
   currency?: string;
 
-  @ApiProperty({ enum: ['ONE_TIME', 'MONTHLY', 'QUARTERLY', 'YEARLY'], required: false })
-  @IsString() @IsOptional()
-  frequency?: string;
+  @ApiProperty({ enum: ExpenseFrequency, required: false })
+  @IsEnum(ExpenseFrequency) @IsOptional()
+  frequency?: ExpenseFrequency;
 
   @ApiProperty() @IsDateString()
   dateIncurred: string;
@@ -81,8 +82,8 @@ export class UpdateExpenseDto {
   @ApiProperty({ required: false }) @IsString() @IsOptional()
   description?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
-  type?: string;
+  @ApiProperty({ enum: ExpenseType, required: false }) @IsEnum(ExpenseType) @IsOptional()
+  type?: ExpenseType;
 
   @ApiProperty({ required: false }) @IsNumber() @IsOptional()
   totalAmount?: number;
@@ -90,8 +91,8 @@ export class UpdateExpenseDto {
   @ApiProperty({ required: false }) @IsString() @IsOptional()
   currency?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
-  frequency?: string;
+  @ApiProperty({ enum: ExpenseFrequency, required: false }) @IsEnum(ExpenseFrequency) @IsOptional()
+  frequency?: ExpenseFrequency;
 
   @ApiProperty({ required: false }) @IsDateString() @IsOptional()
   dateIncurred?: string;

@@ -18,6 +18,28 @@ export const tasksApi = {
     return apiClient.get<Task[]>(`/api/tasks${query ? `?${query}` : ''}`);
   },
 
+  getAllPaginated: (params?: {
+    status?: string;
+    priority?: string;
+    siteId?: string;
+    assignedTo?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.priority) searchParams.append('priority', params.priority);
+    if (params?.siteId) searchParams.append('siteId', params.siteId);
+    if (params?.assignedTo) searchParams.append('assignedTo', params.assignedTo);
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.page) searchParams.append('page', String(params.page));
+    if (params?.pageSize) searchParams.append('pageSize', String(params.pageSize));
+
+    const query = searchParams.toString();
+    return apiClient.get<{ data: Task[]; meta: { total: number; page: number; pageSize: number; totalPages: number } }>(`/api/tasks${query ? `?${query}` : ''}`);
+  },
+
   getById: (id: string) => apiClient.get<Task>(`/api/tasks/${id}`),
 
   create: (data: CreateTaskDto) => apiClient.post<Task>('/api/tasks', data),

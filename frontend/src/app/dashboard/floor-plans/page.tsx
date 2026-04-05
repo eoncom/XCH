@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { floorPlansApi } from '@/lib/api/floor-plans';
 import { sitesApi } from '@/lib/api/sites';
+import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { Plus, Search, FileImage, MapPin, Layers } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -58,13 +59,24 @@ function getVersionCounts(plans: FloorPlan[]): Map<string, number> {
 export default function FloorPlansPage() {
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState<string>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
   const router = useRouter();
 
-  const { data: floorPlans, isLoading } = useQuery<FloorPlan[]>({
-    queryKey: ['floor-plans', siteFilter],
-    queryFn: () => floorPlansApi.getAll(siteFilter !== 'all' ? siteFilter : undefined),
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [siteFilter]);
+
+  const { data: response, isLoading } = useQuery({
+    queryKey: ['floor-plans', siteFilter, page, pageSize],
+    queryFn: () => floorPlansApi.getAll({
+      siteId: siteFilter !== 'all' ? siteFilter : undefined,
+      page,
+      pageSize,
+    }),
   });
+  const floorPlans = response?.data ?? [];
+  const meta = response?.meta;
 
   const { data: sites } = useQuery<Site[]>({
     queryKey: ['sites'],
@@ -72,8 +84,8 @@ export default function FloorPlansPage() {
   });
 
   // Deduplicate: show only latest version per plan group
-  const latestPlans = floorPlans ? getLatestVersions(floorPlans) : [];
-  const versionCounts = floorPlans ? getVersionCounts(floorPlans) : new Map<string, number>();
+  const latestPlans = getLatestVersions(floorPlans);
+  const versionCounts = getVersionCounts(floorPlans);
 
   const filteredFloorPlans = latestPlans.filter((plan) => {
     const searchLower = search.toLowerCase();
@@ -137,7 +149,7 @@ export default function FloorPlansPage() {
 
       {/* Floor Plans Grid */}
       <div data-testid="floor-plans-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {filteredFloorPlans?.map((plan) => {
+        {filteredFloorPlans.map((plan) => {
           const groupKey = plan.planGroupId || plan.id;
           const totalVersions = versionCounts.get(groupKey) || 1;
 
@@ -214,13 +226,15 @@ export default function FloorPlansPage() {
         })}
       </div>
 
-      {filteredFloorPlans?.length === 0 && (
+      {filteredFloorPlans.length === 0 && (
         <EmptyState
           icon={FileImage}
           title="Aucun plan trouvé"
           description={search ? 'Essayez de modifier votre recherche' : undefined}
         />
       )}
+
+      {meta && <Pagination meta={meta} onPageChange={setPage} onPageSizeChange={setPageSize} />}
     </div>
   );
 }

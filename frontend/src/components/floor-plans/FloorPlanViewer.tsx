@@ -83,7 +83,7 @@ interface FloorPlanViewerProps {
 const PIN_COLORS: Record<PinType, string> = {
   SWITCH: '#3b82f6',       // blue
   FIREWALL: '#ef4444',     // red
-  ACCESS_POINT: '#10b981', // green
+  WIFI_AP: '#10b981', // green
   PRINTER: '#6366f1',      // indigo
   RACK: '#8b5cf6',         // purple
   CAMERA: '#f59e0b',       // amber (orange)
@@ -103,7 +103,7 @@ const PIN_COLORS: Record<PinType, string> = {
 const PIN_LABELS: Record<PinType, string> = {
   SWITCH: 'SW',
   FIREWALL: 'FW',
-  ACCESS_POINT: 'AP',
+  WIFI_AP: 'AP',
   PRINTER: 'PRN',
   RACK: 'RK',
   CAMERA: 'CAM',
@@ -123,7 +123,7 @@ const PIN_LABELS: Record<PinType, string> = {
 const PIN_TYPE_NAMES: Record<PinType, string> = {
   SWITCH: 'Switch',
   FIREWALL: 'Firewall',
-  ACCESS_POINT: 'AP WiFi',
+  WIFI_AP: 'AP WiFi',
   PRINTER: 'Imprimante',
   RACK: 'Baie',
   CAMERA: 'Caméra',
@@ -174,7 +174,7 @@ function drawPinShapeCanvas(ctx: CanvasRenderingContext2D, pinType: PinType, col
       drawRegularPolygon(ctx, 6, 14);
       ctx.fill(); ctx.stroke();
       break;
-    case 'ACCESS_POINT': // diamond
+    case 'WIFI_AP': // diamond
       drawRegularPolygon(ctx, 4, 14);
       ctx.fill(); ctx.stroke();
       break;
@@ -392,7 +392,7 @@ function PinShape({ pinType, color }: { pinType: PinType; color: string }) {
       );
 
     // Access Point: WiFi symbol - diamond with radio waves
-    case 'ACCESS_POINT':
+    case 'WIFI_AP':
       return (
         <>
           {/* Diamond base */}
@@ -688,7 +688,7 @@ export default function FloorPlanViewer({
   // Filter pins: hide non-AP when heatmap active and hideOtherPins is true
   const visiblePins = useMemo(() => {
     if (heatmapConfig?.enabled && heatmapConfig.hideOtherPins) {
-      return pins.filter(p => p.pinType === 'ACCESS_POINT');
+      return pins.filter(p => p.pinType === 'WIFI_AP');
     }
     return pins;
   }, [pins, heatmapConfig?.enabled, heatmapConfig?.hideOtherPins]);
@@ -781,7 +781,7 @@ export default function FloorPlanViewer({
       ];
       const heatmapQuadrants: { label: string; dataUrl: string }[] = [];
       if (heatmapActive) {
-        const apPins = currentPins.filter(p => p.pinType === 'ACCESS_POINT');
+        const apPins = currentPins.filter(p => p.pinType === 'WIFI_AP');
         for (const band of wifiBands) {
           const hCanvas = document.createElement('canvas');
           hCanvas.width = currentImage.width * 2;
@@ -1659,7 +1659,7 @@ export default function FloorPlanViewer({
               onDragEnd={(x, y) => {
                 onPinDragEnd?.(pin.id, x, y);
                 // Trigger heatmap re-render after AP drag
-                if (pin.pinType === 'ACCESS_POINT') {
+                if (pin.pinType === 'WIFI_AP') {
                   setHeatmapTrigger(t => t + 1);
                 }
               }}
@@ -1674,7 +1674,7 @@ export default function FloorPlanViewer({
         <div className="flex items-center gap-3 text-xs flex-wrap">
           <LegendItem pinType="SWITCH" />
           <LegendItem pinType="FIREWALL" />
-          <LegendItem pinType="ACCESS_POINT" />
+          <LegendItem pinType="WIFI_AP" />
           <LegendItem pinType="RACK" />
           <LegendItem pinType="CAMERA" />
           <LegendItem pinType="PATCH_PANEL" />
@@ -1738,7 +1738,7 @@ function getLegendShapeStyle(pinType: PinType, color: string): { className: stri
         className: 'w-5 h-5',
         style: { ...base, clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' },
       };
-    case 'ACCESS_POINT':
+    case 'WIFI_AP':
       return {
         className: 'w-5 h-5',
         style: { ...base, clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' },

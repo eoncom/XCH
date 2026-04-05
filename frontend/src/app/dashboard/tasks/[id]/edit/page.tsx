@@ -77,10 +77,11 @@ export default function EditTaskPage() {
     queryFn: () => assetsApi.getAll(),
   });
 
-  const { data: users } = useQuery<User[]>({
+  const { data: usersResponse } = useQuery({
     queryKey: ['users'],
-    queryFn: usersApi.getAll,
+    queryFn: () => usersApi.getAll(),
   });
+  const users = usersResponse?.data;
 
   const {
     register,
