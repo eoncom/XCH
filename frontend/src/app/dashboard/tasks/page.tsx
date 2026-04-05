@@ -204,7 +204,7 @@ export default function TasksPage() {
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [assignedFilter, setAssignedFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(200);
+  const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
 
   const { data: response, isLoading } = useQuery<{ data: Task[]; meta: PaginationMeta }>({
@@ -232,7 +232,7 @@ export default function TasksPage() {
 
   const { data: usersList = [] } = useQuery({
     queryKey: ['users'],
-    queryFn: () => usersApi.getAll({ pageSize: 200 }),
+    queryFn: () => usersApi.getAll({ pageSize: 100 }),
   });
 
   // Apply filters
