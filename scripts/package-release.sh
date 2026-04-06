@@ -4,12 +4,12 @@
 # Builds all Docker images and creates a portable archive for deployment
 #
 # Usage: ./scripts/package-release.sh [version]
-# Example: ./scripts/package-release.sh v1.0.0-rc1
+# Example: ./scripts/package-release.sh v1.1.1
 # =============================================================================
 
 set -euo pipefail
 
-VERSION="${1:-v1.0.0-rc1}"
+VERSION="${1:-v1.1.1}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="/tmp/xch-release-${VERSION}"

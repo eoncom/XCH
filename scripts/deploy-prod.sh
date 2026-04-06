@@ -1,78 +1,117 @@
 #!/bin/bash
+# =============================================================================
+# XCH — Deploy Production (local)
+# Runs locally on the production server where the repo is cloned.
+#
+# Usage: bash scripts/deploy-prod.sh [--backend-only | --frontend-only]
+# =============================================================================
 
-# Script de déploiement production XCH
-# Usage: bash scripts/deploy-prod.sh
+set -euo pipefail
 
-set -e  # Arrêter en cas d'erreur
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+COMPOSE_FILE="${PROJECT_DIR}/docker-compose.prod.yml"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
 echo "========================================="
-echo "🚀 Déploiement XCH - Production"
+echo "  XCH — Deploy Production (local)"
+echo "  $(date)"
 echo "========================================="
 echo ""
 
-# Configuration
-SERVER_USER="xch-deploy"
-SERVER_HOST="192.168.0.13"
-PROJECT_PATH="/var/www/xch"
-STACK_NAME="xch"
+# Parse arguments
+BUILD_BACKEND=true
+BUILD_FRONTEND=true
 
-echo "📡 Connexion au serveur $SERVER_HOST..."
+if [ "${1:-}" = "--backend-only" ]; then
+  BUILD_FRONTEND=false
+  echo -e "${YELLOW}Mode: backend uniquement${NC}"
+elif [ "${1:-}" = "--frontend-only" ]; then
+  BUILD_BACKEND=false
+  echo -e "${YELLOW}Mode: frontend uniquement${NC}"
+fi
+
+cd "$PROJECT_DIR"
+
+# ── Step 1: Pull latest code ────────────────────────────────────────────────
 echo ""
-
-# Connexion SSH et exécution des commandes
-ssh ${SERVER_USER}@${SERVER_HOST} << 'ENDSSH'
-set -e
-
-echo "📂 Navigation vers le projet..."
-cd /var/www/xch
-
-echo "📥 Pull derniers commits..."
-git pull origin main
-
-echo "🔍 Vérification derniers commits..."
+echo "[1/5] Pull derniers commits..."
+git pull origin main || git pull origin master || echo -e "${YELLOW}Pas de remote configure — skip git pull${NC}"
+echo ""
 git log --oneline -3
 
+# ── Step 2: Build images ────────────────────────────────────────────────────
 echo ""
-echo "🐳 Rebuild Frontend (sans cache)..."
-docker compose -p xch down frontend
-docker compose -p xch build --no-cache frontend
-docker compose -p xch up -d frontend
+echo "[2/5] Build des images Docker (--no-cache)..."
 
+SERVICES=""
+if [ "$BUILD_BACKEND" = true ]; then
+  SERVICES="$SERVICES backend"
+fi
+if [ "$BUILD_FRONTEND" = true ]; then
+  SERVICES="$SERVICES frontend"
+fi
+
+docker compose -f "$COMPOSE_FILE" build --no-cache $SERVICES
+
+# ── Step 3: Restart services ────────────────────────────────────────────────
 echo ""
-echo "⏳ Attente démarrage frontend (30s)..."
+echo "[3/5] Redemarrage des services..."
+docker compose -f "$COMPOSE_FILE" up -d $SERVICES
+
+# ── Step 4: Wait and health check ───────────────────────────────────────────
+echo ""
+echo "[4/5] Attente demarrage (30s)..."
 sleep 30
 
-echo ""
-echo "📊 Statut des conteneurs XCH..."
-docker compose -p xch ps
+# Check backend health
+if [ "$BUILD_BACKEND" = true ]; then
+  echo "  Verification backend..."
+  if docker compose -f "$COMPOSE_FILE" exec -T backend wget -qO- http://localhost:3000/api/health > /dev/null 2>&1; then
+    echo -e "  ${GREEN}Backend: OK${NC}"
+  else
+    echo -e "  ${YELLOW}Backend: pas encore pret (verifier les logs)${NC}"
+  fi
+fi
 
-echo ""
-echo "📝 Logs frontend (dernières 20 lignes)..."
-docker logs xch-frontend --tail=20
+# Check frontend
+if [ "$BUILD_FRONTEND" = true ]; then
+  echo "  Verification frontend..."
+  if docker compose -f "$COMPOSE_FILE" exec -T frontend wget -qO- http://localhost:3001 > /dev/null 2>&1; then
+    echo -e "  ${GREEN}Frontend: OK${NC}"
+  else
+    echo -e "  ${YELLOW}Frontend: pas encore pret (verifier les logs)${NC}"
+  fi
+fi
 
+# ── Step 5: Restart Nginx Proxy Manager (DNS cache) ────────────────────────
+echo ""
+echo "[5/5] Redemarrage Nginx Proxy Manager (cache DNS)..."
+# NPM caches container IPs — must restart after rebuild
+NPM_CONTAINER=$(docker ps --format '{{.Names}}' | grep -i "nginx-proxy-manager" | head -1) || true
+if [ -n "$NPM_CONTAINER" ]; then
+  docker restart "$NPM_CONTAINER"
+  echo -e "  ${GREEN}NPM redemarre: $NPM_CONTAINER${NC}"
+else
+  echo -e "  ${YELLOW}NPM non trouve — skip (si proxy externe, redemarrez-le manuellement)${NC}"
+fi
+
+# ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 echo "========================================="
-echo "✅ Déploiement terminé avec succès !"
+echo -e "  ${GREEN}Deploiement termine !${NC}"
 echo "========================================="
 echo ""
-echo "🌐 URLs :"
-echo "  Frontend : https://xch.eoncom.io"
-echo "  Backend  : https://xchapi.eoncom.io"
+echo "  Statut des conteneurs:"
+docker compose -f "$COMPOSE_FILE" ps
 echo ""
-echo "📋 Commandes utiles :"
-echo "  Logs frontend : docker logs xch-frontend -f"
-echo "  Logs backend  : docker logs xch-backend -f"
-echo "  Restart stack : docker compose -p xch restart"
-echo ""
-
-ENDSSH
-
-echo ""
-echo "🎉 Déploiement distant terminé !"
-echo ""
-echo "🧪 Tests à effectuer :"
-echo "  1. Ouvrir https://xch.eoncom.io"
-echo "  2. Tester création site avec GPS auto"
-echo "  3. Vérifier couleurs pins sur floor plans"
-echo "  4. Tester formulaires édition (sites, baies, équipements)"
+echo "  Commandes utiles:"
+echo "    Logs backend  : docker compose -f $COMPOSE_FILE logs -f backend"
+echo "    Logs frontend : docker compose -f $COMPOSE_FILE logs -f frontend"
+echo "    Restart tout  : docker compose -f $COMPOSE_FILE restart"
 echo ""

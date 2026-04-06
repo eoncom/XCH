@@ -1,6 +1,6 @@
 # =============================================================================
 # XCH — Production Docker Compose
-# Version: 1.0.0-rc1
+# Version: 1.1.1
 #
 # Usage:
 #   docker compose -f docker-compose.prod.yml up -d --build
@@ -123,7 +123,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: xch-backend:v1.0.0-rc1
+    image: xch-backend:v1.1.1
     container_name: xch-backend
     env_file:
       - ./backend/.env
@@ -154,7 +154,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: xch-frontend:v1.0.0-rc1
+    image: xch-frontend:v1.1.1
     container_name: xch-frontend
     environment:
       NODE_ENV: production
