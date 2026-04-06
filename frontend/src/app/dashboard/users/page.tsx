@@ -12,7 +12,17 @@ import { usersApi } from '@/lib/api/users';
 import { apiClient } from '@/lib/api-client';
 import { showToast } from '@/lib/toast';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
-import { Users, UserPlus, Mail, Phone, Shield, Send, Loader2, Search, X } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Users, UserPlus, Mail, Phone, Shield, Send, Loader2, Search, X, Trash2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import Link from 'next/link';
 import type { User } from '@/types';
@@ -39,6 +49,21 @@ export default function UsersPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState('VIEWER');
+
+  // Delete user state
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => usersApi.delete(id),
+    onSuccess: () => {
+      showToast.success('Utilisateur supprimé');
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err: any) => {
+      showToast.error(err.message || 'Erreur lors de la suppression');
+    },
+  });
 
   const inviteMutation = useMutation({
     mutationFn: (data: { email: string; name: string; role: string }) =>
@@ -340,6 +365,14 @@ export default function UsersPage() {
                       Modifier
                     </Link>
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setDeleteTarget(user)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -355,6 +388,33 @@ export default function UsersPage() {
           {meta && <Pagination meta={meta} onPageChange={setPage} onPageSizeChange={setPageSize} />}
         </CardContent>
       </Card>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer l'utilisateur</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer <strong>{deleteTarget?.name}</strong> ({deleteTarget?.email}) ?
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              {deleteMutation.isPending ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Suppression...</>
+              ) : (
+                'Supprimer'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

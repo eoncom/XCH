@@ -42,7 +42,7 @@ import {
 import { organizationApi } from '@/lib/api/organization';
 import { sitesApi } from '@/lib/api/sites';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, MapPin, Lock, Unlock, Info, X, Plus, Globe, Building2, Network, Pin, Shield, Calendar } from 'lucide-react';
+import { ArrowLeft, MapPin, Lock, Unlock, Info, X, Plus, Globe, Building2, Network, Pin, Shield, Calendar, Trash2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
@@ -112,6 +112,7 @@ export default function EditUserPage() {
   const userId = params.id as string;
 
   const [showDisable2FADialog, setShowDisable2FADialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // State for adding scope/grant
   const [showAddScope, setShowAddScope] = useState(false);
@@ -221,6 +222,18 @@ export default function EditUserPage() {
       queryClient.invalidateQueries({ queryKey: ['user', userId] });
       queryClient.invalidateQueries({ queryKey: ['users'] });
       router.push('/dashboard/users');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => usersApi.delete(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('Utilisateur supprimé');
+      router.push('/dashboard/users');
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Erreur lors de la suppression');
     },
   });
 
@@ -369,10 +382,18 @@ export default function EditUserPage() {
 
         {/* Actions */}
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground flex items-center gap-1">
-            <Info className="h-4 w-4" />
-            Les champs marqués <span className="text-red-500">*</span> sont obligatoires
-          </p>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Suppression...</>
+            ) : (
+              <><Trash2 className="mr-2 h-4 w-4" />Supprimer l'utilisateur</>
+            )}
+          </Button>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => router.push('/dashboard/users')}>Annuler</Button>
             <Button type="submit" disabled={updateMutation.isPending}>
@@ -695,6 +716,28 @@ export default function EditUserPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete user dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer l'utilisateur</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer <strong>{user?.name}</strong> ({user?.email}) ?
+              Cette action est irréversible. Toutes les portées d'accès et les données associées seront supprimées.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteMutation.mutate()}
+            >
+              Supprimer définitivement
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showDisable2FADialog} onOpenChange={setShowDisable2FADialog}>
         <AlertDialogContent>

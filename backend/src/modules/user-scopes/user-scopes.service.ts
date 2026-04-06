@@ -45,13 +45,46 @@ export class UserScopesService {
   }
 
   /**
-   * List all scopes for a user
+   * List all scopes for a user, enriched with human-readable labels.
    */
   async findByUser(tenantId: string, userId: string) {
-    return this.prisma.userScope.findMany({
+    const scopes = await this.prisma.userScope.findMany({
       where: { tenantId, userId },
       orderBy: { grantedAt: 'desc' },
     });
+
+    // Enrich each scope with the name of the target entity
+    const enriched = await Promise.all(
+      scopes.map(async (scope) => {
+        let scopeLabel: string | null = null;
+
+        if (scope.scopeType === 'DIVISION' && scope.scopeId) {
+          const div = await this.prisma.division.findUnique({
+            where: { id: scope.scopeId },
+            select: { name: true },
+          });
+          scopeLabel = div?.name || scope.scopeId;
+        } else if (scope.scopeType === 'DELEGATION' && scope.scopeId) {
+          const del = await this.prisma.delegation.findUnique({
+            where: { id: scope.scopeId },
+            include: { division: { select: { name: true } } },
+          });
+          scopeLabel = del
+            ? `${del.division?.name || '?'} > ${del.name}`
+            : scope.scopeId;
+        } else if (scope.scopeType === 'SITE' && scope.scopeId) {
+          const site = await this.prisma.site.findUnique({
+            where: { id: scope.scopeId },
+            select: { code: true, name: true },
+          });
+          scopeLabel = site ? `${site.code} — ${site.name}` : scope.scopeId;
+        }
+
+        return { ...scope, scopeLabel };
+      }),
+    );
+
+    return enriched;
   }
 
   /**

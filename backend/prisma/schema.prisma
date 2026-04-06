@@ -606,8 +606,8 @@ model Task {
   // Assignment
   assignedTo   String?
   assignedUser User?   @relation("AssignedTo", fields: [assignedTo], references: [id], onDelete: SetNull)
-  createdBy    String
-  creator      User    @relation("CreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  createdBy    String?
+  creator      User?   @relation("CreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
 
   // Scheduling
   dueDate DateTime?

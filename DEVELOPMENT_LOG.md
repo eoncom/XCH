@@ -4799,3 +4799,24 @@ fix: reduce pageSize to 100 max (backend validation limit)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-06
+
+**Date:** 2026-04-06 03:47:31
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix: remove double /api prefix on notification controller
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
