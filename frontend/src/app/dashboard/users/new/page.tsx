@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,8 +22,11 @@ import {
 } from '@/components/ui/select';
 import { usersApi } from '@/lib/api/users';
 import { apiClient } from '@/lib/api-client';
+import { userScopesApi, type ScopeType } from '@/lib/api/site-access';
+import { organizationApi } from '@/lib/api/organization';
+import { sitesApi } from '@/lib/api/sites';
 import { showToast } from '@/lib/toast';
-import { ArrowLeft, Info, UserPlus, Send, Copy, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Info, UserPlus, Send, Copy, CheckCircle2, Shield, Globe, Building2, Network, Pin } from 'lucide-react';
 import Link from 'next/link';
 import type { UserRole } from '@/types';
 
@@ -53,11 +56,41 @@ const inviteSchema = z.object({
 type DirectFormData = z.infer<typeof directSchema>;
 type InviteFormData = z.infer<typeof inviteSchema>;
 
+const SCOPE_TYPE_LABELS: Record<ScopeType, string> = {
+  TENANT: 'Tout le tenant',
+  DIVISION: 'Division',
+  DELEGATION: 'Délégation',
+  SITE: 'Site',
+};
+
+const SCOPE_TYPE_ICONS: Record<ScopeType, typeof Globe> = {
+  TENANT: Globe,
+  DIVISION: Building2,
+  DELEGATION: Network,
+  SITE: Pin,
+};
+
 export default function NewUserPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<'direct' | 'invite'>('direct');
   const [inviteResult, setInviteResult] = useState<{ token?: string; link?: string } | null>(null);
+
+  // Scope state (mandatory)
+  const [scopeType, setScopeType] = useState<ScopeType>('TENANT');
+  const [scopeTargetId, setScopeTargetId] = useState('');
+
+  // Org data for scope selector
+  const { data: orgTree } = useQuery({
+    queryKey: ['organization-tree'],
+    queryFn: () => organizationApi.getTree(),
+  });
+  const { data: allSites } = useQuery({
+    queryKey: ['sites'],
+    queryFn: () => sitesApi.getAll(),
+  });
+
+  const isScopeValid = scopeType === 'TENANT' || !!scopeTargetId;
 
   // Direct creation form
   const directForm = useForm<DirectFormData>({
@@ -72,10 +105,20 @@ export default function NewUserPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: DirectFormData) => usersApi.create(data),
+    mutationFn: async (data: DirectFormData) => {
+      // 1. Create user
+      const newUser = await usersApi.create(data);
+      // 2. Assign mandatory scope
+      await userScopesApi.create({
+        userId: newUser.id,
+        scopeType,
+        scopeId: scopeType === 'TENANT' ? undefined : scopeTargetId,
+      });
+      return newUser;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      showToast.success('Utilisateur créé avec succès');
+      showToast.success('Utilisateur créé avec portée assignée');
       router.push('/dashboard/users');
     },
     onError: (err: any) => {
@@ -84,11 +127,22 @@ export default function NewUserPage() {
   });
 
   const inviteMutation = useMutation({
-    mutationFn: (data: InviteFormData) =>
-      apiClient.post<{ user: any; inviteToken?: string }>('/api/auth/invite', data),
+    mutationFn: async (data: InviteFormData) => {
+      // 1. Create invited user
+      const result = await apiClient.post<{ user: any; inviteToken?: string }>('/api/auth/invite', data);
+      // 2. Assign mandatory scope
+      if (result.user?.id) {
+        await userScopesApi.create({
+          userId: result.user.id,
+          scopeType,
+          scopeId: scopeType === 'TENANT' ? undefined : scopeTargetId,
+        });
+      }
+      return result;
+    },
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      showToast.success('Invitation envoyée !');
+      showToast.success('Invitation envoyée avec portée assignée !');
       // If SMTP failed, the token may be returned for manual sharing
       if (result.inviteToken) {
         const link = `${window.location.origin}/invite?token=${result.inviteToken}`;
@@ -179,13 +233,73 @@ export default function NewUserPage() {
               </CardContent>
             </Card>
 
+            {/* Scope Card (mandatory) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Portée d&apos;accès
+                  <span className="text-xs font-normal text-red-500 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded">Obligatoire</span>
+                </CardTitle>
+                <CardDescription>
+                  Sans portée, l&apos;utilisateur n&apos;aura aucun accès. Définissez au minimum une portée.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Type de portée <span className="text-red-500">*</span></Label>
+                    <Select value={scopeType} onValueChange={(v) => { setScopeType(v as ScopeType); setScopeTargetId(''); }}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="TENANT">Tout le tenant</SelectItem>
+                        <SelectItem value="DIVISION">Division</SelectItem>
+                        <SelectItem value="DELEGATION">Délégation</SelectItem>
+                        <SelectItem value="SITE">Site</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {scopeType !== 'TENANT' && (
+                    <div className="space-y-2">
+                      <Label>
+                        {scopeType === 'DIVISION' ? 'Division' : scopeType === 'DELEGATION' ? 'Délégation' : 'Site'} <span className="text-red-500">*</span>
+                      </Label>
+                      <Select value={scopeTargetId} onValueChange={setScopeTargetId}>
+                        <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+                        <SelectContent>
+                          {scopeType === 'DIVISION' && orgTree?.map((div: any) => (
+                            <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+                          ))}
+                          {scopeType === 'DELEGATION' && orgTree?.flatMap((div: any) =>
+                            div.delegations.map((del: any) => (
+                              <SelectItem key={del.id} value={del.id}>
+                                {div.name} &gt; {del.name}
+                              </SelectItem>
+                            ))
+                          )}
+                          {scopeType === 'SITE' && allSites?.map((site: any) => (
+                            <SelectItem key={site.id} value={site.id}>
+                              {site.code} - {site.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {!scopeTargetId && (
+                        <p className="text-sm text-red-600">Veuillez sélectionner une cible pour la portée</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground flex items-center gap-1">
                 <Info className="h-4 w-4" /> Le compte sera actif immédiatement
               </p>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => router.push('/dashboard/users')}>Annuler</Button>
-                <Button type="submit" disabled={createMutation.isPending}>
+                <Button type="submit" disabled={createMutation.isPending || !isScopeValid}>
                   {createMutation.isPending ? 'Création...' : 'Créer l\'utilisateur'}
                 </Button>
               </div>
@@ -257,13 +371,73 @@ export default function NewUserPage() {
                 </CardContent>
               </Card>
 
+              {/* Scope Card (mandatory) */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Portée d&apos;accès
+                    <span className="text-xs font-normal text-red-500 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded">Obligatoire</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Sans portée, l&apos;utilisateur n&apos;aura aucun accès. Définissez au minimum une portée.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Type de portée <span className="text-red-500">*</span></Label>
+                      <Select value={scopeType} onValueChange={(v) => { setScopeType(v as ScopeType); setScopeTargetId(''); }}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="TENANT">Tout le tenant</SelectItem>
+                          <SelectItem value="DIVISION">Division</SelectItem>
+                          <SelectItem value="DELEGATION">Délégation</SelectItem>
+                          <SelectItem value="SITE">Site</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {scopeType !== 'TENANT' && (
+                      <div className="space-y-2">
+                        <Label>
+                          {scopeType === 'DIVISION' ? 'Division' : scopeType === 'DELEGATION' ? 'Délégation' : 'Site'} <span className="text-red-500">*</span>
+                        </Label>
+                        <Select value={scopeTargetId} onValueChange={setScopeTargetId}>
+                          <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+                          <SelectContent>
+                            {scopeType === 'DIVISION' && orgTree?.map((div: any) => (
+                              <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+                            ))}
+                            {scopeType === 'DELEGATION' && orgTree?.flatMap((div: any) =>
+                              div.delegations.map((del: any) => (
+                                <SelectItem key={del.id} value={del.id}>
+                                  {div.name} &gt; {del.name}
+                                </SelectItem>
+                              ))
+                            )}
+                            {scopeType === 'SITE' && allSites?.map((site: any) => (
+                              <SelectItem key={site.id} value={site.id}>
+                                {site.code} - {site.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {!scopeTargetId && (
+                          <p className="text-sm text-red-600">Veuillez sélectionner une cible pour la portée</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground flex items-center gap-1">
                   <Info className="h-4 w-4" /> Le compte sera inactif jusqu&apos;à acceptation
                 </p>
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" onClick={() => router.push('/dashboard/users')}>Annuler</Button>
-                  <Button type="submit" disabled={inviteMutation.isPending}>
+                  <Button type="submit" disabled={inviteMutation.isPending || !isScopeValid}>
                     {inviteMutation.isPending ? 'Envoi...' : 'Envoyer l\'invitation'}
                   </Button>
                 </div>

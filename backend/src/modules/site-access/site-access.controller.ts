@@ -126,10 +126,13 @@ export class SiteAccessController {
       orderBy: { grantedAt: 'desc' },
     });
 
+    const hasScope = enrichedScopes.length > 0 || accessGrants.length > 0;
+
     return {
       role,
-      allSitesAccess: accessibleSiteIds === null,
-      accessibleSiteIds,
+      hasScope,
+      allSitesAccess: hasScope ? accessibleSiteIds === null : false,
+      accessibleSiteIds: hasScope ? accessibleSiteIds : [],
       scopes: enrichedScopes,
       accessGrants,
     };

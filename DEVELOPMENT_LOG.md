@@ -4841,3 +4841,24 @@ fix: deployment validation — SSL, env files, cookies, gatus secret
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-07
+
+**Date:** 2026-04-07 00:04:10
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 4
+
+**Commit message:**
+```
+feat: add organizational scope (scopeType/scopeId) to BillingEntity, Expense, Contact + vendor→Contact link
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

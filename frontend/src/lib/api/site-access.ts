@@ -66,6 +66,7 @@ export interface AccessGrant {
 
 export interface MyPermissionsResponse {
   role: string;
+  hasScope: boolean;
   allSitesAccess: boolean;
   accessibleSiteIds: string[] | null;
   scopes: UserScope[];

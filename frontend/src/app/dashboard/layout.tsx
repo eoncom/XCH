@@ -33,6 +33,7 @@ import { useBranding } from '@/components/BrandingProvider';
 import { useMemo } from 'react';
 import { useTenantModules } from '@/hooks/useTenantModules';
 import { usePermissions } from '@/hooks/usePermissions';
+import { ShieldAlert } from 'lucide-react';
 
 // Navigation items with optional moduleKey for feature-flag filtering
 // permResource: if set, requires can(permResource, 'read') to show
@@ -72,7 +73,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sessionChecked, setSessionChecked] = useState(false);
   const { logoUrl, orgName } = useBranding();
   const { isModuleEnabled } = useTenantModules();
-  const { can, hasAnySiteAccess } = usePermissions();
+  const { can, hasAnySiteAccess, hasScope, isLoadingPerms } = usePermissions();
 
   // Filter navigation based on enabled modules + permissions
   const filteredNavigation = useMemo(
@@ -141,6 +142,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const isAdmin = user.role === 'ADMIN';
 
+  // No scope = no access — show blocking screen
+  const noAccess = hasScope === false;
+
   return (
     <div className="flex h-screen bg-background">
       {/* Mobile overlay */}
@@ -180,67 +184,75 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
-          {filteredNavigation.map((item) => {
-            const isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href);
-            const linkProps = item.external ? { target: '_blank' as const, rel: 'noopener noreferrer' } : {};
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                {...linkProps}
-                className={cn(
-                  'group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
-                  isActive
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                )}
-                onClick={() => setSidebarOpen(false)}
-              >
-                <item.icon
+        {!noAccess && (
+          <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
+            {filteredNavigation.map((item) => {
+              const isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href);
+              const linkProps = item.external ? { target: '_blank' as const, rel: 'noopener noreferrer' } : {};
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  {...linkProps}
                   className={cn(
-                    'mr-3 h-5 w-5 flex-shrink-0 transition-colors',
-                    isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-accent-foreground'
+                    'group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
-                />
-                {item.name}
-              </Link>
-            );
-          })}
-
-          {isAdmin && (
-            <>
-              <div className="my-4 border-t" />
-              <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Administration
-              </p>
-              {adminNavigation.map((item) => {
-                const isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <item.icon
                     className={cn(
-                      'group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
-                      isActive
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      'mr-3 h-5 w-5 flex-shrink-0 transition-colors',
+                      isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-accent-foreground'
                     )}
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    <item.icon
+                  />
+                  {item.name}
+                </Link>
+              );
+            })}
+
+            {isAdmin && (
+              <>
+                <div className="my-4 border-t" />
+                <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Administration
+                </p>
+                {adminNavigation.map((item) => {
+                  const isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
                       className={cn(
-                        'mr-3 h-5 w-5 flex-shrink-0 transition-colors',
-                        isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-accent-foreground'
+                        'group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
+                        isActive
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                       )}
-                    />
-                    {item.name}
-                  </Link>
-                );
-              })}
-            </>
-          )}
-        </nav>
+                      onClick={() => setSidebarOpen(false)}
+                    >
+                      <item.icon
+                        className={cn(
+                          'mr-3 h-5 w-5 flex-shrink-0 transition-colors',
+                          isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-accent-foreground'
+                        )}
+                      />
+                      {item.name}
+                    </Link>
+                  );
+                })}
+              </>
+            )}
+          </nav>
+        )}
+
+        {noAccess && (
+          <div className="flex-1 flex items-center justify-center px-6">
+            <p className="text-xs text-muted-foreground text-center">Aucun module accessible</p>
+          </div>
+        )}
 
         <div className="border-t p-4">
           <div className="mb-3 px-3">
@@ -281,7 +293,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-6 bg-background">
-          <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
+          {noAccess ? (
+            <div className="flex flex-col items-center justify-center h-full max-w-md mx-auto text-center space-y-6">
+              <div className="rounded-full bg-destructive/10 p-6">
+                <ShieldAlert className="h-16 w-16 text-destructive" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-foreground">Aucun accès</h2>
+                <p className="text-muted-foreground">
+                  Votre compte n&apos;a aucune portée d&apos;accès configurée.
+                  Vous ne pouvez accéder à aucun module ni donnée.
+                </p>
+              </div>
+              <div className="bg-muted/50 border rounded-lg p-4 w-full">
+                <p className="text-sm text-muted-foreground">
+                  Contactez un administrateur pour qu&apos;il vous attribue une portée d&apos;accès
+                  (tenant, division, délégation ou site).
+                </p>
+              </div>
+              <Button variant="outline" onClick={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Se déconnecter
+              </Button>
+            </div>
+          ) : (
+            <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
+          )}
         </main>
       </div>
     </div>

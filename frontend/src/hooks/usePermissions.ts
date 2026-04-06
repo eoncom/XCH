@@ -132,13 +132,16 @@ function maxPerm(a: ResourcePermissionLevel, b: ResourcePermissionLevel): Resour
  *
  * Uses UserScope + AccessGrant for permission resolution.
  * ALL roles fetch my-permissions (including ADMIN/MANAGER, since they are now scope-bound).
+ *
+ * RULE: No scope + no grant = NO ACCESS to anything.
+ * The role NEVER bypasses scope requirements.
  */
 export function usePermissions() {
   const { user } = useAuthStore();
   const role = (user?.role || 'VIEWER') as string;
 
   // Fetch permissions for ALL roles (Phase B: ADMIN/MANAGER are scope-bound too)
-  const { data: myPerms } = useQuery<MyPermissionsResponse>({
+  const { data: myPerms, isLoading: isLoadingPerms } = useQuery<MyPermissionsResponse>({
     queryKey: ['my-permissions'],
     queryFn: () => siteAccessApi.myPermissions(),
     enabled: !!user,
@@ -147,7 +150,18 @@ export function usePermissions() {
   });
 
   /**
+   * Whether the user has at least one scope or grant.
+   * If false, the user has NO access to anything.
+   */
+  const hasScope = (() => {
+    if (!myPerms) return undefined; // Still loading
+    return myPerms.scopes.length > 0 || myPerms.accessGrants.length > 0;
+  })();
+
+  /**
    * Check if user can do action on resource.
+   *
+   * CRITICAL: If user has no scope AND no grant, ALWAYS returns false.
    *
    * Without siteId: checks if the user has ANY scope that grants this permission.
    * With siteId: checks if the specific site is covered by scopes or grants.
@@ -158,16 +172,16 @@ export function usePermissions() {
    * 3. MAX of both sources
    */
   const can = (resource: string, action: string, siteId?: string): boolean => {
-    // Resources that are not site-scoped (org-level) — use pure role-based check
+    // If permissions haven't loaded yet, block everything (safe default)
+    if (!myPerms) return false;
+
+    // RULE: No scope + no grant = NO ACCESS (role never bypasses scope)
+    if (hasScope === false) return false;
+
+    // Resources that are not site-scoped (org-level) — use role-based check
+    // (but only if user has at least one scope — enforced above)
     const orgResources = ['users', 'tenants', 'divisions', 'delegations', 'contact-types', 'integrations', 'billing-entities', 'expenses'];
     if (orgResources.includes(resource)) {
-      const rolePerms = ROLE_PERMISSIONS[role];
-      if (!rolePerms) return false;
-      return rolePerms[resource]?.includes(action) ?? false;
-    }
-
-    // If permissions haven't loaded yet, fallback to role-based (permissive for UX)
-    if (!myPerms) {
       const rolePerms = ROLE_PERMISSIONS[role];
       if (!rolePerms) return false;
       return rolePerms[resource]?.includes(action) ?? false;
@@ -244,7 +258,8 @@ export function usePermissions() {
    * Check if user has access to at least one site.
    */
   const hasAnySiteAccess = (): boolean => {
-    if (!myPerms) return role === 'ADMIN'; // Fallback while loading
+    if (!myPerms) return false; // Safe default while loading
+    if (hasScope === false) return false; // No scope = no site access
     return myPerms.allSitesAccess || (myPerms.accessibleSiteIds !== null && myPerms.accessibleSiteIds.length > 0);
   };
 
@@ -267,5 +282,9 @@ export function usePermissions() {
     /** All sites access flag */
     allSitesAccess: myPerms?.allSitesAccess ?? false,
     hasAnySiteAccess,
+    /** Whether user has at least one scope or grant (undefined = loading) */
+    hasScope,
+    /** Whether permissions are still loading */
+    isLoadingPerms,
   };
 }
