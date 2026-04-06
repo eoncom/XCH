@@ -1,13 +1,13 @@
 # Stack Technique XCH
 
-Date : 2025-12-31
-Version : 1.0
+Version : 1.1.1
+Mise a jour : 2026-04-06
 
 ## Vue d'ensemble
 
 XCH est une application web full-stack TypeScript avec architecture monolithe modulaire.
 
-**Principe** : Stack JavaScript/TypeScript moderne pour productivité maximale et type-safety bout en bout.
+**Principe** : Stack JavaScript/TypeScript moderne pour productivite maximale et type-safety bout en bout.
 
 ---
 
@@ -15,85 +15,75 @@ XCH est une application web full-stack TypeScript avec architecture monolithe mo
 
 ### Framework principal
 
-**NestJS 10+** (Node.js + TypeScript)
+**NestJS 10** (Node.js + TypeScript)
 - Architecture modulaire (controllers, services, repositories)
 - Dependency injection native
-- Excellente intégration TypeScript
-- Écosystème mature (validation, auth, queue, cache)
+- 15+ modules metier (sites, assets, racks, tasks, contacts, expenses, notifications, etc.)
+- Filtre d'exceptions global (Prisma errors -> HTTP codes)
+- Pagination serveur sur tous les endpoints de liste
 
-**Justification** : Séparation of concerns naturelle, scalabilité modulaire, DX exceptionnelle.
+### Base de donnees
 
-### Base de données
-
-**PostgreSQL 15+**
-- SGBD relationnel robuste (ACID complet)
-- Extension **PostGIS** pour géospatialisation (carte chantiers, coordonnées GPS)
-- Support JSON/JSONB pour métadonnées flexibles
+**PostgreSQL 15** + **PostGIS**
+- Extension PostGIS pour geospatialisation (carte chantiers, coordonnees GPS)
+- Support JSON/JSONB pour metadonnees flexibles
 - Row-Level Security (RLS) pour isolation multi-tenant
 
 **ORM : Prisma**
-- Type-safety DB ↔ API
-- Migrations versionnées
-- Client TypeScript auto-généré
-- Relations complexes simplifiées
+- Type-safety DB <-> API
+- Migrations versionnees (prisma migrate deploy)
+- Client TypeScript auto-genere
+- ~20 modeles (Tenant, User, Site, Asset, Rack, Task, FloorPlan, Pin, Contact, Expense, BillingEntity, NotificationConfig, NotificationLog, Division, Delegation, UserScope, etc.)
 
-**Justification** : PostGIS essentiel pour carte, Prisma meilleur DX TypeScript.
+### Cache
 
-### Cache & Queue
-
-**Redis 7+**
-- Cache applicatif (recherches, intégrations externes)
-- Sessions utilisateurs (JWT refresh tokens)
-- Queue jobs asynchrones (BullMQ)
+**Redis 7**
+- Cache applicatif
+- Sessions utilisateurs
 - Rate limiting
-
-**BullMQ**
-- Queue Redis-backed
-- Jobs asynchrones (exports PDF, génération QR, sync intégrations)
-- Retry automatique
-- Dashboard monitoring
-
-**Justification** : Redis ultra-performant pour cache/sessions, BullMQ robuste pour jobs longs.
 
 ### Stockage fichiers
 
-**MinIO** (on-premise) ou **AWS S3** (cloud)
-- API S3-compatible (portabilité)
-- Buckets : `plans`, `photos`, `exports`, `qrcodes`
-- URLs pré-signées (sécurité)
-- Versioning fichiers
-
-**Justification** : Compatibilité S3 garantit portabilité on-premise ↔ cloud.
+**MinIO** (on-premise, API S3-compatible)
+- Buckets : xch-storage, plans, photos, exports, qrcodes, xch-backups
+- Nettoyage automatique a la suppression (cascade)
 
 ### Permissions
 
 **Casbin**
-- Moteur RBAC/ABAC policy-based
-- Policies persistées PostgreSQL (TypeORM adapter)
-- Performance (cache policies en mémoire)
-- Extensibilité ABAC (permissions contextuelles)
-
-**Justification** : Séparation logique permissions, audit trail, évolutivité.
+- Moteur RBAC policy-based
+- 4 roles : ADMIN, MANAGER, TECHNICIEN, VIEWER
+- Policies persistees PostgreSQL (TypeORM adapter)
 
 ### Authentification
 
 **Passport.js**
-- Strategy `local` : Email/password (bcrypt)
-- Strategy `oidc` : OpenID Connect (Microsoft Entra ID, Keycloak...)
-- JWT tokens : Access token (15min) + Refresh token (7j)
+- Strategy `local` : email/password (bcrypt)
+- Strategy `oidc` : OpenID Connect (Microsoft Entra ID, Keycloak)
+- JWT tokens : access (15min) + refresh (7j)
+- Invitation par email : token 72h
+- Reset password : token 1h
 
-**Provisioning** : Just-In-Time (création auto users OIDC)
+### Notifications
 
-**Justification** : Flexibilité auth locale (MVP) → SSO entreprise (production).
+**Nodemailer** (Email SMTP)
+- Templates HTML configurables
+- Fallback console log en developpement
 
-### Génération documents
+**Microsoft Teams** (Webhooks)
+- Adaptive Cards pour messages riches
 
-**QR Codes** : `qrcode` (Node.js)
-**PDF** : `Puppeteer` (rendu HTML → PDF)
-- Templates brandés (logo délégation)
-- Rapports chantiers, étiquettes QR, schémas baies
+**Configuration multi-scope**
+- Heritage tenant > division > delegation
+- 7 types d'evenements configurables
+- Logs avec statut succes/erreur
 
-**Justification** : Puppeteer flexible pour templates HTML complexes.
+### Generation documents
+
+- **QR Codes** : `qrcode` (Node.js)
+- **PDF** : `Puppeteer` (rendu HTML -> PDF)
+- **CSV/Excel** : `papaparse` + `xlsx`
+- **Export ZIP** : plans PDF avec pins + equipements en baies
 
 ---
 
@@ -101,329 +91,103 @@ XCH est une application web full-stack TypeScript avec architecture monolithe mo
 
 ### Framework
 
-**Next.js 14+** (React + TypeScript)
-- Server-Side Rendering (SSR) + Static Site Generation (SSG)
-- Routing file-based
-- API routes (Backend-For-Frontend si besoin)
-- Image optimization native
-- PWA support
+**Next.js 15** (React 19 + TypeScript 5.7)
+- App Router
+- PWA manifest + icons
+- Responsive design mobile-first
 
-**Justification** : Performance SEO, PWA natif, écosystème React mature.
+### UI
 
-### UI Library
-
-**shadcn/ui** + **Tailwind CSS**
+**shadcn/ui** + **Tailwind CSS 3.4**
 - Composants React modernes (Radix UI sous-jacent)
-- Accessibilité (ARIA, keyboard navigation)
-- Customisation complète (branding délégation)
 - Dark mode natif
-- Mobile-first
-
-**Justification** : Composants production-ready, pas de vendor lock-in (code copié dans projet).
+- AlertDialog pour confirmations (remplace window.confirm)
 
 ### State Management
 
-**Zustand** : État global léger (user, tenant config)
-**TanStack Query** : Server state (cache API, sync automatique, optimistic updates)
-
-**Justification** : Simplicité vs Redux, TanStack Query gère sync serveur.
+**Zustand** : etat global (user, tenant config)
+**TanStack Query 5** : server state (cache API, pagination, sync automatique)
 
 ### Cartes interactives
 
-**Leaflet**
-- Open-source (pas de coût API vs Mapbox)
-- Clustering avec **Supercluster**
-- Markers personnalisés par santé chantier
-- Popups, géolocalisation, recherche adresse
-
-**Alternatives** : Mapbox GL JS (payant mais plus fluide), OpenLayers (lourd)
-
-**Justification** : Leaflet équilibre fonctionnalités/simplicité/coût.
+**Leaflet** + **React Leaflet**
+- Clustering avec markers personnalises
+- Popups, geolocalisation
 
 ### Visualisation plans
 
 **Konva.js** (React Konva)
-- Canvas HTML5 interactif
-- Zoom/pan fluides
-- Drag & drop pins
-- Export images (PNG, PDF via backend)
+- Canvas HTML5 interactif (zoom/pan)
+- Drag & drop pins avec formes distinctives par type
+- Heatmap Wi-Fi (modele FSPL Friis, 4 bandes)
+- Export PNG avec legende
 
-**Justification** : Performance canvas, interactions riches, React integration.
-
-### Scan QR mobile
-
-**html5-qrcode**
-- Accès caméra native (getUserMedia API)
-- Détection QR en temps réel
-- Compatible PWA
-
-**Justification** : Pas besoin app native, fonctionne dans navigateur.
-
-### Validation formulaires
+### Formulaires
 
 **React Hook Form** + **Zod**
-- Validation déclarative (schema Zod)
-- Performance (uncontrolled inputs)
-- Type-safety formulaires
+- Validation declarative
+- Type-safety
 
-**Justification** : Zod cohérent avec Prisma schemas, RHF performant.
+### Animations
+
+**Framer Motion**
+- Transitions fluides entre pages/etats
 
 ---
 
-## DevOps & Infrastructure
+## Infrastructure
 
-### Containerisation
-
-**Docker** + **Docker Compose**
+### Docker Compose
 
 Services :
-- `app` : NestJS + Next.js (monolithe)
+- `backend` : NestJS (image Docker optimisee, bcrypt pre-compile)
+- `frontend` : Next.js (image Docker optimisee)
 - `postgres` : PostgreSQL 15 + PostGIS
-- `redis` : Redis 7
-- `minio` : MinIO (stockage S3-compatible)
-- `traefik` : Reverse proxy (HTTPS, Let's Encrypt)
+- `redis` : Redis 7 Alpine
+- `minio` : MinIO + minio-init (creation buckets)
+- `gatus` : Monitoring / health dashboard
+- `nginx` : Reverse proxy (profil optionnel, pour deployments sans proxy externe)
 
-**Justification** : Simplicité déploiement, portabilité, reproductibilité.
+### Reverse proxy
+
+**Nginx integre** (profil Docker `proxy`) ou **Nginx Proxy Manager** externe
+- Routing : /api/* -> backend, /storage/* -> minio, /* -> frontend
+- SSL/TLS configurable
 
 ### CI/CD
 
-**GitLab CI** (prioritaire)
-- Self-hosted, air-gap compatible
-- Runners on-premise
-- Registry Docker interne
+**GitHub Actions**
+- Tests E2E Playwright
+- Push/PR sur main et develop
 
-Stages :
-1. `test` : Lint, tests unitaires, E2E, coverage
-2. `build` : Build images Docker
-3. `deploy` : Staging auto, production manual
+### Monitoring
 
-**GitHub Actions** (optionnel)
-- Compatibilité projets open-source
-- Workflows identiques (.yml)
-
-**Justification** : GitLab pour entreprise self-hosted, GitHub pour communauté.
-
-### Monitoring & Logs
-
-**Logs** : Structured logging (JSON)
-- Winston (backend)
-- Pino (alternative haute performance)
-
-**Errors** : Sentry (monitoring erreurs production)
-**Metrics** : Prometheus + Grafana (optionnel)
-
-**Justification** : Sentry capture erreurs temps réel, logs structurés searchables.
-
-### Sécurité
-
-**HTTPS** : Let's Encrypt (Traefik auto-renewal)
-**Secrets** : Variables environnement (Docker secrets, GitLab CI variables)
-**Scan vulnérabilités** :
-- Trivy (images Docker)
-- Semgrep (SAST code)
-- npm audit (dependencies)
-
-**Justification** : Sécurité par défaut, automatisation scans.
+**Gatus**
+- Dashboard monitoring integre
+- Webhooks alertes
+- Sante composite SD-WAN
 
 ---
 
-## Architecture Multi-tenant
+## Resume des choix
 
-**Stratégie** : Row-Level Security (RLS) avec `tenant_id`
-
-Toutes les entités principales :
-```prisma
-model Site {
-  id        String @id
-  tenantId  String  // Isolation
-  tenant    Tenant @relation(fields: [tenantId], references: [id])
-  // ...
-
-  @@index([tenantId])
-}
-```
-
-**PostgreSQL RLS** :
-```sql
-ALTER TABLE "Site" ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY tenant_isolation ON "Site"
-  USING (tenant_id = current_setting('app.current_tenant_id')::text);
-```
-
-**Middleware NestJS** :
-```typescript
-await prisma.$executeRaw`SET app.current_tenant_id = ${tenantId}`;
-```
-
-**MVP** : Un seul tenant actif, architecture prête.
-
-**Justification** : Compatible Prisma, backup simple, performance excellente.
-
----
-
-## PWA (Progressive Web App)
-
-**Configuration Next.js PWA** :
-```json
-{
-  "manifest": {
-    "name": "XCH",
-    "short_name": "XCH",
-    "theme_color": "#0070f3",
-    "background_color": "#ffffff",
-    "display": "standalone",
-    "scope": "/",
-    "start_url": "/"
-  }
-}
-```
-
-**Fonctionnalités** :
-- ✅ Installation écran d'accueil
-- ✅ Mode offline basique (cache pages consultées)
-- ✅ Notifications push
-- ✅ Accès caméra (scan QR, photos)
-- ✅ Géolocalisation
-
-**Service Worker** :
-- Cache stratégies : Network-first (API), Cache-first (assets statiques)
-- Offline fallback (page consultation dernières données)
-
-**Justification** : Expérience mobile native sans app stores, mise à jour automatique.
-
----
-
-## Tests
-
-### Backend
-
-**Framework** : Jest + Supertest
-- Tests unitaires services/repositories
-- Tests intégration (controllers + DB)
-- Tests E2E (API complète)
-- Coverage minimum : 80%
-
-### Frontend
-
-**Framework** : Vitest + React Testing Library
-- Tests unitaires composants
-- Tests intégration pages
-- Mocks API (MSW)
-
-**E2E** : Playwright
-- Scénarios utilisateurs complets
-- Tests cross-browser (Chrome, Firefox, Safari)
-- Tests mobile (viewport responsive)
-
-**Justification** : Jest standard Node.js, Playwright meilleur E2E moderne.
-
----
-
-## Performance
-
-**Cibles** :
-- Temps chargement pages < 3s
-- Actions utilisateur < 1s
-- Recherche < 500ms
-- Carte 100 chantiers < 2s
-
-**Optimisations** :
-- Cache Redis agressif
-- Pagination (50 items/page)
-- Lazy loading images
-- Code splitting Next.js
-- Indexes PostgreSQL (tenant_id, foreign keys, full-text search)
-- CDN assets statiques (optionnel)
-
----
-
-## Déploiement
-
-### On-premise
-
-**Requirements** :
-- Docker 24+
-- Docker Compose 2.20+
-- 4 CPU, 8 GB RAM minimum
-- 100 GB stockage
-
-**Commandes** :
-```bash
-git clone https://gitlab.internal.company.com/xch/xch.git
-cd xch
-cp .env.example .env
-# Éditer .env (DB passwords, JWT secret, etc.)
-docker-compose up -d
-# Accès : https://localhost
-```
-
-**Backup** :
-```bash
-docker-compose exec postgres pg_dump -U xch xch > backup_$(date +%Y%m%d).sql
-docker-compose exec minio mc mirror /data /backup
-```
-
-### Cloud (optionnel)
-
-**Providers** : AWS, Azure, GCP
-- App : ECS, AKS, Cloud Run
-- DB : RDS PostgreSQL, Azure Database, Cloud SQL
-- Storage : S3, Azure Blob, GCS
-- Cache : ElastiCache Redis, Azure Cache
-
-**Justification** : Architecture Docker portable on-premise ↔ cloud.
-
----
-
-## Scalabilité future
-
-**Horizontal scaling** :
-- Load balancer (Traefik, Nginx)
-- Multiple instances app (Docker Swarm, Kubernetes)
-- PostgreSQL read replicas
-- Redis cluster (HA)
-
-**Vertical scaling** :
-- PostgreSQL : Connection pooling (PgBouncer)
-- App : Worker threads, clustering Node.js
-
-**Microservices (si nécessaire)** :
-- Modules NestJS extractibles en services séparés
-- Communication : REST, gRPC ou message queue (RabbitMQ)
-
----
-
-## Résumé des choix
-
-| Composant | Technologie | Justification |
-|-----------|-------------|---------------|
-| **Backend** | NestJS + TypeScript | Architecture modulaire, type-safety |
-| **Frontend** | Next.js + React | SSR, PWA natif, performance |
-| **Database** | PostgreSQL + PostGIS | Relationnel robuste + géospatial |
-| **ORM** | Prisma | Type-safety DB, migrations |
-| **Cache/Queue** | Redis + BullMQ | Performance, jobs async |
-| **Storage** | MinIO / S3 | Portabilité on-premise ↔ cloud |
-| **Auth** | Passport (local + OIDC) | Flexibilité MVP → SSO |
-| **Permissions** | Casbin | RBAC/ABAC policy-based |
-| **UI** | shadcn/ui + Tailwind | Composants modernes, customisation |
-| **Cartes** | Leaflet | Open-source, clustering |
-| **Plans** | Konva.js | Canvas interactif |
-| **QR** | qrcode + html5-qrcode | Génération + scan web |
-| **PDF** | Puppeteer | Templates HTML flexibles |
-| **CI/CD** | GitLab CI (+ GitHub Actions) | Self-hosted, air-gap ready |
-| **Deployment** | Docker Compose | Simplicité, portabilité |
-
----
-
-## Prochaines étapes
-
-1. ✅ Stack validée
-2. ⏳ Schéma base de données détaillé (Prisma schema)
-3. ⏳ Structure projet complète (monorepo, modules)
-4. ⏳ Roadmap développement avec agents
-5. ⏳ Développement MVP
-
----
-
-**Dernière mise à jour** : 2025-12-31 par Architecte Lead
+| Composant | Technologie |
+|-----------|-------------|
+| Backend | NestJS 10 + TypeScript |
+| Frontend | Next.js 15 + React 19 |
+| Database | PostgreSQL 15 + PostGIS |
+| ORM | Prisma (migrations versionnees) |
+| Cache | Redis 7 |
+| Storage | MinIO (S3-compatible) |
+| Auth | Passport (local + OIDC) |
+| Permissions | Casbin (RBAC 4 roles) |
+| UI | shadcn/ui + Tailwind CSS |
+| Cartes | Leaflet |
+| Plans | Konva.js |
+| Notifications | Nodemailer + Teams webhooks |
+| QR | qrcode + @zxing/browser |
+| PDF | Puppeteer |
+| Monitoring | Gatus |
+| Reverse proxy | Nginx / Nginx Proxy Manager |
+| CI/CD | GitHub Actions |
+| Deploiement | Docker Compose |

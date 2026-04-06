@@ -1,4 +1,4 @@
-# XCH — Guide de Deploiement v1.0.0-rc1
+# XCH — Guide de Deploiement v1.1.1
 
 ## Prerequis
 
@@ -35,10 +35,10 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ```bash
 # Builder et empaqueter toutes les images
-bash scripts/package-release.sh v1.0.0-rc1
+bash scripts/package-release.sh v1.1.1
 
 # Transferer l'archive sur le serveur cible
-scp releases/xch-v1.0.0-rc1-full.tar.gz user@serveur:/tmp/
+scp releases/xch-v1.1.1-full.tar.gz user@serveur:/tmp/
 ```
 
 ### Sur le serveur cible (sans Internet)
@@ -46,8 +46,8 @@ scp releases/xch-v1.0.0-rc1-full.tar.gz user@serveur:/tmp/
 ```bash
 # Extraire
 cd /tmp
-tar xzf xch-v1.0.0-rc1-full.tar.gz
-cd xch-release-v1.0.0-rc1
+tar xzf xch-v1.1.1-full.tar.gz
+cd xch-release-v1.1.1
 
 # Installer (charge les images + configure + demarre)
 bash scripts/install-airgap.sh /opt/xch
@@ -155,6 +155,11 @@ frontend:
 | `COOKIE_SECURE` | `true` pour HTTPS, `false` pour HTTP | `true` |
 | `HTTP_PORT` | Port HTTP expose | `80` |
 | `GATUS_PORT` | Port monitoring Gatus | `8080` |
+| `SMTP_HOST` | Serveur SMTP (notifications email) | (optionnel) |
+| `SMTP_PORT` | Port SMTP | `587` |
+| `SMTP_USER` | Utilisateur SMTP | (optionnel) |
+| `SMTP_PASS` | Mot de passe SMTP | (optionnel) |
+| `SMTP_FROM` | Adresse expediteur | (optionnel) |
 
 ---
 
@@ -185,3 +190,4 @@ Internet/LAN
 | 502 Bad Gateway | Backend pas encore pret — attendre 30s |
 | Permissions MinIO | Relancer `docker compose restart minio-init` |
 | Port deja utilise | Changer `HTTP_PORT` / `GATUS_PORT` dans `.env` |
+| 502 apres rebuild | Nginx Proxy Manager cache les IPs Docker — `docker restart <npm-container>` |
