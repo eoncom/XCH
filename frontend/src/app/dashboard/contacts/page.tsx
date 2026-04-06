@@ -34,6 +34,8 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
+import { organizationApi, type OrganizationTree } from '@/lib/api/organization';
+import { ScopeBadge } from '@/components/ui/scope-selector';
 import { Plus, Search, Eye, Pencil, Trash2, Users, Settings } from 'lucide-react';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -64,6 +66,7 @@ export default function ContactsPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [scopeFilter, setScopeFilter] = useState<string>('ALL');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -71,12 +74,27 @@ export default function ContactsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
+  const { data: orgTree = [] } = useQuery<OrganizationTree[]>({
+    queryKey: ['organization-tree'],
+    queryFn: () => organizationApi.getTree(),
+    staleTime: 60_000,
+  });
+
+  // Parse scope filter: "ALL" | "GLOBAL" | "DIVISION:id" | "DELEGATION:id" | "SITE:id"
+  const parsedScope = scopeFilter.includes(':')
+    ? { scopeType: scopeFilter.split(':')[0], scopeId: scopeFilter.split(':')[1] }
+    : scopeFilter === 'GLOBAL'
+      ? { scopeType: '_GLOBAL' as string, scopeId: undefined }
+      : { scopeType: undefined, scopeId: undefined };
+
   const { data: response, isLoading, error } = useQuery<{ data: Contact[]; meta: PaginationMeta }>({
-    queryKey: ['contacts', { search, categoryFilter, typeFilter, page, pageSize }],
+    queryKey: ['contacts', { search, categoryFilter, typeFilter, scopeFilter, page, pageSize }],
     queryFn: () => contactsApi.getAllPaginated({
       search: search || undefined,
       category: categoryFilter !== 'ALL' ? categoryFilter : undefined,
       typeId: typeFilter !== 'ALL' ? typeFilter : undefined,
+      scopeType: parsedScope.scopeType !== '_GLOBAL' ? parsedScope.scopeType : undefined,
+      scopeId: parsedScope.scopeId,
       page,
       pageSize,
     }),
@@ -86,7 +104,7 @@ export default function ContactsPage() {
   const meta = response?.meta;
 
   // Reset page when filters change
-  useEffect(() => { setPage(1); }, [search, categoryFilter, typeFilter]);
+  useEffect(() => { setPage(1); }, [search, categoryFilter, typeFilter, scopeFilter]);
 
   const { data: contactTypes } = useQuery<ContactType[]>({
     queryKey: ['contact-types'],
@@ -221,7 +239,7 @@ export default function ContactsPage() {
         </TabsList>
       </Tabs>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
@@ -252,6 +270,27 @@ export default function ContactsPage() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={scopeFilter} onValueChange={setScopeFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Portee" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Toutes les portees</SelectItem>
+            <SelectItem value="GLOBAL">Global (tenant)</SelectItem>
+            {orgTree.map((div) => (
+              <SelectItem key={div.id} value={`DIVISION:${div.id}`}>
+                Div. {div.name}
+              </SelectItem>
+            ))}
+            {orgTree.flatMap((div) =>
+              (div.delegations || []).map((del) => (
+                <SelectItem key={del.id} value={`DELEGATION:${del.id}`}>
+                  Del. {del.name}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>
@@ -265,6 +304,7 @@ export default function ContactsPage() {
                   <TableHead>Entreprise</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Telephone</TableHead>
+                  <TableHead>Portee</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -307,6 +347,9 @@ export default function ContactsPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {contact.phone || contact.mobile || '-'}
+                    </TableCell>
+                    <TableCell>
+                      <ScopeBadge scopeType={contact.scopeType} scopeId={contact.scopeId} tree={orgTree} />
                     </TableCell>
                     <TableCell>
                       <Badge variant={contact.isActive ? 'success' : 'secondary'}>
@@ -357,10 +400,10 @@ export default function ContactsPage() {
             <EmptyState
               icon={Users}
               title="Aucun contact trouvé"
-              description={search || categoryFilter !== 'ALL' || typeFilter !== 'ALL'
+              description={search || categoryFilter !== 'ALL' || typeFilter !== 'ALL' || scopeFilter !== 'ALL'
                 ? 'Essayez de modifier vos filtres de recherche'
                 : 'Commencez par ajouter un nouveau contact'}
-              action={!search && categoryFilter === 'ALL' && typeFilter === 'ALL' && canCreate('contacts')
+              action={!search && categoryFilter === 'ALL' && typeFilter === 'ALL' && scopeFilter === 'ALL' && canCreate('contacts')
                 ? { label: 'Nouveau contact', href: '/dashboard/contacts/new', icon: Plus }
                 : undefined}
             />

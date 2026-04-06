@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsEmail, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEmail, MaxLength, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateContactDto {
@@ -89,4 +89,18 @@ export class CreateContactDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  @ApiPropertyOptional({
+    description: 'Scope type: DIVISION, DELEGATION, SITE (or null for global/tenant-wide)',
+  })
+  @IsOptional()
+  @IsIn(['DIVISION', 'DELEGATION', 'SITE'])
+  scopeType?: string;
+
+  @ApiPropertyOptional({
+    description: 'ID of the scoped entity (divisionId, delegationId, or siteId)',
+  })
+  @IsOptional()
+  @IsString()
+  scopeId?: string;
 }

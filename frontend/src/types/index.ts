@@ -443,6 +443,8 @@ export interface Contact {
   company?: string;
   role?: string;
   notes?: string;
+  scopeType?: string | null;
+  scopeId?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -458,6 +460,8 @@ export interface CreateContactDto {
   company?: string;
   role?: string;
   notes?: string;
+  scopeType?: string | null;
+  scopeId?: string | null;
 }
 
 export interface UpdateContactDto extends Partial<CreateContactDto> {

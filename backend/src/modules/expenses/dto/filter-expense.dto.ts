@@ -33,6 +33,31 @@ export class FilterExpenseDto extends PaginationDto {
   @IsString()
   search?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by scope type (direct)' })
+  @IsOptional()
+  @IsString()
+  scopeType?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by scope ID (direct)' })
+  @IsOptional()
+  @IsString()
+  scopeId?: string;
+
+  @ApiPropertyOptional({ description: 'Hierarchical scope filter type' })
+  @IsOptional()
+  @IsString()
+  forScopeType?: string;
+
+  @ApiPropertyOptional({ description: 'Hierarchical scope filter ID' })
+  @IsOptional()
+  @IsString()
+  forScopeId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by vendor contact ID' })
+  @IsOptional()
+  @IsString()
+  vendorId?: string;
+
   @ApiPropertyOptional({
     description: 'Field to sort by',
     enum: ['dateIncurred', 'totalAmount', 'label', 'createdAt'],

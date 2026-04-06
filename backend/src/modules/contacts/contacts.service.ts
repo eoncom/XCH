@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaClient, ContactCategory } from '@prisma/client';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { QueryContactDto } from './dto/query-contact.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
+import { validateScope } from '../../common/utils/scope-validation.util';
+import { resolveHierarchicalScopes } from '../../common/utils/scope-resolution.util';
 
 @Injectable()
 export class ContactsService {
@@ -24,11 +26,18 @@ export class ContactsService {
       );
     }
 
+    // Validate scope if provided
+    if (createContactDto.scopeType && createContactDto.scopeId) {
+      await validateScope(this.prisma as any, tenantId, createContactDto.scopeType, createContactDto.scopeId);
+    }
+
     return this.prisma.contact.create({
       data: {
         ...createContactDto,
+        scopeType: createContactDto.scopeType || null,
+        scopeId: createContactDto.scopeId || null,
         tenantId,
-      },
+      } as any,
       include: {
         type: true,
       },
@@ -71,6 +80,28 @@ export class ContactsService {
         { email: { contains: search, mode: 'insensitive' } },
         { company: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    // Direct scope filter (exact match)
+    if (query.scopeType) {
+      where.scopeType = query.scopeType;
+      if (query.scopeId) where.scopeId = query.scopeId;
+    }
+
+    // Hierarchical scope filter: show contacts visible at this scope (global + ancestors + exact)
+    if (query.forScopeType && query.forScopeId) {
+      const scopeConditions = await resolveHierarchicalScopes(
+        this.prisma as any,
+        query.forScopeType,
+        query.forScopeId,
+      );
+      if (where.OR) {
+        // Merge search OR with scope OR using AND
+        where.AND = [{ OR: where.OR }, { OR: scopeConditions }];
+        delete where.OR;
+      } else {
+        where.OR = scopeConditions;
+      }
     }
 
     // Determine sort order (default: name asc)
@@ -117,12 +148,8 @@ export class ContactsService {
   }
 
   async update(tenantId: string, id: string, updateContactDto: UpdateContactDto) {
-    // Check if contact exists and belongs to tenant
     const existingContact = await this.prisma.contact.findFirst({
-      where: {
-        id,
-        tenantId,
-      },
+      where: { id, tenantId },
     });
 
     if (!existingContact) {
@@ -132,12 +159,8 @@ export class ContactsService {
     // Validate typeId if provided
     if (updateContactDto.typeId) {
       const contactType = await this.prisma.contactType.findFirst({
-        where: {
-          id: updateContactDto.typeId,
-          tenantId,
-        },
+        where: { id: updateContactDto.typeId, tenantId },
       });
-
       if (!contactType) {
         throw new NotFoundException(
           `Contact type with ID ${updateContactDto.typeId} not found for this tenant`,
@@ -145,9 +168,24 @@ export class ContactsService {
       }
     }
 
+    // Validate scope if changing
+    if (updateContactDto.scopeType && updateContactDto.scopeId) {
+      await validateScope(this.prisma as any, tenantId, updateContactDto.scopeType, updateContactDto.scopeId);
+    }
+
+    const data: any = { ...updateContactDto };
+    // Handle explicit null to clear scope
+    if (updateContactDto.scopeType === null || updateContactDto.scopeType === undefined) {
+      // Only clear if explicitly passed
+      if ('scopeType' in updateContactDto && updateContactDto.scopeType === null) {
+        data.scopeType = null;
+        data.scopeId = null;
+      }
+    }
+
     return this.prisma.contact.update({
       where: { id },
-      data: updateContactDto,
+      data,
       include: {
         type: true,
       },
@@ -155,19 +193,25 @@ export class ContactsService {
   }
 
   async remove(tenantId: string, id: string) {
-    // Check if contact exists and belongs to tenant
     const existingContact = await this.prisma.contact.findFirst({
-      where: {
-        id,
-        tenantId,
-      },
+      where: { id, tenantId },
     });
 
     if (!existingContact) {
       throw new NotFoundException(`Contact with ID ${id} not found`);
     }
 
-    // Hard delete the contact
+    // Check if contact is used as vendor in expenses
+    const vendorExpenseCount = await this.prisma.expense.count({
+      where: { vendorId: id } as any,
+    });
+
+    if (vendorExpenseCount > 0) {
+      throw new ConflictException(
+        `Ce contact est référencé comme fournisseur dans ${vendorExpenseCount} dépense(s). Dissociez-le d'abord.`,
+      );
+    }
+
     await this.prisma.contact.delete({
       where: { id },
     });
@@ -176,12 +220,8 @@ export class ContactsService {
   }
 
   async setActive(tenantId: string, id: string, isActive: boolean) {
-    // Check if contact exists and belongs to tenant
     const existingContact = await this.prisma.contact.findFirst({
-      where: {
-        id,
-        tenantId,
-      },
+      where: { id, tenantId },
     });
 
     if (!existingContact) {

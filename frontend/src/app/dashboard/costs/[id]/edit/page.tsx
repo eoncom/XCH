@@ -11,12 +11,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { expensesApi, billingEntitiesApi, type BillingEntity, type Expense } from '@/lib/api/costs';
-import { contactsApi } from '@/lib/api/contacts';
 import { assetsApi } from '@/lib/api/assets';
-import { GroupedSiteSelector } from '@/components/ui/grouped-site-selector';
+import { ScopeSelector, type ScopeValue } from '@/components/ui/scope-selector';
+import { VendorCombobox } from '@/components/costs/vendor-combobox';
 import { ArrowLeft, Plus, X, Percent, Package } from 'lucide-react';
 import Link from 'next/link';
-import type { Contact, Asset } from '@/types';
+import type { Asset } from '@/types';
 
 const EXPENSE_TYPES = [
   { value: 'EQUIPMENT', label: 'Équipement' },
@@ -56,9 +56,9 @@ export default function EditExpensePage() {
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
   const [bearerId, setBearerId] = useState('');
-  const [siteId, setSiteId] = useState('');
+  const [scope, setScope] = useState<ScopeValue>({ scopeType: null, scopeId: null });
   const [externalRef, setExternalRef] = useState('');
-  const [vendor, setVendor] = useState('');
+  const [vendorId, setVendorId] = useState<string | null>(null);
   const [assetId, setAssetId] = useState('');
   const [invoiceRef, setInvoiceRef] = useState('');
   const [poNumber, setPoNumber] = useState('');
@@ -76,17 +76,10 @@ export default function EditExpensePage() {
     queryFn: () => billingEntitiesApi.getAll(),
   });
 
-  const { data: contacts = [] } = useQuery<Contact[]>({
-    queryKey: ['contacts'],
-    queryFn: () => contactsApi.getAll(),
-  });
-
   const { data: assets = [] } = useQuery<Asset[]>({
     queryKey: ['assets'],
     queryFn: () => assetsApi.getAll({}),
   });
-
-  const providerContacts = contacts.filter(c => c.category === 'PROVIDER');
 
   // Load expense data into form
   useEffect(() => {
@@ -101,10 +94,10 @@ export default function EditExpensePage() {
       setDateStart(expense.dateStart ? new Date(expense.dateStart).toISOString().split('T')[0] : '');
       setDateEnd(expense.dateEnd ? new Date(expense.dateEnd).toISOString().split('T')[0] : '');
       setBearerId(expense.bearerId);
-      setSiteId(expense.siteId || '');
+      setScope({ scopeType: expense.scopeType || null, scopeId: expense.scopeId || null });
       setAssetId(expense.assetId || '');
       setExternalRef(expense.externalRef || '');
-      setVendor(expense.vendor || '');
+      setVendorId(expense.vendorId || null);
       setInvoiceRef(expense.invoiceRef || '');
       setPoNumber(expense.poNumber || '');
       setNotes(expense.notes || '');
@@ -147,10 +140,11 @@ export default function EditExpensePage() {
       dateStart: dateStart || undefined,
       dateEnd: dateEnd || undefined,
       bearerId,
-      siteId: siteId || undefined,
+      scopeType: scope.scopeType || null,
+      scopeId: scope.scopeId || null,
+      vendorId: vendorId || null,
       assetId: assetId || undefined,
       externalRef: externalRef || undefined,
-      vendor: vendor || undefined,
       invoiceRef: invoiceRef || undefined,
       poNumber: poNumber || undefined,
       notes: notes || undefined,
@@ -243,44 +237,41 @@ export default function EditExpensePage() {
       </Card>
 
       <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Rattachement organisationnel <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ScopeSelector value={scope} onChange={setScope} label="" />
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader><CardTitle>Liens <span className="text-xs font-normal text-muted-foreground">Optionnel</span></CardTitle></CardHeader>
         <CardContent>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-1">
-              <Label>Site</Label>
-              <GroupedSiteSelector
-                value={siteId || 'none'}
-                onValueChange={(v) => setSiteId(v === 'none' ? '' : v)}
-                allowNone
-                noneLabel="Aucun"
-                placeholder="Aucun"
+              <Label>Fournisseur</Label>
+              <VendorCombobox
+                value={vendorId}
+                onChange={setVendorId}
+                scopeType={scope.scopeType}
+                scopeId={scope.scopeId}
               />
             </div>
             <div className="space-y-1">
               <Label>Ref. externe</Label>
               <Input value={externalRef} onChange={(e) => setExternalRef(e.target.value)} />
             </div>
-            <div className="space-y-1">
-              <Label>Fournisseur</Label>
-              <Select value={vendor || 'none'} onValueChange={(v) => setVendor(v === 'none' ? '' : v)}>
-                <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Aucun</SelectItem>
-                  {providerContacts.map(c => (
-                    <SelectItem key={c.id} value={c.company || c.name}>{c.company || c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="Ou saisir un nom..." className="mt-1" />
-            </div>
             {type === 'EQUIPMENT' && (
               <div className="space-y-1">
-                <Label className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Équipement lié</Label>
+                <Label className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Equipement lie</Label>
                 <Select value={assetId || 'none'} onValueChange={(v) => setAssetId(v === 'none' ? '' : v)}>
                   <SelectTrigger><SelectValue placeholder="Aucun" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Aucun</SelectItem>
-                    {assets.filter(a => !siteId || a.siteId === siteId).map(a => (
+                    {assets.map(a => (
                       <SelectItem key={a.id} value={a.id}>{a.manufacturer} {a.model} ({a.serialNumber || a.type})</SelectItem>
                     ))}
                   </SelectContent>

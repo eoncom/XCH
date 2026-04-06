@@ -21,6 +21,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { billingEntitiesApi, type BillingEntity } from '@/lib/api/costs';
+import { organizationApi, type OrganizationTree } from '@/lib/api/organization';
+import { ScopeSelector, ScopeBadge, type ScopeValue } from '@/components/ui/scope-selector';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ArrowLeft, Plus, Pencil, Trash2, Building2 } from 'lucide-react';
 import Link from 'next/link';
@@ -41,11 +43,18 @@ export default function BillingEntitiesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', code: '', type: 'OTHER', description: '' });
+  const [formScope, setFormScope] = useState<ScopeValue>({ scopeType: null, scopeId: null });
   const [pendingDeleteEntity, setPendingDeleteEntity] = useState<BillingEntity | null>(null);
 
   const { data: entities = [], isLoading } = useQuery<BillingEntity[]>({
     queryKey: ['billing-entities'],
     queryFn: () => billingEntitiesApi.getAll(),
+  });
+
+  const { data: orgTree = [] } = useQuery<OrganizationTree[]>({
+    queryKey: ['organization-tree'],
+    queryFn: () => organizationApi.getTree(),
+    staleTime: 60_000,
   });
 
   const createMutation = useMutation({
@@ -73,19 +82,26 @@ export default function BillingEntitiesPage() {
     setShowForm(false);
     setEditingId(null);
     setFormData({ name: '', code: '', type: 'OTHER', description: '' });
+    setFormScope({ scopeType: null, scopeId: null });
   };
 
   const startEdit = (entity: BillingEntity) => {
     setEditingId(entity.id);
     setFormData({ name: entity.name, code: entity.code, type: entity.type, description: entity.description || '' });
+    setFormScope({ scopeType: entity.scopeType || null, scopeId: entity.scopeId || null });
     setShowForm(true);
   };
 
   const handleSubmit = () => {
+    const data = {
+      ...formData,
+      scopeType: formScope.scopeType || undefined,
+      scopeId: formScope.scopeId || undefined,
+    };
     if (editingId) {
-      updateMutation.mutate({ id: editingId, data: formData });
+      updateMutation.mutate({ id: editingId, data });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(data);
     }
   };
 
@@ -135,6 +151,7 @@ export default function BillingEntitiesPage() {
                 <Input value={formData.description} onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))} />
               </div>
             </div>
+            <ScopeSelector value={formScope} onChange={setFormScope} label="Rattachement organisationnel" />
             <div className="flex gap-2 justify-end">
               <Button variant="ghost" onClick={resetForm}>Annuler</Button>
               <Button
@@ -163,6 +180,7 @@ export default function BillingEntitiesPage() {
                 <TableHead>Code</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Description</TableHead>
+                <TableHead>Portee</TableHead>
                 <TableHead>Statut</TableHead>
                 {(canUpdate('billing-entities') || canDelete('billing-entities')) && (
                   <TableHead className="text-right">Actions</TableHead>
@@ -178,6 +196,9 @@ export default function BillingEntitiesPage() {
                     <Badge variant="secondary">{ENTITY_TYPE_LABELS[entity.type] || entity.type}</Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{entity.description || '—'}</TableCell>
+                  <TableCell>
+                    <ScopeBadge scopeType={entity.scopeType} scopeId={entity.scopeId} tree={orgTree} />
+                  </TableCell>
                   <TableCell>
                     <Badge variant={entity.isActive ? 'success' : 'secondary'}>
                       {entity.isActive ? 'Actif' : 'Inactif'}

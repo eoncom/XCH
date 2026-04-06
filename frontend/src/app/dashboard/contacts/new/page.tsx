@@ -1,6 +1,7 @@
 // @ts-nocheck - Temporary fix for Radix UI + React 19 type incompatibility
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
+import { ScopeSelector, type ScopeValue } from '@/components/ui/scope-selector';
 import { ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
 import type { ContactType, ContactCategory } from '@/types';
@@ -58,6 +60,7 @@ type ContactFormData = z.infer<typeof contactSchema>;
 export default function NewContactPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [scope, setScope] = useState<ScopeValue>({ scopeType: null, scopeId: null });
 
   const { data: contactTypes } = useQuery<ContactType[]>({
     queryKey: ['contact-types'],
@@ -97,6 +100,8 @@ export default function NewContactPage() {
         company: data.company || undefined,
         role: data.role || undefined,
         notes: data.notes || undefined,
+        scopeType: scope.scopeType || undefined,
+        scopeId: scope.scopeId || undefined,
       };
       return contactsApi.create(cleaned);
     },
@@ -207,7 +212,27 @@ export default function NewContactPage() {
           </CardContent>
         </Card>
 
-        {/* Section 3: Informations professionnelles (optionnel) */}
+        {/* Section 3: Portee organisationnelle */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Portee organisationnelle
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScopeSelector
+              value={scope}
+              onChange={setScope}
+              label=""
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              Sans rattachement, le contact est visible par tout le tenant (global).
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Section 4: Informations professionnelles (optionnel) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

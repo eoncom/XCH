@@ -43,4 +43,24 @@ export class QueryContactDto extends PaginationDto {
   })
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ description: 'Direct filter: exact scope type' })
+  @IsOptional()
+  @IsString()
+  scopeType?: string;
+
+  @ApiPropertyOptional({ description: 'Direct filter: exact scope ID' })
+  @IsOptional()
+  @IsString()
+  scopeId?: string;
+
+  @ApiPropertyOptional({ description: 'Hierarchical filter: show contacts visible at this scope type (includes global + ancestors)' })
+  @IsOptional()
+  @IsString()
+  forScopeType?: string;
+
+  @ApiPropertyOptional({ description: 'Hierarchical filter: scope ID' })
+  @IsOptional()
+  @IsString()
+  forScopeId?: string;
 }

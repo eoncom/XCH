@@ -1,5 +1,5 @@
-import { IsString, IsEnum, IsOptional, IsNumber, IsArray, IsDateString, ValidateNested, Min, Max } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsEnum, IsOptional, IsNumber, IsArray, IsDateString, ValidateNested, Min, Max, IsIn } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ExpenseType, ExpenseFrequency } from '@prisma/client';
 
@@ -10,7 +10,7 @@ export class AllocationDto {
   @ApiProperty() @IsNumber() @Min(0) @Max(100)
   percentage: number;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   notes?: string;
 }
 
@@ -18,7 +18,7 @@ export class CreateExpenseDto {
   @ApiProperty() @IsString()
   label: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   description?: string;
 
   @ApiProperty({ enum: ExpenseType })
@@ -28,47 +28,65 @@ export class CreateExpenseDto {
   @ApiProperty() @IsNumber()
   totalAmount: number;
 
-  @ApiProperty({ required: false, default: 'EUR' }) @IsString() @IsOptional()
+  @ApiPropertyOptional({ default: 'EUR' }) @IsString() @IsOptional()
   currency?: string;
 
-  @ApiProperty({ enum: ExpenseFrequency, required: false })
+  @ApiPropertyOptional({ enum: ExpenseFrequency })
   @IsEnum(ExpenseFrequency) @IsOptional()
   frequency?: ExpenseFrequency;
 
   @ApiProperty() @IsDateString()
   dateIncurred: string;
 
-  @ApiProperty({ required: false }) @IsDateString() @IsOptional()
+  @ApiPropertyOptional() @IsDateString() @IsOptional()
   dateStart?: string;
 
-  @ApiProperty({ required: false }) @IsDateString() @IsOptional()
+  @ApiPropertyOptional() @IsDateString() @IsOptional()
   dateEnd?: string;
 
   @ApiProperty() @IsString()
   bearerId: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  // Scope organisationnel
+  @ApiPropertyOptional({ description: 'Scope type: DIVISION, DELEGATION, SITE' })
+  @IsOptional()
+  @IsIn(['DIVISION', 'DELEGATION', 'SITE'])
+  scopeType?: string;
+
+  @ApiPropertyOptional({ description: 'ID of the scoped entity' })
+  @IsOptional()
+  @IsString()
+  scopeId?: string;
+
+  // Vendor — FK vers Contact
+  @ApiPropertyOptional({ description: 'Vendor contact ID (from Contacts module)' })
+  @IsOptional()
+  @IsString()
+  vendorId?: string;
+
+  // DEPRECATED
+  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
   siteId?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   assetId?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   externalRef?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
   vendor?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   invoiceRef?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   poNumber?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   notes?: string;
 
-  @ApiProperty({ type: [AllocationDto], required: false })
+  @ApiPropertyOptional({ type: [AllocationDto] })
   @IsArray() @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => AllocationDto)
@@ -76,58 +94,71 @@ export class CreateExpenseDto {
 }
 
 export class UpdateExpenseDto {
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   label?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   description?: string;
 
-  @ApiProperty({ enum: ExpenseType, required: false }) @IsEnum(ExpenseType) @IsOptional()
+  @ApiPropertyOptional({ enum: ExpenseType }) @IsEnum(ExpenseType) @IsOptional()
   type?: ExpenseType;
 
-  @ApiProperty({ required: false }) @IsNumber() @IsOptional()
+  @ApiPropertyOptional() @IsNumber() @IsOptional()
   totalAmount?: number;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   currency?: string;
 
-  @ApiProperty({ enum: ExpenseFrequency, required: false }) @IsEnum(ExpenseFrequency) @IsOptional()
+  @ApiPropertyOptional({ enum: ExpenseFrequency }) @IsEnum(ExpenseFrequency) @IsOptional()
   frequency?: ExpenseFrequency;
 
-  @ApiProperty({ required: false }) @IsDateString() @IsOptional()
+  @ApiPropertyOptional() @IsDateString() @IsOptional()
   dateIncurred?: string;
 
-  @ApiProperty({ required: false }) @IsDateString() @IsOptional()
+  @ApiPropertyOptional() @IsDateString() @IsOptional()
   dateStart?: string;
 
-  @ApiProperty({ required: false }) @IsDateString() @IsOptional()
+  @ApiPropertyOptional() @IsDateString() @IsOptional()
   dateEnd?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   bearerId?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional({ description: 'Scope type: DIVISION, DELEGATION, SITE (or null to clear)' })
+  @IsOptional()
+  @IsIn(['DIVISION', 'DELEGATION', 'SITE'])
+  scopeType?: string | null;
+
+  @ApiPropertyOptional() @IsOptional() @IsString()
+  scopeId?: string | null;
+
+  @ApiPropertyOptional({ description: 'Vendor contact ID' })
+  @IsOptional() @IsString()
+  vendorId?: string | null;
+
+  // DEPRECATED
+  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
   siteId?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   assetId?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   externalRef?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
   vendor?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   invoiceRef?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   poNumber?: string;
 
-  @ApiProperty({ required: false }) @IsString() @IsOptional()
+  @ApiPropertyOptional() @IsString() @IsOptional()
   notes?: string;
 
-  @ApiProperty({ type: [AllocationDto], required: false })
+  @ApiPropertyOptional({ type: [AllocationDto] })
   @IsArray() @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => AllocationDto)

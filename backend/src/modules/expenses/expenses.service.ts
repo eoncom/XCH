@@ -3,6 +3,16 @@ import { PrismaClient } from '@prisma/client';
 import { CreateExpenseDto, UpdateExpenseDto, AllocationDto } from './dto/create-expense.dto';
 import { FilterExpenseDto } from './dto/filter-expense.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
+import { validateScope } from '../../common/utils/scope-validation.util';
+import { resolveDescendantScopes } from '../../common/utils/scope-resolution.util';
+
+const EXPENSE_INCLUDE: any = {
+  bearer: { select: { id: true, name: true, code: true, type: true } },
+  vendorContact: { select: { id: true, name: true, company: true, email: true, phone: true } },
+  allocations: {
+    include: { target: { select: { id: true, name: true, code: true, type: true } } },
+  },
+};
 
 @Injectable()
 export class ExpensesService {
@@ -15,40 +25,67 @@ export class ExpensesService {
     });
     if (!bearer) throw new NotFoundException('Bearer billing entity not found');
 
+    // Auto-populate scopeType/scopeId from deprecated siteId
+    let { scopeType, scopeId } = dto;
+    if (!scopeType && !scopeId && dto.siteId) {
+      scopeType = 'SITE';
+      scopeId = dto.siteId;
+    }
+
+    // Validate scope
+    if (scopeType && scopeId) {
+      await validateScope(this.prisma as any, tenantId, scopeType, scopeId);
+    }
+
+    // Validate vendorId references a PROVIDER contact
+    if (dto.vendorId) {
+      await this.validateVendorContact(tenantId, dto.vendorId);
+    }
+
     // Validate allocations
     if (dto.allocations?.length) {
       this.validateAllocations(dto.allocations);
       await this.validateAllocationTargets(tenantId, dto.allocations);
     }
 
-    const { allocations, ...expenseData } = dto;
+    const { allocations, ...rest } = dto;
 
     return this.prisma.expense.create({
       data: {
         tenantId,
-        ...expenseData,
-        dateIncurred: new Date(dto.dateIncurred),
-        dateStart: dto.dateStart ? new Date(dto.dateStart) : null,
-        dateEnd: dto.dateEnd ? new Date(dto.dateEnd) : null,
-        frequency: (dto.frequency || 'ONE_TIME') as any,
-        type: dto.type as any,
-        currency: dto.currency || 'EUR',
+        label: rest.label,
+        description: rest.description,
+        type: rest.type as any,
+        totalAmount: rest.totalAmount,
+        currency: rest.currency || 'EUR',
+        frequency: (rest.frequency || 'ONE_TIME') as any,
+        dateIncurred: new Date(rest.dateIncurred),
+        dateStart: rest.dateStart ? new Date(rest.dateStart) : null,
+        dateEnd: rest.dateEnd ? new Date(rest.dateEnd) : null,
+        bearerId: rest.bearerId,
+        scopeType: scopeType || null,
+        scopeId: scopeId || null,
+        vendorId: rest.vendorId || null,
+        siteId: rest.siteId,
+        assetId: rest.assetId,
+        externalRef: rest.externalRef,
+        vendor: rest.vendor,
+        invoiceRef: rest.invoiceRef,
+        poNumber: rest.poNumber,
+        notes: rest.notes,
         createdBy,
         allocations: allocations?.length
           ? {
               create: allocations.map((a) => ({
                 targetId: a.targetId,
                 percentage: a.percentage,
-                amount: (dto.totalAmount * a.percentage) / 100,
+                amount: (rest.totalAmount * a.percentage) / 100,
                 notes: a.notes,
               })),
             }
           : undefined,
-      },
-      include: {
-        bearer: true,
-        allocations: { include: { target: true } },
-      },
+      } as any,
+      include: EXPENSE_INCLUDE,
     });
   }
 
@@ -56,11 +93,15 @@ export class ExpensesService {
     const where: any = { tenantId };
     if (filters.type) where.type = filters.type;
     if (filters.bearerId) where.bearerId = filters.bearerId;
+    if (filters.vendorId) where.vendorId = filters.vendorId;
+
     if (filters.search) {
       where.OR = [
         { label: { contains: filters.search, mode: 'insensitive' } },
         { vendor: { contains: filters.search, mode: 'insensitive' } },
         { externalRef: { contains: filters.search, mode: 'insensitive' } },
+        { vendorContact: { name: { contains: filters.search, mode: 'insensitive' } } },
+        { vendorContact: { company: { contains: filters.search, mode: 'insensitive' } } },
       ];
     }
     if (filters.dateFrom || filters.dateTo) {
@@ -72,6 +113,32 @@ export class ExpensesService {
       where.allocations = { some: { targetId: filters.targetId } };
     }
 
+    // Direct scope filter
+    if (filters.scopeType) {
+      where.scopeType = filters.scopeType;
+      if (filters.scopeId) where.scopeId = filters.scopeId;
+    }
+
+    // Hierarchical scope filter: include expenses at this scope + all descendants + tenant-wide
+    if (filters.forScopeType && filters.forScopeId) {
+      const descendants = await resolveDescendantScopes(
+        this.prisma as any,
+        filters.forScopeType,
+        filters.forScopeId,
+      );
+      const scopeConditions = [
+        { scopeType: null }, // Tenant-wide
+        ...descendants.map((d) => ({ scopeType: d.scopeType, scopeId: d.scopeId })),
+      ];
+      if (where.OR) {
+        // Merge with existing search OR
+        where.AND = [{ OR: where.OR }, { OR: scopeConditions }];
+        delete where.OR;
+      } else {
+        where.OR = scopeConditions;
+      }
+    }
+
     const page = filters.page ?? 1;
     const pageSize = filters.pageSize ?? 25;
     const sortField = filters.sortBy || 'dateIncurred';
@@ -80,12 +147,7 @@ export class ExpensesService {
     const [data, total] = await Promise.all([
       this.prisma.expense.findMany({
         where,
-        include: {
-          bearer: { select: { id: true, name: true, code: true, type: true } },
-          allocations: {
-            include: { target: { select: { id: true, name: true, code: true, type: true } } },
-          },
-        },
+        include: EXPENSE_INCLUDE,
         orderBy: { [sortField]: sortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -101,8 +163,9 @@ export class ExpensesService {
       where: { id, tenantId },
       include: {
         bearer: true,
+        vendorContact: true,
         allocations: { include: { target: true } },
-      },
+      } as any,
     });
     if (!expense) throw new NotFoundException('Expense not found');
     return expense;
@@ -121,11 +184,31 @@ export class ExpensesService {
       if (!bearer) throw new NotFoundException('Bearer billing entity not found');
     }
 
+    // Validate scope if changing
+    const scopeType = dto.scopeType !== undefined ? dto.scopeType : (expense as any).scopeType;
+    const scopeId = dto.scopeId !== undefined ? dto.scopeId : (expense as any).scopeId;
+    if (scopeType && scopeId) {
+      await validateScope(this.prisma as any, tenantId, scopeType, scopeId);
+    }
+
+    // Validate vendorId if changing
+    if (dto.vendorId) {
+      await this.validateVendorContact(tenantId, dto.vendorId);
+    }
+
     const { allocations, ...updateData } = dto;
     const data: any = { ...updateData };
     if (dto.dateIncurred) data.dateIncurred = new Date(dto.dateIncurred);
     if (dto.dateStart !== undefined) data.dateStart = dto.dateStart ? new Date(dto.dateStart) : null;
     if (dto.dateEnd !== undefined) data.dateEnd = dto.dateEnd ? new Date(dto.dateEnd) : null;
+    // Handle explicit null for scope clearing
+    if (dto.scopeType === null) {
+      data.scopeType = null;
+      data.scopeId = null;
+    }
+    if (dto.vendorId === null) {
+      data.vendorId = null;
+    }
 
     // If allocations provided, replace them
     if (allocations !== undefined) {
@@ -135,10 +218,8 @@ export class ExpensesService {
       const totalAmount = dto.totalAmount || expense.totalAmount;
 
       return this.prisma.$transaction(async (tx) => {
-        // Delete existing allocations
         await tx.costAllocation.deleteMany({ where: { expenseId: id } });
 
-        // Update expense + create new allocations
         return tx.expense.update({
           where: { id },
           data: {
@@ -152,10 +233,7 @@ export class ExpensesService {
               })),
             },
           },
-          include: {
-            bearer: true,
-            allocations: { include: { target: true } },
-          },
+          include: EXPENSE_INCLUDE,
         });
       });
     }
@@ -163,10 +241,7 @@ export class ExpensesService {
     return this.prisma.expense.update({
       where: { id },
       data,
-      include: {
-        bearer: true,
-        allocations: { include: { target: true } },
-      },
+      include: EXPENSE_INCLUDE,
     });
   }
 
@@ -182,26 +257,31 @@ export class ExpensesService {
 
   // ========== REPORTS ==========
 
-  /**
-   * Report: total by bearer (who paid how much)
-   */
-  async reportByBearer(tenantId: string, filters?: { dateFrom?: string; dateTo?: string }) {
-    const dateFilter: any = {};
-    if (filters?.dateFrom) dateFilter.gte = new Date(filters.dateFrom);
-    if (filters?.dateTo) dateFilter.lte = new Date(filters.dateTo);
+  async reportByBearer(tenantId: string, filters?: { dateFrom?: string; dateTo?: string; scopeType?: string; scopeId?: string }) {
+    const where: any = { tenantId };
+    if (filters?.dateFrom || filters?.dateTo) {
+      where.dateIncurred = {};
+      if (filters.dateFrom) where.dateIncurred.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) where.dateIncurred.lte = new Date(filters.dateTo);
+    }
+
+    // Scope filter for reports
+    if (filters?.scopeType && filters?.scopeId) {
+      const descendants = await resolveDescendantScopes(this.prisma as any, filters.scopeType, filters.scopeId);
+      where.OR = [
+        { scopeType: null },
+        ...descendants.map((d) => ({ scopeType: d.scopeType, scopeId: d.scopeId })),
+      ];
+    }
 
     const expenses = await this.prisma.expense.findMany({
-      where: {
-        tenantId,
-        ...(Object.keys(dateFilter).length ? { dateIncurred: dateFilter } : {}),
-      },
+      where,
       include: {
         bearer: { select: { id: true, name: true, code: true, type: true } },
         allocations: { select: { amount: true, targetId: true } },
       },
     });
 
-    // Aggregate by bearer
     const bearerMap = new Map<string, {
       bearer: { id: string; name: string; code: string; type: string };
       totalBorne: number;
@@ -227,7 +307,6 @@ export class ExpensesService {
       entry.expenseCount++;
     }
 
-    // Calculate net
     for (const entry of bearerMap.values()) {
       entry.netBorne = entry.totalBorne - entry.totalRefactured;
     }
@@ -235,30 +314,31 @@ export class ExpensesService {
     return Array.from(bearerMap.values()).sort((a, b) => b.totalBorne - a.totalBorne);
   }
 
-  /**
-   * Report: total by target (who owes how much)
-   */
-  async reportByTarget(tenantId: string, filters?: { dateFrom?: string; dateTo?: string }) {
-    const dateFilter: any = {};
-    if (filters?.dateFrom) dateFilter.gte = new Date(filters.dateFrom);
-    if (filters?.dateTo) dateFilter.lte = new Date(filters.dateTo);
+  async reportByTarget(tenantId: string, filters?: { dateFrom?: string; dateTo?: string; scopeType?: string; scopeId?: string }) {
+    const expenseWhere: any = { tenantId };
+    if (filters?.dateFrom || filters?.dateTo) {
+      expenseWhere.dateIncurred = {};
+      if (filters.dateFrom) expenseWhere.dateIncurred.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) expenseWhere.dateIncurred.lte = new Date(filters.dateTo);
+    }
+
+    if (filters?.scopeType && filters?.scopeId) {
+      const descendants = await resolveDescendantScopes(this.prisma as any, filters.scopeType, filters.scopeId);
+      expenseWhere.OR = [
+        { scopeType: null },
+        ...descendants.map((d) => ({ scopeType: d.scopeType, scopeId: d.scopeId })),
+      ];
+    }
 
     const allocations = await this.prisma.costAllocation.findMany({
-      where: {
-        expense: {
-          tenantId,
-          ...(Object.keys(dateFilter).length ? { dateIncurred: dateFilter } : {}),
-        },
-      },
+      where: { expense: expenseWhere },
       include: {
         target: { select: { id: true, name: true, code: true, type: true } },
-        expense: { select: { id: true, label: true, type: true, bearerId: true } },
       },
     });
 
-    // Aggregate by target
     const targetMap = new Map<string, {
-      target: { id: string; name: string; code: string; type: string };
+      target: { id: string; name: true; code: string; type: string };
       totalImputed: number;
       allocationCount: number;
     }>();
@@ -267,7 +347,7 @@ export class ExpensesService {
       const key = alloc.targetId;
       if (!targetMap.has(key)) {
         targetMap.set(key, {
-          target: alloc.target,
+          target: alloc.target as any,
           totalImputed: 0,
           allocationCount: 0,
         });
@@ -280,9 +360,6 @@ export class ExpensesService {
     return Array.from(targetMap.values()).sort((a, b) => b.totalImputed - a.totalImputed);
   }
 
-  /**
-   * Report: chargeback view — for each target, list of imputed expenses
-   */
   async reportChargeback(tenantId: string, filters?: { dateFrom?: string; dateTo?: string }) {
     const dateFilter: any = {};
     if (filters?.dateFrom) dateFilter.gte = new Date(filters.dateFrom);
@@ -304,8 +381,10 @@ export class ExpensesService {
             type: true,
             totalAmount: true,
             dateIncurred: true,
+            scopeType: true,
+            scopeId: true,
             bearer: { select: { id: true, name: true, code: true } },
-          },
+          } as any,
         },
       },
       orderBy: { expense: { dateIncurred: 'desc' } },
@@ -329,6 +408,17 @@ export class ExpensesService {
         where: { id: alloc.targetId, tenantId },
       });
       if (!target) throw new NotFoundException(`Target billing entity ${alloc.targetId} not found`);
+    }
+  }
+
+  private async validateVendorContact(tenantId: string, vendorId: string) {
+    const contact = await this.prisma.contact.findFirst({
+      where: { id: vendorId, tenantId },
+      include: { type: true },
+    });
+    if (!contact) throw new NotFoundException(`Vendor contact "${vendorId}" not found`);
+    if (contact.type.category !== 'PROVIDER') {
+      throw new BadRequestException(`Contact "${contact.name}" is not a PROVIDER type`);
     }
   }
 }

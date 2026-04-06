@@ -10,6 +10,8 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { expensesApi, billingEntitiesApi, type Expense, type BillingEntity } from '@/lib/api/costs';
+import { organizationApi, type OrganizationTree } from '@/lib/api/organization';
+import { ScopeBadge } from '@/components/ui/scope-selector';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import {
@@ -85,6 +87,12 @@ export default function CostsPage() {
     queryFn: () => billingEntitiesApi.getAll(),
   });
   const entities = entitiesResponse ?? [];
+
+  const { data: orgTree = [] } = useQuery<OrganizationTree[]>({
+    queryKey: ['organization-tree'],
+    queryFn: () => organizationApi.getTree(),
+    staleTime: 60_000,
+  });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => expensesApi.delete(id),
@@ -226,6 +234,7 @@ export default function CostsPage() {
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">Montant</TableHead>
                 <TableHead>Porteur</TableHead>
+                <TableHead>Portee</TableHead>
                 <TableHead>Cibles</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -238,8 +247,11 @@ export default function CostsPage() {
                     <Link href={`/dashboard/costs/${expense.id}/edit`} className="hover:underline">
                       {expense.label}
                     </Link>
-                    {expense.vendor && (
-                      <span className="block text-xs text-muted-foreground">{expense.vendor}</span>
+                    {(expense.vendorContact || expense.vendor) && (
+                      <span className="block text-xs text-muted-foreground">
+                        {expense.vendorContact?.name || expense.vendor}
+                        {expense.vendorContact?.company && ` — ${expense.vendorContact.company}`}
+                      </span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -257,6 +269,9 @@ export default function CostsPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{expense.bearer?.name || '—'}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <ScopeBadge scopeType={expense.scopeType} scopeId={expense.scopeId} tree={orgTree} />
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
@@ -291,7 +306,7 @@ export default function CostsPage() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     Aucune dépense trouvée
                   </TableCell>
                 </TableRow>

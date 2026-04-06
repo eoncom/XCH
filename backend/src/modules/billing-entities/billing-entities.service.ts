@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateBillingEntityDto, UpdateBillingEntityDto } from './dto/create-billing-entity.dto';
+import { validateScope } from '../../common/utils/scope-validation.util';
+import { resolveDescendantScopes } from '../../common/utils/scope-resolution.util';
 
 @Injectable()
 export class BillingEntitiesService {
@@ -13,12 +15,48 @@ export class BillingEntitiesService {
     });
     if (existing) throw new ConflictException(`Code "${dto.code}" already exists`);
 
+    // Auto-populate scopeType/scopeId from deprecated fields if not set
+    let { scopeType, scopeId } = dto;
+    if (!scopeType && !scopeId) {
+      if (dto.siteId) { scopeType = 'SITE'; scopeId = dto.siteId; }
+      else if (dto.delegationId) { scopeType = 'DELEGATION'; scopeId = dto.delegationId; }
+      else if (dto.divisionId) { scopeType = 'DIVISION'; scopeId = dto.divisionId; }
+    }
+
+    // Validate scope entity exists
+    if (scopeType && scopeId) {
+      await validateScope(this.prisma as any, tenantId, scopeType, scopeId);
+    }
+
     return this.prisma.billingEntity.create({
-      data: { tenantId, ...dto },
+      data: {
+        tenantId,
+        name: dto.name,
+        code: dto.code,
+        type: dto.type,
+        description: dto.description,
+        isActive: dto.isActive,
+        scopeType: scopeType || null,
+        scopeId: scopeId || null,
+        divisionId: dto.divisionId,
+        delegationId: dto.delegationId,
+        siteId: dto.siteId,
+      } as any,
     });
   }
 
-  async findAll(tenantId: string, filters?: { type?: string; isActive?: string; search?: string }) {
+  async findAll(
+    tenantId: string,
+    filters?: {
+      type?: string;
+      isActive?: string;
+      search?: string;
+      scopeType?: string;
+      scopeId?: string;
+      forScopeType?: string;
+      forScopeId?: string;
+    },
+  ) {
     const where: any = { tenantId };
     if (filters?.type) where.type = filters.type;
     if (filters?.isActive !== undefined) where.isActive = filters.isActive === 'true';
@@ -26,6 +64,27 @@ export class BillingEntitiesService {
       where.OR = [
         { name: { contains: filters.search, mode: 'insensitive' } },
         { code: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Direct scope filter
+    if (filters?.scopeType) {
+      where.scopeType = filters.scopeType;
+      if (filters.scopeId) where.scopeId = filters.scopeId;
+    }
+
+    // Hierarchical scope filter: include entities at this scope + all descendants + tenant-wide
+    if (filters?.forScopeType && filters?.forScopeId) {
+      const descendants = await resolveDescendantScopes(
+        this.prisma as any,
+        filters.forScopeType,
+        filters.forScopeId,
+      );
+      where.OR = [
+        { scopeType: null }, // Tenant-wide entities
+        ...descendants.map((d) => ({ scopeType: d.scopeType, scopeId: d.scopeId })),
+        // Also include if search was set (merge OR conditions)
+        ...(where.OR || []),
       ];
     }
 
@@ -57,9 +116,23 @@ export class BillingEntitiesService {
       if (existing) throw new ConflictException(`Code "${dto.code}" already exists`);
     }
 
+    // Validate scope if changing
+    const scopeType = dto.scopeType !== undefined ? dto.scopeType : (entity as any).scopeType;
+    const scopeId = dto.scopeId !== undefined ? dto.scopeId : (entity as any).scopeId;
+    if (scopeType && scopeId) {
+      await validateScope(this.prisma as any, tenantId, scopeType, scopeId);
+    }
+
+    const data: any = { ...dto };
+    // Handle explicit null for scope clearing
+    if (dto.scopeType === null) {
+      data.scopeType = null;
+      data.scopeId = null;
+    }
+
     return this.prisma.billingEntity.update({
       where: { id },
-      data: dto,
+      data,
     });
   }
 
@@ -121,8 +194,8 @@ export class BillingEntitiesService {
       ...entity,
       totalBorne,
       totalRefactured,
-      netBorne: totalBorne - totalRefactured, // What the bearer actually absorbs
-      totalImputed, // What is charged to this entity from others
+      netBorne: totalBorne - totalRefactured,
+      totalImputed,
     };
   }
 }

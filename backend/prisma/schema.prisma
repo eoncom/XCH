@@ -727,15 +727,22 @@ model Contact {
 
   notes    String?     @db.Text
 
+  /// Scope organisationnel : "DIVISION", "DELEGATION", "SITE" ou null (= global tenant)
+  scopeType    String?  @db.VarChar(20)
+  /// ID de l'entité référencée
+  scopeId      String?
+
   isActive Boolean     @default(true)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
   // Relations
-  externalRefs ExternalRef[]
+  externalRefs     ExternalRef[]
+  expensesAsVendor Expense[]     @relation("expenseVendor")
 
   @@index([tenantId])
   @@index([tenantId, typeId])
+  @@index([tenantId, scopeType, scopeId])
   @@map("contacts")
 }
 
@@ -1057,11 +1064,16 @@ model BillingEntity {
   tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name        String  @db.VarChar(100)
   code        String  @db.VarChar(20)
-  type        String  @db.VarChar(50) // "DIRECTION", "BU", "DELEGATION", "SITE", "SERVICE", "OTHER"
+  type        String  @db.VarChar(50) // Classification métier: "DIRECTION", "BU", "DELEGATION", "SITE", "SERVICE", "OTHER"
   description String? @db.Text
   isActive    Boolean @default(true)
 
-  // Optional links to org hierarchy (informational, not constraining)
+  /// Rattachement organisationnel (polymorphique) : "DIVISION", "DELEGATION", "SITE" ou null (= tenant-wide)
+  scopeType    String?  @db.VarChar(20)
+  /// ID de l'entité référencée (divisionId, delegationId ou siteId)
+  scopeId      String?
+
+  // DEPRECATED — gardés pour rétrocompatibilité migration, à supprimer en v1.3
   divisionId   String?
   delegationId String?
   siteId       String?
@@ -1075,6 +1087,7 @@ model BillingEntity {
 
   @@unique([tenantId, code])
   @@index([tenantId])
+  @@index([tenantId, scopeType, scopeId])
   @@map("billing_entities")
 }
 
@@ -1102,12 +1115,21 @@ model Expense {
   bearerId String
   bearer   BillingEntity @relation("bearer", fields: [bearerId], references: [id])
 
+  /// Rattachement organisationnel (polymorphique) : "DIVISION", "DELEGATION", "SITE" ou null
+  scopeType    String?  @db.VarChar(20)
+  /// ID de l'entité référencée
+  scopeId      String?
+
   // Optional links to XCH entities
-  siteId      String?
+  siteId      String?  // DEPRECATED — migré vers scopeType/scopeId
   assetId     String?
   externalRef String? @db.VarChar(200)
 
-  // Vendor reference
+  // Vendor — FK vers Contact (source de vérité fournisseurs)
+  vendorId      String?
+  vendorContact Contact? @relation("expenseVendor", fields: [vendorId], references: [id], onDelete: SetNull)
+
+  // DEPRECATED — remplacé par vendorId
   vendor     String? @db.VarChar(100)
   invoiceRef String? @db.VarChar(100)
   poNumber   String? @db.VarChar(50)
@@ -1123,6 +1145,8 @@ model Expense {
   @@index([tenantId])
   @@index([tenantId, type])
   @@index([bearerId])
+  @@index([tenantId, scopeType, scopeId])
+  @@index([vendorId])
   @@map("expenses")
 }
 
