@@ -7,6 +7,18 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.1.1] - 2026-04-06
+
+### Notifications et gestion utilisateurs
+
+- **Systeme notifications** — Email SMTP + Microsoft Teams webhooks, config multi-scope avec heritage, 7 types d'evenements, page UI config + logs
+- **Suppression utilisateur** — bouton corbeille (liste) + bouton rouge (edition), dialog confirmation, Task.createdBy nullable
+- **Portees d'acces enrichies** — noms divisions/delegations/sites visibles
+- **Creation dual-mode** — directe (mot de passe) ou invitation email (fallback lien)
+- **Corrections** — double prefixe API notifications, pagination getAll(), pageSize max 100
+
+---
+
 ## [1.1.0] - 2026-04-05
 
 ### Stabilisation pre-production — 6 phases
