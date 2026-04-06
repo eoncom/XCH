@@ -22,7 +22,7 @@ import { PrismaClient } from '@prisma/client';
 @ApiTags('Notifications')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('api/notifications')
+@Controller('notifications')
 export class NotificationController {
   constructor(
     private configService: NotificationConfigService,
