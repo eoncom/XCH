@@ -105,7 +105,7 @@ export class TasksService {
         tenantId,
         task: { id: task.id, title: task.title, siteId: task.siteId },
         assignee: task.assignedUser,
-        actor: task.creator,
+        actor: task.creator || undefined,
       }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
     }
 
