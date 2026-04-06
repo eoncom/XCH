@@ -7,6 +7,7 @@ import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { StorageService } from '../../common/services/storage.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { NotificationEmitter } from '../notifications/notification-emitter';
 import { createId } from '@paralleldrive/cuid2';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
@@ -18,6 +19,7 @@ export class TasksService {
     private prisma: PrismaClient,
     private storageService: StorageService,
     private auditLogService: AuditLogService,
+    private notificationEmitter: NotificationEmitter,
   ) {}
 
   async create(tenantId: string, userId: string, createTaskDto: CreateTaskDto) {
@@ -95,6 +97,16 @@ export class TasksService {
       });
     } catch (e) {
       this.logger.warn(`Failed to write audit log for task ${task.id}: ${e.message}`);
+    }
+
+    // Notification: task assigned
+    if (task.assignedUser) {
+      this.notificationEmitter.taskAssigned({
+        tenantId,
+        task: { id: task.id, title: task.title, siteId: task.siteId },
+        assignee: task.assignedUser,
+        actor: task.creator,
+      }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
     }
 
     return task;
@@ -354,6 +366,30 @@ export class TasksService {
       }
     } catch (e) {
       this.logger.warn(`Failed to write audit log for task ${id}: ${e.message}`);
+    }
+
+    // Notifications
+    const actor = userId ? await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true } }) : undefined;
+
+    // Task status changed
+    if (updateTaskDto.status && updateTaskDto.status !== before.status) {
+      this.notificationEmitter.taskStatusChanged({
+        tenantId,
+        task: { id: task.id, title: task.title, siteId: task.siteId },
+        oldStatus: before.status,
+        newStatus: updateTaskDto.status,
+        actor: actor || undefined,
+      }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
+    }
+
+    // Task reassigned
+    if (updateTaskDto.assignedTo && updateTaskDto.assignedTo !== before.assignedTo && task.assignedUser) {
+      this.notificationEmitter.taskAssigned({
+        tenantId,
+        task: { id: task.id, title: task.title, siteId: task.siteId },
+        assignee: task.assignedUser,
+        actor: actor || undefined,
+      }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
     }
 
     return task;

@@ -11,6 +11,7 @@ import { QRCodeService } from '../../common/services/qrcode.service';
 import { ConfigService } from '@nestjs/config';
 import { StorageService } from '../../common/services/storage.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { NotificationEmitter } from '../notifications/notification-emitter';
 import { createId } from '@paralleldrive/cuid2';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
@@ -25,6 +26,7 @@ export class AssetsService {
     private configService: ConfigService,
     private storageService: StorageService,
     private auditLogService: AuditLogService,
+    private notificationEmitter: NotificationEmitter,
   ) {}
 
   async create(tenantId: string, createAssetDto: CreateAssetDto, userId?: string) {
@@ -290,6 +292,18 @@ export class AssetsService {
       }
     } catch (e) {
       this.logger.warn(`Failed to write audit log for asset ${id}: ${e.message}`);
+    }
+
+    // Notification: asset goes OUT_OF_SERVICE
+    if (updateAssetDto.status === 'OUT_OF_SERVICE' && currentAsset.status !== 'OUT_OF_SERVICE') {
+      const actor = userId ? await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true } }) : undefined;
+      const assetName = (asset as any).hostname || asset.serialNumber || asset.model || `${asset.type} #${asset.id.slice(-6)}`;
+      this.notificationEmitter.assetCritical({
+        tenantId,
+        asset: { id: asset.id, name: assetName, type: asset.type, siteId: asset.siteId || undefined },
+        reason: 'Passage en statut Hors Service',
+        actor: actor || undefined,
+      }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
     }
 
     return asset;

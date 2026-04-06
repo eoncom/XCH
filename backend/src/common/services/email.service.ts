@@ -24,11 +24,12 @@ export class EmailService {
     }
   }
 
+  /** Returns true only if actually sent via SMTP. Returns false if just logged. */
   async sendEmail(to: string, subject: string, html: string): Promise<boolean> {
     const from = this.configService.get('SMTP_FROM', 'noreply@xch.local');
     if (!this.transporter) {
       this.logger.log(`[EMAIL-LOG] To: ${to} | Subject: ${subject}\n${html}`);
-      return true;
+      return false; // logged only, not actually sent
     }
     try {
       await this.transporter.sendMail({ from, to, subject, html });

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network, X } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network, X, Bell } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
@@ -1652,6 +1652,14 @@ export default function SettingsPage() {
             <TabsTrigger value="backup">
               <HardDrive className="mr-2 h-4 w-4" />
               Sauvegardes
+            </TabsTrigger>
+          )}
+          {(user?.role === 'ADMIN' || user?.role === 'MANAGER') && (
+            <TabsTrigger value="notifications" asChild>
+              <a href="/dashboard/settings/notifications" className="flex items-center">
+                <Bell className="mr-2 h-4 w-4" />
+                Notifications
+              </a>
             </TabsTrigger>
           )}
         </TabsList>

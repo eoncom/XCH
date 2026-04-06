@@ -271,11 +271,16 @@ export class AuthService {
       include: { tenant: true },
     });
 
-    // Send invitation email
-    await this.emailService.sendInvitation(email, name, token, user.tenant?.name);
+    // Send invitation email (graceful: if SMTP fails, return token for manual sharing)
+    const emailSent = await this.emailService.sendInvitation(email, name, token, user.tenant?.name);
 
-    const { passwordHash, totpSecret, totpBackupCodes, inviteToken, resetToken, ...result } = user;
-    return result;
+    const { passwordHash, totpSecret, totpBackupCodes, inviteToken: _it, resetToken: _rt, ...result } = user;
+
+    // If email was not actually sent (SMTP not configured or failed), return token so admin can share link
+    if (!emailSent) {
+      return { ...result, inviteToken: token, emailSent: false };
+    }
+    return { ...result, emailSent: true };
   }
 
   async acceptInvite(token: string, password: string) {

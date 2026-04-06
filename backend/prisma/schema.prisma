@@ -54,6 +54,8 @@ model Tenant {
   enumLabels           EnumLabel[]
   billingEntities      BillingEntity[]
   expenses             Expense[]
+  notificationConfigs  NotificationConfig[]
+  notificationLogs     NotificationLog[]
 
   @@index([status])
   @@map("tenants")
@@ -1142,4 +1144,67 @@ model CostAllocation {
   @@index([expenseId])
   @@index([targetId])
   @@map("cost_allocations")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+/// Configuration des notifications par scope (tenant/division/délégation)
+/// Logique d'héritage : tenant → division → délégation
+model NotificationConfig {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Scope : TENANT, DIVISION, DELEGATION
+  scopeType String   @db.VarChar(20)
+  /// ID du scope (tenantId, divisionId ou delegationId)
+  scopeId   String
+
+  /// Config canaux : { email: { inherit, enabled, recipients[] }, teams: { inherit, enabled, webhookUrl } }
+  channels  Json     @db.JsonB
+
+  /// Config événements : { TASK_ASSIGNED: { inherit, enabled, channels[] }, ... }
+  events    Json     @db.JsonB
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, scopeType, scopeId])
+  @@index([tenantId])
+  @@map("notification_configs")
+}
+
+/// Journal des notifications envoyées (audit)
+model NotificationLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Type d'événement (TASK_ASSIGNED, SITE_STATUS_CHANGED, etc.)
+  eventType String   @db.VarChar(50)
+  /// Canal utilisé (email, teams)
+  channel   String   @db.VarChar(20)
+  /// Scope qui a déclenché
+  scopeType String?  @db.VarChar(20)
+  scopeId   String?
+
+  /// Destinataire (email ou webhook URL)
+  recipient String
+  /// Sujet/titre
+  subject   String
+  /// Succès ou échec
+  success   Boolean  @default(true)
+  /// Message d'erreur si échec
+  errorMessage String? @db.Text
+
+  /// Contexte de l'événement (JSON: entityId, entityType, details...)
+  context   Json?    @db.JsonB
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, eventType])
+  @@map("notification_logs")
 }

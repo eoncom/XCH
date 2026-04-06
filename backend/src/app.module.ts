@@ -27,6 +27,7 @@ import { SetupModule } from './modules/setup/setup.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BackupModule } from './modules/backup/backup.module';
 import { OrganizationModule } from './modules/organization/organization.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { OrganizationModule } from './modules/organization/organization.module';
     SetupModule,
     AdminModule,
     BackupModule,
+    NotificationsModule,
   ],
   providers: [
     {

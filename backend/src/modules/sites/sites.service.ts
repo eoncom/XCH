@@ -6,6 +6,7 @@ import { FilterSiteDto } from './dto/filter-site.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { StorageService } from '../../common/services/storage.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { NotificationEmitter } from '../notifications/notification-emitter';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { createId } from '@paralleldrive/cuid2';
 
@@ -17,6 +18,7 @@ export class SitesService {
     private prisma: PrismaClient,
     private storageService: StorageService,
     private auditLogService: AuditLogService,
+    private notificationEmitter: NotificationEmitter,
   ) {}
 
   async create(tenantId: string, createSiteDto: CreateSiteDto, userId?: string) {
@@ -367,6 +369,18 @@ export class SitesService {
           changes,
         });
       }
+    }
+
+    // Notification: site status changed
+    if (before && updateSiteDto.status && updateSiteDto.status !== before.status) {
+      const actor = userId ? await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true } }) : undefined;
+      this.notificationEmitter.siteStatusChanged({
+        tenantId,
+        site: { id: updated.id, name: updated.name, delegationId: updated.delegationId },
+        oldStatus: before.status,
+        newStatus: updateSiteDto.status,
+        actor: actor || undefined,
+      }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
     }
 
     return updated;
