@@ -19,7 +19,7 @@ FROM node:20-alpine
 
 LABEL org.opencontainers.image.title="XCH Frontend" \
       org.opencontainers.image.description="XCH IT Management UI — Next.js" \
-      org.opencontainers.image.version="1.0.0-rc1" \
+      org.opencontainers.image.version="1.1.1" \
       org.opencontainers.image.vendor="eoncom"
 
 WORKDIR /app

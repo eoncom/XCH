@@ -179,6 +179,8 @@ services:
   gatus:
     image: twinproduction/gatus:latest
     container_name: xch-gatus
+    environment:
+      GATUS_WEBHOOK_SECRET: ${GATUS_WEBHOOK_SECRET:-changeme}
     volumes:
       - ./gatus/config.yaml:/config/config.yaml:ro
       - gatus_data:/data
@@ -211,6 +213,7 @@ services:
       - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
       - ./docker/nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       - backend

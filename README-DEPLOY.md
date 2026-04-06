@@ -19,11 +19,17 @@
 git clone https://github.com/votre-org/XCH.git /opt/xch
 cd /opt/xch
 
-# 2. Configurer l'environnement
-cp .env.production.example backend/.env
-nano backend/.env  # Personnaliser les secrets (JWT, PostgreSQL, MinIO)
+# 2. Creer le fichier root .env (variables Docker Compose)
+cp .env.production.example .env
+nano .env  # Personnaliser POSTGRES_PASSWORD, MINIO_ACCESS_KEY, MINIO_SECRET_KEY
 
-# 3. Lancer la stack
+# 3. Creer le fichier backend/.env (variables application NestJS)
+cp backend/.env.production backend/.env
+nano backend/.env  # Personnaliser DATABASE_URL, JWT secrets, MinIO keys
+# IMPORTANT: Les credentials (POSTGRES_PASSWORD, MINIO keys) doivent
+# etre identiques entre .env (root) et backend/.env
+
+# 4. Lancer la stack
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
@@ -117,17 +123,31 @@ echo "0 2 * * * /opt/xch/scripts/backup-full.sh /opt/xch/backups && find /opt/xc
 
 ## Configuration avancee
 
-### HTTPS avec certificat
+### HTTPS avec certificat auto-signe (IP sans domaine)
+
+```bash
+# 1. Generer le certificat (detecte l'IP automatiquement)
+bash scripts/generate-ssl.sh
+# Ou specifier l'IP : bash scripts/generate-ssl.sh 192.168.1.100
+
+# 2. Activer les cookies securises
+sed -i 's/COOKIE_SECURE=false/COOKIE_SECURE=true/' backend/.env
+
+# 3. Redemarrer
+docker compose -f docker-compose.prod.yml restart nginx backend
+```
+
+### HTTPS avec vrai certificat
 
 1. Placer les fichiers dans `docker/nginx/ssl/` :
-   - `cert.pem` — Certificat
+   - `cert.pem` — Certificat (chaine complete)
    - `key.pem` — Cle privee
 
-2. Decommenter le bloc SSL dans `docker/nginx/nginx.conf`
-
-3. Relancer nginx :
+2. Generer la config SSL :
    ```bash
-   docker compose restart nginx
+   bash scripts/generate-ssl.sh votre-domaine.com
+   sed -i 's/COOKIE_SECURE=false/COOKIE_SECURE=true/' backend/.env
+   docker compose -f docker-compose.prod.yml restart nginx backend
    ```
 
 ### Proxy externe (Nginx Proxy Manager, Traefik, etc.)
@@ -152,7 +172,7 @@ frontend:
 | `JWT_REFRESH_SECRET` | Secret JWT refresh tokens | (requis) |
 | `MINIO_ACCESS_KEY` | Identifiant MinIO | (requis) |
 | `MINIO_SECRET_KEY` | Secret MinIO (min 16 car.) | (requis) |
-| `COOKIE_SECURE` | `true` pour HTTPS, `false` pour HTTP | `true` |
+| `COOKIE_SECURE` | `true` pour HTTPS, `false` pour HTTP | `false` |
 | `HTTP_PORT` | Port HTTP expose | `80` |
 | `GATUS_PORT` | Port monitoring Gatus | `8080` |
 | `SMTP_HOST` | Serveur SMTP (notifications email) | (optionnel) |
@@ -190,4 +210,5 @@ Internet/LAN
 | 502 Bad Gateway | Backend pas encore pret — attendre 30s |
 | Permissions MinIO | Relancer `docker compose restart minio-init` |
 | Port deja utilise | Changer `HTTP_PORT` / `GATUS_PORT` dans `.env` |
+| Login silencieux | Verifier `COOKIE_SECURE` : `false` en HTTP, `true` en HTTPS |
 | 502 apres rebuild | Nginx Proxy Manager cache les IPs Docker — `docker restart <npm-container>` |

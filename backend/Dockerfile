@@ -29,7 +29,7 @@ FROM node:20-alpine
 
 LABEL org.opencontainers.image.title="XCH Backend" \
       org.opencontainers.image.description="XCH IT Management API — NestJS" \
-      org.opencontainers.image.version="1.0.0-rc1" \
+      org.opencontainers.image.version="1.1.1" \
       org.opencontainers.image.vendor="eoncom"
 
 WORKDIR /app

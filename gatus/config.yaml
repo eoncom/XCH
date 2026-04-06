@@ -18,7 +18,7 @@ alerting:
     method: "POST"
     headers:
       Content-Type: "application/json"
-      x-webhook-secret: "xch-gatus-webhook-secret-dev"
+      x-webhook-secret: "${GATUS_WEBHOOK_SECRET}"
     body: |
       {
         "endpoint_name": "[ENDPOINT_NAME]",
