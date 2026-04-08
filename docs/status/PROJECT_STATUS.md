@@ -1,7 +1,7 @@
 # XCH - Statut du Projet
 
 **Dernière mise à jour :** 2026-04-08 19:14:15 (Auto-update)
-**Version actuelle :** 1.3.0
+**Version actuelle :** 1.2.0
 **Statut global :** ✅ MVP Production-Ready (100%) + Modele Delegation-First
 
 ---
@@ -255,7 +255,7 @@ POST-MVP     ████████████████████ 100% (
 
 ## 📅 HISTORIQUE DES VERSIONS
 
-### v1.3.0 (2026-04-08) - Modele Delegation-First (ADR-009)
+### v1.2.0 (2026-04-08) - Delegation-First + Repartition des couts (ADR-009)
 
 **Refactoring majeur** : suppression hierarchy 4 niveaux (Division + scopeType/scopeId) au profit d'un modele "delegation autonome".
 
@@ -290,26 +290,11 @@ POST-MVP     ████████████████████ 100% (
 
 ---
 
-### v1.2.0 (2026-03-29) - Organisation + Acces flexible + Repartition des couts
+### v1.1.1 (2026-04-06) - Corrections et stabilisation
 
-> **Note:** La hierarchy Division et le scope polymorphique de cette version ont ete remplaces par le modele delegation-first en v1.3.0 (ADR-009).
-
-**Phase C — Repartition des couts (conserve en v1.3) :**
-- ✅ Modeles Prisma : BillingEntity, Expense, CostAllocation
-- ✅ Backend module `billing-entities/` (CRUD + summary)
-- ✅ Backend module `expenses/` (CRUD + allocations + rapports + export CSV)
-- ✅ Frontend : page liste depenses avec filtres et cards resume
-- ✅ Frontend : formulaire depense (new/edit) avec refacturation dynamique
-- ✅ Frontend : page centres de cout (CRUD)
-- ✅ Frontend : page rapports (par porteur / par cible)
-
-**Casbin :**
-- ✅ Policies delegations, billing-entities, expenses
-
-**Architecture :**
-- AccessGrants purement additifs (jamais restrictifs)
-- BillingEntity = centre de cout generique
-- Allocation <= 100% (reste a la charge du porteur)
+> Derniere version stable avant refactoring delegation-first.
+> Incluait hierarchy Division + scopeType/scopeId (supprime en v1.2.0).
+> Incluait BillingEntities, Expenses, CostAllocations (conserve en v1.2.0).
 
 ---
 
