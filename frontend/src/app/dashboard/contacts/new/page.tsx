@@ -44,15 +44,15 @@ const categoryColors: Record<ContactCategory, string> = {
 };
 
 const contactSchema = z.object({
-  name: z.string().min(1, 'Le nom est requis').max(100, 'Le nom ne peut pas depasser 100 caracteres'),
+  name: z.string().min(1, 'Le nom est requis').max(100, 'Le nom ne peut pas dépasser 100 caractères'),
   typeId: z.string().min(1, 'Le type est requis'),
   email: z.string().email('Email invalide').max(200).optional().or(z.literal('')),
-  phone: z.string().max(30, 'Le telephone ne peut pas depasser 30 caracteres').optional().or(z.literal('')),
-  mobile: z.string().max(30, 'Le mobile ne peut pas depasser 30 caracteres').optional().or(z.literal('')),
-  address: z.string().max(500, 'L\'adresse ne peut pas depasser 500 caracteres').optional().or(z.literal('')),
-  company: z.string().max(200, 'L\'entreprise ne peut pas depasser 200 caracteres').optional().or(z.literal('')),
-  role: z.string().max(100, 'Le role ne peut pas depasser 100 caracteres').optional().or(z.literal('')),
-  notes: z.string().max(1000, 'Les notes ne peuvent pas depasser 1000 caracteres').optional().or(z.literal('')),
+  phone: z.string().max(30, 'Le téléphone ne peut pas dépasser 30 caractères').optional().or(z.literal('')),
+  mobile: z.string().max(30, 'Le mobile ne peut pas dépasser 30 caractères').optional().or(z.literal('')),
+  address: z.string().max(500, 'L\'adresse ne peut pas dépasser 500 caractères').optional().or(z.literal('')),
+  company: z.string().max(200, 'L\'entreprise ne peut pas dépasser 200 caractères').optional().or(z.literal('')),
+  role: z.string().max(100, 'Le rôle ne peut pas dépasser 100 caractères').optional().or(z.literal('')),
+  notes: z.string().max(1000, 'Les notes ne peuvent pas dépasser 1000 caractères').optional().or(z.literal('')),
 });
 
 type ContactFormData = z.infer<typeof contactSchema>;
@@ -107,11 +107,11 @@ export default function NewContactPage() {
     },
     onSuccess: (contact) => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      toast.success('Contact cree avec succes');
+      toast.success('Contact créé avec succès');
       router.push(`/dashboard/contacts/${contact.id}`);
     },
     onError: (error: Error) => {
-      toast.error(`Erreur lors de la creation: ${error.message}`);
+      toast.error(`Erreur lors de la création : ${error.message}`);
     },
   });
 
@@ -134,11 +134,11 @@ export default function NewContactPage() {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {/* Section 1: Identite (obligatoire) */}
+        {/* Section 1: Identité (obligatoire) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Identite
+              Identité
               <span className="text-xs font-normal text-red-500 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded">Obligatoire</span>
             </CardTitle>
           </CardHeader>
@@ -152,7 +152,7 @@ export default function NewContactPage() {
               <div className="space-y-2">
                 <Label htmlFor="typeId">Type <span className="text-red-500">*</span></Label>
                 <Select value={typeId} onValueChange={(value) => setValue('typeId', value)}>
-                  <SelectTrigger><SelectValue placeholder="Selectionner un type" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner un type" /></SelectTrigger>
                   <SelectContent>
                     {contactTypes?.map((type) => (
                       <SelectItem key={type.id} value={type.id}>
@@ -171,18 +171,18 @@ export default function NewContactPage() {
                 </Select>
                 {errors.typeId && <p className="text-sm text-red-600">{errors.typeId.message}</p>}
                 {selectedType && (
-                  <p className="text-xs text-muted-foreground">Categorie : {categoryLabels[selectedType.category]}</p>
+                  <p className="text-xs text-muted-foreground">Catégorie : {categoryLabels[selectedType.category]}</p>
                 )}
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Section 2: Coordonnees (optionnel) */}
+        {/* Section 2: Coordonnées (optionnel) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Coordonnees
+              Coordonnées
               <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
             </CardTitle>
           </CardHeader>
@@ -194,7 +194,7 @@ export default function NewContactPage() {
                 {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Telephone fixe</Label>
+                <Label htmlFor="phone">Téléphone fixe</Label>
                 <Input id="phone" {...register('phone')} placeholder="+33 1 23 45 67 89" />
                 {errors.phone && <p className="text-sm text-red-600">{errors.phone.message}</p>}
               </div>
@@ -216,7 +216,7 @@ export default function NewContactPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Portee organisationnelle
+              Portée organisationnelle
               <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
             </CardTitle>
           </CardHeader>
@@ -248,13 +248,13 @@ export default function NewContactPage() {
                 {errors.company && <p className="text-sm text-red-600">{errors.company.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="role">Role / Fonction</Label>
+                <Label htmlFor="role">Rôle / Fonction</Label>
                 <Input id="role" {...register('role')} placeholder="Responsable technique" />
                 {errors.role && <p className="text-sm text-red-600">{errors.role.message}</p>}
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="notes">Notes</Label>
-                <Textarea id="notes" {...register('notes')} placeholder="Informations complementaires sur le contact..." rows={4} />
+                <Textarea id="notes" {...register('notes')} placeholder="Informations complémentaires sur le contact..." rows={4} />
                 {errors.notes && <p className="text-sm text-red-600">{errors.notes.message}</p>}
               </div>
             </div>
@@ -265,12 +265,12 @@ export default function NewContactPage() {
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground flex items-center gap-1">
             <Info className="h-4 w-4" />
-            Les champs marques <span className="text-red-500">*</span> sont obligatoires
+            Les champs marqués <span className="text-red-500">*</span> sont obligatoires
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => router.push('/dashboard/contacts')}>Annuler</Button>
             <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Creation...' : 'Creer le contact'}
+              {createMutation.isPending ? 'Création...' : 'Créer le contact'}
             </Button>
           </div>
         </div>

@@ -290,7 +290,7 @@ export default function EditUserPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="role">Rôle <span className="text-red-500">*</span></Label>
-                <Select value={role || ''} onValueChange={(value) => setValue('role', value as UserRole, { shouldDirty: true })}>
+                <Select key={role || 'empty'} value={role || ''} onValueChange={(value) => setValue('role', value as UserRole, { shouldDirty: true })}>
                   <SelectTrigger><SelectValue placeholder="Sélectionner un rôle" /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(userRoleLabels).map(([value, label]) => (

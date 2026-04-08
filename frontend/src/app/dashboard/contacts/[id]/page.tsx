@@ -79,7 +79,7 @@ export default function ContactDetailPage({
     mutationFn: () => contactsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      toast.success('Contact supprime avec succes');
+      toast.success('Contact supprimé avec succès');
       router.push('/dashboard/contacts');
     },
     onError: (error: Error) => {
@@ -94,8 +94,8 @@ export default function ContactDetailPage({
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       toast.success(
         contact?.isActive
-          ? 'Contact desactive avec succes'
-          : 'Contact active avec succes'
+          ? 'Contact désactivé avec succès'
+          : 'Contact activé avec succès'
       );
     },
     onError: (error: Error) => {
@@ -131,7 +131,7 @@ export default function ContactDetailPage({
   }
 
   if (!contact) {
-    toast.error('Contact non trouve');
+    toast.error('Contact non trouvé');
     router.push('/dashboard/contacts');
     return null;
   }
@@ -166,7 +166,7 @@ export default function ContactDetailPage({
             }
             variant={contact.type?.color ? 'outline' : 'secondary'}
           >
-            {contact.type?.name || 'Non defini'}
+            {contact.type?.name || 'Non défini'}
           </Badge>
           {contact.type?.category && (
             <Badge className={categoryColors[contact.type.category]}>
@@ -186,7 +186,7 @@ export default function ContactDetailPage({
               disabled={toggleActiveMutation.isPending}
             >
               <Power className="mr-2 h-4 w-4" />
-              {contact.isActive ? 'Desactiver' : 'Activer'}
+              {contact.isActive ? 'Désactiver' : 'Activer'}
             </Button>
           )}
           {canUpdate('contacts') && (
@@ -289,7 +289,7 @@ export default function ContactDetailPage({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
-              Entreprise et role
+              Entreprise et rôle
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -306,7 +306,7 @@ export default function ContactDetailPage({
               <div className="flex items-center gap-3">
                 <UserCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Role / Fonction</label>
+                  <label className="text-sm font-medium text-muted-foreground">Rôle / Fonction</label>
                   <p className="text-lg">{contact.role}</p>
                 </div>
               </div>
@@ -346,7 +346,7 @@ export default function ContactDetailPage({
 
       {/* Scope */}
       <InlineEditCard
-        title="Portee organisationnelle"
+        title="Portée organisationnelle"
         icon={Building2}
         canEdit={canUpdate('contacts')}
         onEdit={() => setEditScope({
@@ -374,14 +374,14 @@ export default function ContactDetailPage({
       {/* Metadata */}
       <Card>
         <CardHeader>
-          <CardTitle>Informations systeme</CardTitle>
+          <CardTitle>Informations système</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid md:grid-cols-2 gap-4">
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Cree le</label>
+                <label className="text-sm font-medium text-muted-foreground">Créé le</label>
                 <p className="text-sm">
                   {format(new Date(contact.createdAt), 'dd MMMM yyyy a HH:mm', {
                     locale: fr,
@@ -393,7 +393,7 @@ export default function ContactDetailPage({
               <Clock className="h-4 w-4 text-muted-foreground" />
               <div>
                 <label className="text-sm font-medium text-muted-foreground">
-                  Modifie le
+                  Modifié le
                 </label>
                 <p className="text-sm">
                   {format(new Date(contact.updatedAt), 'dd MMMM yyyy a HH:mm', {
@@ -412,8 +412,8 @@ export default function ContactDetailPage({
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
             <AlertDialogDescription>
-              Etes-vous sur de vouloir supprimer le contact &quot;{contact.name}&quot; ?
-              Cette action est irreversible.
+              Êtes-vous sûr de vouloir supprimer le contact &quot;{contact.name}&quot; ?
+              Cette action est irréversible.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

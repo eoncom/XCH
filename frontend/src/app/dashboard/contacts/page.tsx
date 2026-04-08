@@ -70,7 +70,7 @@ export default function ContactsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const { canCreate, canUpdate, canDelete, isManagerOrAbove } = usePermissions();
+  const { canCreate, canUpdate, canDelete, isManagerOrAbove, isSuperAdmin } = usePermissions();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -367,7 +367,7 @@ export default function ContactsPage() {
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>
-                        {canUpdate('contacts') && (
+                        {canUpdate('contacts') && (isSuperAdmin || contact.delegationId) && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -379,7 +379,7 @@ export default function ContactsPage() {
                             </Link>
                           </Button>
                         )}
-                        {canDelete('contacts') && (
+                        {canDelete('contacts') && (isSuperAdmin || contact.delegationId) && (
                           <Button
                             variant="ghost"
                             size="icon"

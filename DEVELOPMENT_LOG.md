@@ -4883,3 +4883,24 @@ feat: enforce mandatory scope - no scope means no access
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-09
+
+**Date:** 2026-04-09 01:37:50
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 6
+
+**Commit message:**
+```
+fix: demo users get real bcrypt password + UserDelegation assignments
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
