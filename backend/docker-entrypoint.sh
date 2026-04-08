@@ -4,8 +4,11 @@ set -e
 echo "🔄 Generating Prisma client..."
 npx prisma generate
 
-echo "🔄 Running database migrations..."
-npx prisma migrate deploy
+echo "🔄 Applying database schema..."
+npx prisma db push --accept-data-loss
+
+echo "🌱 Seeding database..."
+npx prisma db seed || echo "⚠️ Seed skipped (may already exist)"
 
 echo "✅ Database ready"
 echo "🚀 Starting XCH Backend..."
