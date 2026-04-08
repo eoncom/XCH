@@ -101,6 +101,7 @@ export class SetupService {
         name: dto.adminName,
         phone: dto.adminPhone || null,
         role: 'ADMIN',
+        isSuperAdmin: true,
         active: true,
         authProvider: 'local',
       },
