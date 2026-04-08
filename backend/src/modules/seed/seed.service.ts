@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaClient, UserRole, SiteStatus, HealthStatus, AssetType, AssetStatus, RackType, RackStatus, TaskStatus, TaskPriority, ContactCategory } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class SeedService {
@@ -18,6 +19,7 @@ export class SeedService {
     const delegations = await this.createOrganization(tenantId);
     const sites = await this.createSites(tenantId, delegations);
     const users = await this.createUsers(tenantId);
+    await this.createUserDelegations(tenantId, users, delegations);
     const racks = await this.createRacks(tenantId, sites);
     const assets = await this.createAssets(tenantId, sites, racks);
     const tasks = await this.createTasks(tenantId, sites, users, assets);
@@ -313,6 +315,9 @@ export class SeedService {
       },
     ];
 
+    // All demo users get password "demo123"
+    const demoPasswordHash = await bcrypt.hash('demo123', 10);
+
     const users = [];
     for (const u of usersData) {
       const user = await this.prisma.user.upsert({
@@ -321,13 +326,44 @@ export class SeedService {
         create: {
           ...u,
           tenantId,
-          passwordHash: '$2b$10$dummyhashfordemopurposes',
+          passwordHash: demoPasswordHash,
         },
       });
       users.push(user);
     }
 
     return users;
+  }
+
+  // ============================================================================
+  // USER DELEGATIONS
+  // ============================================================================
+
+  private async createUserDelegations(tenantId: string, users: any[], delegations: { default: string }) {
+    const delegationId = delegations.default;
+    // Find the admin user (setup-created, isSuperAdmin) to use as grantedBy
+    const admin = await this.prisma.user.findFirst({
+      where: { tenantId, isSuperAdmin: true },
+    });
+    const grantedById = admin?.id || users[0]?.id;
+
+    for (const user of users) {
+      await this.prisma.userDelegation.upsert({
+        where: {
+          userId_delegationId: { userId: user.id, delegationId },
+        },
+        update: {},
+        create: {
+          tenantId,
+          userId: user.id,
+          delegationId,
+          role: user.role, // same as User.role for demo
+          grantedBy: grantedById,
+        },
+      });
+    }
+
+    this.logger.log(`UserDelegations created: ${users.length} users assigned to delegation`);
   }
 
   // ============================================================================
