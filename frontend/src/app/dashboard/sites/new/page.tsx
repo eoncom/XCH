@@ -301,8 +301,8 @@ export default function NewSitePage() {
     queryFn: () => organizationApi.getTree(),
   });
 
-  // Find selected delegation's division for display
-  const selectedDelegation = orgTree?.flatMap(d => d.delegations.map(del => ({ ...del, division: d }))).find(d => d.id === selectedDelegationId);
+  // Find selected delegation for display
+  const selectedDelegation = orgTree?.find((d: any) => d.id === selectedDelegationId);
 
   return (
     <div className="space-y-6">
@@ -378,24 +378,20 @@ export default function NewSitePage() {
                       <SelectValue placeholder="Sélectionner une délégation..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {orgTree?.map((division) => (
-                        <div key={division.id}>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-2">
-                            {division.color && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: division.color }} />}
-                            {division.name}
-                          </div>
-                          {division.delegations.map((del) => (
-                            <SelectItem key={del.id} value={del.id} className="pl-6">
-                              {del.name} ({del.code})
-                            </SelectItem>
-                          ))}
-                        </div>
+                      {orgTree?.map((del: any) => (
+                        <SelectItem key={del.id} value={del.id}>
+                          <span className="flex items-center gap-2">
+                            {del.groupColor && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: del.groupColor }} />}
+                            {del.name} ({del.code})
+                            {del.groupLabel && <span className="text-xs text-muted-foreground">({del.groupLabel})</span>}
+                          </span>
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedDelegation && (
+                  {selectedDelegation?.groupLabel && (
                     <p className="text-xs text-muted-foreground">
-                      Division : {selectedDelegation.division.name} ({selectedDelegation.division.code})
+                      Groupe : {selectedDelegation.groupLabel}
                     </p>
                   )}
                   {errors.delegationId && (

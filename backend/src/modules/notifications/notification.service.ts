@@ -39,11 +39,11 @@ export class NotificationService {
    */
   async dispatch(payload: NotificationPayload): Promise<void> {
     try {
-      // Resolve scope context to find the right delegation/division
-      const scopeContext = await this.resolveScopeContext(payload);
+      // Resolve delegationId from scope context
+      const delegationId = await this.resolveScopeContext(payload);
 
       // Resolve effective config with inheritance
-      const config = await this.configService.resolveConfig(payload.tenantId, scopeContext);
+      const config = await this.configService.resolveConfig(payload.tenantId, delegationId);
 
       // Check if the event is enabled
       const eventConfig = config.events[payload.eventType];
@@ -114,34 +114,28 @@ export class NotificationService {
   // ──────────────── Private helpers ────────────────
 
   /**
-   * Resolve scope context from the payload (find delegation/division from site).
+   * Resolve delegation context from the payload (find delegationId from site if needed).
    */
   private async resolveScopeContext(
     payload: NotificationPayload,
-  ): Promise<{ delegationId?: string; divisionId?: string }> {
-    // If explicit scope context is provided, use it
-    if (payload.scopeContext?.delegationId || payload.scopeContext?.divisionId) {
-      return {
-        delegationId: payload.scopeContext.delegationId,
-        divisionId: payload.scopeContext.divisionId,
-      };
+  ): Promise<string | undefined> {
+    // If explicit delegationId is provided, use it
+    if (payload.scopeContext?.delegationId) {
+      return payload.scopeContext.delegationId;
     }
 
     // Try to resolve from site
     if (payload.scopeContext?.siteId) {
       const site = await this.prisma.site.findUnique({
         where: { id: payload.scopeContext.siteId },
-        include: { delegation: { include: { division: true } } },
+        select: { delegationId: true },
       });
-      if (site?.delegation) {
-        return {
-          delegationId: site.delegationId,
-          divisionId: site.delegation.divisionId,
-        };
+      if (site?.delegationId) {
+        return site.delegationId;
       }
     }
 
-    return {};
+    return undefined;
   }
 
   /**

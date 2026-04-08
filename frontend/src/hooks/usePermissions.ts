@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
+import { useDelegation } from '@/contexts/DelegationContext';
 import { siteAccessApi, type ResourcePermissionLevel, type ResourcePermissions, type MyPermissionsResponse } from '@/lib/api/site-access';
 import type { UserRole } from '@/types';
 
@@ -23,7 +24,6 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     tenants: ['read', 'update'],
     contacts: ['create', 'read', 'update', 'delete'],
     'contact-types': ['create', 'read', 'update', 'delete'],
-    divisions: ['create', 'read', 'update', 'delete'],
     delegations: ['create', 'read', 'update', 'delete'],
     'billing-entities': ['create', 'read', 'update', 'delete'],
     expenses: ['create', 'read', 'update', 'delete'],
@@ -40,7 +40,6 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     users: ['read'],
     contacts: ['create', 'read', 'update'],
     'contact-types': ['read'],
-    divisions: ['read'],
     delegations: ['read'],
     'billing-entities': ['read'],
     expenses: ['create', 'read', 'update'],
@@ -56,7 +55,6 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     monitoring: ['read'],
     contacts: ['read'],
     'contact-types': ['read'],
-    divisions: ['read'],
     delegations: ['read'],
   },
   VIEWER: {
@@ -70,14 +68,12 @@ const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
     monitoring: ['read'],
     contacts: ['read'],
     'contact-types': ['read'],
-    divisions: ['read'],
     delegations: ['read'],
   },
 };
 
 /**
- * Map from kebab-case resource names (used in Casbin/frontend)
- * to camelCase keys (used in resourcePermissions JSON)
+ * Map from kebab-case resource names to camelCase keys (for resourcePermissions JSON)
  */
 const RESOURCE_KEY_MAP: Record<string, string> = {
   'floor-plans': 'floorPlans',
@@ -92,9 +88,6 @@ const RESOURCE_KEY_MAP: Record<string, string> = {
   expenses: 'expenses',
 };
 
-/**
- * Map ResourcePermissionLevel to allowed actions
- */
 function permLevelToActions(level: ResourcePermissionLevel): string[] {
   switch (level) {
     case 'WRITE':
@@ -108,9 +101,6 @@ function permLevelToActions(level: ResourcePermissionLevel): string[] {
   }
 }
 
-/**
- * Map role to default ResourcePermissionLevel for a resource.
- */
 function roleToPermLevel(role: string, resource: string): ResourcePermissionLevel {
   const rolePerms = ROLE_PERMISSIONS[role];
   if (!rolePerms || !rolePerms[resource]) return 'NONE';
@@ -128,19 +118,21 @@ function maxPerm(a: ResourcePermissionLevel, b: ResourcePermissionLevel): Resour
 }
 
 /**
- * usePermissions hook — Phase B version.
+ * usePermissions hook — Delegation-first version.
  *
- * Uses UserScope + AccessGrant for permission resolution.
- * ALL roles fetch my-permissions (including ADMIN/MANAGER, since they are now scope-bound).
+ * Uses UserDelegation + AccessGrant for permission resolution.
+ * Role comes from localRole in the active delegation (R7).
  *
- * RULE: No scope + no grant = NO ACCESS to anything.
- * The role NEVER bypasses scope requirements.
+ * RULE: No delegation + no grant = NO ACCESS to anything (unless super admin).
  */
 export function usePermissions() {
   const { user } = useAuthStore();
-  const role = (user?.role || 'VIEWER') as string;
+  const { localRole, isSuperAdmin, hasDelegation } = useDelegation();
 
-  // Fetch permissions for ALL roles (Phase B: ADMIN/MANAGER are scope-bound too)
+  // Use localRole from active delegation (R7), fallback to user.role
+  const role = localRole || (user?.role || 'VIEWER') as string;
+
+  // Fetch permissions
   const { data: myPerms, isLoading: isLoadingPerms } = useQuery<MyPermissionsResponse>({
     queryKey: ['my-permissions'],
     queryFn: () => siteAccessApi.myPermissions(),
@@ -150,37 +142,30 @@ export function usePermissions() {
   });
 
   /**
-   * Whether the user has at least one scope or grant.
-   * If false, the user has NO access to anything.
+   * Whether the user has at least one delegation or grant.
+   * Super admin always has access.
    */
-  const hasScope = (() => {
+  const hasDelegationAccess = (() => {
     if (!myPerms) return undefined; // Still loading
-    return myPerms.scopes.length > 0 || myPerms.accessGrants.length > 0;
+    return myPerms.isSuperAdmin || myPerms.hasDelegation;
   })();
 
   /**
    * Check if user can do action on resource.
    *
-   * CRITICAL: If user has no scope AND no grant, ALWAYS returns false.
-   *
-   * Without siteId: checks if the user has ANY scope that grants this permission.
-   * With siteId: checks if the specific site is covered by scopes or grants.
-   *
-   * Resolution:
-   * 1. UserScopes: if site is covered -> full role permissions apply
-   * 2. AccessGrants: if site is covered AND resource is listed -> grant's level applies
-   * 3. MAX of both sources
+   * CRITICAL: If user has no delegation AND no grant AND is not super admin, ALWAYS returns false.
    */
   const can = (resource: string, action: string, siteId?: string): boolean => {
-    // If permissions haven't loaded yet, block everything (safe default)
     if (!myPerms) return false;
 
-    // RULE: No scope + no grant = NO ACCESS (role never bypasses scope)
-    if (hasScope === false) return false;
+    // Super admin can do everything
+    if (myPerms.isSuperAdmin) return true;
 
-    // Resources that are not site-scoped (org-level) — use role-based check
-    // (but only if user has at least one scope — enforced above)
-    const orgResources = ['users', 'tenants', 'divisions', 'delegations', 'contact-types', 'integrations', 'billing-entities', 'expenses'];
+    // No delegation + no grant = NO ACCESS
+    if (!myPerms.hasDelegation) return false;
+
+    // Org-level resources (not site-scoped) — use role-based check
+    const orgResources = ['users', 'tenants', 'delegations', 'contact-types', 'integrations', 'billing-entities', 'expenses'];
     if (orgResources.includes(resource)) {
       const rolePerms = ROLE_PERMISSIONS[role];
       if (!rolePerms) return false;
@@ -194,16 +179,15 @@ export function usePermissions() {
       return rolePerms[resource]?.includes(action) ?? false;
     }
 
-    // If no siteId, check if user has ANY scope (meaning they have access somewhere)
+    // If no siteId, check if user has any delegation
     if (!siteId) {
-      if (myPerms.scopes.length > 0) {
-        // User has at least one scope — check role-based permission for the resource
+      if (myPerms.delegations.length > 0) {
         const rolePerms = ROLE_PERMISSIONS[role];
         if (!rolePerms) return false;
         return rolePerms[resource]?.includes(action) ?? false;
       }
 
-      // No scopes — check if any grant covers this resource
+      // No delegations — check if any grant covers this resource
       const resourceKey = RESOURCE_KEY_MAP[resource] || resource;
       for (const grant of myPerms.accessGrants) {
         const grantPerms = grant.resourcePermissions as ResourcePermissions;
@@ -222,12 +206,9 @@ export function usePermissions() {
     const resourceKey = RESOURCE_KEY_MAP[resource] || resource;
     let effectiveLevel: ResourcePermissionLevel = 'NONE';
 
-    // SOURCE 1: UserScopes — if site is in accessibleSiteIds (or allSitesAccess), role applies
+    // SOURCE 1: UserDelegations — if site is in accessibleSiteIds, role applies
     if (myPerms.allSitesAccess || (myPerms.accessibleSiteIds && myPerms.accessibleSiteIds.includes(siteId))) {
-      // Check if the site is covered by scopes (not just grants)
-      // Since allSitesAccess includes both scopes and grants, we need to check scopes separately
-      // For simplicity: if user has any scope, the role applies on covered sites
-      if (myPerms.scopes.length > 0) {
+      if (myPerms.delegations.length > 0) {
         const rolePerm = roleToPermLevel(role, resource);
         effectiveLevel = maxPerm(effectiveLevel, rolePerm);
       }
@@ -247,19 +228,14 @@ export function usePermissions() {
     return permLevelToActions(effectiveLevel).includes(action);
   };
 
-  /**
-   * Check per-site resource permission.
-   */
   const canForSite = (resource: string, action: string, siteId: string): boolean => {
     return can(resource, action, siteId);
   };
 
-  /**
-   * Check if user has access to at least one site.
-   */
   const hasAnySiteAccess = (): boolean => {
-    if (!myPerms) return false; // Safe default while loading
-    if (hasScope === false) return false; // No scope = no site access
+    if (!myPerms) return false;
+    if (myPerms.isSuperAdmin) return true;
+    if (!myPerms.hasDelegation) return false;
     return myPerms.allSitesAccess || (myPerms.accessibleSiteIds !== null && myPerms.accessibleSiteIds.length > 0);
   };
 
@@ -274,16 +250,17 @@ export function usePermissions() {
     isManagerOrAbove: role === 'ADMIN' || role === 'MANAGER',
     isTechnicien: role === 'TECHNICIEN',
     isViewer: role === 'VIEWER',
+    isSuperAdmin,
     role: role as UserRole,
-    /** User scopes (for display) */
-    scopes: myPerms?.scopes || [],
+    /** User delegations (for display) */
+    delegations: myPerms?.delegations || [],
     /** User access grants (for display) */
     accessGrants: myPerms?.accessGrants || [],
     /** All sites access flag */
     allSitesAccess: myPerms?.allSitesAccess ?? false,
     hasAnySiteAccess,
-    /** Whether user has at least one scope or grant (undefined = loading) */
-    hasScope,
+    /** Whether user has at least one delegation or grant (undefined = loading) */
+    hasDelegation: hasDelegationAccess,
     /** Whether permissions are still loading */
     isLoadingPerms,
   };

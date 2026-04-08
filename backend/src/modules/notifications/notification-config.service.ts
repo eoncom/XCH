@@ -1,4 +1,4 @@
-import { Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import {
   NotificationChannel,
@@ -13,10 +13,9 @@ import {
 export interface ResolvedConfig {
   channels: NotificationChannelsConfig;
   events: NotificationEventsConfig;
-  /** Indicates where each setting comes from */
   inheritance: {
-    channels: Record<string, { source: string; scopeType: string; scopeId: string }>;
-    events: Record<string, { source: string; scopeType: string; scopeId: string }>;
+    channels: Record<string, { source: string; delegationId: string | null }>;
+    events: Record<string, { source: string; delegationId: string | null }>;
   };
 }
 
@@ -27,61 +26,68 @@ export class NotificationConfigService {
   constructor(private prisma: PrismaClient) {}
 
   /**
-   * Get or create notification config for a scope.
+   * Get notification config for a delegation (or global if delegationId=null).
    */
-  async getConfig(tenantId: string, scopeType: string, scopeId: string) {
-    let config = await this.prisma.notificationConfig.findUnique({
-      where: { tenantId_scopeType_scopeId: { tenantId, scopeType, scopeId } },
+  async getConfig(tenantId: string, delegationId: string | null) {
+    const config = await this.prisma.notificationConfig.findFirst({
+      where: { tenantId, delegationId },
     });
 
     if (!config) {
-      // Return default config (not persisted until saved)
       const defaults = getDefaultConfig();
       return {
         id: null,
         tenantId,
-        scopeType,
-        scopeId,
-        channels: scopeType === 'TENANT' ? defaults.channels : this.inheritAllChannels(),
-        events: scopeType === 'TENANT' ? defaults.events : this.inheritAllEvents(),
+        delegationId,
+        channels: delegationId === null ? defaults.channels : this.inheritAllChannels(),
+        events: delegationId === null ? defaults.events : this.inheritAllEvents(),
         isDefault: true,
       };
     }
 
-    return {
-      ...config,
-      isDefault: false,
-    };
+    return { ...config, isDefault: false };
   }
 
   /**
-   * Save notification config for a scope.
+   * Save notification config for a delegation (or global).
    */
-  async saveConfig(tenantId: string, scopeType: string, scopeId: string, data: { channels: any; events: any }) {
-    return this.prisma.notificationConfig.upsert({
-      where: { tenantId_scopeType_scopeId: { tenantId, scopeType, scopeId } },
-      create: {
+  async saveConfig(tenantId: string, delegationId: string | null, data: { channels: any; events: any }) {
+    // Find existing config
+    const existing = await this.prisma.notificationConfig.findFirst({
+      where: { tenantId, delegationId },
+    });
+
+    if (existing) {
+      return this.prisma.notificationConfig.update({
+        where: { id: existing.id },
+        data: {
+          channels: data.channels,
+          events: data.events,
+        },
+      });
+    }
+
+    return this.prisma.notificationConfig.create({
+      data: {
         tenantId,
-        scopeType,
-        scopeId,
+        delegationId,
         channels: data.channels,
         events: data.events,
-      },
-      update: {
-        channels: data.channels,
-        events: data.events,
-      },
+      } as any,
     });
   }
 
   /**
-   * Delete notification config for a scope (reverts to inheritance).
+   * Delete notification config for a delegation (reverts to inheritance).
    */
-  async deleteConfig(tenantId: string, scopeType: string, scopeId: string) {
+  async deleteConfig(tenantId: string, delegationId: string | null) {
     try {
-      await this.prisma.notificationConfig.delete({
-        where: { tenantId_scopeType_scopeId: { tenantId, scopeType, scopeId } },
+      const config = await this.prisma.notificationConfig.findFirst({
+        where: { tenantId, delegationId },
       });
+      if (config) {
+        await this.prisma.notificationConfig.delete({ where: { id: config.id } });
+      }
       return { deleted: true };
     } catch {
       return { deleted: false };
@@ -89,79 +95,37 @@ export class NotificationConfigService {
   }
 
   /**
-   * Resolve the effective configuration for a given scope, applying inheritance.
-   * Resolution order: delegation → division → tenant → defaults
+   * Resolve effective config for a delegation with inheritance (R4).
+   * Resolution order: delegation → global (tenant, delegationId=null) → defaults
    */
-  async resolveConfig(
-    tenantId: string,
-    scopeContext?: { delegationId?: string; divisionId?: string },
-  ): Promise<ResolvedConfig> {
+  async resolveConfig(tenantId: string, delegationId?: string): Promise<ResolvedConfig> {
     const defaults = getDefaultConfig();
     const inheritance: ResolvedConfig['inheritance'] = { channels: {}, events: {} };
 
-    // 1. Start with tenant config
-    const tenantConfig = await this.prisma.notificationConfig.findUnique({
-      where: { tenantId_scopeType_scopeId: { tenantId, scopeType: 'TENANT', scopeId: tenantId } },
+    // 1. Start with global config (delegationId=null)
+    const globalConfig = await this.prisma.notificationConfig.findFirst({
+      where: { tenantId, delegationId: null },
     });
 
-    let resolvedChannels: NotificationChannelsConfig = tenantConfig
-      ? (tenantConfig.channels as any)
+    let resolvedChannels: NotificationChannelsConfig = globalConfig
+      ? (globalConfig.channels as any)
       : defaults.channels;
-    let resolvedEvents: NotificationEventsConfig = tenantConfig
-      ? (tenantConfig.events as any)
+    let resolvedEvents: NotificationEventsConfig = globalConfig
+      ? (globalConfig.events as any)
       : defaults.events;
 
-    // Mark tenant as source
+    // Mark global as source
     for (const ch of Object.keys(resolvedChannels)) {
-      inheritance.channels[ch] = { source: 'tenant', scopeType: 'TENANT', scopeId: tenantId };
+      inheritance.channels[ch] = { source: 'global', delegationId: null };
     }
     for (const ev of Object.keys(resolvedEvents)) {
-      inheritance.events[ev] = { source: 'tenant', scopeType: 'TENANT', scopeId: tenantId };
+      inheritance.events[ev] = { source: 'global', delegationId: null };
     }
 
-    // 2. Apply division override if present
-    if (scopeContext?.divisionId) {
-      const divConfig = await this.prisma.notificationConfig.findUnique({
-        where: {
-          tenantId_scopeType_scopeId: {
-            tenantId,
-            scopeType: 'DIVISION',
-            scopeId: scopeContext.divisionId,
-          },
-        },
-      });
-
-      if (divConfig) {
-        const divChannels = divConfig.channels as any;
-        const divEvents = divConfig.events as any;
-
-        resolvedChannels = this.mergeChannels(resolvedChannels, divChannels);
-        resolvedEvents = this.mergeEvents(resolvedEvents, divEvents);
-
-        // Update inheritance for overridden items
-        for (const [ch, cfg] of Object.entries(divChannels)) {
-          if (!(cfg as any).inherit) {
-            inheritance.channels[ch] = { source: 'division', scopeType: 'DIVISION', scopeId: scopeContext.divisionId };
-          }
-        }
-        for (const [ev, cfg] of Object.entries(divEvents)) {
-          if (!(cfg as any).inherit) {
-            inheritance.events[ev] = { source: 'division', scopeType: 'DIVISION', scopeId: scopeContext.divisionId };
-          }
-        }
-      }
-    }
-
-    // 3. Apply delegation override if present
-    if (scopeContext?.delegationId) {
-      const delConfig = await this.prisma.notificationConfig.findUnique({
-        where: {
-          tenantId_scopeType_scopeId: {
-            tenantId,
-            scopeType: 'DELEGATION',
-            scopeId: scopeContext.delegationId,
-          },
-        },
+    // 2. Apply delegation override if present
+    if (delegationId) {
+      const delConfig = await this.prisma.notificationConfig.findFirst({
+        where: { tenantId, delegationId },
       });
 
       if (delConfig) {
@@ -173,12 +137,12 @@ export class NotificationConfigService {
 
         for (const [ch, cfg] of Object.entries(delChannels)) {
           if (!(cfg as any).inherit) {
-            inheritance.channels[ch] = { source: 'delegation', scopeType: 'DELEGATION', scopeId: scopeContext.delegationId };
+            inheritance.channels[ch] = { source: 'delegation', delegationId };
           }
         }
         for (const [ev, cfg] of Object.entries(delEvents)) {
           if (!(cfg as any).inherit) {
-            inheritance.events[ev] = { source: 'delegation', scopeType: 'DELEGATION', scopeId: scopeContext.delegationId };
+            inheritance.events[ev] = { source: 'delegation', delegationId };
           }
         }
       }
@@ -193,7 +157,7 @@ export class NotificationConfigService {
   async getAllConfigs(tenantId: string) {
     return this.prisma.notificationConfig.findMany({
       where: { tenantId },
-      orderBy: { scopeType: 'asc' },
+      orderBy: { createdAt: 'asc' },
     });
   }
 

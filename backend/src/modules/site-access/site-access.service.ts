@@ -1,18 +1,15 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { GrantSiteAccessDto, BulkGrantSiteAccessDto, UpdateSiteAccessDto, SiteAccessLevel, ResourcePermissions, ResourcePermissionLevel } from './dto/grant-site-access.dto';
+import { SiteAccessLevel, ResourcePermissions, ResourcePermissionLevel } from './dto/grant-site-access.dto';
 
 /**
- * Permission resolution using UserScope + AccessGrant (Phase B).
- *
- * UserSiteAccess is DEPRECATED and NOT used in resolution.
+ * Permission resolution using UserDelegation + AccessGrant.
  *
  * 2 sources combined by MAX:
- * - UserScope: role applies fully on covered sites
+ * - UserDelegation: local role applies fully on delegation's sites
  * - AccessGrant: ADDITIVE partial permissions (only listed resourcePermissions)
  */
 
-// Numeric ordering for permission levels (for MAX comparison)
 const PERM_ORDER: Record<string, number> = {
   NONE: 0,
   READ: 1,
@@ -62,27 +59,16 @@ export class SiteAccessService {
   constructor(private prisma: PrismaClient) {}
 
   // ==========================================================================
-  // CORE PERMISSION RESOLUTION (UserScope + AccessGrant)
+  // CORE PERMISSION RESOLUTION (UserDelegation + AccessGrant)
   // ==========================================================================
 
   /**
-   * Resolve site IDs covered by a single UserScope
+   * Resolve site IDs covered by an AccessGrant scope
    */
-  private async resolveScopeSiteIds(tenantId: string, scopeType: string, scopeId: string | null): Promise<string[] | null> {
-    switch (scopeType) {
-      case 'TENANT':
+  private async resolveGrantScopeToSiteIds(tenantId: string, scope: string, scopeId: string | null): Promise<string[] | null> {
+    switch (scope) {
+      case 'ALL_SITES':
         return null; // all sites
-
-      case 'DIVISION': {
-        const sites = await this.prisma.site.findMany({
-          where: {
-            tenantId,
-            delegation: { divisionId: scopeId! },
-          },
-          select: { id: true },
-        });
-        return sites.map(s => s.id);
-      }
 
       case 'DELEGATION': {
         const sites = await this.prisma.site.findMany({
@@ -101,23 +87,12 @@ export class SiteAccessService {
   }
 
   /**
-   * Check if a specific site is covered by a scope
+   * Check if a specific site is covered by an AccessGrant scope
    */
-  private async isSiteCoveredByScope(tenantId: string, scopeType: string, scopeId: string | null, siteId: string): Promise<boolean> {
-    switch (scopeType) {
-      case 'TENANT':
+  private async isSiteCoveredByGrantScope(tenantId: string, scope: string, scopeId: string | null, siteId: string): Promise<boolean> {
+    switch (scope) {
+      case 'ALL_SITES':
         return true;
-
-      case 'DIVISION': {
-        const site = await this.prisma.site.findFirst({
-          where: {
-            id: siteId,
-            tenantId,
-            delegation: { divisionId: scopeId! },
-          },
-        });
-        return !!site;
-      }
 
       case 'DELEGATION': {
         const site = await this.prisma.site.findFirst({
@@ -136,20 +111,24 @@ export class SiteAccessService {
 
   /**
    * Get accessible site IDs for a user (for filtering queries).
-   * Returns null if user has access to ALL sites.
+   * Returns null if user has access to ALL sites (super admin).
    *
-   * Uses UserScope + AccessGrant ONLY (no UserSiteAccess).
+   * Uses UserDelegation + AccessGrant.
    */
   async getAccessibleSiteIds(tenantId: string, userId: string): Promise<string[] | null> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      select: { role: true },
+      select: { isSuperAdmin: true },
     });
     if (!user) return [];
 
-    // Load user scopes
-    const scopes = await this.prisma.userScope.findMany({
+    // Super admin sees all sites
+    if (user.isSuperAdmin) return null;
+
+    // Load user delegations
+    const delegations = await this.prisma.userDelegation.findMany({
       where: { tenantId, userId },
+      select: { delegationId: true },
     });
 
     // Load non-expired access grants
@@ -164,20 +143,20 @@ export class SiteAccessService {
       },
     });
 
-    // If no scopes and no grants → no access
-    if (scopes.length === 0 && grants.length === 0) return [];
+    // If no delegations and no grants → no access
+    if (delegations.length === 0 && grants.length === 0) return [];
 
-    // Resolve scopes to site IDs
-    const allSiteIds = new Set<string>();
-    for (const scope of scopes) {
-      const ids = await this.resolveScopeSiteIds(tenantId, scope.scopeType, scope.scopeId);
-      if (ids === null) return null; // TENANT scope → all sites
-      ids.forEach(id => allSiteIds.add(id));
-    }
+    // Resolve delegations to site IDs
+    const delegationIds = delegations.map(d => d.delegationId);
+    const sites = await this.prisma.site.findMany({
+      where: { tenantId, delegationId: { in: delegationIds } },
+      select: { id: true },
+    });
+    const allSiteIds = new Set<string>(sites.map(s => s.id));
 
     // Resolve grants to site IDs
     for (const grant of grants) {
-      const ids = await this.resolveScopeSiteIds(tenantId, grant.scope === 'ALL_SITES' ? 'TENANT' : grant.scope, grant.scopeId);
+      const ids = await this.resolveGrantScopeToSiteIds(tenantId, grant.scope, grant.scopeId);
       if (ids === null) return null; // ALL_SITES grant → all sites
       ids.forEach(id => allSiteIds.add(id));
     }
@@ -187,7 +166,6 @@ export class SiteAccessService {
 
   /**
    * Get accessible site IDs filtered by per-resource permissions.
-   * Uses UserScope + AccessGrant ONLY.
    */
   async getAccessibleSiteIdsForResource(
     tenantId: string,
@@ -196,13 +174,16 @@ export class SiteAccessService {
   ): Promise<string[] | null> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      select: { role: true },
+      select: { isSuperAdmin: true },
     });
     if (!user) return [];
 
-    // Load user scopes
-    const scopes = await this.prisma.userScope.findMany({
+    if (user.isSuperAdmin) return null;
+
+    // Load user delegations with roles
+    const delegations = await this.prisma.userDelegation.findMany({
       where: { tenantId, userId },
+      select: { delegationId: true, role: true },
     });
 
     // Load non-expired access grants
@@ -217,19 +198,19 @@ export class SiteAccessService {
       },
     });
 
-    if (scopes.length === 0 && grants.length === 0) return [];
+    if (delegations.length === 0 && grants.length === 0) return [];
 
-    // Check if role grants any access on this resource
-    const roleLevel = roleToPermission(user.role, resource);
-
-    // Scopes: if role has access to resource → include all scope sites
     const allSiteIds = new Set<string>();
 
-    if (roleLevel !== ResourcePermissionLevel.NONE) {
-      for (const scope of scopes) {
-        const ids = await this.resolveScopeSiteIds(tenantId, scope.scopeType, scope.scopeId);
-        if (ids === null) return null; // TENANT → all sites
-        ids.forEach(id => allSiteIds.add(id));
+    // Delegations: check if local role grants access on this resource
+    for (const del of delegations) {
+      const roleLevel = roleToPermission(del.role, resource);
+      if (roleLevel !== ResourcePermissionLevel.NONE) {
+        const sites = await this.prisma.site.findMany({
+          where: { tenantId, delegationId: del.delegationId },
+          select: { id: true },
+        });
+        sites.forEach(s => allSiteIds.add(s.id));
       }
     }
 
@@ -239,7 +220,7 @@ export class SiteAccessService {
       if (grantPerms && resource in grantPerms) {
         const level = (grantPerms as any)[resource];
         if (level && level !== ResourcePermissionLevel.NONE) {
-          const ids = await this.resolveScopeSiteIds(tenantId, grant.scope === 'ALL_SITES' ? 'TENANT' : grant.scope, grant.scopeId);
+          const ids = await this.resolveGrantScopeToSiteIds(tenantId, grant.scope, grant.scopeId);
           if (ids === null) return null;
           ids.forEach(id => allSiteIds.add(id));
         }
@@ -253,10 +234,8 @@ export class SiteAccessService {
    * Get the effective permission level for a user on a specific resource within a site.
    *
    * Resolution (MAX of 2 sources):
-   * 1. UserScopes: if site is covered → full role permission for this resource
+   * 1. UserDelegation: if site belongs to user's delegation → local role permission
    * 2. AccessGrants: if site is covered AND resource is listed → grant's permission level
-   *
-   * UserSiteAccess is NOT used.
    */
   async getResourcePermission(
     tenantId: string,
@@ -266,23 +245,28 @@ export class SiteAccessService {
   ): Promise<ResourcePermissionLevel> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      select: { role: true },
+      select: { isSuperAdmin: true },
     });
     if (!user) return ResourcePermissionLevel.NONE;
 
+    // Super admin gets WRITE on everything
+    if (user.isSuperAdmin) return ResourcePermissionLevel.WRITE;
+
     let maxLevel = ResourcePermissionLevel.NONE;
 
-    // SOURCE 1: UserScopes (role applies fully on covered sites)
-    const scopes = await this.prisma.userScope.findMany({
-      where: { tenantId, userId },
+    // SOURCE 1: UserDelegation (local role applies on delegation's sites)
+    const site = await this.prisma.site.findFirst({
+      where: { id: siteId, tenantId },
+      select: { delegationId: true },
     });
 
-    for (const scope of scopes) {
-      const covered = await this.isSiteCoveredByScope(tenantId, scope.scopeType, scope.scopeId, siteId);
-      if (covered) {
-        const roleLevel = roleToPermission(user.role, resource);
+    if (site?.delegationId) {
+      const userDelegation = await this.prisma.userDelegation.findUnique({
+        where: { userId_delegationId: { userId, delegationId: site.delegationId } },
+      });
+      if (userDelegation) {
+        const roleLevel = roleToPermission(userDelegation.role, resource);
         maxLevel = maxPerm(maxLevel, roleLevel);
-        break; // One scope covering = full role, no need to check more
       }
     }
 
@@ -305,9 +289,7 @@ export class SiteAccessService {
       const grantLevel = (grantPerms as any)[resource] as ResourcePermissionLevel;
       if (!grantLevel || grantLevel === ResourcePermissionLevel.NONE) continue;
 
-      // Check if the site is covered by this grant's scope
-      const grantScopeType = grant.scope === 'ALL_SITES' ? 'TENANT' : grant.scope;
-      const covered = await this.isSiteCoveredByScope(tenantId, grantScopeType, grant.scopeId, siteId);
+      const covered = await this.isSiteCoveredByGrantScope(tenantId, grant.scope, grant.scopeId, siteId);
       if (covered) {
         maxLevel = maxPerm(maxLevel, grantLevel);
       }
@@ -318,7 +300,6 @@ export class SiteAccessService {
 
   /**
    * Check if a user has access to a specific site.
-   * Uses UserScope + AccessGrant ONLY.
    */
   async checkAccess(tenantId: string, userId: string, siteId: string, requiredLevel?: SiteAccessLevel): Promise<boolean> {
     const perm = await this.getResourcePermission(tenantId, userId, siteId, 'sites');
@@ -331,193 +312,50 @@ export class SiteAccessService {
   }
 
   /**
-   * Get user IDs that are visible to a scoped user.
-   * A user is visible if any of their scopes overlap with the requesting user's scope.
-   * Returns null if the requesting user has TENANT scope (sees all users).
+   * Get user IDs that are visible to a requesting user.
+   * Users are visible if they share at least one delegation.
+   * Returns null if the requesting user is super admin (sees all).
    */
   async getVisibleUserIds(tenantId: string, requestingUserId: string): Promise<string[] | null> {
-    // Get requesting user's accessible site IDs
-    const accessibleSiteIds = await this.getAccessibleSiteIds(tenantId, requestingUserId);
-
-    // null = TENANT scope, sees all users
-    if (accessibleSiteIds === null) return null;
-
-    // Empty access = see no one (except self)
-    if (accessibleSiteIds.length === 0) return [requestingUserId];
-
-    // Find all users in the tenant who have scopes overlapping with the requesting user's sites
-    const allScopes = await this.prisma.userScope.findMany({
-      where: { tenantId },
-      select: { userId: true, scopeType: true, scopeId: true },
-    });
-
-    const visibleUserIds = new Set<string>();
-    visibleUserIds.add(requestingUserId); // Always see yourself
-
-    for (const scope of allScopes) {
-      if (visibleUserIds.has(scope.userId)) continue;
-
-      // TENANT scope users are visible to everyone (they manage the whole tenant)
-      if (scope.scopeType === 'TENANT') {
-        visibleUserIds.add(scope.userId);
-        continue;
-      }
-
-      // Resolve the target user's scope to site IDs
-      const scopeSiteIds = await this.resolveScopeSiteIds(tenantId, scope.scopeType, scope.scopeId);
-      if (scopeSiteIds === null) {
-        visibleUserIds.add(scope.userId);
-        continue;
-      }
-
-      // Check overlap
-      const hasOverlap = scopeSiteIds.some(id => accessibleSiteIds.includes(id));
-      if (hasOverlap) {
-        visibleUserIds.add(scope.userId);
-      }
-    }
-
-    // Also include users with access grants that overlap
-    const allGrants = await this.prisma.accessGrant.findMany({
-      where: {
-        tenantId,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-      },
-      select: { userId: true, scope: true, scopeId: true },
-    });
-
-    for (const grant of allGrants) {
-      if (visibleUserIds.has(grant.userId)) continue;
-
-      const grantScopeType = grant.scope === 'ALL_SITES' ? 'TENANT' : grant.scope;
-      const grantSiteIds = await this.resolveScopeSiteIds(tenantId, grantScopeType, grant.scopeId);
-      if (grantSiteIds === null) {
-        visibleUserIds.add(grant.userId);
-        continue;
-      }
-
-      const hasOverlap = grantSiteIds.some(id => accessibleSiteIds.includes(id));
-      if (hasOverlap) {
-        visibleUserIds.add(grant.userId);
-      }
-    }
-
-    return Array.from(visibleUserIds);
-  }
-
-  // ==========================================================================
-  // LEGACY METHODS (UserSiteAccess CRUD — kept for backward compat)
-  // These do NOT affect permission resolution.
-  // ==========================================================================
-
-  async grantAccess(tenantId: string, dto: GrantSiteAccessDto, grantedBy: string) {
     const user = await this.prisma.user.findFirst({
-      where: { id: dto.userId, tenantId },
+      where: { id: requestingUserId, tenantId },
+      select: { isSuperAdmin: true },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) return [requestingUserId];
 
-    const site = await this.prisma.site.findFirst({
-      where: { id: dto.siteId, tenantId },
+    // Super admin sees all users
+    if (user.isSuperAdmin) return null;
+
+    // Get requesting user's delegations
+    const myDelegations = await this.prisma.userDelegation.findMany({
+      where: { tenantId, userId: requestingUserId },
+      select: { delegationId: true },
     });
-    if (!site) throw new NotFoundException('Site not found');
 
-    return this.prisma.userSiteAccess.upsert({
+    if (myDelegations.length === 0) return [requestingUserId];
+
+    const myDelegationIds = myDelegations.map(d => d.delegationId);
+
+    // Find all users who share at least one delegation
+    const sharedDelegationUsers = await this.prisma.userDelegation.findMany({
       where: {
-        userId_siteId: { userId: dto.userId, siteId: dto.siteId },
-      },
-      update: {
-        accessLevel: dto.accessLevel || 'READ',
-        ...(dto.resourcePermissions !== undefined && { resourcePermissions: dto.resourcePermissions as any }),
-        grantedBy,
-        grantedAt: new Date(),
-      },
-      create: {
         tenantId,
-        userId: dto.userId,
-        siteId: dto.siteId,
-        accessLevel: dto.accessLevel || 'READ',
-        ...(dto.resourcePermissions !== undefined && { resourcePermissions: dto.resourcePermissions as any }),
-        grantedBy,
+        delegationId: { in: myDelegationIds },
       },
-      include: {
-        user: { select: { id: true, name: true, email: true, role: true } },
-        site: { select: { id: true, name: true, code: true } },
-      },
+      select: { userId: true },
+      distinct: ['userId'],
     });
-  }
 
-  async bulkGrantAccess(tenantId: string, dto: BulkGrantSiteAccessDto, grantedBy: string) {
-    const site = await this.prisma.site.findFirst({
-      where: { id: dto.siteId, tenantId },
-    });
-    if (!site) throw new NotFoundException('Site not found');
+    const visibleUserIds = new Set<string>(sharedDelegationUsers.map(u => u.userId));
+    visibleUserIds.add(requestingUserId);
 
-    const users = await this.prisma.user.findMany({
-      where: { id: { in: dto.userIds }, tenantId },
+    // Also include super admins (they're visible to everyone)
+    const superAdmins = await this.prisma.user.findMany({
+      where: { tenantId, isSuperAdmin: true },
       select: { id: true },
     });
-    const validUserIds = users.map((u) => u.id);
+    superAdmins.forEach(sa => visibleUserIds.add(sa.id));
 
-    const results = [];
-    for (const userId of validUserIds) {
-      const access = await this.prisma.userSiteAccess.upsert({
-        where: { userId_siteId: { userId, siteId: dto.siteId } },
-        update: { accessLevel: dto.accessLevel || 'READ', grantedBy, grantedAt: new Date() },
-        create: { tenantId, userId, siteId: dto.siteId, accessLevel: dto.accessLevel || 'READ', grantedBy },
-      });
-      results.push(access);
-    }
-
-    return { granted: results.length, skipped: dto.userIds.length - validUserIds.length };
-  }
-
-  async updateAccess(tenantId: string, accessId: string, dto: UpdateSiteAccessDto) {
-    const access = await this.prisma.userSiteAccess.findFirst({
-      where: { id: accessId, tenantId },
-    });
-    if (!access) throw new NotFoundException('Site access record not found');
-
-    const data: any = {};
-    if (dto.accessLevel) data.accessLevel = dto.accessLevel;
-    if (dto.resourcePermissions !== undefined) data.resourcePermissions = dto.resourcePermissions;
-
-    return this.prisma.userSiteAccess.update({
-      where: { id: accessId },
-      data,
-      include: {
-        user: { select: { id: true, name: true, email: true, role: true } },
-        site: { select: { id: true, name: true, code: true } },
-      },
-    });
-  }
-
-  async revokeAccess(tenantId: string, accessId: string) {
-    const access = await this.prisma.userSiteAccess.findFirst({
-      where: { id: accessId, tenantId },
-    });
-    if (!access) throw new NotFoundException('Site access record not found');
-
-    await this.prisma.userSiteAccess.delete({ where: { id: accessId } });
-    return { message: 'Access revoked successfully' };
-  }
-
-  async listBySite(tenantId: string, siteId: string) {
-    return this.prisma.userSiteAccess.findMany({
-      where: { tenantId, siteId },
-      include: {
-        user: { select: { id: true, name: true, email: true, role: true, avatarUrl: true } },
-      },
-      orderBy: { grantedAt: 'desc' },
-    });
-  }
-
-  async listByUser(tenantId: string, userId: string) {
-    return this.prisma.userSiteAccess.findMany({
-      where: { tenantId, userId },
-      include: {
-        site: { select: { id: true, name: true, code: true, status: true } },
-      },
-      orderBy: { grantedAt: 'desc' },
-    });
+    return Array.from(visibleUserIds);
   }
 }

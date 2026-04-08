@@ -21,6 +21,15 @@ class ApiClient {
     this.baseURL = baseURL;
   }
 
+  /**
+   * Get the active delegation ID from localStorage.
+   * Used to inject X-Delegation-Id header on operational requests.
+   */
+  private getActiveDelegationId(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('xch-active-delegation');
+  }
+
   private async refreshToken(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
     if (this.isRefreshing) return false; // Prevent concurrent refresh
@@ -52,11 +61,21 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    // Inject X-Delegation-Id header on operational requests (skip admin routes)
+    const delegationHeaders: Record<string, string> = {};
+    if (!endpoint.startsWith('/api/admin/') && !endpoint.startsWith('/api/auth/') && !endpoint.startsWith('/api/setup')) {
+      const delegationId = this.getActiveDelegationId();
+      if (delegationId) {
+        delegationHeaders['X-Delegation-Id'] = delegationId;
+      }
+    }
+
     const config: RequestInit = {
       ...options,
       credentials: 'include', // ✅ CRITICAL - sends/receives cookies automatically
       headers: {
         'Content-Type': 'application/json',
+        ...delegationHeaders,
         ...options.headers,
       },
     };

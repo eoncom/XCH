@@ -4,7 +4,6 @@ import { ResourcePermissions } from '../../site-access/dto/grant-site-access.dto
 
 export enum AccessScopeDto {
   ALL_SITES = 'ALL_SITES',
-  DIVISION = 'DIVISION',
   DELEGATION = 'DELEGATION',
   SITE = 'SITE',
 }

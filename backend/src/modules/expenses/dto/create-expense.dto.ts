@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, IsNumber, IsArray, IsDateString, ValidateNested, Min, Max, IsIn } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsNumber, IsArray, IsDateString, ValidateNested, Min, Max, IsNotEmpty } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ExpenseType, ExpenseFrequency } from '@prisma/client';
@@ -47,35 +47,26 @@ export class CreateExpenseDto {
   @ApiProperty() @IsString()
   bearerId: string;
 
-  // Scope organisationnel
-  @ApiPropertyOptional({ description: 'Scope type: DIVISION, DELEGATION, SITE' })
-  @IsOptional()
-  @IsIn(['DIVISION', 'DELEGATION', 'SITE'])
-  scopeType?: string;
+  @ApiProperty({ description: 'Delegation ID (required for expenses, R2)' })
+  @IsString()
+  @IsNotEmpty()
+  delegationId: string;
 
-  @ApiPropertyOptional({ description: 'ID of the scoped entity' })
+  @ApiPropertyOptional({ description: 'Site ID — optional site-level attachment (R1)' })
   @IsOptional()
   @IsString()
-  scopeId?: string;
+  siteId?: string;
 
-  // Vendor — FK vers Contact
   @ApiPropertyOptional({ description: 'Vendor contact ID (from Contacts module)' })
   @IsOptional()
   @IsString()
   vendorId?: string;
-
-  // DEPRECATED
-  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
-  siteId?: string;
 
   @ApiPropertyOptional() @IsString() @IsOptional()
   assetId?: string;
 
   @ApiPropertyOptional() @IsString() @IsOptional()
   externalRef?: string;
-
-  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
-  vendor?: string;
 
   @ApiPropertyOptional() @IsString() @IsOptional()
   invoiceRef?: string;
@@ -124,30 +115,25 @@ export class UpdateExpenseDto {
   @ApiPropertyOptional() @IsString() @IsOptional()
   bearerId?: string;
 
-  @ApiPropertyOptional({ description: 'Scope type: DIVISION, DELEGATION, SITE (or null to clear)' })
+  @ApiPropertyOptional({ description: 'Delegation ID (required for expenses)' })
   @IsOptional()
-  @IsIn(['DIVISION', 'DELEGATION', 'SITE'])
-  scopeType?: string | null;
+  @IsString()
+  delegationId?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
-  scopeId?: string | null;
+  @ApiPropertyOptional({ description: 'Site ID (null to clear)' })
+  @IsOptional()
+  @IsString()
+  siteId?: string | null;
 
   @ApiPropertyOptional({ description: 'Vendor contact ID' })
   @IsOptional() @IsString()
   vendorId?: string | null;
-
-  // DEPRECATED
-  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
-  siteId?: string;
 
   @ApiPropertyOptional() @IsString() @IsOptional()
   assetId?: string;
 
   @ApiPropertyOptional() @IsString() @IsOptional()
   externalRef?: string;
-
-  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
-  vendor?: string;
 
   @ApiPropertyOptional() @IsString() @IsOptional()
   invoiceRef?: string;

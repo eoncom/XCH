@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, SiteStatus, AssetType, AssetStatus, TaskStatus, TaskPriority, RackType, RackStatus, ContactCategory, ScopeType } from '@prisma/client';
+import { PrismaClient, UserRole, SiteStatus, AssetType, AssetStatus, TaskStatus, TaskPriority, RackType, RackStatus, ContactCategory } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -48,6 +48,7 @@ async function main() {
       passwordHash: adminPassword,
       name: 'Sophie Administrateur',
       role: UserRole.ADMIN,
+      isSuperAdmin: true,
       active: true,
       phone: '+33 6 12 34 56 78',
     },
@@ -134,96 +135,59 @@ async function main() {
 
   console.log('✅ Users created: 5 total (1 admin, 1 manager, 2 techs, 1 viewer)');
 
-  // 2b. Create organizational structure: Divisions → Delegations
-  const divIDF = await prisma.division.create({
-    data: {
-      tenantId: tenant.id,
-      name: 'Île-de-France',
-      code: 'IDF',
-      color: '#0070f3',
-      notes: 'Division couvrant la région parisienne et ses environs',
-    },
-  });
-
-  const divRA = await prisma.division.create({
-    data: {
-      tenantId: tenant.id,
-      name: 'Rhône-Alpes',
-      code: 'RA',
-      color: '#10b981',
-      notes: 'Division couvrant la région Rhône-Alpes',
-    },
-  });
-
-  const divPACA = await prisma.division.create({
-    data: {
-      tenantId: tenant.id,
-      name: 'PACA',
-      code: 'PACA',
-      color: '#f59e0b',
-      notes: 'Division Provence-Alpes-Côte d\'Azur',
-    },
-  });
-
-  const divSO = await prisma.division.create({
-    data: {
-      tenantId: tenant.id,
-      name: 'Sud-Ouest',
-      code: 'SO',
-      color: '#8b5cf6',
-      notes: 'Division couvrant le grand Sud-Ouest',
-    },
-  });
-
-  console.log('✅ Divisions created: 4 (IDF, RA, PACA, SO)');
-
+  // 2b. Create organizational structure: Delegations (with groupLabel for visual grouping)
   const delParisOuest = await prisma.delegation.create({
     data: {
       tenantId: tenant.id,
-      divisionId: divIDF.id,
       name: 'Paris Ouest',
       code: 'PAR-O',
       notes: 'Délégation couvrant Paris ouest et La Défense',
+      groupLabel: 'Île-de-France',
+      groupColor: '#0070f3',
     },
   });
 
   const delLyon = await prisma.delegation.create({
     data: {
       tenantId: tenant.id,
-      divisionId: divRA.id,
       name: 'Lyon Métropole',
       code: 'LYN-M',
       notes: 'Délégation Grand Lyon',
+      groupLabel: 'Rhône-Alpes',
+      groupColor: '#10b981',
     },
   });
 
   const delMarseille = await prisma.delegation.create({
     data: {
       tenantId: tenant.id,
-      divisionId: divPACA.id,
       name: 'Marseille',
       code: 'MRS',
       notes: 'Délégation Marseille et environs',
+      groupLabel: 'PACA',
+      groupColor: '#f59e0b',
     },
   });
 
   const delBordeaux = await prisma.delegation.create({
     data: {
       tenantId: tenant.id,
-      divisionId: divSO.id,
       name: 'Bordeaux',
       code: 'BDX',
       notes: 'Délégation Bordeaux Métropole',
+      groupLabel: 'Sud-Ouest',
+      groupColor: '#8b5cf6',
     },
   });
 
   const delToulouse = await prisma.delegation.create({
     data: {
       tenantId: tenant.id,
-      divisionId: divSO.id,
       name: 'Toulouse',
       code: 'TLS',
       notes: 'Délégation Toulouse Métropole',
+      groupLabel: 'Sud-Ouest',
+      groupColor: '#8b5cf6',
     },
   });
 
@@ -386,35 +350,50 @@ async function main() {
 
   console.log('✅ Sites created: 5 total (with GPS coordinates)');
 
-  // 3b. Create UserScopes (who can access where)
-  // Admin → TENANT scope (full access)
-  await prisma.userScope.create({
-    data: { tenantId: tenant.id, userId: admin.id, scopeType: 'TENANT', scopeId: null, grantedBy: admin.id },
+  // 3b. Create UserDelegations (who can access where, with local role)
+  // Admin is isSuperAdmin=true, but also ADMIN on Paris Ouest for demo
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: admin.id, delegationId: delParisOuest.id, role: 'ADMIN', grantedBy: admin.id },
   });
-  // Manager → DIVISION IDF + DELEGATION Bordeaux (cross-division)
-  await prisma.userScope.create({
-    data: { tenantId: tenant.id, userId: manager.id, scopeType: 'DIVISION', scopeId: divIDF.id, grantedBy: admin.id },
+  // Manager → ADMIN on Paris Ouest + MANAGER on Bordeaux
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: manager.id, delegationId: delParisOuest.id, role: 'MANAGER', grantedBy: admin.id },
   });
-  await prisma.userScope.create({
-    data: { tenantId: tenant.id, userId: manager.id, scopeType: 'DELEGATION', scopeId: delBordeaux.id, grantedBy: admin.id },
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: manager.id, delegationId: delBordeaux.id, role: 'MANAGER', grantedBy: admin.id },
   });
-  // Tech1 → DELEGATION Lyon + SITE Marseille (cross-division)
-  await prisma.userScope.create({
-    data: { tenantId: tenant.id, userId: tech1.id, scopeType: 'DELEGATION', scopeId: delLyon.id, grantedBy: admin.id },
+  // Tech1 → TECHNICIEN on Lyon + Marseille
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: tech1.id, delegationId: delLyon.id, role: 'TECHNICIEN', grantedBy: admin.id },
   });
-  await prisma.userScope.create({
-    data: { tenantId: tenant.id, userId: tech1.id, scopeType: 'SITE', scopeId: site3.id, grantedBy: admin.id },
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: tech1.id, delegationId: delMarseille.id, role: 'TECHNICIEN', grantedBy: admin.id },
   });
-  // Tech2 → DIVISION Sud-Ouest (Bordeaux + Toulouse)
-  await prisma.userScope.create({
-    data: { tenantId: tenant.id, userId: tech2.id, scopeType: 'DIVISION', scopeId: divSO.id, grantedBy: admin.id },
+  // Tech2 → TECHNICIEN on Bordeaux + Toulouse
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: tech2.id, delegationId: delBordeaux.id, role: 'TECHNICIEN', grantedBy: admin.id },
   });
-  // Viewer → TENANT scope (read-only on everything)
-  await prisma.userScope.create({
-    data: { tenantId: tenant.id, userId: viewer.id, scopeType: 'TENANT', scopeId: null, grantedBy: admin.id },
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: tech2.id, delegationId: delToulouse.id, role: 'TECHNICIEN', grantedBy: admin.id },
+  });
+  // Viewer → VIEWER on all delegations
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: viewer.id, delegationId: delParisOuest.id, role: 'VIEWER', grantedBy: admin.id },
+  });
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: viewer.id, delegationId: delLyon.id, role: 'VIEWER', grantedBy: admin.id },
+  });
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: viewer.id, delegationId: delMarseille.id, role: 'VIEWER', grantedBy: admin.id },
+  });
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: viewer.id, delegationId: delBordeaux.id, role: 'VIEWER', grantedBy: admin.id },
+  });
+  await prisma.userDelegation.create({
+    data: { tenantId: tenant.id, userId: viewer.id, delegationId: delToulouse.id, role: 'VIEWER', grantedBy: admin.id },
   });
 
-  console.log('✅ UserScopes created: 7 (admin=tenant, manager=IDF+BDX, tech1=LYN+MRS, tech2=SO, viewer=tenant)');
+  console.log('✅ UserDelegations created: 12 (admin=PAR-O+superAdmin, manager=PAR-O+BDX, tech1=LYN+MRS, tech2=BDX+TLS, viewer=all)');
 
   // 3c. Create BillingEntities (cost centers)
   const beDSI = await prisma.billingEntity.create({
@@ -430,7 +409,7 @@ async function main() {
     data: { tenantId: tenant.id, name: 'Délégation Lyon Métropole', code: 'BE-LYN', type: 'DELEGATION', delegationId: delLyon.id },
   });
   const beSiteBDX = await prisma.billingEntity.create({
-    data: { tenantId: tenant.id, name: 'Site Bordeaux', code: 'BE-BDX', type: 'SITE', siteId: site4.id },
+    data: { tenantId: tenant.id, name: 'Site Bordeaux', code: 'BE-BDX', type: 'SITE', delegationId: delBordeaux.id, siteId: site4.id },
   });
   const beBUIT = await prisma.billingEntity.create({
     data: { tenantId: tenant.id, name: 'BU IT Services', code: 'BU-IT', type: 'BU', description: 'Business Unit IT interne' },
@@ -447,8 +426,8 @@ async function main() {
       frequency: 'ONE_TIME',
       dateIncurred: new Date('2026-01-15'),
       bearerId: beDSI.id,
+      delegationId: delParisOuest.id,
       siteId: site1.id,
-      vendor: 'Cisco',
       invoiceRef: 'FAC-2026-001',
       createdBy: admin.id,
       allocations: {
@@ -473,7 +452,7 @@ async function main() {
       dateStart: new Date('2026-01-01'),
       dateEnd: new Date('2026-12-31'),
       bearerId: beDSI.id,
-      vendor: 'NetworkPro',
+      delegationId: delParisOuest.id,
       externalRef: 'CTR-NET-2026',
       createdBy: admin.id,
       allocations: {
@@ -499,6 +478,7 @@ async function main() {
       dateStart: new Date('2026-02-01'),
       dateEnd: new Date('2027-01-31'),
       bearerId: beBUIT.id,
+      delegationId: delParisOuest.id,
       createdBy: admin.id,
       allocations: {
         create: [
@@ -519,8 +499,8 @@ async function main() {
       frequency: 'ONE_TIME',
       dateIncurred: new Date('2026-03-01'),
       bearerId: beDOP.id,
+      delegationId: delBordeaux.id,
       siteId: site4.id,
-      vendor: 'CableTech',
       poNumber: 'PO-2026-042',
       createdBy: admin.id,
       allocations: {
@@ -1137,7 +1117,7 @@ async function main() {
       manufacturer: 'Canon',
       serialNumber: 'PRINT-MRS-001',
       inventoryTag: 'MRS-PRINT-001',
-      status: AssetStatus.STORAGE,
+      status: AssetStatus.STOCK,
       notes: 'En stock - Installation prévue mars 2026',
     },
   });
@@ -1151,7 +1131,7 @@ async function main() {
       manufacturer: 'Cisco',
       serialNumber: 'SW-MRS-001',
       inventoryTag: 'MRS-SW-001',
-      status: AssetStatus.STORAGE,
+      status: AssetStatus.STOCK,
       notes: 'En stock datacenter Bordeaux - À déployer',
     },
   });
@@ -1988,11 +1968,11 @@ async function main() {
   console.log('  📎 Attachments: 5 (3 on assets, 2 on tasks)\n');
 
   console.log('🏢 ORGANISATION:');
-  console.log('  Division IDF → Délégation Paris Ouest → PAR-001');
-  console.log('  Division RA → Délégation Lyon Métropole → LYN-002');
-  console.log('  Division PACA → Délégation Marseille → MRS-003');
-  console.log('  Division SO → Délégation Bordeaux → BDX-004');
-  console.log('  Division SO → Délégation Toulouse → TLS-005\n');
+  console.log('  Délégation Paris Ouest [IDF] → PAR-001');
+  console.log('  Délégation Lyon Métropole [RA] → LYN-002');
+  console.log('  Délégation Marseille [PACA] → MRS-003');
+  console.log('  Délégation Bordeaux [SO] → BDX-004');
+  console.log('  Délégation Toulouse [SO] → TLS-005\n');
   console.log('📍 SITES DETAILS:');
   console.log('  1. Paris La Défense (PAR-001) - ACTIVE');
   console.log('     → 12 assets, 2 racks, 6 tasks');

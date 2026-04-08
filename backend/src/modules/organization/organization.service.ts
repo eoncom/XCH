@@ -1,7 +1,5 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { CreateDivisionDto } from './dto/create-division.dto';
-import { UpdateDivisionDto } from './dto/update-division.dto';
 import { CreateDelegationDto } from './dto/create-delegation.dto';
 import { UpdateDelegationDto } from './dto/update-delegation.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
@@ -14,112 +12,10 @@ export class OrganizationService {
   ) {}
 
   // ============================================================================
-  // DIVISIONS
-  // ============================================================================
-
-  async createDivision(tenantId: string, dto: CreateDivisionDto, userId?: string) {
-    const existing = await this.prisma.division.findUnique({
-      where: { tenantId_code: { tenantId, code: dto.code } },
-    });
-    if (existing) {
-      throw new ConflictException(`Division with code "${dto.code}" already exists`);
-    }
-
-    const division = await this.prisma.division.create({
-      data: { tenantId, ...dto },
-    });
-
-    await this.auditLogService.log({
-      tenantId, userId, action: 'CREATE', entityType: 'division', entityId: division.id,
-      changes: { after: { code: division.code, name: division.name } },
-    });
-
-    return division;
-  }
-
-  async findAllDivisions(tenantId: string, includeInactive = false) {
-    return this.prisma.division.findMany({
-      where: {
-        tenantId,
-        ...(includeInactive ? {} : { isActive: true }),
-      },
-      include: {
-        _count: { select: { delegations: true } },
-      },
-      orderBy: { name: 'asc' },
-    });
-  }
-
-  async findOneDivision(id: string, tenantId: string) {
-    const division = await this.prisma.division.findFirst({
-      where: { id, tenantId },
-      include: {
-        delegations: {
-          include: { _count: { select: { sites: true } } },
-          orderBy: { name: 'asc' },
-        },
-      },
-    });
-    if (!division) throw new NotFoundException('Division not found');
-    return division;
-  }
-
-  async updateDivision(id: string, tenantId: string, dto: UpdateDivisionDto, userId?: string) {
-    const division = await this.prisma.division.findFirst({ where: { id, tenantId } });
-    if (!division) throw new NotFoundException('Division not found');
-
-    if (dto.code && dto.code !== division.code) {
-      const existing = await this.prisma.division.findUnique({
-        where: { tenantId_code: { tenantId, code: dto.code } },
-      });
-      if (existing) throw new ConflictException(`Division with code "${dto.code}" already exists`);
-    }
-
-    const updated = await this.prisma.division.update({ where: { id }, data: dto });
-
-    await this.auditLogService.log({
-      tenantId, userId, action: 'UPDATE', entityType: 'division', entityId: id,
-      changes: { before: { code: division.code, name: division.name }, after: { code: updated.code, name: updated.name } },
-    });
-
-    return updated;
-  }
-
-  async removeDivision(id: string, tenantId: string, userId?: string) {
-    const division = await this.prisma.division.findFirst({
-      where: { id, tenantId },
-      include: { delegations: { include: { _count: { select: { sites: true } } } } },
-    });
-    if (!division) throw new NotFoundException('Division not found');
-
-    const sitesCount = division.delegations.reduce((sum, d) => sum + d._count.sites, 0);
-    if (sitesCount > 0) {
-      throw new BadRequestException(
-        `Cannot delete division "${division.name}": ${sitesCount} site(s) still assigned via its delegations. Transfer them first.`,
-      );
-    }
-
-    await this.prisma.division.delete({ where: { id } });
-
-    await this.auditLogService.log({
-      tenantId, userId, action: 'DELETE', entityType: 'division', entityId: id,
-      changes: { before: { code: division.code, name: division.name } },
-    });
-
-    return { deleted: true };
-  }
-
-  // ============================================================================
   // DELEGATIONS
   // ============================================================================
 
   async createDelegation(tenantId: string, dto: CreateDelegationDto, userId?: string) {
-    // Verify division exists and belongs to tenant
-    const division = await this.prisma.division.findFirst({
-      where: { id: dto.divisionId, tenantId },
-    });
-    if (!division) throw new NotFoundException('Division not found');
-
     const existing = await this.prisma.delegation.findUnique({
       where: { tenantId_code: { tenantId, code: dto.code } },
     });
@@ -129,27 +25,24 @@ export class OrganizationService {
 
     const delegation = await this.prisma.delegation.create({
       data: { tenantId, ...dto },
-      include: { division: { select: { id: true, name: true, code: true } } },
     });
 
     await this.auditLogService.log({
       tenantId, userId, action: 'CREATE', entityType: 'delegation', entityId: delegation.id,
-      changes: { after: { code: delegation.code, name: delegation.name, divisionCode: division.code } },
+      changes: { after: { code: delegation.code, name: delegation.name } },
     });
 
     return delegation;
   }
 
-  async findAllDelegations(tenantId: string, divisionId?: string, includeInactive = false) {
+  async findAllDelegations(tenantId: string, includeInactive = false) {
     return this.prisma.delegation.findMany({
       where: {
         tenantId,
-        ...(divisionId ? { divisionId } : {}),
         ...(includeInactive ? {} : { isActive: true }),
       },
       include: {
-        division: { select: { id: true, name: true, code: true, color: true } },
-        _count: { select: { sites: true } },
+        _count: { select: { sites: true, userDelegations: true } },
       },
       orderBy: { name: 'asc' },
     });
@@ -159,7 +52,6 @@ export class OrganizationService {
     const delegation = await this.prisma.delegation.findFirst({
       where: { id, tenantId },
       include: {
-        division: { select: { id: true, name: true, code: true, color: true } },
         sites: { select: { id: true, code: true, name: true, status: true } },
       },
     });
@@ -171,11 +63,6 @@ export class OrganizationService {
     const delegation = await this.prisma.delegation.findFirst({ where: { id, tenantId } });
     if (!delegation) throw new NotFoundException('Delegation not found');
 
-    if (dto.divisionId && dto.divisionId !== delegation.divisionId) {
-      const division = await this.prisma.division.findFirst({ where: { id: dto.divisionId, tenantId } });
-      if (!division) throw new NotFoundException('Target division not found');
-    }
-
     if (dto.code && dto.code !== delegation.code) {
       const existing = await this.prisma.delegation.findUnique({
         where: { tenantId_code: { tenantId, code: dto.code } },
@@ -186,7 +73,6 @@ export class OrganizationService {
     const updated = await this.prisma.delegation.update({
       where: { id },
       data: dto,
-      include: { division: { select: { id: true, name: true, code: true, color: true } } },
     });
 
     await this.auditLogService.log({
@@ -221,14 +107,9 @@ export class OrganizationService {
   }
 
   // ============================================================================
-  // ORGANIZATION TREE
+  // ORGANIZATION TREE (flat list of delegations with sites)
   // ============================================================================
 
-  /**
-   * Get organization tree, optionally filtered by accessible site IDs.
-   * If accessibleSiteIds is null, returns all sites (full tenant access).
-   * If accessibleSiteIds is an array, only includes those sites and prunes empty branches.
-   */
   async getTree(tenantId: string, includeInactive = false, accessibleSiteIds?: string[] | null) {
     const siteFilter: any = {};
     if (accessibleSiteIds !== null && accessibleSiteIds !== undefined) {
@@ -236,37 +117,26 @@ export class OrganizationService {
       siteFilter.id = { in: accessibleSiteIds };
     }
 
-    const divisions = await this.prisma.division.findMany({
+    const delegations = await this.prisma.delegation.findMany({
       where: {
         tenantId,
         ...(includeInactive ? {} : { isActive: true }),
       },
       include: {
-        delegations: {
-          where: includeInactive ? {} : { isActive: true },
-          include: {
-            sites: {
-              where: siteFilter,
-              select: { id: true, code: true, name: true, status: true, city: true },
-              orderBy: { name: 'asc' },
-            },
-          },
+        sites: {
+          where: siteFilter,
+          select: { id: true, code: true, name: true, status: true, city: true },
           orderBy: { name: 'asc' },
         },
       },
       orderBy: { name: 'asc' },
     });
 
-    // Prune empty branches: remove delegations with no sites, divisions with no delegations
+    // Prune empty delegations when filtering by accessible sites
     if (accessibleSiteIds !== null && accessibleSiteIds !== undefined) {
-      return divisions
-        .map(div => ({
-          ...div,
-          delegations: div.delegations.filter(del => del.sites.length > 0),
-        }))
-        .filter(div => div.delegations.length > 0);
+      return delegations.filter(del => del.sites.length > 0);
     }
 
-    return divisions;
+    return delegations;
   }
 }

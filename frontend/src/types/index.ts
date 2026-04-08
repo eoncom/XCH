@@ -6,6 +6,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  isSuperAdmin?: boolean;
   tenantId: string;
   avatarUrl?: string;
   phone?: string;
@@ -158,8 +159,7 @@ export interface Site {
   createdAt: string;
   updatedAt: string;
   // Organization info (populated by backend)
-  delegation?: { id: string; name: string; code: string };
-  division?: { id: string; name: string; code: string; color?: string };
+  delegation?: { id: string; name: string; code: string; groupLabel?: string; groupColor?: string };
 }
 
 // Asset types
@@ -443,8 +443,8 @@ export interface Contact {
   company?: string;
   role?: string;
   notes?: string;
-  scopeType?: string | null;
-  scopeId?: string | null;
+  delegationId?: string | null;
+  siteId?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -460,8 +460,8 @@ export interface CreateContactDto {
   company?: string;
   role?: string;
   notes?: string;
-  scopeType?: string | null;
-  scopeId?: string | null;
+  delegationId?: string | null;
+  siteId?: string | null;
 }
 
 export interface UpdateContactDto extends Partial<CreateContactDto> {
@@ -625,31 +625,8 @@ export interface NetboxRackRemote {
   role?: { id: number; name: string; slug: string };
 }
 
-// Site Access Control
+// Site Access Control (legacy type kept for backward compat)
 export type SiteAccessLevel = 'READ' | 'WRITE';
-
-export interface UserSiteAccess {
-  id: string;
-  tenantId: string;
-  userId: string;
-  siteId: string;
-  accessLevel: SiteAccessLevel;
-  grantedBy?: string;
-  grantedAt: string;
-  user?: {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    avatarUrl?: string;
-  };
-  site?: {
-    id: string;
-    name: string;
-    code: string;
-    status?: string;
-  };
-}
 
 // Pagination
 export interface PaginatedResponse<T> {

@@ -24,7 +24,7 @@ interface BackupMetadata {
   counts: Record<string, number>;
 }
 
-interface BackupListItem {
+export interface BackupListItem {
   id: string;
   filename: string;
   type: 'full' | 'site';
@@ -1001,7 +1001,7 @@ export class BackupService {
     const floorPlanIds = floorPlans.map(fp => fp.id);
     const taskIds = tasks.map(t => t.id);
 
-    const [pins, taskChecklist, taskComments, userSiteAccess, auditLogs, attachments] = await Promise.all([
+    const [pins, taskChecklist, taskComments, auditLogs, attachments] = await Promise.all([
       floorPlanIds.length
         ? this.prisma.pin.findMany({ where: { floorPlanId: { in: floorPlanIds } } })
         : [],
@@ -1011,7 +1011,6 @@ export class BackupService {
       taskIds.length
         ? this.prisma.taskComment.findMany({ where: { taskId: { in: taskIds } } })
         : [],
-      this.prisma.userSiteAccess.findMany({ where: { siteId } }),
       this.prisma.auditLog.findMany({
         where: { tenantId, entityType: 'site', entityId: siteId },
         take: 500,
@@ -1038,7 +1037,7 @@ export class BackupService {
       site: enrichedSite, assets, racks,
       'floor-plans': floorPlans, pins, tasks,
       'task-checklist': taskChecklist, 'task-comments': taskComments,
-      'user-site-access': userSiteAccess, 'audit-logs': auditLogs,
+      'audit-logs': auditLogs,
       attachments,
     };
   }
@@ -1555,14 +1554,8 @@ export class BackupService {
     const existing = await tx.delegation.findFirst({ where: { tenantId, code: 'IMPORT' } });
     if (existing) return existing.id;
 
-    let division = await tx.division.findFirst({ where: { tenantId, code: 'IMPORT' } });
-    if (!division) {
-      division = await tx.division.create({
-        data: { tenantId, name: 'Imports', code: 'IMPORT', notes: 'Division auto-créée pour les imports' },
-      });
-    }
     const delegation = await tx.delegation.create({
-      data: { tenantId, divisionId: division.id, name: 'Imports', code: 'IMPORT', notes: 'Délégation auto-créée pour les imports' },
+      data: { tenantId, name: 'Imports', code: 'IMPORT', notes: 'Délégation auto-créée pour les imports' },
     });
     return delegation.id;
   }

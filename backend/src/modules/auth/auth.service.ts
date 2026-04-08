@@ -1,14 +1,14 @@
 import { Injectable, UnauthorizedException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, UserRole, ScopeType } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { EmailService } from '../../common/services/email.service';
 
-interface SsoScopeEntry {
-  type: 'TENANT' | 'DIVISION' | 'DELEGATION' | 'SITE';
-  id?: string;
+interface SsoDelegationEntry {
+  delegationId: string;
+  role?: UserRole;
 }
 
 @Injectable()
@@ -84,6 +84,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       tenantId: user.tenantId,
+      isSuperAdmin: user.isSuperAdmin || false,
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: sessionTimeout });
@@ -108,6 +109,7 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
+        isSuperAdmin: user.isSuperAdmin || false,
         tenantId: user.tenantId,
         tenant: user.tenant,
         totpEnabled: user.totpEnabled || false,
@@ -148,7 +150,7 @@ export class AuthService {
     return result;
   }
 
-  async oidcLogin(profile: any, tenantId: string, role?: string, scopes?: SsoScopeEntry[]) {
+  async oidcLogin(profile: any, tenantId: string, role?: string, scopes?: SsoDelegationEntry[]) {
     const mappedRole = (role || 'VIEWER') as UserRole;
 
     let user = await this.prisma.user.findFirst({
@@ -183,45 +185,45 @@ export class AuthService {
       }
     }
 
-    // Sync UserScopes from SSO mapping (IdP is source of truth for scopes too)
+    // Sync UserDelegations from SSO mapping (IdP is source of truth for delegation access)
     if (scopes && scopes.length > 0) {
-      await this.syncSsoScopes(tenantId, user.id, scopes);
+      await this.syncSsoDelegations(tenantId, user.id, scopes);
     }
 
     return this.login(user);
   }
 
   /**
-   * Sync user scopes from SSO group mapping.
-   * Replaces all existing SSO-sourced scopes with the new ones from the IdP.
+   * Sync user delegation access from SSO group mapping.
+   * Replaces all existing SSO-sourced delegations with the new ones from the IdP.
    */
-  private async syncSsoScopes(tenantId: string, userId: string, scopes: SsoScopeEntry[]) {
+  private async syncSsoDelegations(tenantId: string, userId: string, delegations: SsoDelegationEntry[]) {
     try {
-      // Delete existing scopes (IdP is source of truth — full replace)
-      await this.prisma.userScope.deleteMany({
-        where: { userId, tenantId },
+      // Delete existing delegations granted by SSO (IdP is source of truth — full replace)
+      await this.prisma.userDelegation.deleteMany({
+        where: { userId, tenantId, grantedBy: 'sso' },
       });
 
-      // Create new scopes from SSO mapping
-      const scopeData = scopes.map((s) => ({
+      // Create new delegation access from SSO mapping
+      const delegationData = delegations.map((d) => ({
         tenantId,
         userId,
-        scopeType: s.type as ScopeType,
-        scopeId: s.id || null,
+        delegationId: d.delegationId,
+        role: d.role || ('VIEWER' as UserRole),
         grantedBy: 'sso',
       }));
 
-      if (scopeData.length > 0) {
-        await this.prisma.userScope.createMany({
-          data: scopeData,
+      if (delegationData.length > 0) {
+        await this.prisma.userDelegation.createMany({
+          data: delegationData,
           skipDuplicates: true,
         });
       }
 
-      this.logger.log(`Synced ${scopeData.length} scopes for SSO user ${userId}`);
+      this.logger.log(`Synced ${delegationData.length} delegation access for SSO user ${userId}`);
     } catch (error) {
-      this.logger.warn(`Failed to sync SSO scopes for user ${userId}: ${error.message}`);
-      // Don't fail login if scope sync fails
+      this.logger.warn(`Failed to sync SSO delegations for user ${userId}: ${error.message}`);
+      // Don't fail login if delegation sync fails
     }
   }
 

@@ -3,8 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { CreateExpenseDto, UpdateExpenseDto, AllocationDto } from './dto/create-expense.dto';
 import { FilterExpenseDto } from './dto/filter-expense.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
-import { validateScope } from '../../common/utils/scope-validation.util';
-import { resolveDescendantScopes } from '../../common/utils/scope-resolution.util';
+import { validateDelegationSiteCoherence } from '../../common/utils/delegation-site-validation.util';
 
 const EXPENSE_INCLUDE: any = {
   bearer: { select: { id: true, name: true, code: true, type: true } },
@@ -25,17 +24,8 @@ export class ExpensesService {
     });
     if (!bearer) throw new NotFoundException('Bearer billing entity not found');
 
-    // Auto-populate scopeType/scopeId from deprecated siteId
-    let { scopeType, scopeId } = dto;
-    if (!scopeType && !scopeId && dto.siteId) {
-      scopeType = 'SITE';
-      scopeId = dto.siteId;
-    }
-
-    // Validate scope
-    if (scopeType && scopeId) {
-      await validateScope(this.prisma as any, tenantId, scopeType, scopeId);
-    }
+    // Validate delegation/site coherence (R1) — delegationId is mandatory for expenses (R2)
+    await validateDelegationSiteCoherence(this.prisma as any, dto.delegationId, dto.siteId);
 
     // Validate vendorId references a PROVIDER contact
     if (dto.vendorId) {
@@ -63,13 +53,11 @@ export class ExpensesService {
         dateStart: rest.dateStart ? new Date(rest.dateStart) : null,
         dateEnd: rest.dateEnd ? new Date(rest.dateEnd) : null,
         bearerId: rest.bearerId,
-        scopeType: scopeType || null,
-        scopeId: scopeId || null,
+        delegationId: rest.delegationId,
+        siteId: rest.siteId || null,
         vendorId: rest.vendorId || null,
-        siteId: rest.siteId,
         assetId: rest.assetId,
         externalRef: rest.externalRef,
-        vendor: rest.vendor,
         invoiceRef: rest.invoiceRef,
         poNumber: rest.poNumber,
         notes: rest.notes,
@@ -98,7 +86,6 @@ export class ExpensesService {
     if (filters.search) {
       where.OR = [
         { label: { contains: filters.search, mode: 'insensitive' } },
-        { vendor: { contains: filters.search, mode: 'insensitive' } },
         { externalRef: { contains: filters.search, mode: 'insensitive' } },
         { vendorContact: { name: { contains: filters.search, mode: 'insensitive' } } },
         { vendorContact: { company: { contains: filters.search, mode: 'insensitive' } } },
@@ -113,31 +100,11 @@ export class ExpensesService {
       where.allocations = { some: { targetId: filters.targetId } };
     }
 
-    // Direct scope filter
-    if (filters.scopeType) {
-      where.scopeType = filters.scopeType;
-      if (filters.scopeId) where.scopeId = filters.scopeId;
-    }
+    // Delegation filter
+    if (filters.delegationId) where.delegationId = filters.delegationId;
 
-    // Hierarchical scope filter: include expenses at this scope + all descendants + tenant-wide
-    if (filters.forScopeType && filters.forScopeId) {
-      const descendants = await resolveDescendantScopes(
-        this.prisma as any,
-        filters.forScopeType,
-        filters.forScopeId,
-      );
-      const scopeConditions = [
-        { scopeType: null }, // Tenant-wide
-        ...descendants.map((d) => ({ scopeType: d.scopeType, scopeId: d.scopeId })),
-      ];
-      if (where.OR) {
-        // Merge with existing search OR
-        where.AND = [{ OR: where.OR }, { OR: scopeConditions }];
-        delete where.OR;
-      } else {
-        where.OR = scopeConditions;
-      }
-    }
+    // Site filter
+    if (filters.siteId) where.siteId = filters.siteId;
 
     const page = filters.page ?? 1;
     const pageSize = filters.pageSize ?? 25;
@@ -184,12 +151,10 @@ export class ExpensesService {
       if (!bearer) throw new NotFoundException('Bearer billing entity not found');
     }
 
-    // Validate scope if changing
-    const scopeType = dto.scopeType !== undefined ? dto.scopeType : (expense as any).scopeType;
-    const scopeId = dto.scopeId !== undefined ? dto.scopeId : (expense as any).scopeId;
-    if (scopeType && scopeId) {
-      await validateScope(this.prisma as any, tenantId, scopeType, scopeId);
-    }
+    // Validate delegation/site coherence if changing (R1)
+    const delegationId = 'delegationId' in dto ? dto.delegationId : (expense as any).delegationId;
+    const siteId = 'siteId' in dto ? dto.siteId : (expense as any).siteId;
+    await validateDelegationSiteCoherence(this.prisma as any, delegationId, siteId);
 
     // Validate vendorId if changing
     if (dto.vendorId) {
@@ -201,14 +166,8 @@ export class ExpensesService {
     if (dto.dateIncurred) data.dateIncurred = new Date(dto.dateIncurred);
     if (dto.dateStart !== undefined) data.dateStart = dto.dateStart ? new Date(dto.dateStart) : null;
     if (dto.dateEnd !== undefined) data.dateEnd = dto.dateEnd ? new Date(dto.dateEnd) : null;
-    // Handle explicit null for scope clearing
-    if (dto.scopeType === null) {
-      data.scopeType = null;
-      data.scopeId = null;
-    }
-    if (dto.vendorId === null) {
-      data.vendorId = null;
-    }
+    if (dto.vendorId === null) data.vendorId = null;
+    if ('siteId' in dto && dto.siteId === null) data.siteId = null;
 
     // If allocations provided, replace them
     if (allocations !== undefined) {
@@ -257,22 +216,14 @@ export class ExpensesService {
 
   // ========== REPORTS ==========
 
-  async reportByBearer(tenantId: string, filters?: { dateFrom?: string; dateTo?: string; scopeType?: string; scopeId?: string }) {
+  async reportByBearer(tenantId: string, filters?: { dateFrom?: string; dateTo?: string; delegationId?: string }) {
     const where: any = { tenantId };
     if (filters?.dateFrom || filters?.dateTo) {
       where.dateIncurred = {};
       if (filters.dateFrom) where.dateIncurred.gte = new Date(filters.dateFrom);
       if (filters.dateTo) where.dateIncurred.lte = new Date(filters.dateTo);
     }
-
-    // Scope filter for reports
-    if (filters?.scopeType && filters?.scopeId) {
-      const descendants = await resolveDescendantScopes(this.prisma as any, filters.scopeType, filters.scopeId);
-      where.OR = [
-        { scopeType: null },
-        ...descendants.map((d) => ({ scopeType: d.scopeType, scopeId: d.scopeId })),
-      ];
-    }
+    if (filters?.delegationId) where.delegationId = filters.delegationId;
 
     const expenses = await this.prisma.expense.findMany({
       where,
@@ -314,21 +265,14 @@ export class ExpensesService {
     return Array.from(bearerMap.values()).sort((a, b) => b.totalBorne - a.totalBorne);
   }
 
-  async reportByTarget(tenantId: string, filters?: { dateFrom?: string; dateTo?: string; scopeType?: string; scopeId?: string }) {
+  async reportByTarget(tenantId: string, filters?: { dateFrom?: string; dateTo?: string; delegationId?: string }) {
     const expenseWhere: any = { tenantId };
     if (filters?.dateFrom || filters?.dateTo) {
       expenseWhere.dateIncurred = {};
       if (filters.dateFrom) expenseWhere.dateIncurred.gte = new Date(filters.dateFrom);
       if (filters.dateTo) expenseWhere.dateIncurred.lte = new Date(filters.dateTo);
     }
-
-    if (filters?.scopeType && filters?.scopeId) {
-      const descendants = await resolveDescendantScopes(this.prisma as any, filters.scopeType, filters.scopeId);
-      expenseWhere.OR = [
-        { scopeType: null },
-        ...descendants.map((d) => ({ scopeType: d.scopeType, scopeId: d.scopeId })),
-      ];
-    }
+    if (filters?.delegationId) expenseWhere.delegationId = filters.delegationId;
 
     const allocations = await this.prisma.costAllocation.findMany({
       where: { expense: expenseWhere },
@@ -381,8 +325,7 @@ export class ExpensesService {
             type: true,
             totalAmount: true,
             dateIncurred: true,
-            scopeType: true,
-            scopeId: true,
+            delegationId: true,
             bearer: { select: { id: true, name: true, code: true } },
           } as any,
         },

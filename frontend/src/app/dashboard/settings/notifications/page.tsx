@@ -23,9 +23,8 @@ import {
 import Link from 'next/link';
 
 const SCOPE_LABELS: Record<string, string> = {
-  TENANT: 'Tenant (global)',
-  DIVISION: 'Division',
-  DELEGATION: 'Délégation',
+  GLOBAL: 'Global',
+  DELEGATION: 'Par délégation',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -42,9 +41,9 @@ export default function NotificationsSettingsPage() {
   const tenantId = user?.tenantId || '';
   const isAdmin = user?.role === 'ADMIN';
 
-  // Scope selection
-  const [scopeType, setScopeType] = useState<string>('TENANT');
-  const [scopeId, setScopeId] = useState<string>(tenantId);
+  // Scope selection: global (null) or per-delegation
+  const [scopeMode, setScopeMode] = useState<string>('GLOBAL');
+  const [delegationId, setDelegationId] = useState<string | null>(null);
 
   // Local edited state
   const [editedChannels, setEditedChannels] = useState<Record<string, ChannelConfig>>({});
@@ -60,13 +59,7 @@ export default function NotificationsSettingsPage() {
     queryFn: notificationsApi.getMeta,
   });
 
-  // Fetch organization tree for scope selection
-  const { data: divisions } = useQuery({
-    queryKey: ['divisions'],
-    queryFn: () => organizationApi.getDivisions(),
-    enabled: isAdmin,
-  });
-
+  // Fetch delegations for scope selection
   const { data: delegations } = useQuery({
     queryKey: ['delegations'],
     queryFn: () => organizationApi.getDelegations(),
@@ -75,9 +68,9 @@ export default function NotificationsSettingsPage() {
 
   // Fetch config for selected scope
   const { data: config, isLoading: configLoading } = useQuery({
-    queryKey: ['notification-config', scopeType, scopeId],
-    queryFn: () => notificationsApi.getConfig(scopeType, scopeId),
-    enabled: !!scopeId,
+    queryKey: ['notification-config', delegationId],
+    queryFn: () => notificationsApi.getConfig(delegationId),
+    enabled: scopeMode === 'GLOBAL' || !!delegationId,
   });
 
   // Fetch logs
@@ -97,21 +90,20 @@ export default function NotificationsSettingsPage() {
     }
   }, [config]);
 
-  // Update scopeId when scopeType changes
+  // Reset delegationId when scope mode changes
   useEffect(() => {
-    if (scopeType === 'TENANT') {
-      setScopeId(tenantId);
+    if (scopeMode === 'GLOBAL') {
+      setDelegationId(null);
     } else {
-      setScopeId('');
+      setDelegationId('');
     }
-  }, [scopeType, tenantId]);
+  }, [scopeMode]);
 
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: () =>
       notificationsApi.saveConfig({
-        scopeType,
-        scopeId,
+        delegationId,
         channels: editedChannels,
         events: editedEvents,
       }),
@@ -143,7 +135,7 @@ export default function NotificationsSettingsPage() {
 
   // Reset to inheritance
   const resetMutation = useMutation({
-    mutationFn: () => notificationsApi.deleteConfig(scopeType, scopeId),
+    mutationFn: () => notificationsApi.deleteConfig(delegationId),
     onSuccess: () => {
       showToast.success('Configuration réinitialisée (héritage parent)');
       queryClient.invalidateQueries({ queryKey: ['notification-config'] });
@@ -234,7 +226,7 @@ export default function NotificationsSettingsPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          {scopeType !== 'TENANT' && (
+          {scopeMode !== 'GLOBAL' && delegationId && (
             <Button variant="outline" onClick={() => resetMutation.mutate()} size="sm">
               <RotateCcw className="h-4 w-4 mr-2" /> Réinitialiser (hériter)
             </Button>
@@ -250,40 +242,25 @@ export default function NotificationsSettingsPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Périmètre de configuration</CardTitle>
-          <CardDescription>Les configurations héritent du niveau supérieur : Tenant → Division → Délégation</CardDescription>
+          <CardDescription>Les configurations par délégation héritent de la configuration globale</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-4 items-end">
             <div className="w-48">
               <Label>Niveau</Label>
-              <Select value={scopeType} onValueChange={setScopeType}>
+              <Select value={scopeMode} onValueChange={setScopeMode}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="TENANT">Tenant (global)</SelectItem>
-                  {isAdmin && <SelectItem value="DIVISION">Division</SelectItem>}
-                  {isAdmin && <SelectItem value="DELEGATION">Délégation</SelectItem>}
+                  <SelectItem value="GLOBAL">Global</SelectItem>
+                  {isAdmin && <SelectItem value="DELEGATION">Par délégation</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
 
-            {scopeType === 'DIVISION' && divisions && (
-              <div className="w-64">
-                <Label>Division</Label>
-                <Select value={scopeId} onValueChange={setScopeId}>
-                  <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
-                  <SelectContent>
-                    {divisions.map((d: any) => (
-                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {scopeType === 'DELEGATION' && delegations && (
+            {scopeMode === 'DELEGATION' && delegations && (
               <div className="w-64">
                 <Label>Délégation</Label>
-                <Select value={scopeId} onValueChange={setScopeId}>
+                <Select value={delegationId || ''} onValueChange={setDelegationId}>
                   <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
                   <SelectContent>
                     {delegations.map((d: any) => (
@@ -294,9 +271,9 @@ export default function NotificationsSettingsPage() {
               </div>
             )}
 
-            {config?.isDefault && scopeType !== 'TENANT' && (
+            {config?.isDefault && scopeMode !== 'GLOBAL' && (
               <Badge variant="outline" className="text-blue-600 border-blue-200">
-                <Info className="h-3 w-3 mr-1" /> Hérite du parent
+                <Info className="h-3 w-3 mr-1" /> Hérite du global
               </Badge>
             )}
           </div>
@@ -327,7 +304,7 @@ export default function NotificationsSettingsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    {scopeType !== 'TENANT' && (
+                    {scopeMode !== 'GLOBAL' && (
                       <div className="flex items-center gap-2">
                         <Label className="text-xs text-muted-foreground">Hériter</Label>
                         <Switch
@@ -394,7 +371,7 @@ export default function NotificationsSettingsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    {scopeType !== 'TENANT' && (
+                    {scopeMode !== 'GLOBAL' && (
                       <div className="flex items-center gap-2">
                         <Label className="text-xs text-muted-foreground">Hériter</Label>
                         <Switch
@@ -452,7 +429,7 @@ export default function NotificationsSettingsPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-sm">{eventMeta.label}</span>
-                            {scopeType !== 'TENANT' && eventCfg.inherit && (
+                            {scopeMode !== 'GLOBAL' && eventCfg.inherit && (
                               <Badge variant="outline" className="text-xs text-blue-500 border-blue-200">hérité</Badge>
                             )}
                           </div>
@@ -485,7 +462,7 @@ export default function NotificationsSettingsPage() {
                             disabled={eventCfg.inherit}
                           />
                           {/* Inherit toggle */}
-                          {scopeType !== 'TENANT' && (
+                          {scopeMode !== 'GLOBAL' && (
                             <Button
                               variant="ghost"
                               size="sm"

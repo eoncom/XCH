@@ -43,61 +43,60 @@ export class NotificationController {
   }
 
   /**
-   * Get notification config for a specific scope.
+   * Get notification config for a delegation (or global if delegationId=null).
    */
-  @Get('config/:scopeType/:scopeId')
-  @ApiOperation({ summary: 'Get notification config for a scope' })
+  @Get('config')
+  @ApiOperation({ summary: 'Get notification config for a delegation or global' })
   async getConfig(
-    @Param('scopeType') scopeType: string,
-    @Param('scopeId') scopeId: string,
+    @Query('delegationId') delegationId: string | undefined,
     @Request() req: any,
   ) {
     const tenantId = req.user.tenantId;
-    await this.checkScopeAccess(req.user, scopeType, scopeId);
-    return this.configService.getConfig(tenantId, scopeType.toUpperCase(), scopeId);
+    const delId = delegationId || null;
+    await this.checkDelegationAccess(req.user, delId);
+    return this.configService.getConfig(tenantId, delId);
   }
 
   /**
-   * Get the resolved (effective) config for a scope, with inheritance applied.
+   * Get the resolved (effective) config for a delegation, with inheritance applied.
    */
   @Get('config/resolved')
-  @ApiOperation({ summary: 'Get resolved config with inheritance for a scope context' })
+  @ApiOperation({ summary: 'Get resolved config with inheritance for a delegation' })
   async getResolvedConfig(
     @Query('delegationId') delegationId?: string,
-    @Query('divisionId') divisionId?: string,
     @Request() req?: any,
   ) {
     const tenantId = req.user.tenantId;
-    return this.configService.resolveConfig(tenantId, { delegationId, divisionId });
+    return this.configService.resolveConfig(tenantId, delegationId);
   }
 
   /**
-   * Save notification config for a scope.
+   * Save notification config for a delegation (or global).
    */
   @Put('config')
-  @ApiOperation({ summary: 'Save notification config for a scope' })
+  @ApiOperation({ summary: 'Save notification config' })
   async saveConfig(@Body() dto: SaveNotificationConfigDto, @Request() req: any) {
     const tenantId = req.user.tenantId;
-    await this.checkScopeAccess(req.user, dto.scopeType, dto.scopeId);
-    return this.configService.saveConfig(tenantId, dto.scopeType, dto.scopeId, {
+    const delegationId = dto.delegationId ?? null;
+    await this.checkDelegationAccess(req.user, delegationId);
+    return this.configService.saveConfig(tenantId, delegationId, {
       channels: dto.channels,
       events: dto.events,
     });
   }
 
   /**
-   * Delete notification config for a scope (revert to inheritance).
+   * Delete notification config for a delegation (revert to inheritance).
    */
-  @Delete('config/:scopeType/:scopeId')
-  @ApiOperation({ summary: 'Delete config for a scope (revert to inheritance)' })
+  @Delete('config/:delegationId')
+  @ApiOperation({ summary: 'Delete config for a delegation (revert to inheritance)' })
   async deleteConfig(
-    @Param('scopeType') scopeType: string,
-    @Param('scopeId') scopeId: string,
+    @Param('delegationId') delegationId: string,
     @Request() req: any,
   ) {
     const tenantId = req.user.tenantId;
-    await this.checkScopeAccess(req.user, scopeType, scopeId);
-    return this.configService.deleteConfig(tenantId, scopeType.toUpperCase(), scopeId);
+    await this.checkDelegationAccess(req.user, delegationId);
+    return this.configService.deleteConfig(tenantId, delegationId);
   }
 
   /**
@@ -133,67 +132,45 @@ export class NotificationController {
   // ──────────────── Access control ────────────────
 
   private requireAdmin(user: any) {
-    if (user.role !== 'ADMIN') {
+    const role = user.localRole || user.role;
+    if (role !== 'ADMIN' && !user.isSuperAdmin) {
       throw new ForbiddenException('Admin access required');
     }
   }
 
   private requireAdminOrManager(user: any) {
-    if (!['ADMIN', 'MANAGER'].includes(user.role)) {
+    const role = user.localRole || user.role;
+    if (!['ADMIN', 'MANAGER'].includes(role) && !user.isSuperAdmin) {
       throw new ForbiddenException('Admin or Manager access required');
     }
   }
 
   /**
-   * Check if the user has access to manage notifications for a given scope.
-   * - ADMIN: can manage all scopes
-   * - MANAGER: can manage division/delegation they belong to
+   * Check access to manage notification config for a delegation.
+   * - Super admin or isSuperAdmin: can manage all (including global)
+   * - Admin/Manager: can manage their own delegations
+   * - Global config (delegationId=null): super admin only
    */
-  private async checkScopeAccess(user: any, scopeType: string, scopeId: string) {
-    if (user.role === 'ADMIN') return; // Admin can do everything
+  private async checkDelegationAccess(user: any, delegationId: string | null) {
+    if (user.isSuperAdmin) return;
 
-    if (!['ADMIN', 'MANAGER'].includes(user.role)) {
+    const role = user.localRole || user.role;
+    if (!['ADMIN', 'MANAGER'].includes(role)) {
       throw new ForbiddenException('Admin or Manager access required');
     }
 
-    const upper = scopeType.toUpperCase();
-
-    if (upper === 'TENANT') {
-      throw new ForbiddenException('Only admins can manage tenant-level notifications');
+    // Global config is super admin only
+    if (delegationId === null) {
+      throw new ForbiddenException('Only super admins can manage global notification config');
     }
 
-    // For divisions/delegations, check user scopes
-    const scopes = await this.prisma.userScope.findMany({
-      where: { userId: user.sub || user.id },
+    // Check user has a UserDelegation for this delegation
+    const userDelegation = await this.prisma.userDelegation.findUnique({
+      where: { userId_delegationId: { userId: user.id, delegationId } },
     });
 
-    if (upper === 'DIVISION') {
-      const hasDivisionScope = scopes.some(
-        (s) =>
-          (s.scopeType === 'TENANT') ||
-          (s.scopeType === 'DIVISION' && s.scopeId === scopeId),
-      );
-      if (!hasDivisionScope) {
-        throw new ForbiddenException('You do not have access to this division');
-      }
-    }
-
-    if (upper === 'DELEGATION') {
-      // Check delegation → division → scope chain
-      const delegation = await this.prisma.delegation.findUnique({
-        where: { id: scopeId },
-      });
-      if (!delegation) throw new ForbiddenException('Delegation not found');
-
-      const hasDelegationScope = scopes.some(
-        (s) =>
-          (s.scopeType === 'TENANT') ||
-          (s.scopeType === 'DIVISION' && s.scopeId === delegation.divisionId) ||
-          (s.scopeType === 'DELEGATION' && s.scopeId === scopeId),
-      );
-      if (!hasDelegationScope) {
-        throw new ForbiddenException('You do not have access to this delegation');
-      }
+    if (!userDelegation) {
+      throw new ForbiddenException('You do not have access to this delegation');
     }
   }
 }

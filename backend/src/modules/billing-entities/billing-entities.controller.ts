@@ -27,22 +27,20 @@ export class BillingEntitiesController {
   @ApiQuery({ name: 'type', required: false })
   @ApiQuery({ name: 'isActive', required: false })
   @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'scopeType', required: false })
-  @ApiQuery({ name: 'scopeId', required: false })
-  @ApiQuery({ name: 'forScopeType', required: false, description: 'Hierarchical filter: include entities visible at this scope' })
-  @ApiQuery({ name: 'forScopeId', required: false })
+  @ApiQuery({ name: 'delegationId', required: false })
+  @ApiQuery({ name: 'siteId', required: false })
+  @ApiQuery({ name: 'includeGlobal', required: false })
   findAll(
     @Query('type') type: string,
     @Query('isActive') isActive: string,
     @Query('search') search: string,
-    @Query('scopeType') scopeType: string,
-    @Query('scopeId') scopeId: string,
-    @Query('forScopeType') forScopeType: string,
-    @Query('forScopeId') forScopeId: string,
+    @Query('delegationId') delegationId: string,
+    @Query('siteId') siteId: string,
+    @Query('includeGlobal') includeGlobal: string,
     @Request() req: AuthRequest,
   ) {
     return this.billingEntitiesService.findAll(req.user.tenantId, {
-      type, isActive, search, scopeType, scopeId, forScopeType, forScopeId,
+      type, isActive, search, delegationId, siteId, includeGlobal: includeGlobal !== 'false',
     });
   }
 

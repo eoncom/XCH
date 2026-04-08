@@ -73,7 +73,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sessionChecked, setSessionChecked] = useState(false);
   const { logoUrl, orgName } = useBranding();
   const { isModuleEnabled } = useTenantModules();
-  const { can, hasAnySiteAccess, hasScope, isLoadingPerms } = usePermissions();
+  const { can, hasAnySiteAccess, hasDelegation, isLoadingPerms, isSuperAdmin } = usePermissions();
 
   // Filter navigation based on enabled modules + permissions
   const filteredNavigation = useMemo(
@@ -140,10 +140,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  const isAdmin = user.role === 'ADMIN';
+  const isAdmin = user.role === 'ADMIN' || isSuperAdmin;
 
-  // No scope = no access — show blocking screen
-  const noAccess = hasScope === false;
+  // No delegation = no access — show blocking screen
+  const noAccess = hasDelegation === false;
 
   return (
     <div className="flex h-screen bg-background">
@@ -307,8 +307,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
               <div className="bg-muted/50 border rounded-lg p-4 w-full">
                 <p className="text-sm text-muted-foreground">
-                  Contactez un administrateur pour qu&apos;il vous attribue une portée d&apos;accès
-                  (tenant, division, délégation ou site).
+                  Contactez un administrateur pour qu&apos;il vous attribue une délégation.
                 </p>
               </div>
               <Button variant="outline" onClick={handleLogout}>

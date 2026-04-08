@@ -6,20 +6,18 @@ function buildContactParams(params?: {
   category?: string;
   search?: string;
   isActive?: boolean;
-  scopeType?: string;
-  scopeId?: string;
-  forScopeType?: string;
-  forScopeId?: string;
+  delegationId?: string;
+  siteId?: string;
+  includeGlobal?: boolean;
 }) {
   const searchParams = new URLSearchParams();
   if (params?.typeId) searchParams.append('typeId', params.typeId);
   if (params?.category) searchParams.append('category', params.category);
   if (params?.search) searchParams.append('search', params.search);
   if (params?.isActive !== undefined) searchParams.append('isActive', String(params.isActive));
-  if (params?.scopeType) searchParams.append('scopeType', params.scopeType);
-  if (params?.scopeId) searchParams.append('scopeId', params.scopeId);
-  if (params?.forScopeType) searchParams.append('forScopeType', params.forScopeType);
-  if (params?.forScopeId) searchParams.append('forScopeId', params.forScopeId);
+  if (params?.delegationId) searchParams.append('delegationId', params.delegationId);
+  if (params?.siteId) searchParams.append('siteId', params.siteId);
+  if (params?.includeGlobal !== undefined) searchParams.append('includeGlobal', String(params.includeGlobal));
   return searchParams;
 }
 
@@ -29,10 +27,9 @@ export const contactsApi = {
     category?: string;
     search?: string;
     isActive?: boolean;
-    scopeType?: string;
-    scopeId?: string;
-    forScopeType?: string;
-    forScopeId?: string;
+    delegationId?: string;
+    siteId?: string;
+    includeGlobal?: boolean;
   }): Promise<Contact[]> => {
     const searchParams = buildContactParams(params);
     const query = searchParams.toString();
@@ -45,10 +42,9 @@ export const contactsApi = {
     category?: string;
     search?: string;
     isActive?: boolean;
-    scopeType?: string;
-    scopeId?: string;
-    forScopeType?: string;
-    forScopeId?: string;
+    delegationId?: string;
+    siteId?: string;
+    includeGlobal?: boolean;
     page?: number;
     pageSize?: number;
   }) => {

@@ -71,16 +71,15 @@ export class SeedService {
       await this.prisma.billingEntity.deleteMany({ where: { tenantId } });
       // Access model tables
       await this.prisma.accessGrant.deleteMany({ where: { tenantId } });
-      await this.prisma.userScope.deleteMany({ where: { tenantId } });
-      // Sites (must delete before delegations/divisions)
+      await this.prisma.userDelegation.deleteMany({ where: { tenantId } });
+      // Sites (must delete before delegations)
       await this.prisma.site.deleteMany({ where: { tenantId } });
       // Organization
       await this.prisma.delegation.deleteMany({ where: { tenantId } });
-      await this.prisma.division.deleteMany({ where: { tenantId } });
       await this.prisma.contact.deleteMany({ where: { tenantId } });
       await this.prisma.contactType.deleteMany({ where: { tenantId } });
       await this.prisma.integrationMapping.deleteMany({ where: { tenantId } });
-      await this.prisma.userSiteAccess.deleteMany({ where: { tenantId } });
+      // userSiteAccess removed in delegation-first refactoring
       await this.prisma.auditLog.deleteMany({ where: { tenantId } });
 
       // Delete non-admin users
@@ -104,29 +103,19 @@ export class SeedService {
   // ============================================================================
 
   private async createOrganization(tenantId: string) {
-    const division = await this.prisma.division.upsert({
-      where: { tenantId_code: { tenantId, code: 'IDF' } },
-      update: {},
-      create: {
-        tenantId,
-        name: 'Île-de-France',
-        code: 'IDF',
-        color: '#0070f3',
-      },
-    });
-
     const delegation = await this.prisma.delegation.upsert({
       where: { tenantId_code: { tenantId, code: 'IDF-OUEST' } },
       update: {},
       create: {
         tenantId,
-        divisionId: division.id,
         name: 'IDF Ouest',
         code: 'IDF-OUEST',
+        groupLabel: 'Île-de-France',
+        groupColor: '#0070f3',
       },
     });
 
-    this.logger.log('Organization created: 1 division, 1 delegation');
+    this.logger.log('Organization created: 1 delegation');
     return { default: delegation.id };
   }
 

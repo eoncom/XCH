@@ -1,8 +1,7 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateBillingEntityDto, UpdateBillingEntityDto } from './dto/create-billing-entity.dto';
-import { validateScope } from '../../common/utils/scope-validation.util';
-import { resolveDescendantScopes } from '../../common/utils/scope-resolution.util';
+import { validateDelegationSiteCoherence } from '../../common/utils/delegation-site-validation.util';
 
 @Injectable()
 export class BillingEntitiesService {
@@ -15,18 +14,8 @@ export class BillingEntitiesService {
     });
     if (existing) throw new ConflictException(`Code "${dto.code}" already exists`);
 
-    // Auto-populate scopeType/scopeId from deprecated fields if not set
-    let { scopeType, scopeId } = dto;
-    if (!scopeType && !scopeId) {
-      if (dto.siteId) { scopeType = 'SITE'; scopeId = dto.siteId; }
-      else if (dto.delegationId) { scopeType = 'DELEGATION'; scopeId = dto.delegationId; }
-      else if (dto.divisionId) { scopeType = 'DIVISION'; scopeId = dto.divisionId; }
-    }
-
-    // Validate scope entity exists
-    if (scopeType && scopeId) {
-      await validateScope(this.prisma as any, tenantId, scopeType, scopeId);
-    }
+    // Validate delegation/site coherence (R1)
+    await validateDelegationSiteCoherence(this.prisma as any, dto.delegationId, dto.siteId);
 
     return this.prisma.billingEntity.create({
       data: {
@@ -36,11 +25,8 @@ export class BillingEntitiesService {
         type: dto.type,
         description: dto.description,
         isActive: dto.isActive,
-        scopeType: scopeType || null,
-        scopeId: scopeId || null,
-        divisionId: dto.divisionId,
-        delegationId: dto.delegationId,
-        siteId: dto.siteId,
+        delegationId: dto.delegationId || null,
+        siteId: dto.siteId || null,
       } as any,
     });
   }
@@ -51,10 +37,9 @@ export class BillingEntitiesService {
       type?: string;
       isActive?: string;
       search?: string;
-      scopeType?: string;
-      scopeId?: string;
-      forScopeType?: string;
-      forScopeId?: string;
+      delegationId?: string;
+      siteId?: string;
+      includeGlobal?: boolean;
     },
   ) {
     const where: any = { tenantId };
@@ -67,26 +52,25 @@ export class BillingEntitiesService {
       ];
     }
 
-    // Direct scope filter
-    if (filters?.scopeType) {
-      where.scopeType = filters.scopeType;
-      if (filters.scopeId) where.scopeId = filters.scopeId;
+    // Delegation-based filtering
+    if (filters?.delegationId) {
+      if (filters.includeGlobal !== false) {
+        const delegationCondition = [
+          { delegationId: filters.delegationId },
+          { delegationId: null },
+        ];
+        if (where.OR) {
+          where.AND = [{ OR: where.OR }, { OR: delegationCondition }];
+          delete where.OR;
+        } else {
+          where.OR = delegationCondition;
+        }
+      } else {
+        where.delegationId = filters.delegationId;
+      }
     }
 
-    // Hierarchical scope filter: include entities at this scope + all descendants + tenant-wide
-    if (filters?.forScopeType && filters?.forScopeId) {
-      const descendants = await resolveDescendantScopes(
-        this.prisma as any,
-        filters.forScopeType,
-        filters.forScopeId,
-      );
-      where.OR = [
-        { scopeType: null }, // Tenant-wide entities
-        ...descendants.map((d) => ({ scopeType: d.scopeType, scopeId: d.scopeId })),
-        // Also include if search was set (merge OR conditions)
-        ...(where.OR || []),
-      ];
-    }
+    if (filters?.siteId) where.siteId = filters.siteId;
 
     return this.prisma.billingEntity.findMany({
       where,
@@ -108,7 +92,6 @@ export class BillingEntitiesService {
     });
     if (!entity) throw new NotFoundException('Billing entity not found');
 
-    // Check code uniqueness if changing
     if (dto.code && dto.code !== entity.code) {
       const existing = await this.prisma.billingEntity.findUnique({
         where: { tenantId_code: { tenantId, code: dto.code } },
@@ -116,18 +99,15 @@ export class BillingEntitiesService {
       if (existing) throw new ConflictException(`Code "${dto.code}" already exists`);
     }
 
-    // Validate scope if changing
-    const scopeType = dto.scopeType !== undefined ? dto.scopeType : (entity as any).scopeType;
-    const scopeId = dto.scopeId !== undefined ? dto.scopeId : (entity as any).scopeId;
-    if (scopeType && scopeId) {
-      await validateScope(this.prisma as any, tenantId, scopeType, scopeId);
-    }
+    // Validate delegation/site coherence if changing (R1)
+    const delegationId = 'delegationId' in dto ? dto.delegationId : (entity as any).delegationId;
+    const siteId = 'siteId' in dto ? dto.siteId : (entity as any).siteId;
+    await validateDelegationSiteCoherence(this.prisma as any, delegationId, siteId);
 
     const data: any = { ...dto };
-    // Handle explicit null for scope clearing
-    if (dto.scopeType === null) {
-      data.scopeType = null;
-      data.scopeId = null;
+    if ('delegationId' in dto && dto.delegationId === null) {
+      data.delegationId = null;
+      data.siteId = null;
     }
 
     return this.prisma.billingEntity.update({
@@ -142,7 +122,6 @@ export class BillingEntitiesService {
     });
     if (!entity) throw new NotFoundException('Billing entity not found');
 
-    // Check for linked expenses
     const expenseCount = await this.prisma.expense.count({
       where: { bearerId: id },
     });
@@ -160,20 +139,15 @@ export class BillingEntitiesService {
     return { message: 'Billing entity deleted' };
   }
 
-  /**
-   * Get summary: total borne (as bearer), total imputed (as target), net balance
-   */
   async getSummary(tenantId: string, id: string) {
     const entity = await this.findOne(tenantId, id);
 
-    // Total expenses borne (bearer)
     const expenses = await this.prisma.expense.findMany({
       where: { bearerId: id },
       select: { totalAmount: true },
     });
     const totalBorne = expenses.reduce((sum, e) => sum + e.totalAmount, 0);
 
-    // Total refactured out (allocations FROM expenses of this bearer to other targets)
     const allocationsOut = await this.prisma.costAllocation.findMany({
       where: {
         expense: { bearerId: id },
@@ -183,7 +157,6 @@ export class BillingEntitiesService {
     });
     const totalRefactured = allocationsOut.reduce((sum, a) => sum + a.amount, 0);
 
-    // Total imputed (allocations received as target)
     const allocationsIn = await this.prisma.costAllocation.findMany({
       where: { targetId: id },
       select: { amount: true },

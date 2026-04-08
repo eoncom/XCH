@@ -78,7 +78,6 @@ export interface NotificationPayload {
   scopeContext?: {
     siteId?: string;
     delegationId?: string;
-    divisionId?: string;
   };
   /** Entity that triggered the notification */
   entity: {

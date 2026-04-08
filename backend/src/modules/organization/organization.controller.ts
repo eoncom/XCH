@@ -2,8 +2,6 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, 
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { SiteAccessService } from '../site-access/site-access.service';
-import { CreateDivisionDto } from './dto/create-division.dto';
-import { UpdateDivisionDto } from './dto/update-division.dto';
 import { CreateDelegationDto } from './dto/create-delegation.dto';
 import { UpdateDelegationDto } from './dto/update-delegation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -22,49 +20,6 @@ export class OrganizationController {
   ) {}
 
   // ============================================================================
-  // DIVISIONS
-  // ============================================================================
-
-  @Post('divisions')
-  @Resource('divisions') @Action('create')
-  @ApiOperation({ summary: 'Create a division' })
-  createDivision(@Body() dto: CreateDivisionDto, @Request() req: AuthRequest) {
-    return this.organizationService.createDivision(req.user.tenantId, dto, req.user.userId);
-  }
-
-  @Get('divisions')
-  @Resource('divisions') @Action('read')
-  @ApiOperation({ summary: 'List all divisions' })
-  @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
-  findAllDivisions(
-    @Query('includeInactive') includeInactive: string,
-    @Request() req: AuthRequest,
-  ) {
-    return this.organizationService.findAllDivisions(req.user.tenantId, includeInactive === 'true');
-  }
-
-  @Get('divisions/:id')
-  @Resource('divisions') @Action('read')
-  @ApiOperation({ summary: 'Get a division with its delegations' })
-  findOneDivision(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.organizationService.findOneDivision(id, req.user.tenantId);
-  }
-
-  @Patch('divisions/:id')
-  @Resource('divisions') @Action('update')
-  @ApiOperation({ summary: 'Update a division' })
-  updateDivision(@Param('id') id: string, @Body() dto: UpdateDivisionDto, @Request() req: AuthRequest) {
-    return this.organizationService.updateDivision(id, req.user.tenantId, dto, req.user.userId);
-  }
-
-  @Delete('divisions/:id')
-  @Resource('divisions') @Action('delete')
-  @ApiOperation({ summary: 'Delete a division (must have no sites)' })
-  removeDivision(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.organizationService.removeDivision(id, req.user.tenantId, req.user.userId);
-  }
-
-  // ============================================================================
   // DELEGATIONS
   // ============================================================================
 
@@ -77,15 +32,13 @@ export class OrganizationController {
 
   @Get('delegations')
   @Resource('delegations') @Action('read')
-  @ApiOperation({ summary: 'List all delegations (filterable by divisionId)' })
-  @ApiQuery({ name: 'divisionId', required: false })
+  @ApiOperation({ summary: 'List all delegations' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
   findAllDelegations(
-    @Query('divisionId') divisionId: string,
     @Query('includeInactive') includeInactive: string,
     @Request() req: AuthRequest,
   ) {
-    return this.organizationService.findAllDelegations(req.user.tenantId, divisionId, includeInactive === 'true');
+    return this.organizationService.findAllDelegations(req.user.tenantId, includeInactive === 'true');
   }
 
   @Get('delegations/:id')
@@ -114,8 +67,8 @@ export class OrganizationController {
   // ============================================================================
 
   @Get('organization/tree')
-  @Resource('divisions') @Action('read')
-  @ApiOperation({ summary: 'Get organization tree filtered by user scope' })
+  @Resource('delegations') @Action('read')
+  @ApiOperation({ summary: 'Get organization tree (delegations with sites) filtered by user access' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
   async getTree(
     @Query('includeInactive') includeInactive: string,

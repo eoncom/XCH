@@ -28,30 +28,20 @@ export class FilterExpenseDto extends PaginationDto {
   @IsString()
   dateTo?: string;
 
-  @ApiPropertyOptional({ description: 'Search by label, vendor, or external ref' })
+  @ApiPropertyOptional({ description: 'Search by label or external ref' })
   @IsOptional()
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by scope type (direct)' })
+  @ApiPropertyOptional({ description: 'Filter by delegation ID' })
   @IsOptional()
   @IsString()
-  scopeType?: string;
+  delegationId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by scope ID (direct)' })
+  @ApiPropertyOptional({ description: 'Filter by site ID' })
   @IsOptional()
   @IsString()
-  scopeId?: string;
-
-  @ApiPropertyOptional({ description: 'Hierarchical scope filter type' })
-  @IsOptional()
-  @IsString()
-  forScopeType?: string;
-
-  @ApiPropertyOptional({ description: 'Hierarchical scope filter ID' })
-  @IsOptional()
-  @IsString()
-  forScopeId?: string;
+  siteId?: string;
 
   @ApiPropertyOptional({ description: 'Filter by vendor contact ID' })
   @IsOptional()

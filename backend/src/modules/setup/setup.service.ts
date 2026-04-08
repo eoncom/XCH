@@ -11,7 +11,7 @@ interface ServiceHealth {
   message?: string;
 }
 
-interface SetupStatus {
+export interface SetupStatus {
   needsSetup: boolean;
   services: ServiceHealth[];
 }

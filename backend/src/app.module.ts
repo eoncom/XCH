@@ -18,7 +18,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ContactTypesModule } from './modules/contact-types/contact-types.module';
 import { SiteAccessModule } from './modules/site-access/site-access.module';
-import { UserScopesModule } from './modules/user-scopes/user-scopes.module';
+import { UserDelegationsModule } from './modules/user-delegations/user-delegations.module';
 import { AccessGrantsModule } from './modules/access-grants/access-grants.module';
 import { BillingEntitiesModule } from './modules/billing-entities/billing-entities.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
@@ -77,7 +77,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     ContactTypesModule,
     IntegrationsModule,
     SiteAccessModule,
-    UserScopesModule,
+    UserDelegationsModule,
     AccessGrantsModule,
     BillingEntitiesModule,
     ExpensesModule,

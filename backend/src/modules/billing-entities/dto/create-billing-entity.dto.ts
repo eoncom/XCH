@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateBillingEntityDto {
@@ -18,24 +18,14 @@ export class CreateBillingEntityDto {
   @ApiPropertyOptional() @IsBoolean() @IsOptional()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ description: 'Scope type: DIVISION, DELEGATION, SITE (or null for tenant-wide)' })
-  @IsOptional()
-  @IsIn(['DIVISION', 'DELEGATION', 'SITE'])
-  scopeType?: string;
-
-  @ApiPropertyOptional({ description: 'ID of the scoped entity (divisionId, delegationId or siteId)' })
+  @ApiPropertyOptional({ description: 'Delegation ID (null = global, R2)' })
   @IsOptional()
   @IsString()
-  scopeId?: string;
-
-  // DEPRECATED — kept for backward compatibility
-  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
-  divisionId?: string;
-
-  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
   delegationId?: string;
 
-  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
+  @ApiPropertyOptional({ description: 'Site ID — optional site-level attachment (R1)' })
+  @IsOptional()
+  @IsString()
   siteId?: string;
 }
 
@@ -55,23 +45,13 @@ export class UpdateBillingEntityDto {
   @ApiPropertyOptional() @IsBoolean() @IsOptional()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ description: 'Scope type: DIVISION, DELEGATION, SITE (or null to clear)' })
-  @IsOptional()
-  @IsIn(['DIVISION', 'DELEGATION', 'SITE'])
-  scopeType?: string | null;
-
-  @ApiPropertyOptional({ description: 'ID of the scoped entity' })
+  @ApiPropertyOptional({ description: 'Delegation ID (null to make global)' })
   @IsOptional()
   @IsString()
-  scopeId?: string | null;
+  delegationId?: string | null;
 
-  // DEPRECATED
-  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
-  divisionId?: string;
-
-  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
-  delegationId?: string;
-
-  @ApiPropertyOptional({ deprecated: true }) @IsString() @IsOptional()
-  siteId?: string;
+  @ApiPropertyOptional({ description: 'Site ID (null to clear)' })
+  @IsOptional()
+  @IsString()
+  siteId?: string | null;
 }

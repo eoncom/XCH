@@ -1,8 +1,8 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-04-07 00:04:10 (Auto-update)
-**Version actuelle :** 1.2.0
-**Statut global :** ✅ MVP Production-Ready (100%) + Organisation + Accès flexible + Coûts
+**Dernière mise à jour :** 2026-04-08 19:14:15 (Auto-update)
+**Version actuelle :** 1.3.0
+**Statut global :** ✅ MVP Production-Ready (100%) + Modele Delegation-First
 
 ---
 
@@ -43,7 +43,7 @@ POST-MVP     ████████████████████ 100% (
 | 9 | **FloorPlans** | ✅ | ~10 | Manuel |
 | 10 | **Integrations** | ✅ | ~8 | Manuel |
 | 11 | **Organization** | ✅ | ~8 | Manuel |
-| 12 | **UserScopes** | ✅ | ~5 | Manuel |
+| 12 | **UserDelegations** | ✅ | ~5 | Manuel |
 | 13 | **AccessGrants** | ✅ | ~5 | Manuel |
 | 14 | **BillingEntities** | ✅ | ~6 | Manuel |
 | 15 | **Expenses** | ✅ | ~10 | Manuel |
@@ -66,10 +66,10 @@ POST-MVP     ████████████████████ 100% (
 **Métriques :**
 - ~145+ endpoints REST
 - ~12000+ lignes de code TypeScript
-- 25+ modèles Prisma (dont Division, Delegation, UserScope, AccessGrant, BillingEntity, Expense, CostAllocation)
+- 25+ modèles Prisma (dont Delegation, UserDelegation, AccessGrant, BillingEntity, Expense, CostAllocation)
 - 95 policies Casbin (ADMIN=46, MANAGER=20, TECHNICIEN=22, VIEWER=7)
-- 4 rôles (Admin, Manager, Technicien, Viewer)
-- 14 ressources RBAC (+ divisions, delegations, billing-entities, expenses)
+- 4 rôles (Admin, Manager, Technicien, Viewer) + isSuperAdmin
+- 14 ressources RBAC (delegations, user-delegations, billing-entities, expenses)
 
 **Documentation :**
 - ✅ Swagger API (http://localhost:3000/api)
@@ -94,7 +94,7 @@ POST-MVP     ████████████████████ 100% (
 | 7 | **Contacts** | 4 | CRUD contacts, types personnalisables, catégories, import depuis intégrations |
 | 8 | **Intégrations** | 3 | Dashboard providers, NetBox config (4 tabs), mapping drag-drop, monitoring placeholder |
 | 9 | **Users** | 1 | Liste utilisateurs, statistiques par rôle, gestion portées + grants |
-| 10 | **Settings** | 3 | Profil utilisateur, config tenant, organisation (divisions/délégations) |
+| 10 | **Settings** | 3 | Profil utilisateur, config tenant, organisation (délégations + groupLabel/groupColor) |
 | 11 | **Coûts** | 4 | Liste dépenses, création/édition, centres de coût, rapports |
 
 **Total pages :** 30+ pages fonctionnelles
@@ -255,43 +255,61 @@ POST-MVP     ████████████████████ 100% (
 
 ## 📅 HISTORIQUE DES VERSIONS
 
-### v1.2.0 (2026-03-29) - Organisation + Accès flexible + Répartition des coûts
+### v1.3.0 (2026-04-08) - Modele Delegation-First (ADR-009)
 
-**Phase A — Structure organisationnelle :**
-- ✅ Modèles Prisma : Division, Delegation + Site.delegationId obligatoire
-- ✅ Backend module `organization/` (CRUD divisions, délégations, arbre)
-- ✅ Filtres divisionId/delegationId dans sites
-- ✅ Frontend : onglet Organisation dans Settings (CRUD arbre)
-- ✅ Frontend : filtres Division/Délégation sur liste sites + formulaire site
+**Refactoring majeur** : suppression hierarchy 4 niveaux (Division + scopeType/scopeId) au profit d'un modele "delegation autonome".
 
-**Phase B — UserScope + AccessGrant (accès flexible non-hiérarchique) :**
-- ✅ Modèle UserScope (N portées par user : TENANT, DIVISION, DELEGATION, SITE)
-- ✅ Modèle AccessGrant (exceptions additives avec expiration)
-- ✅ Backend modules `user-scopes/` et `access-grants/` (CRUD)
-- ✅ Réécriture complète `site-access.service.ts` : résolution UserScope + AccessGrant uniquement (UserSiteAccess déprécié)
-- ✅ Ajout monitoring/netbox à ResourcePermissions
-- ✅ Frontend : réécriture `usePermissions` hook
-- ✅ Frontend : UI gestion portées + grants sur page user edit
+**Schema :**
+- Suppression model Division, UserScope, UserSiteAccess, ScopeType enum
+- Nouveau model UserDelegation (role local par delegation, source de verite permissions)
+- User.isSuperAdmin (acces plateforme global)
+- scopeType/scopeId remplaces par delegationId FK + siteId FK sur Contact, BillingEntity, Expense, NotificationConfig
+- Delegation.groupLabel/groupColor (tag visuel, zero impact fonctionnel)
 
-**Phase C — Répartition des coûts :**
-- ✅ Modèles Prisma : BillingEntity, Expense, CostAllocation
+**Backend :**
+- DelegationGuard + SuperAdminGuard (nouveaux guards)
+- X-Delegation-Id header obligatoire sur requetes operationnelles
+- CasbinGuard utilise localRole (UserDelegation.role) au lieu de User.role
+- Module user-delegations (remplace user-scopes)
+- Validation R1 centralisee (coherence delegationId/siteId)
+- Services migres : contacts, billing-entities, expenses, notifications, organization, sites, backup
+
+**Frontend :**
+- DelegationContext + useDelegation() hook
+- API client injecte X-Delegation-Id automatiquement
+- Types nettoyes (plus de Division, UserScope, scopeType/scopeId)
+- ScopeSelector reecrit en DelegationPicker (delegationId + siteId)
+- Toutes les pages migrees (sites, contacts, costs, users, settings, notifications)
+- usePermissions utilise localRole depuis DelegationContext
+
+**Regles :**
+- R1: coherence delegationId/siteId (si siteId, site.delegationId doit correspondre)
+- R2: objets globaux (delegationId=null) super admin only
+- R7: UserDelegation.role = source de verite (User.role = defaut initial)
+- R10: X-Delegation-Id header requis (absent=400, non-autorise=403)
+
+---
+
+### v1.2.0 (2026-03-29) - Organisation + Acces flexible + Repartition des couts
+
+> **Note:** La hierarchy Division et le scope polymorphique de cette version ont ete remplaces par le modele delegation-first en v1.3.0 (ADR-009).
+
+**Phase C — Repartition des couts (conserve en v1.3) :**
+- ✅ Modeles Prisma : BillingEntity, Expense, CostAllocation
 - ✅ Backend module `billing-entities/` (CRUD + summary)
 - ✅ Backend module `expenses/` (CRUD + allocations + rapports + export CSV)
-- ✅ Frontend : page liste dépenses avec filtres et cards résumé
-- ✅ Frontend : formulaire dépense (new/edit) avec refacturation dynamique
-- ✅ Frontend : page centres de coût (CRUD)
+- ✅ Frontend : page liste depenses avec filtres et cards resume
+- ✅ Frontend : formulaire depense (new/edit) avec refacturation dynamique
+- ✅ Frontend : page centres de cout (CRUD)
 - ✅ Frontend : page rapports (par porteur / par cible)
-- ✅ Nav item "Coûts" avec permissions
 
 **Casbin :**
-- ✅ 12 nouvelles policies (divisions, delegations, billing-entities, expenses)
+- ✅ Policies delegations, billing-entities, expenses
 
 **Architecture :**
-- Principe : la hiérarchie organise, elle ne contrôle PAS l'accès
-- ADMIN/MANAGER soumis à leurs portées (UserScope)
 - AccessGrants purement additifs (jamais restrictifs)
-- BillingEntity = centre de coût générique (pas limité à la hiérarchie org)
-- Allocation ≤ 100% (reste à la charge du porteur)
+- BillingEntity = centre de cout generique
+- Allocation <= 100% (reste a la charge du porteur)
 
 ---
 

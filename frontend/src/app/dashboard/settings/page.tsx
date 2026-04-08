@@ -330,13 +330,12 @@ const XCH_ROLES = ['ADMIN', 'MANAGER', 'TECHNICIEN', 'VIEWER'] as const;
 
 const SCOPE_TYPES = [
   { value: '', label: 'Aucune portée' },
-  { value: 'TENANT', label: 'Tout le tenant' },
-  { value: 'DIVISION', label: 'Division' },
   { value: 'DELEGATION', label: 'Délégation' },
+  { value: 'SITE', label: 'Site' },
 ] as const;
 
 interface ScopeEntry {
-  type: 'TENANT' | 'DIVISION' | 'DELEGATION' | 'SITE';
+  type: 'DELEGATION' | 'SITE';
   id?: string;
 }
 
@@ -348,7 +347,7 @@ interface RoleMappingEntry {
 /**
  * Normalize mapping entries: supports both legacy string format and new object format.
  * Legacy:  { "admin": "ADMIN" }
- * New:     { "admin": { "role": "ADMIN", "scopes": [{ "type": "DIVISION", "id": "xxx" }] } }
+ * New:     { "admin": { "role": "ADMIN", "scopes": [{ "type": "DELEGATION", "id": "xxx" }] } }
  */
 function normalizeMapping(raw: Record<string, any>): Record<string, RoleMappingEntry> {
   const result: Record<string, RoleMappingEntry> = {};
@@ -374,7 +373,7 @@ function SsoConfigSection() {
   const [clientSecret, setClientSecret] = useState('');
   const [callbackUrl, setCallbackUrl] = useState('');
   const [roleMapping, setRoleMapping] = useState<Record<string, RoleMappingEntry>>({
-    admin: { role: 'ADMIN', scopes: [{ type: 'TENANT' }] },
+    admin: { role: 'ADMIN', scopes: [] },
     manager: { role: 'MANAGER', scopes: [] },
     technician: { role: 'TECHNICIEN', scopes: [] },
     default: { role: 'VIEWER', scopes: [] },
@@ -462,7 +461,7 @@ function SsoConfigSection() {
     const entry = roleMapping[key];
     setRoleMapping({
       ...roleMapping,
-      [key]: { ...entry, scopes: [...entry.scopes, { type: 'TENANT' }] },
+      [key]: { ...entry, scopes: [...entry.scopes, { type: 'DELEGATION' }] },
     });
   };
 
@@ -484,11 +483,8 @@ function SsoConfigSection() {
     setRoleMapping({ ...roleMapping, [key]: { ...entry, scopes: newScopes } });
   };
 
-  // Build flat lists for scope selectors
-  const divisions = orgTree || [];
-  const delegations = divisions.flatMap((d: any) =>
-    (d.delegations || []).map((del: any) => ({ ...del, divisionName: d.name, divisionCode: d.code }))
-  );
+  // Build flat list for scope selectors (tree is now flat delegation list)
+  const delegations = orgTree || [];
 
   if (isLoadingSso) {
     return (
@@ -620,8 +616,7 @@ function SsoConfigSection() {
                           value={scope.type}
                           onChange={(e) => {
                             const val = e.target.value;
-                            if (val === 'TENANT') updateScope(groupKey, si, 'TENANT');
-                            else updateScope(groupKey, si, val, '');
+                            updateScope(groupKey, si, val, '');
                           }}
                           className="h-7 px-2 rounded border bg-background text-xs"
                         >
@@ -629,19 +624,6 @@ function SsoConfigSection() {
                             <option key={s.value} value={s.value}>{s.label}</option>
                           ))}
                         </select>
-
-                        {scope.type === 'DIVISION' && (
-                          <select
-                            value={scope.id || ''}
-                            onChange={(e) => updateScope(groupKey, si, 'DIVISION', e.target.value)}
-                            className="h-7 px-2 rounded border bg-background text-xs flex-1"
-                          >
-                            <option value="">-- Choisir --</option>
-                            {divisions.map((d: any) => (
-                              <option key={d.id} value={d.id}>{d.code} - {d.name}</option>
-                            ))}
-                          </select>
-                        )}
 
                         {scope.type === 'DELEGATION' && (
                           <select
@@ -651,7 +633,7 @@ function SsoConfigSection() {
                           >
                             <option value="">-- Choisir --</option>
                             {delegations.map((d: any) => (
-                              <option key={d.id} value={d.id}>{d.divisionCode} &gt; {d.code} - {d.name}</option>
+                              <option key={d.id} value={d.id}>{d.code} - {d.name}</option>
                             ))}
                           </select>
                         )}

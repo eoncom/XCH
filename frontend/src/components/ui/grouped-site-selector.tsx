@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { organizationApi } from '@/lib/api/organization';
+import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { Search } from 'lucide-react';
 
 interface GroupedSiteSelectorProps {
@@ -28,9 +28,15 @@ interface GroupedSiteSelectorProps {
   className?: string;
 }
 
+interface DelegationGroup {
+  label: string;
+  color?: string;
+  delegations: Delegation[];
+}
+
 /**
- * Reusable site selector grouped by Division > Délégation.
- * Uses the organization tree API (already scope-filtered by backend).
+ * Reusable site selector grouped by delegation groupLabel.
+ * Uses the organization tree API (flat delegation list from backend).
  * Includes search for long lists.
  */
 export function GroupedSiteSelector({
@@ -46,27 +52,42 @@ export function GroupedSiteSelector({
 }: GroupedSiteSelectorProps) {
   const [search, setSearch] = useState('');
 
-  const { data: orgTree } = useQuery({
+  const { data: delegations } = useQuery({
     queryKey: ['organization-tree'],
     queryFn: () => organizationApi.getTree(),
     staleTime: 60_000,
   });
 
+  // Group delegations by groupLabel
+  const groups = useMemo((): DelegationGroup[] => {
+    if (!delegations) return [];
+    const groupMap = new Map<string, DelegationGroup>();
+
+    for (const del of delegations) {
+      const label = del.groupLabel || 'Autres';
+      if (!groupMap.has(label)) {
+        groupMap.set(label, { label, color: del.groupColor || undefined, delegations: [] });
+      }
+      groupMap.get(label)!.delegations.push(del);
+    }
+
+    return Array.from(groupMap.values());
+  }, [delegations]);
+
   // Count total sites for search threshold
   const totalSites = useMemo(() => {
-    if (!orgTree) return 0;
-    return orgTree.reduce((sum, div) =>
-      sum + div.delegations.reduce((s, del) => s + (del.sites?.length || 0), 0), 0);
-  }, [orgTree]);
+    if (!delegations) return 0;
+    return delegations.reduce((sum, del) => sum + (del.sites?.length || 0), 0);
+  }, [delegations]);
 
-  // Filter tree by search
-  const filteredTree = useMemo(() => {
-    if (!orgTree || !search.trim()) return orgTree;
+  // Filter by search
+  const filteredGroups = useMemo(() => {
+    if (!search.trim()) return groups;
     const q = search.toLowerCase();
-    return orgTree
-      .map(div => ({
-        ...div,
-        delegations: div.delegations
+    return groups
+      .map(group => ({
+        ...group,
+        delegations: group.delegations
           .map(del => ({
             ...del,
             sites: (del.sites || []).filter(site =>
@@ -77,10 +98,10 @@ export function GroupedSiteSelector({
               (site.city && site.city.toLowerCase().includes(q))
             ),
           }))
-          .filter(del => del.sites.length > 0),
+          .filter(del => (del.sites?.length || 0) > 0),
       }))
-      .filter(div => div.delegations.length > 0);
-  }, [orgTree, search]);
+      .filter(group => group.delegations.length > 0);
+  }, [groups, search]);
 
   const showSearch = totalSites > 5;
 
@@ -107,24 +128,24 @@ export function GroupedSiteSelector({
         {allowNone && (
           <SelectItem value={noneValue}>{noneLabel}</SelectItem>
         )}
-        {filteredTree?.map((division) => {
-          const allSites = division.delegations.flatMap((d) => d.sites || []);
+        {filteredGroups.map((group) => {
+          const allSites = group.delegations.flatMap(d => d.sites || []);
           if (allSites.length === 0 && !showCount) return null;
           return (
-            <div key={division.id}>
+            <div key={group.label}>
               <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-2">
-                {division.color && (
+                {group.color && (
                   <span
                     className="inline-block w-2 h-2 rounded-full"
-                    style={{ backgroundColor: division.color }}
+                    style={{ backgroundColor: group.color }}
                   />
                 )}
-                {division.name}
+                {group.label}
                 {showCount && (
                   <span className="text-muted-foreground/60">({allSites.length})</span>
                 )}
               </div>
-              {division.delegations.map((del) =>
+              {group.delegations.map((del) =>
                 (del.sites || []).map((site) => (
                   <SelectItem key={site.id} value={site.id} className="pl-6">
                     <span className="flex items-center gap-2">
@@ -138,7 +159,7 @@ export function GroupedSiteSelector({
             </div>
           );
         })}
-        {filteredTree && filteredTree.length === 0 && search && (
+        {filteredGroups.length === 0 && search && (
           <div className="px-2 py-4 text-center text-sm text-muted-foreground">
             Aucun site trouvé
           </div>
@@ -155,7 +176,7 @@ interface SiteFilterSelectProps {
 }
 
 /**
- * Filter variant: "Tous les sites" option + grouped sites by Division > Délégation.
+ * Filter variant: "Tous les sites" option + grouped sites by delegation groupLabel.
  * Use in list pages (assets, racks, tasks, etc.)
  */
 export function SiteFilterSelect({

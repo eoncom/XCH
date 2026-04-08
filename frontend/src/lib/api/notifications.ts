@@ -16,8 +16,7 @@ export interface EventConfig {
 export interface NotificationConfigData {
   id: string | null;
   tenantId: string;
-  scopeType: string;
-  scopeId: string;
+  delegationId: string | null;
   channels: Record<string, ChannelConfig>;
   events: Record<string, EventConfig>;
   isDefault?: boolean;
@@ -49,22 +48,21 @@ export const notificationsApi = {
   getMeta: () =>
     apiClient.get<NotificationMeta>('/api/notifications/meta'),
 
-  getConfig: (scopeType: string, scopeId: string) =>
-    apiClient.get<NotificationConfigData>(`/api/notifications/config/${scopeType}/${scopeId}`),
+  getConfig: (delegationId: string | null) =>
+    apiClient.get<NotificationConfigData>(`/api/notifications/config/${delegationId || 'global'}`),
 
-  getResolvedConfig: (params?: { delegationId?: string; divisionId?: string }) => {
+  getResolvedConfig: (delegationId?: string) => {
     const qs = new URLSearchParams();
-    if (params?.delegationId) qs.set('delegationId', params.delegationId);
-    if (params?.divisionId) qs.set('divisionId', params.divisionId);
+    if (delegationId) qs.set('delegationId', delegationId);
     const query = qs.toString();
     return apiClient.get(`/api/notifications/config/resolved${query ? `?${query}` : ''}`);
   },
 
-  saveConfig: (data: { scopeType: string; scopeId: string; channels: any; events: any }) =>
+  saveConfig: (data: { delegationId: string | null; channels: any; events: any }) =>
     apiClient.put('/api/notifications/config', data),
 
-  deleteConfig: (scopeType: string, scopeId: string) =>
-    apiClient.delete(`/api/notifications/config/${scopeType}/${scopeId}`),
+  deleteConfig: (delegationId: string | null) =>
+    apiClient.delete(`/api/notifications/config/${delegationId || 'global'}`),
 
   getAllConfigs: () =>
     apiClient.get<NotificationConfigData[]>('/api/notifications/configs'),

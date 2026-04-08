@@ -4,8 +4,7 @@ import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { QueryContactDto } from './dto/query-contact.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
-import { validateScope } from '../../common/utils/scope-validation.util';
-import { resolveHierarchicalScopes } from '../../common/utils/scope-resolution.util';
+import { validateDelegationSiteCoherence } from '../../common/utils/delegation-site-validation.util';
 
 @Injectable()
 export class ContactsService {
@@ -26,16 +25,18 @@ export class ContactsService {
       );
     }
 
-    // Validate scope if provided
-    if (createContactDto.scopeType && createContactDto.scopeId) {
-      await validateScope(this.prisma as any, tenantId, createContactDto.scopeType, createContactDto.scopeId);
-    }
+    // Validate delegation/site coherence (R1, R3)
+    await validateDelegationSiteCoherence(
+      this.prisma as any,
+      createContactDto.delegationId,
+      createContactDto.siteId,
+    );
 
     return this.prisma.contact.create({
       data: {
         ...createContactDto,
-        scopeType: createContactDto.scopeType || null,
-        scopeId: createContactDto.scopeId || null,
+        delegationId: createContactDto.delegationId || null,
+        siteId: createContactDto.siteId || null,
         tenantId,
       } as any,
       include: {
@@ -51,29 +52,16 @@ export class ContactsService {
 
     const { typeId, category, search, isActive } = query;
 
-    // Build where clause
-    const where: any = {
-      tenantId,
-    };
+    const where: any = { tenantId };
 
-    // Filter by type ID
-    if (typeId) {
-      where.typeId = typeId;
-    }
+    if (typeId) where.typeId = typeId;
 
-    // Filter by category (via type relation)
     if (category) {
-      where.type = {
-        category: category as ContactCategory,
-      };
+      where.type = { category: category as ContactCategory };
     }
 
-    // Filter by active status
-    if (isActive !== undefined) {
-      where.isActive = isActive;
-    }
+    if (isActive !== undefined) where.isActive = isActive;
 
-    // Search by name, email, or company (case-insensitive)
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -82,29 +70,29 @@ export class ContactsService {
       ];
     }
 
-    // Direct scope filter (exact match)
-    if (query.scopeType) {
-      where.scopeType = query.scopeType;
-      if (query.scopeId) where.scopeId = query.scopeId;
-    }
-
-    // Hierarchical scope filter: show contacts visible at this scope (global + ancestors + exact)
-    if (query.forScopeType && query.forScopeId) {
-      const scopeConditions = await resolveHierarchicalScopes(
-        this.prisma as any,
-        query.forScopeType,
-        query.forScopeId,
-      );
-      if (where.OR) {
-        // Merge search OR with scope OR using AND
-        where.AND = [{ OR: where.OR }, { OR: scopeConditions }];
-        delete where.OR;
+    // Delegation-based filtering
+    if (query.delegationId) {
+      if (query.includeGlobal !== false) {
+        // Show delegation's contacts + global contacts
+        const delegationCondition = [
+          { delegationId: query.delegationId },
+          { delegationId: null },
+        ];
+        if (where.OR) {
+          where.AND = [{ OR: where.OR }, { OR: delegationCondition }];
+          delete where.OR;
+        } else {
+          where.OR = delegationCondition;
+        }
       } else {
-        where.OR = scopeConditions;
+        where.delegationId = query.delegationId;
       }
     }
 
-    // Determine sort order (default: name asc)
+    // Site filter
+    if (query.siteId) where.siteId = query.siteId;
+
+    // Determine sort order
     const allowedSortFields = ['name', 'createdAt', 'updatedAt', 'isActive'];
     const hasExplicitSort = query.sortBy && allowedSortFields.includes(query.sortBy);
     const sortBy: string = hasExplicitSort ? query.sortBy! : 'name';
@@ -113,12 +101,8 @@ export class ContactsService {
     const [contacts, total] = await Promise.all([
       this.prisma.contact.findMany({
         where,
-        include: {
-          type: true,
-        },
-        orderBy: {
-          [sortBy]: sortOrder,
-        },
+        include: { type: true },
+        orderBy: { [sortBy]: sortOrder },
         skip,
         take: pageSize,
       }),
@@ -130,10 +114,7 @@ export class ContactsService {
 
   async findOne(tenantId: string, id: string) {
     const contact = await this.prisma.contact.findFirst({
-      where: {
-        id,
-        tenantId,
-      },
+      where: { id, tenantId },
       include: {
         type: true,
         externalRefs: true,
@@ -156,7 +137,6 @@ export class ContactsService {
       throw new NotFoundException(`Contact with ID ${id} not found`);
     }
 
-    // Validate typeId if provided
     if (updateContactDto.typeId) {
       const contactType = await this.prisma.contactType.findFirst({
         where: { id: updateContactDto.typeId, tenantId },
@@ -168,27 +148,27 @@ export class ContactsService {
       }
     }
 
-    // Validate scope if changing
-    if (updateContactDto.scopeType && updateContactDto.scopeId) {
-      await validateScope(this.prisma as any, tenantId, updateContactDto.scopeType, updateContactDto.scopeId);
-    }
+    // Validate delegation/site coherence if changing (R1)
+    const delegationId = 'delegationId' in updateContactDto
+      ? updateContactDto.delegationId
+      : (existingContact as any).delegationId;
+    const siteId = 'siteId' in updateContactDto
+      ? updateContactDto.siteId
+      : (existingContact as any).siteId;
+
+    await validateDelegationSiteCoherence(this.prisma as any, delegationId, siteId);
 
     const data: any = { ...updateContactDto };
-    // Handle explicit null to clear scope
-    if (updateContactDto.scopeType === null || updateContactDto.scopeType === undefined) {
-      // Only clear if explicitly passed
-      if ('scopeType' in updateContactDto && updateContactDto.scopeType === null) {
-        data.scopeType = null;
-        data.scopeId = null;
-      }
+    // Handle explicit null to make global
+    if ('delegationId' in updateContactDto && updateContactDto.delegationId === null) {
+      data.delegationId = null;
+      data.siteId = null;
     }
 
     return this.prisma.contact.update({
       where: { id },
       data,
-      include: {
-        type: true,
-      },
+      include: { type: true },
     });
   }
 
@@ -201,7 +181,6 @@ export class ContactsService {
       throw new NotFoundException(`Contact with ID ${id} not found`);
     }
 
-    // Check if contact is used as vendor in expenses
     const vendorExpenseCount = await this.prisma.expense.count({
       where: { vendorId: id } as any,
     });
@@ -212,10 +191,7 @@ export class ContactsService {
       );
     }
 
-    await this.prisma.contact.delete({
-      where: { id },
-    });
-
+    await this.prisma.contact.delete({ where: { id } });
     return { message: 'Contact deleted successfully' };
   }
 
@@ -231,9 +207,7 @@ export class ContactsService {
     return this.prisma.contact.update({
       where: { id },
       data: { isActive },
-      include: {
-        type: true,
-      },
+      include: { type: true },
     });
   }
 }

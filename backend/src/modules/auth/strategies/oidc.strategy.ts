@@ -22,13 +22,18 @@ const DEFAULT_ROLE_MAPPING: Record<string, string> = {
  * or an object with role + scopes for the new access model.
  */
 interface ScopeEntry {
-  type: 'TENANT' | 'DIVISION' | 'DELEGATION' | 'SITE';
-  id?: string; // null for TENANT
+  type: 'DELEGATION' | 'SITE';
+  id?: string;
 }
 
 interface RoleMappingEntry {
   role: string;
   scopes?: ScopeEntry[];
+}
+
+interface SsoDelegationEntry {
+  delegationId: string;
+  role?: string;
 }
 
 @Injectable()
@@ -65,7 +70,12 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
       // Determine role + scopes from OIDC claims
       const { role, scopes } = this.mapRoleAndScopes(profile, tenantConfig);
 
-      const user = await this.authService.oidcLogin(profile, tenantId, role, scopes);
+      // Convert scopes to SsoDelegationEntry format for auth service
+      const delegationEntries: SsoDelegationEntry[] = scopes
+        .filter(s => s.type === 'DELEGATION' && s.id)
+        .map(s => ({ delegationId: s.id!, role }));
+
+      const user = await this.authService.oidcLogin(profile, tenantId, role, delegationEntries as any);
       done(null, user);
     } catch (error) {
       done(error, null);

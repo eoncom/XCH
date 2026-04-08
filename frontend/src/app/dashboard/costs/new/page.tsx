@@ -54,7 +54,7 @@ export default function NewExpensePage() {
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
   const [bearerId, setBearerId] = useState('');
-  const [scope, setScope] = useState<ScopeValue>({ scopeType: null, scopeId: null });
+  const [scope, setScope] = useState<ScopeValue>({ delegationId: null, siteId: null });
   const [externalRef, setExternalRef] = useState('');
   const [vendorId, setVendorId] = useState<string | null>(null);
   const [assetId, setAssetId] = useState('');
@@ -108,8 +108,8 @@ export default function NewExpensePage() {
       dateStart: dateStart || undefined,
       dateEnd: dateEnd || undefined,
       bearerId,
-      scopeType: scope.scopeType || undefined,
-      scopeId: scope.scopeId || undefined,
+      delegationId: scope.delegationId || undefined,
+      siteId: scope.siteId || undefined,
       vendorId: vendorId || undefined,
       assetId: assetId || undefined,
       externalRef: externalRef || undefined,
@@ -236,8 +236,7 @@ export default function NewExpensePage() {
               <VendorCombobox
                 value={vendorId}
                 onChange={setVendorId}
-                scopeType={scope.scopeType}
-                scopeId={scope.scopeId}
+                delegationId={scope.delegationId}
               />
             </div>
             <div className="space-y-1">

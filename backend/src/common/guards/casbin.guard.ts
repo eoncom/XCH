@@ -24,8 +24,12 @@ export class CasbinGuard implements CanActivate {
       return true;
     }
 
+    // Use localRole from DelegationGuard (R7: UserDelegation.role is source of truth)
+    // Fallback to user.role for routes without DelegationGuard (e.g. global admin routes)
+    const role = request.localRole || user.role;
+
     const allowed = await this.enforcer.enforce(
-      user.role,
+      role,
       resource,
       action,
       user.tenantId,

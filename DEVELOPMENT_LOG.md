@@ -4862,3 +4862,24 @@ feat: add organizational scope (scopeType/scopeId) to BillingEntity, Expense, Co
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-08
+
+**Date:** 2026-04-08 19:14:15
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 84
+- Frontend files modified: 30
+
+**Commit message:**
+```
+feat: enforce mandatory scope - no scope means no access
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

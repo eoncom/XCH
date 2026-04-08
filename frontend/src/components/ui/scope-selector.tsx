@@ -2,7 +2,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { organizationApi, OrganizationTree } from '@/lib/api/organization';
+import { organizationApi, type Delegation } from '@/lib/api/organization';
+import { sitesApi } from '@/lib/api/sites';
 import {
   Select,
   SelectContent,
@@ -12,98 +13,123 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { useDelegation } from '@/contexts/DelegationContext';
 
+/**
+ * ScopeValue — delegation-first model.
+ * delegationId = organizational boundary (nullable for global entities)
+ * siteId = optional site-level attachment
+ */
 export interface ScopeValue {
-  scopeType: string | null;
-  scopeId: string | null;
+  delegationId: string | null;
+  siteId: string | null;
 }
 
 interface ScopeSelectorProps {
   value: ScopeValue;
   onChange: (value: ScopeValue) => void;
   label?: string;
-  allowedTypes?: ('DIVISION' | 'DELEGATION' | 'SITE')[];
+  showSiteSelector?: boolean;
   disabled?: boolean;
   className?: string;
 }
 
+/**
+ * Delegation + Site picker for entity attachment.
+ * Pre-fills with active delegation from context.
+ */
 export function ScopeSelector({
   value,
   onChange,
   label = 'Rattachement organisationnel',
-  allowedTypes = ['DIVISION', 'DELEGATION', 'SITE'],
+  showSiteSelector = true,
   disabled = false,
   className = '',
 }: ScopeSelectorProps) {
-  const { data: tree = [] } = useQuery({
-    queryKey: ['organization-tree'],
-    queryFn: () => organizationApi.getTree(),
+  const { delegations, isSuperAdmin } = useDelegation();
+
+  // Load delegations for super admin (who may not have UserDelegation entries)
+  const { data: allDelegations = [] } = useQuery({
+    queryKey: ['delegations-all'],
+    queryFn: () => organizationApi.getDelegations(),
     staleTime: 60_000,
+    enabled: isSuperAdmin,
   });
 
-  const scopeTypeOptions = [
-    { value: '', label: 'Aucun (tenant)' },
-    ...(allowedTypes.includes('DIVISION') ? [{ value: 'DIVISION', label: 'Division' }] : []),
-    ...(allowedTypes.includes('DELEGATION') ? [{ value: 'DELEGATION', label: 'Délégation' }] : []),
-    ...(allowedTypes.includes('SITE') ? [{ value: 'SITE', label: 'Site' }] : []),
-  ];
+  // Load sites for the selected delegation
+  const { data: sitesData } = useQuery({
+    queryKey: ['sites-for-delegation', value.delegationId],
+    queryFn: () => sitesApi.getAllPaginated({ delegationId: value.delegationId!, pageSize: 200 }),
+    staleTime: 60_000,
+    enabled: !!value.delegationId,
+  });
 
-  // Build entity options based on selected scope type
-  const entityOptions = buildEntityOptions(tree, value.scopeType);
+  const sites = sitesData?.data || [];
+
+  // Delegation options: user's delegations + "Global" option for super admin
+  const delegationOptions = isSuperAdmin
+    ? allDelegations
+    : delegations.map(d => d.delegation);
 
   return (
     <div className={`space-y-3 ${className}`}>
       {label && <Label className="text-sm font-medium">{label}</Label>}
 
       <div className="flex gap-3">
-        {/* Scope Type */}
+        {/* Delegation selector */}
         <Select
-          value={value.scopeType || ''}
+          value={value.delegationId || '_global'}
           onValueChange={(v) => {
-            onChange({ scopeType: v || null, scopeId: null });
+            const delegationId = v === '_global' ? null : v;
+            onChange({ delegationId, siteId: null });
           }}
           disabled={disabled}
         >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Type de scope" />
+          <SelectTrigger className="w-[220px]">
+            <SelectValue placeholder="Sélectionner une délégation..." />
           </SelectTrigger>
           <SelectContent>
-            {scopeTypeOptions.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value || '_none'}>
-                {opt.label}
+            {isSuperAdmin && (
+              <SelectItem value="_global">Global (toutes délégations)</SelectItem>
+            )}
+            {delegationOptions.map((del) => (
+              <SelectItem key={del.id} value={del.id}>
+                <span className="flex items-center gap-2">
+                  {del.groupColor && (
+                    <span
+                      className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: del.groupColor }}
+                    />
+                  )}
+                  {del.name}
+                  {del.groupLabel && (
+                    <span className="text-muted-foreground text-xs">({del.groupLabel})</span>
+                  )}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        {/* Entity selector — only shown when scopeType is set */}
-        {value.scopeType && (
+        {/* Site selector — optional, only if delegation is selected */}
+        {showSiteSelector && value.delegationId && (
           <Select
-            value={value.scopeId || ''}
+            value={value.siteId || '_none'}
             onValueChange={(v) => {
-              onChange({ scopeType: value.scopeType, scopeId: v || null });
+              onChange({ delegationId: value.delegationId, siteId: v === '_none' ? null : v });
             }}
             disabled={disabled}
           >
             <SelectTrigger className="flex-1">
-              <SelectValue placeholder={`Sélectionner ${getScopeLabel(value.scopeType)}...`} />
+              <SelectValue placeholder="Site (optionnel)..." />
             </SelectTrigger>
             <SelectContent>
-              {entityOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  <span className="flex items-center gap-2">
-                    {opt.parentLabel && (
-                      <span className="text-muted-foreground text-xs">{opt.parentLabel} /</span>
-                    )}
-                    {opt.label}
-                  </span>
+              <SelectItem value="_none">Aucun site</SelectItem>
+              {sites.map((site) => (
+                <SelectItem key={site.id} value={site.id}>
+                  {site.code} — {site.name}
                 </SelectItem>
               ))}
-              {entityOptions.length === 0 && (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                  Aucun(e) {getScopeLabel(value.scopeType)} disponible
-                </div>
-              )}
             </SelectContent>
           </Select>
         )}
@@ -113,104 +139,30 @@ export function ScopeSelector({
 }
 
 /**
- * Displays the currently selected scope as a badge.
+ * Displays the current scope as a badge.
  */
 export function ScopeBadge({
-  scopeType,
-  scopeId,
-  tree,
+  delegationId,
+  siteId,
+  delegationName,
+  siteName,
 }: {
-  scopeType: string | null | undefined;
-  scopeId: string | null | undefined;
-  tree?: OrganizationTree[];
+  delegationId?: string | null;
+  siteId?: string | null;
+  delegationName?: string;
+  siteName?: string;
 }) {
-  if (!scopeType || !scopeId) {
+  if (!delegationId) {
     return <Badge variant="outline">Global</Badge>;
   }
 
-  const resolved = resolveScopeName(tree || [], scopeType, scopeId);
-
-  const colorMap: Record<string, string> = {
-    DIVISION: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-    DELEGATION: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
-    SITE: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-  };
+  const label = siteName
+    ? `${delegationName || 'Délégation'} / ${siteName}`
+    : delegationName || 'Délégation';
 
   return (
-    <Badge className={colorMap[scopeType] || ''} variant="outline">
-      {getScopeLabel(scopeType)}: {resolved || scopeId.slice(0, 8)}
+    <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300" variant="outline">
+      {label}
     </Badge>
   );
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function getScopeLabel(scopeType: string | null): string {
-  switch (scopeType) {
-    case 'DIVISION': return 'Division';
-    case 'DELEGATION': return 'Délégation';
-    case 'SITE': return 'Site';
-    default: return '';
-  }
-}
-
-interface EntityOption {
-  value: string;
-  label: string;
-  parentLabel?: string;
-}
-
-function buildEntityOptions(
-  tree: OrganizationTree[],
-  scopeType: string | null,
-): EntityOption[] {
-  if (!scopeType || !tree.length) return [];
-
-  switch (scopeType) {
-    case 'DIVISION':
-      return tree.map((div) => ({
-        value: div.id,
-        label: div.name,
-      }));
-
-    case 'DELEGATION':
-      return tree.flatMap((div) =>
-        (div.delegations || []).map((del) => ({
-          value: del.id,
-          label: del.name,
-          parentLabel: div.name,
-        })),
-      );
-
-    case 'SITE':
-      return tree.flatMap((div) =>
-        (div.delegations || []).flatMap((del) =>
-          (del.sites || []).map((site) => ({
-            value: site.id,
-            label: `${site.code} — ${site.name}`,
-            parentLabel: `${div.name} / ${del.name}`,
-          })),
-        ),
-      );
-
-    default:
-      return [];
-  }
-}
-
-function resolveScopeName(
-  tree: OrganizationTree[],
-  scopeType: string,
-  scopeId: string,
-): string | null {
-  for (const div of tree) {
-    if (scopeType === 'DIVISION' && div.id === scopeId) return div.name;
-    for (const del of div.delegations || []) {
-      if (scopeType === 'DELEGATION' && del.id === scopeId) return del.name;
-      for (const site of del.sites || []) {
-        if (scopeType === 'SITE' && site.id === scopeId) return site.name;
-      }
-    }
-  }
-  return null;
 }

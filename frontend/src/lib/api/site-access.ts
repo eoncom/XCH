@@ -13,42 +13,23 @@ export interface ResourcePermissions {
   netbox?: ResourcePermissionLevel;
 }
 
-export interface UserSiteAccess {
+export type AccessScope = 'ALL_SITES' | 'DELEGATION' | 'SITE';
+
+export interface UserDelegation {
   id: string;
   tenantId: string;
   userId: string;
-  siteId: string;
-  accessLevel: 'READ' | 'WRITE';
-  resourcePermissions?: ResourcePermissions | null;
+  delegationId: string;
+  role: string;
   grantedBy?: string;
   grantedAt: string;
-  user?: {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    avatarUrl?: string;
-  };
-  site?: {
+  delegation?: {
     id: string;
     name: string;
     code: string;
-    status?: string;
+    groupLabel?: string;
+    groupColor?: string;
   };
-}
-
-export type ScopeType = 'TENANT' | 'DIVISION' | 'DELEGATION' | 'SITE';
-export type AccessScope = 'ALL_SITES' | 'DIVISION' | 'DELEGATION' | 'SITE';
-
-export interface UserScope {
-  id: string;
-  tenantId: string;
-  userId: string;
-  scopeType: ScopeType;
-  scopeId: string | null;
-  scopeLabel?: string;
-  grantedBy?: string;
-  grantedAt: string;
 }
 
 export interface AccessGrant {
@@ -65,65 +46,43 @@ export interface AccessGrant {
 }
 
 export interface MyPermissionsResponse {
-  role: string;
-  hasScope: boolean;
+  isSuperAdmin: boolean;
+  hasDelegation: boolean;
   allSitesAccess: boolean;
   accessibleSiteIds: string[] | null;
-  scopes: UserScope[];
+  delegations: UserDelegation[];
   accessGrants: AccessGrant[];
 }
 
 export const siteAccessApi = {
-  // Get all users with access to a site (legacy)
-  listBySite: (siteId: string) =>
-    apiClient.get<UserSiteAccess[]>(`/api/site-access/site/${siteId}`),
-
-  // Get all sites a user has access to (legacy)
-  listByUser: (userId: string) =>
-    apiClient.get<UserSiteAccess[]>(`/api/site-access/user/${userId}`),
-
-  // Get current user's accessible sites (legacy)
-  myAccessibleSites: () =>
-    apiClient.get<UserSiteAccess[]>('/api/site-access/my-sites'),
-
-  // Grant access (legacy)
-  grant: (data: { userId: string; siteId: string; accessLevel?: 'READ' | 'WRITE'; resourcePermissions?: ResourcePermissions }) =>
-    apiClient.post<UserSiteAccess>('/api/site-access', data),
-
-  // Bulk grant access (legacy)
-  bulkGrant: (data: { userIds: string[]; siteId: string; accessLevel?: 'READ' | 'WRITE' }) =>
-    apiClient.post<{ granted: number; skipped: number }>('/api/site-access/bulk', data),
-
-  // Update access level and/or resource permissions (legacy)
-  update: (id: string, data: { accessLevel?: 'READ' | 'WRITE'; resourcePermissions?: ResourcePermissions }) =>
-    apiClient.patch<UserSiteAccess>(`/api/site-access/${id}`, data),
-
-  // Revoke access (legacy)
-  revoke: (id: string) =>
-    apiClient.delete(`/api/site-access/${id}`),
-
   // Check if current user has access
   checkAccess: (siteId: string) =>
     apiClient.get<{ hasAccess: boolean }>(`/api/site-access/check?siteId=${siteId}`),
 
-  // Get current user's permissions (scopes + grants)
+  // Get current user's permissions (delegations + grants)
   myPermissions: () =>
     apiClient.get<MyPermissionsResponse>('/api/site-access/my-permissions'),
 };
 
-// User scopes API
-export const userScopesApi = {
+// User delegations API
+export const userDelegationsApi = {
   getByUser: (userId: string) =>
-    apiClient.get<UserScope[]>(`/api/user-scopes/user/${userId}`),
+    apiClient.get<UserDelegation[]>(`/api/user-delegations/user/${userId}`),
 
-  create: (data: { userId: string; scopeType: ScopeType; scopeId?: string }) =>
-    apiClient.post<UserScope>('/api/user-scopes', data),
+  getByDelegation: (delegationId: string) =>
+    apiClient.get<UserDelegation[]>(`/api/user-delegations/delegation/${delegationId}`),
 
-  bulkSet: (userId: string, data: { userId: string; scopes: { scopeType: ScopeType; scopeId?: string }[] }) =>
-    apiClient.put<UserScope[]>(`/api/user-scopes/user/${userId}`, data),
+  getMine: () =>
+    apiClient.get<UserDelegation[]>('/api/user-delegations/mine'),
 
-  remove: (id: string) =>
-    apiClient.delete(`/api/user-scopes/${id}`),
+  create: (data: { userId: string; delegationId: string; role: string }) =>
+    apiClient.post<UserDelegation>('/api/user-delegations', data),
+
+  setRole: (userId: string, delegationId: string, role: string) =>
+    apiClient.patch<UserDelegation>(`/api/user-delegations/${userId}/${delegationId}`, { role }),
+
+  remove: (userId: string, delegationId: string) =>
+    apiClient.delete(`/api/user-delegations/${userId}/${delegationId}`),
 };
 
 // Access grants API

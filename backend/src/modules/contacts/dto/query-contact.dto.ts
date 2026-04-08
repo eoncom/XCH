@@ -44,23 +44,19 @@ export class QueryContactDto extends PaginationDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ description: 'Direct filter: exact scope type' })
+  @ApiPropertyOptional({ description: 'Filter by delegation ID' })
   @IsOptional()
   @IsString()
-  scopeType?: string;
+  delegationId?: string;
 
-  @ApiPropertyOptional({ description: 'Direct filter: exact scope ID' })
+  @ApiPropertyOptional({ description: 'Filter by site ID' })
   @IsOptional()
   @IsString()
-  scopeId?: string;
+  siteId?: string;
 
-  @ApiPropertyOptional({ description: 'Hierarchical filter: show contacts visible at this scope type (includes global + ancestors)' })
+  @ApiPropertyOptional({ description: 'Include global contacts (delegationId=null) in results' })
   @IsOptional()
-  @IsString()
-  forScopeType?: string;
-
-  @ApiPropertyOptional({ description: 'Hierarchical filter: scope ID' })
-  @IsOptional()
-  @IsString()
-  forScopeId?: string;
+  @Transform(({ value }) => value === 'true')
+  @IsBoolean()
+  includeGlobal?: boolean;
 }

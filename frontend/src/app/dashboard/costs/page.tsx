@@ -10,7 +10,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { expensesApi, billingEntitiesApi, type Expense, type BillingEntity } from '@/lib/api/costs';
-import { organizationApi, type OrganizationTree } from '@/lib/api/organization';
+import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { ScopeBadge } from '@/components/ui/scope-selector';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
@@ -88,7 +88,7 @@ export default function CostsPage() {
   });
   const entities = entitiesResponse ?? [];
 
-  const { data: orgTree = [] } = useQuery<OrganizationTree[]>({
+  const { data: orgTree = [] } = useQuery<Delegation[]>({
     queryKey: ['organization-tree'],
     queryFn: () => organizationApi.getTree(),
     staleTime: 60_000,
@@ -271,7 +271,7 @@ export default function CostsPage() {
                     <Badge variant="outline">{expense.bearer?.name || '—'}</Badge>
                   </TableCell>
                   <TableCell>
-                    <ScopeBadge scopeType={expense.scopeType} scopeId={expense.scopeId} tree={orgTree} />
+                    <ScopeBadge delegationId={expense.delegationId} siteId={expense.siteId} />
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">

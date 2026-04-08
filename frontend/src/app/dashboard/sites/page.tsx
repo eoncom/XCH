@@ -65,7 +65,6 @@ export default function SitesPage() {
   const [siteViewMode, setSiteViewMode] = useState<'grid' | 'list'>('grid');
   const [sortField, setSortField] = useState<string>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [filterDivisionId, setFilterDivisionId] = useState<string>('');
   const [filterDelegationId, setFilterDelegationId] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [page, setPage] = useState(1);
@@ -79,10 +78,9 @@ export default function SitesPage() {
   const effectivePage = activeTab === 'map' ? 1 : page;
 
   const { data: response, isLoading } = useQuery<{ data: Site[]; meta: PaginationMeta }>({
-    queryKey: ['sites', { search, filterDivisionId, filterDelegationId, filterStatus, page: effectivePage, pageSize: effectivePageSize }],
+    queryKey: ['sites', { search, filterDelegationId, filterStatus, page: effectivePage, pageSize: effectivePageSize }],
     queryFn: () => sitesApi.getAllPaginated({
       search: search || undefined,
-      divisionId: filterDivisionId || undefined,
       delegationId: filterDelegationId || undefined,
       status: filterStatus || undefined,
       page: effectivePage,
@@ -93,16 +91,11 @@ export default function SitesPage() {
   const meta = response?.meta;
 
   // Reset page when filters change
-  useEffect(() => { setPage(1); }, [search, filterDivisionId, filterDelegationId, filterStatus]);
-
-  const { data: divisions } = useQuery({
-    queryKey: ['divisions'],
-    queryFn: () => organizationApi.getDivisions(),
-  });
+  useEffect(() => { setPage(1); }, [search, filterDelegationId, filterStatus]);
 
   const { data: delegations } = useQuery({
-    queryKey: ['delegations', filterDivisionId],
-    queryFn: () => organizationApi.getDelegations(filterDivisionId || undefined),
+    queryKey: ['delegations'],
+    queryFn: () => organizationApi.getDelegations(),
   });
 
   const filteredSites = sites.filter((site) => {
@@ -111,10 +104,9 @@ export default function SitesPage() {
       site.code.toLowerCase().includes(search.toLowerCase()) ||
       site.city?.toLowerCase().includes(search.toLowerCase());
 
-    const matchesDivision = !filterDivisionId || site.division?.id === filterDivisionId;
     const matchesDelegation = !filterDelegationId || site.delegationId === filterDelegationId;
 
-    return matchesSearch && matchesDivision && matchesDelegation;
+    return matchesSearch && matchesDelegation;
   });
 
   // Sort sites for table view
@@ -227,22 +219,6 @@ export default function SitesPage() {
             className="pl-10"
           />
         </div>
-        <Select value={filterDivisionId} onValueChange={(v) => { setFilterDivisionId(v === 'all' ? '' : v); setFilterDelegationId(''); }}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Division" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Toutes les divisions</SelectItem>
-            {divisions?.map((d) => (
-              <SelectItem key={d.id} value={d.id}>
-                <span className="flex items-center gap-2">
-                  {d.color && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />}
-                  {d.name}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Select value={filterDelegationId} onValueChange={(v) => setFilterDelegationId(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Délégation" />
@@ -250,7 +226,12 @@ export default function SitesPage() {
           <SelectContent>
             <SelectItem value="all">Toutes les délégations</SelectItem>
             {delegations?.map((d) => (
-              <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+              <SelectItem key={d.id} value={d.id}>
+                <span className="flex items-center gap-2">
+                  {d.groupColor && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: d.groupColor }} />}
+                  {d.groupLabel ? `${d.groupLabel} > ${d.name}` : d.name}
+                </span>
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -379,11 +360,11 @@ export default function SitesPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2 text-sm">
-                        {site.division && (
+                        {site.delegation && (
                           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            {site.division.color && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: site.division.color }} />}
-                            <span>{site.division.name}</span>
-                            {site.delegation && <span> &gt; {site.delegation.name}</span>}
+                            {site.delegation.groupColor && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: site.delegation.groupColor }} />}
+                            {site.delegation.groupLabel && <span>{site.delegation.groupLabel} &gt; </span>}
+                            <span>{site.delegation.name}</span>
                           </div>
                         )}
                         {site.city && (

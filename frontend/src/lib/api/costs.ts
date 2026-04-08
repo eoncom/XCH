@@ -16,14 +16,8 @@ export interface BillingEntity {
   type: string;
   description?: string;
   isActive: boolean;
-  scopeType?: string | null;
-  scopeId?: string | null;
-  /** @deprecated Use scopeType/scopeId */
-  divisionId?: string;
-  /** @deprecated Use scopeType/scopeId */
-  delegationId?: string;
-  /** @deprecated Use scopeType/scopeId */
-  siteId?: string;
+  delegationId?: string | null;
+  siteId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -36,15 +30,14 @@ export interface BillingEntitySummary extends BillingEntity {
 }
 
 export const billingEntitiesApi = {
-  getAll: (params?: { type?: string; isActive?: string; search?: string; scopeType?: string; scopeId?: string; forScopeType?: string; forScopeId?: string }) => {
+  getAll: (params?: { type?: string; isActive?: string; search?: string; delegationId?: string; siteId?: string; includeGlobal?: boolean }) => {
     const qs = new URLSearchParams();
     if (params?.type) qs.set('type', params.type);
     if (params?.isActive) qs.set('isActive', params.isActive);
     if (params?.search) qs.set('search', params.search);
-    if (params?.scopeType) qs.set('scopeType', params.scopeType);
-    if (params?.scopeId) qs.set('scopeId', params.scopeId);
-    if (params?.forScopeType) qs.set('forScopeType', params.forScopeType);
-    if (params?.forScopeId) qs.set('forScopeId', params.forScopeId);
+    if (params?.delegationId) qs.set('delegationId', params.delegationId);
+    if (params?.siteId) qs.set('siteId', params.siteId);
+    if (params?.includeGlobal !== undefined) qs.set('includeGlobal', String(params.includeGlobal));
     const query = qs.toString();
     return apiClient.get<BillingEntity[]>(`/api/billing-entities${query ? `?${query}` : ''}`);
   },
@@ -89,16 +82,12 @@ export interface Expense {
   dateEnd?: string;
   bearerId: string;
   bearer?: BillingEntity;
-  scopeType?: string | null;
-  scopeId?: string | null;
+  delegationId: string;
+  siteId?: string | null;
   vendorId?: string | null;
   vendorContact?: VendorContact | null;
-  /** @deprecated Use scopeType/scopeId */
-  siteId?: string;
   assetId?: string;
   externalRef?: string;
-  /** @deprecated Use vendorId */
-  vendor?: string;
   invoiceRef?: string;
   poNumber?: string;
   notes?: string;
@@ -119,15 +108,11 @@ export interface CreateExpenseData {
   dateStart?: string;
   dateEnd?: string;
   bearerId: string;
-  scopeType?: string | null;
-  scopeId?: string | null;
+  delegationId: string;
+  siteId?: string | null;
   vendorId?: string | null;
-  /** @deprecated Use scopeType/scopeId */
-  siteId?: string;
   assetId?: string;
   externalRef?: string;
-  /** @deprecated Use vendorId */
-  vendor?: string;
   invoiceRef?: string;
   poNumber?: string;
   notes?: string;
@@ -148,7 +133,7 @@ export interface TargetReport {
   allocationCount: number;
 }
 
-function buildExpenseParams(params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; scopeType?: string; scopeId?: string; forScopeType?: string; forScopeId?: string; page?: number; pageSize?: number }) {
+function buildExpenseParams(params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; delegationId?: string; siteId?: string; page?: number; pageSize?: number }) {
   const qs = new URLSearchParams();
   if (params?.type) qs.set('type', params.type);
   if (params?.bearerId) qs.set('bearerId', params.bearerId);
@@ -157,24 +142,22 @@ function buildExpenseParams(params?: { type?: string; bearerId?: string; vendorI
   if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
   if (params?.dateTo) qs.set('dateTo', params.dateTo);
   if (params?.search) qs.set('search', params.search);
-  if (params?.scopeType) qs.set('scopeType', params.scopeType);
-  if (params?.scopeId) qs.set('scopeId', params.scopeId);
-  if (params?.forScopeType) qs.set('forScopeType', params.forScopeType);
-  if (params?.forScopeId) qs.set('forScopeId', params.forScopeId);
+  if (params?.delegationId) qs.set('delegationId', params.delegationId);
+  if (params?.siteId) qs.set('siteId', params.siteId);
   if (params?.page) qs.set('page', String(params.page));
   if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
   return qs;
 }
 
 export const expensesApi = {
-  getAll: async (params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; scopeType?: string; scopeId?: string; forScopeType?: string; forScopeId?: string; page?: number; pageSize?: number }): Promise<Expense[]> => {
+  getAll: async (params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; delegationId?: string; siteId?: string; page?: number; pageSize?: number }): Promise<Expense[]> => {
     const qs = buildExpenseParams(params);
     const query = qs.toString();
     const res = await apiClient.get<PaginatedResponse<Expense>>(`/api/expenses${query ? `?${query}` : ''}`);
     return res.data;
   },
 
-  getAllPaginated: (params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; scopeType?: string; scopeId?: string; forScopeType?: string; forScopeId?: string; page?: number; pageSize?: number }): Promise<PaginatedResponse<Expense>> => {
+  getAllPaginated: (params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; delegationId?: string; siteId?: string; page?: number; pageSize?: number }): Promise<PaginatedResponse<Expense>> => {
     const qs = buildExpenseParams(params);
     const query = qs.toString();
     return apiClient.get<PaginatedResponse<Expense>>(`/api/expenses${query ? `?${query}` : ''}`);
@@ -185,21 +168,19 @@ export const expensesApi = {
   delete: (id: string) => apiClient.delete(`/api/expenses/${id}`),
 
   // Reports
-  reportByBearer: (params?: { dateFrom?: string; dateTo?: string; scopeType?: string; scopeId?: string }) => {
+  reportByBearer: (params?: { dateFrom?: string; dateTo?: string; delegationId?: string }) => {
     const qs = new URLSearchParams();
     if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
     if (params?.dateTo) qs.set('dateTo', params.dateTo);
-    if (params?.scopeType) qs.set('scopeType', params.scopeType);
-    if (params?.scopeId) qs.set('scopeId', params.scopeId);
+    if (params?.delegationId) qs.set('delegationId', params.delegationId);
     const query = qs.toString();
     return apiClient.get<BearerReport[]>(`/api/expenses/reports/by-bearer${query ? `?${query}` : ''}`);
   },
-  reportByTarget: (params?: { dateFrom?: string; dateTo?: string; scopeType?: string; scopeId?: string }) => {
+  reportByTarget: (params?: { dateFrom?: string; dateTo?: string; delegationId?: string }) => {
     const qs = new URLSearchParams();
     if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
     if (params?.dateTo) qs.set('dateTo', params.dateTo);
-    if (params?.scopeType) qs.set('scopeType', params.scopeType);
-    if (params?.scopeId) qs.set('scopeId', params.scopeId);
+    if (params?.delegationId) qs.set('delegationId', params.delegationId);
     const query = qs.toString();
     return apiClient.get<TargetReport[]>(`/api/expenses/reports/by-target${query ? `?${query}` : ''}`);
   },

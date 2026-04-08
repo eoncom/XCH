@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
 import { BrandingProvider } from '@/components/BrandingProvider';
+import { DelegationProvider } from '@/contexts/DelegationContext';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -27,7 +28,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         disableTransitionOnChange={false}
       >
         <BrandingProvider>
-          {children}
+          <DelegationProvider>
+            {children}
+          </DelegationProvider>
         </BrandingProvider>
       </ThemeProvider>
     </QueryClientProvider>

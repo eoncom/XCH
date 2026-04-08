@@ -6,9 +6,14 @@ export interface AuthenticatedUser {
   tenantId: string;
   email: string;
   role: string;
+  isSuperAdmin: boolean;
   totpEnabled?: boolean;
 }
 
 export interface AuthRequest extends Request {
   user: AuthenticatedUser;
+  /** Set by DelegationGuard — active delegation ID from X-Delegation-Id header */
+  delegationId?: string;
+  /** Set by DelegationGuard — local role within the active delegation (from UserDelegation) */
+  localRole?: string;
 }

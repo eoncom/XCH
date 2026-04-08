@@ -9,7 +9,6 @@ export const sitesApi = {
 
   getAllPaginated: async (params?: {
     search?: string;
-    divisionId?: string;
     delegationId?: string;
     status?: string;
     page?: number;
@@ -17,7 +16,6 @@ export const sitesApi = {
   }): Promise<{ data: Site[]; meta: { total: number; page: number; pageSize: number; totalPages: number } }> => {
     const searchParams = new URLSearchParams();
     if (params?.search) searchParams.append('search', params.search);
-    if (params?.divisionId) searchParams.append('divisionId', params.divisionId);
     if (params?.delegationId) searchParams.append('delegationId', params.delegationId);
     if (params?.status) searchParams.append('status', params.status);
     if (params?.page) searchParams.append('page', String(params.page));

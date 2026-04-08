@@ -1,39 +1,55 @@
-# Schéma Base de Données XCH
+# Schema Base de Donnees XCH
 
-Date : 2025-12-31
-Version : 1.0
+Date : 2026-04-08
+Version : 1.3 (Delegation-First — ADR-009)
 
 ## Vue d'ensemble
 
-Base de données PostgreSQL 15+ avec extension PostGIS pour géospatialisation.
+Base de donnees PostgreSQL 15+ avec extension PostGIS pour geospatialisation.
 
-**Architecture** : Multi-tenant avec Row-Level Security (RLS) via `tenantId`
+**Architecture** : Multi-tenant avec isolation via `tenantId`
 
 **ORM** : Prisma
 
+**Modele** : Delegation-First (delegations autonomes, couche globale legere)
+
 ---
 
-## Entités principales
+## Entites principales
 
-### Hiérarchie
+### Hierarchie
 
 ```
-Tenant (Délégation)
-  ├── Users (Utilisateurs)
-  ├── AuthProviders (Config SSO)
-  ├── Sites (Chantiers)
-  │     ├── Assets (Équipements)
-  │     ├── Racks (Baies)
-  │     ├── FloorPlans (Plans d'étage)
-  │     │     └── Pins (Markers sur plans)
-  │     ├── Tasks (Tâches)
-  │     └── Contacts (Contacts chantier)
-  ├── Providers (Prestataires)
-  └── AuditLogs (Audit trail)
+Tenant (= instance XCH)
+  +-- Config globale (SSO, SMTP, monitoring engine)
+  +-- Super Admin (isSuperAdmin sur User)
+  +-- Delegations (autonomes, isolees)
+        +-- groupLabel? / groupColor? (tag UI)
+        +-- Sites
+        |     +-- Assets, Racks, FloorPlans (+Pins)
+        |     +-- Tasks
+        +-- Contacts (delegationId nullable = global)
+        +-- BillingEntities (delegationId nullable + siteId optionnel)
+        +-- Expenses (delegationId obligatoire + siteId optionnel)
+        +-- NotificationConfig (delegationId nullable = global)
+        +-- UserDelegation (userId + role local)
+              +-- AccessGrant (additif, temporaire)
 
-ExternalRefs (Références outils externes) → polymorphique (Sites, Assets)
-Photos (Pièces jointes) → polymorphique (Sites, Assets, Tasks)
+ExternalRefs → polymorphique (Sites, Assets)
+Photos → polymorphique (Sites, Assets, Tasks)
+AuditLogs (audit trail)
 ```
+
+### Rattachement par entite
+
+| Entite | delegationId | siteId | Global possible |
+|--------|:---:|:---:|:---:|
+| Site | FK obligatoire | -- | NON |
+| Asset/Rack/Task/FloorPlan | via site | FK obligatoire | NON |
+| Expense | FK obligatoire | FK optionnel | NON |
+| BillingEntity | FK nullable | FK optionnel | OUI (super admin) |
+| Contact | FK nullable | FK optionnel | OUI (super admin) |
+| NotificationConfig | FK nullable | -- | OUI (super admin) |
 
 ---
 

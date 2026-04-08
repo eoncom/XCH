@@ -2,14 +2,10 @@ import { IsString, IsObject, IsOptional, IsIn, IsNumber, Min, Max } from 'class-
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SaveNotificationConfigDto {
-  @ApiProperty({ description: 'Scope type', enum: ['TENANT', 'DIVISION', 'DELEGATION'] })
+  @ApiPropertyOptional({ description: 'Delegation ID (null = global config)' })
+  @IsOptional()
   @IsString()
-  @IsIn(['TENANT', 'DIVISION', 'DELEGATION'])
-  scopeType: string;
-
-  @ApiProperty({ description: 'Scope ID (tenantId, divisionId, or delegationId)' })
-  @IsString()
-  scopeId: string;
+  delegationId?: string | null;
 
   @ApiProperty({ description: 'Channel configurations (email, teams)' })
   @IsObject()

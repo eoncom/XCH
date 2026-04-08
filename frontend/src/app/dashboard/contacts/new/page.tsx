@@ -60,7 +60,7 @@ type ContactFormData = z.infer<typeof contactSchema>;
 export default function NewContactPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [scope, setScope] = useState<ScopeValue>({ scopeType: null, scopeId: null });
+  const [scope, setScope] = useState<ScopeValue>({ delegationId: null, siteId: null });
 
   const { data: contactTypes } = useQuery<ContactType[]>({
     queryKey: ['contact-types'],
@@ -100,8 +100,8 @@ export default function NewContactPage() {
         company: data.company || undefined,
         role: data.role || undefined,
         notes: data.notes || undefined,
-        scopeType: scope.scopeType || undefined,
-        scopeId: scope.scopeId || undefined,
+        delegationId: scope.delegationId || undefined,
+        siteId: scope.siteId || undefined,
       };
       return contactsApi.create(cleaned);
     },

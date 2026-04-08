@@ -30,19 +30,18 @@ import {
 } from '@/components/ui/alert-dialog';
 import { usersApi } from '@/lib/api/users';
 import {
-  userScopesApi,
+  userDelegationsApi,
   accessGrantsApi,
-  type UserScope,
+  type UserDelegation,
   type AccessGrant,
-  type ScopeType,
   type AccessScope,
   type ResourcePermissionLevel,
   type ResourcePermissions,
 } from '@/lib/api/site-access';
-import { organizationApi } from '@/lib/api/organization';
+import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { sitesApi } from '@/lib/api/sites';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, MapPin, Lock, Unlock, Info, X, Plus, Globe, Building2, Network, Pin, Shield, Calendar, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Lock, Unlock, Info, X, Plus, Network, Shield, Calendar, Trash2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
@@ -66,23 +65,15 @@ const userSchema = z.object({
 
 type UserFormData = z.infer<typeof userSchema>;
 
-const SCOPE_TYPE_LABELS: Record<ScopeType, string> = {
-  TENANT: 'Tout le tenant',
-  DIVISION: 'Division',
-  DELEGATION: 'Délégation',
-  SITE: 'Site',
-};
-
-const SCOPE_TYPE_ICONS: Record<ScopeType, typeof Globe> = {
-  TENANT: Globe,
-  DIVISION: Building2,
-  DELEGATION: Network,
-  SITE: Pin,
+const DELEGATION_ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Administrateur',
+  MANAGER: 'Manager',
+  TECHNICIEN: 'Technicien',
+  VIEWER: 'Observateur',
 };
 
 const ACCESS_SCOPE_LABELS: Record<AccessScope, string> = {
   ALL_SITES: 'Tous les sites',
-  DIVISION: 'Division',
   DELEGATION: 'Délégation',
   SITE: 'Site',
 };
@@ -114,10 +105,10 @@ export default function EditUserPage() {
   const [showDisable2FADialog, setShowDisable2FADialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  // State for adding scope/grant
-  const [showAddScope, setShowAddScope] = useState(false);
-  const [newScopeType, setNewScopeType] = useState<ScopeType>('SITE');
-  const [newScopeTargetId, setNewScopeTargetId] = useState('');
+  // State for adding delegation/grant
+  const [showAddDelegation, setShowAddDelegation] = useState(false);
+  const [newDelegationId, setNewDelegationId] = useState('');
+  const [newDelegationRole, setNewDelegationRole] = useState('VIEWER');
   const [showAddGrant, setShowAddGrant] = useState(false);
   const [newGrantScope, setNewGrantScope] = useState<AccessScope>('ALL_SITES');
   const [newGrantScopeId, setNewGrantScopeId] = useState('');
@@ -130,10 +121,10 @@ export default function EditUserPage() {
     queryFn: () => usersApi.getById(userId),
   });
 
-  // UserScopes
-  const { data: userScopes = [] } = useQuery<UserScope[]>({
-    queryKey: ['user-scopes', userId],
-    queryFn: () => userScopesApi.getByUser(userId),
+  // UserDelegations
+  const { data: userDelegations = [] } = useQuery<UserDelegation[]>({
+    queryKey: ['user-delegations', userId],
+    queryFn: () => userDelegationsApi.getByUser(userId),
     enabled: !!userId,
   });
 
@@ -145,9 +136,9 @@ export default function EditUserPage() {
   });
 
   // Org data for selectors
-  const { data: orgTree } = useQuery({
-    queryKey: ['organization-tree'],
-    queryFn: () => organizationApi.getTree(),
+  const { data: allDelegations } = useQuery<Delegation[]>({
+    queryKey: ['delegations'],
+    queryFn: () => organizationApi.getDelegations(),
   });
 
   const { data: allSites } = useQuery({
@@ -155,20 +146,21 @@ export default function EditUserPage() {
     queryFn: () => sitesApi.getAll(),
   });
 
-  // Mutations for scopes
-  const addScopeMutation = useMutation({
-    mutationFn: (data: { userId: string; scopeType: ScopeType; scopeId?: string }) =>
-      userScopesApi.create(data),
+  // Mutations for delegations
+  const addDelegationMutation = useMutation({
+    mutationFn: (data: { userId: string; delegationId: string; role: string }) =>
+      userDelegationsApi.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-scopes', userId] });
-      setShowAddScope(false);
-      setNewScopeTargetId('');
+      queryClient.invalidateQueries({ queryKey: ['user-delegations', userId] });
+      setShowAddDelegation(false);
+      setNewDelegationId('');
+      setNewDelegationRole('VIEWER');
     },
   });
 
-  const removeScopeMutation = useMutation({
-    mutationFn: (scopeId: string) => userScopesApi.remove(scopeId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['user-scopes', userId] }),
+  const removeDelegationMutation = useMutation({
+    mutationFn: (delegationId: string) => userDelegationsApi.remove(userId, delegationId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['user-delegations', userId] }),
   });
 
   // Mutations for grants
@@ -403,112 +395,95 @@ export default function EditUserPage() {
         </div>
       </form>
 
-      {/* Section: Portées (UserScope) */}
+      {/* Section: Délégations (UserDelegation) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Portées d'accès
+            Délégations d'accès
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Définit où le rôle <Badge variant="outline">{userRoleLabels[user?.role || 'VIEWER']}</Badge> s'applique.
-            Un utilisateur peut avoir plusieurs portées.
+            Définit les délégations auxquelles l'utilisateur a accès et son rôle dans chacune.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
-          {/* Existing scopes */}
-          {userScopes.length > 0 ? (
+          {/* Existing delegations */}
+          {userDelegations.length > 0 ? (
             <div className="space-y-2">
-              {userScopes.map((scope) => {
-                const Icon = SCOPE_TYPE_ICONS[scope.scopeType] || Globe;
-                return (
-                  <div key={scope.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">
-                        {SCOPE_TYPE_LABELS[scope.scopeType]}
-                      </span>
-                      {scope.scopeLabel && (
-                        <span className="text-sm text-muted-foreground">
-                          — {scope.scopeLabel}
-                        </span>
-                      )}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => removeScopeMutation.mutate(scope.id)}
-                      disabled={removeScopeMutation.isPending}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+              {userDelegations.map((ud) => (
+                <div key={ud.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Network className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">
+                      {ud.delegation?.groupLabel ? `${ud.delegation.groupLabel} > ` : ''}
+                      {ud.delegation?.name || ud.delegationId}
+                    </span>
+                    {ud.delegation?.groupColor && (
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ud.delegation.groupColor }} />
+                    )}
+                    <Badge variant="outline" className="text-xs">
+                      {DELEGATION_ROLE_LABELS[ud.role] || ud.role}
+                    </Badge>
                   </div>
-                );
-              })}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => removeDelegationMutation.mutate(ud.delegationId)}
+                    disabled={removeDelegationMutation.isPending}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Aucune portée. L'utilisateur n'a accès à aucun site via son rôle.
+              Aucune délégation. L'utilisateur n'a accès à aucun site.
             </p>
           )}
 
-          {/* Add scope form */}
-          {showAddScope ? (
+          {/* Add delegation form */}
+          {showAddDelegation ? (
             <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">Type de portée</Label>
-                  <Select value={newScopeType} onValueChange={(v) => { setNewScopeType(v as ScopeType); setNewScopeTargetId(''); }}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Label className="text-xs">Délégation</Label>
+                  <Select value={newDelegationId} onValueChange={setNewDelegationId}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="TENANT">Tout le tenant</SelectItem>
-                      <SelectItem value="DIVISION">Division</SelectItem>
-                      <SelectItem value="DELEGATION">Délégation</SelectItem>
-                      <SelectItem value="SITE">Site</SelectItem>
+                      {allDelegations?.map((del) => (
+                        <SelectItem key={del.id} value={del.id}>
+                          {del.groupLabel ? `${del.groupLabel} > ${del.name}` : del.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {newScopeType !== 'TENANT' && (
-                  <div className="space-y-1">
-                    <Label className="text-xs">
-                      {newScopeType === 'DIVISION' ? 'Division' : newScopeType === 'DELEGATION' ? 'Délégation' : 'Site'}
-                    </Label>
-                    <Select value={newScopeTargetId} onValueChange={setNewScopeTargetId}>
-                      <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
-                      <SelectContent>
-                        {newScopeType === 'DIVISION' && orgTree?.map((div) => (
-                          <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
-                        ))}
-                        {newScopeType === 'DELEGATION' && orgTree?.flatMap((div) =>
-                          div.delegations.map((del) => (
-                            <SelectItem key={del.id} value={del.id}>
-                              {div.name} &gt; {del.name}
-                            </SelectItem>
-                          ))
-                        )}
-                        {newScopeType === 'SITE' && allSites?.map((site) => (
-                          <SelectItem key={site.id} value={site.id}>
-                            {site.code} - {site.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                <div className="space-y-1">
+                  <Label className="text-xs">Rôle</Label>
+                  <Select value={newDelegationRole} onValueChange={setNewDelegationRole}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(DELEGATION_ROLE_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="flex gap-2 justify-end">
-                <Button variant="ghost" size="sm" onClick={() => setShowAddScope(false)}>Annuler</Button>
+                <Button variant="ghost" size="sm" onClick={() => setShowAddDelegation(false)}>Annuler</Button>
                 <Button
                   size="sm"
-                  disabled={addScopeMutation.isPending || (newScopeType !== 'TENANT' && !newScopeTargetId)}
+                  disabled={addDelegationMutation.isPending || !newDelegationId}
                   onClick={() => {
-                    addScopeMutation.mutate({
+                    addDelegationMutation.mutate({
                       userId,
-                      scopeType: newScopeType,
-                      scopeId: newScopeType === 'TENANT' ? undefined : newScopeTargetId,
+                      delegationId: newDelegationId,
+                      role: newDelegationRole,
                     });
                   }}
                 >
@@ -517,9 +492,9 @@ export default function EditUserPage() {
               </div>
             </div>
           ) : (
-            <Button variant="outline" size="sm" onClick={() => setShowAddScope(true)}>
+            <Button variant="outline" size="sm" onClick={() => setShowAddDelegation(true)}>
               <Plus className="mr-1 h-4 w-4" />
-              Ajouter une portée
+              Ajouter une délégation
             </Button>
           )}
         </CardContent>
@@ -597,7 +572,6 @@ export default function EditUserPage() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL_SITES">Tous les sites</SelectItem>
-                      <SelectItem value="DIVISION">Division</SelectItem>
                       <SelectItem value="DELEGATION">Délégation</SelectItem>
                       <SelectItem value="SITE">Site</SelectItem>
                     </SelectContent>
@@ -610,16 +584,11 @@ export default function EditUserPage() {
                     <Select value={newGrantScopeId} onValueChange={setNewGrantScopeId}>
                       <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
                       <SelectContent>
-                        {newGrantScope === 'DIVISION' && orgTree?.map((div) => (
-                          <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+                        {newGrantScope === 'DELEGATION' && allDelegations?.map((del) => (
+                          <SelectItem key={del.id} value={del.id}>
+                            {del.groupLabel ? `${del.groupLabel} > ${del.name}` : del.name}
+                          </SelectItem>
                         ))}
-                        {newGrantScope === 'DELEGATION' && orgTree?.flatMap((div) =>
-                          div.delegations.map((del) => (
-                            <SelectItem key={del.id} value={del.id}>
-                              {div.name} &gt; {del.name}
-                            </SelectItem>
-                          ))
-                        )}
                         {newGrantScope === 'SITE' && allSites?.map((site) => (
                           <SelectItem key={site.id} value={site.id}>
                             {site.code} - {site.name}

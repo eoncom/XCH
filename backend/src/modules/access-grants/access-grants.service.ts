@@ -91,11 +91,6 @@ export class AccessGrantsService {
     if (!scopeId) throw new BadRequestException(`scopeId is required for ${scope} scope`);
 
     switch (scope) {
-      case 'DIVISION': {
-        const div = await this.prisma.division.findFirst({ where: { id: scopeId, tenantId } });
-        if (!div) throw new NotFoundException(`Division ${scopeId} not found`);
-        break;
-      }
       case 'DELEGATION': {
         const del = await this.prisma.delegation.findFirst({ where: { id: scopeId, tenantId } });
         if (!del) throw new NotFoundException(`Delegation ${scopeId} not found`);

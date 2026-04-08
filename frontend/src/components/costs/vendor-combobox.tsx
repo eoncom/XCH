@@ -21,8 +21,7 @@ import { toast } from 'sonner';
 interface VendorComboboxProps {
   value: string | null;
   onChange: (vendorId: string | null) => void;
-  scopeType?: string | null;
-  scopeId?: string | null;
+  delegationId?: string | null;
   disabled?: boolean;
   className?: string;
 }
@@ -30,8 +29,7 @@ interface VendorComboboxProps {
 export function VendorCombobox({
   value,
   onChange,
-  scopeType,
-  scopeId,
+  delegationId,
   disabled = false,
   className = '',
 }: VendorComboboxProps) {
@@ -43,12 +41,12 @@ export function VendorCombobox({
 
   // Load provider contacts
   const { data: providers = [] } = useQuery<Contact[]>({
-    queryKey: ['contacts', 'providers', scopeType, scopeId],
+    queryKey: ['contacts', 'providers', delegationId],
     queryFn: () =>
       contactsApi.getAll({
         category: 'PROVIDER',
         isActive: true,
-        ...(scopeType && scopeId ? { forScopeType: scopeType, forScopeId: scopeId } : {}),
+        ...(delegationId ? { delegationId, includeGlobal: true } : {}),
       }),
   });
 

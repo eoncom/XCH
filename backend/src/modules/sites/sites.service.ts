@@ -129,17 +129,8 @@ export class SitesService {
       paramIndex++;
     }
 
-    // Division filter: join through delegation
-    let joinClause = '';
-    if (filter?.divisionId) {
-      joinClause = `JOIN "delegations" del ON del.id = s."delegationId"`;
-      whereClause += ` AND del."divisionId" = $${paramIndex}`;
-      params.push(filter.divisionId);
-      paramIndex++;
-    }
-
-    // Build COUNT query — needs the delegation JOIN only when divisionId filter is active
-    const countJoin = filter?.divisionId ? joinClause : '';
+    // Build COUNT query
+    const countJoin = '';
     const countResult = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(
       `SELECT COUNT(*) as count FROM "sites" s ${countJoin} WHERE ${whereClause}`,
       ...params,
@@ -161,13 +152,7 @@ export class SitesService {
     const limitClause = `LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
 
     // Use raw query to extract latitude/longitude from PostGIS coordinates
-    // Always LEFT JOIN delegation and division for org info
-    const orgJoin = filter?.divisionId
-      ? joinClause // Already has the JOIN from division filter
-      : `LEFT JOIN "delegations" del ON del.id = s."delegationId"`;
-    const divJoin = filter?.divisionId
-      ? `LEFT JOIN "divisions" div ON div.id = del."divisionId"` // del already joined
-      : `LEFT JOIN "divisions" div ON div.id = del."divisionId"`;
+    const orgJoin = `LEFT JOIN "delegations" del ON del.id = s."delegationId"`;
 
     const rawSites = await this.prisma.$queryRawUnsafe(`
       SELECT
@@ -197,13 +182,10 @@ export class SitesService {
         ST_X(s.coordinates::geometry) as longitude,
         del.name as "delegation_name",
         del.code as "delegation_code",
-        div.id as "division_id",
-        div.name as "division_name",
-        div.code as "division_code",
-        div.color as "division_color"
+        del."groupLabel" as "delegation_groupLabel",
+        del."groupColor" as "delegation_groupColor"
       FROM "sites" s
       ${orgJoin}
-      ${divJoin}
       WHERE ${whereClause}
       ORDER BY ${sortColumn} ${sortDirection}
       ${limitClause}
@@ -216,19 +198,13 @@ export class SitesService {
         id: site.delegationId,
         name: site.delegation_name,
         code: site.delegation_code,
-      } : null,
-      division: site.division_id ? {
-        id: site.division_id,
-        name: site.division_name,
-        code: site.division_code,
-        color: site.division_color,
+        groupLabel: site.delegation_groupLabel,
+        groupColor: site.delegation_groupColor,
       } : null,
       delegation_name: undefined,
       delegation_code: undefined,
-      division_id: undefined,
-      division_name: undefined,
-      division_code: undefined,
-      division_color: undefined,
+      delegation_groupLabel: undefined,
+      delegation_groupColor: undefined,
     }));
 
     return buildPaginatedResponse(transformedResults, total, page, pageSize);
@@ -268,13 +244,10 @@ export class SitesService {
         del.id as "delegation_id",
         del.name as "delegation_name",
         del.code as "delegation_code",
-        div.id as "division_id",
-        div.name as "division_name",
-        div.code as "division_code",
-        div.color as "division_color"
+        del."groupLabel" as "delegation_groupLabel",
+        del."groupColor" as "delegation_groupColor"
       FROM "sites" s
       LEFT JOIN "delegations" del ON del.id = s."delegationId"
-      LEFT JOIN "divisions" div ON div.id = del."divisionId"
       WHERE s.id = $1 AND s."tenantId" = $2
     `, id, tenantId);
 
@@ -291,12 +264,8 @@ export class SitesService {
         id: site.delegation_id,
         name: site.delegation_name,
         code: site.delegation_code,
-      } : null,
-      division: site.division_id ? {
-        id: site.division_id,
-        name: site.division_name,
-        code: site.division_code,
-        color: site.division_color,
+        groupLabel: site.delegation_groupLabel,
+        groupColor: site.delegation_groupColor,
       } : null,
       _count: {
         assets: Number(site._count_assets) || 0,
@@ -309,10 +278,8 @@ export class SitesService {
       delegation_id: undefined,
       delegation_name: undefined,
       delegation_code: undefined,
-      division_id: undefined,
-      division_name: undefined,
-      division_code: undefined,
-      division_color: undefined,
+      delegation_groupLabel: undefined,
+      delegation_groupColor: undefined,
     };
   }
 

@@ -22,11 +22,10 @@ import {
 } from '@/components/ui/select';
 import { usersApi } from '@/lib/api/users';
 import { apiClient } from '@/lib/api-client';
-import { userScopesApi, type ScopeType } from '@/lib/api/site-access';
-import { organizationApi } from '@/lib/api/organization';
-import { sitesApi } from '@/lib/api/sites';
+import { userDelegationsApi } from '@/lib/api/site-access';
+import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { showToast } from '@/lib/toast';
-import { ArrowLeft, Info, UserPlus, Send, Copy, CheckCircle2, Shield, Globe, Building2, Network, Pin } from 'lucide-react';
+import { ArrowLeft, Info, UserPlus, Send, Copy, CheckCircle2, Shield, Network } from 'lucide-react';
 import Link from 'next/link';
 import type { UserRole } from '@/types';
 
@@ -56,18 +55,11 @@ const inviteSchema = z.object({
 type DirectFormData = z.infer<typeof directSchema>;
 type InviteFormData = z.infer<typeof inviteSchema>;
 
-const SCOPE_TYPE_LABELS: Record<ScopeType, string> = {
-  TENANT: 'Tout le tenant',
-  DIVISION: 'Division',
-  DELEGATION: 'Délégation',
-  SITE: 'Site',
-};
-
-const SCOPE_TYPE_ICONS: Record<ScopeType, typeof Globe> = {
-  TENANT: Globe,
-  DIVISION: Building2,
-  DELEGATION: Network,
-  SITE: Pin,
+const DELEGATION_ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Administrateur',
+  MANAGER: 'Manager',
+  TECHNICIEN: 'Technicien',
+  VIEWER: 'Observateur',
 };
 
 export default function NewUserPage() {
@@ -76,21 +68,17 @@ export default function NewUserPage() {
   const [mode, setMode] = useState<'direct' | 'invite'>('direct');
   const [inviteResult, setInviteResult] = useState<{ token?: string; link?: string } | null>(null);
 
-  // Scope state (mandatory)
-  const [scopeType, setScopeType] = useState<ScopeType>('TENANT');
-  const [scopeTargetId, setScopeTargetId] = useState('');
+  // Delegation state (mandatory)
+  const [selectedDelegationId, setSelectedDelegationId] = useState('');
+  const [delegationRole, setDelegationRole] = useState('VIEWER');
 
-  // Org data for scope selector
-  const { data: orgTree } = useQuery({
-    queryKey: ['organization-tree'],
-    queryFn: () => organizationApi.getTree(),
-  });
-  const { data: allSites } = useQuery({
-    queryKey: ['sites'],
-    queryFn: () => sitesApi.getAll(),
+  // Org data for delegation selector
+  const { data: delegations } = useQuery({
+    queryKey: ['delegations'],
+    queryFn: () => organizationApi.getDelegations(),
   });
 
-  const isScopeValid = scopeType === 'TENANT' || !!scopeTargetId;
+  const isDelegationValid = !!selectedDelegationId;
 
   // Direct creation form
   const directForm = useForm<DirectFormData>({
@@ -108,17 +96,17 @@ export default function NewUserPage() {
     mutationFn: async (data: DirectFormData) => {
       // 1. Create user
       const newUser = await usersApi.create(data);
-      // 2. Assign mandatory scope
-      await userScopesApi.create({
+      // 2. Assign mandatory delegation
+      await userDelegationsApi.create({
         userId: newUser.id,
-        scopeType,
-        scopeId: scopeType === 'TENANT' ? undefined : scopeTargetId,
+        delegationId: selectedDelegationId,
+        role: delegationRole,
       });
       return newUser;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      showToast.success('Utilisateur créé avec portée assignée');
+      showToast.success('Utilisateur créé avec délégation assignée');
       router.push('/dashboard/users');
     },
     onError: (err: any) => {
@@ -130,19 +118,19 @@ export default function NewUserPage() {
     mutationFn: async (data: InviteFormData) => {
       // 1. Create invited user
       const result = await apiClient.post<{ user: any; inviteToken?: string }>('/api/auth/invite', data);
-      // 2. Assign mandatory scope
+      // 2. Assign mandatory delegation
       if (result.user?.id) {
-        await userScopesApi.create({
+        await userDelegationsApi.create({
           userId: result.user.id,
-          scopeType,
-          scopeId: scopeType === 'TENANT' ? undefined : scopeTargetId,
+          delegationId: selectedDelegationId,
+          role: delegationRole,
         });
       }
       return result;
     },
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      showToast.success('Invitation envoyée avec portée assignée !');
+      showToast.success('Invitation envoyée avec délégation assignée !');
       // If SMTP failed, the token may be returned for manual sharing
       if (result.inviteToken) {
         const link = `${window.location.origin}/invite?token=${result.inviteToken}`;
@@ -233,62 +221,50 @@ export default function NewUserPage() {
               </CardContent>
             </Card>
 
-            {/* Scope Card (mandatory) */}
+            {/* Delegation Card (mandatory) */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="h-5 w-5" />
-                  Portée d&apos;accès
+                  Délégation d&apos;accès
                   <span className="text-xs font-normal text-red-500 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded">Obligatoire</span>
                 </CardTitle>
                 <CardDescription>
-                  Sans portée, l&apos;utilisateur n&apos;aura aucun accès. Définissez au minimum une portée.
+                  Sans délégation, l&apos;utilisateur n&apos;aura aucun accès. Assignez au minimum une délégation.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Type de portée <span className="text-red-500">*</span></Label>
-                    <Select value={scopeType} onValueChange={(v) => { setScopeType(v as ScopeType); setScopeTargetId(''); }}>
+                    <Label>Délégation <span className="text-red-500">*</span></Label>
+                    <Select value={selectedDelegationId} onValueChange={setSelectedDelegationId}>
+                      <SelectTrigger><SelectValue placeholder="Sélectionner une délégation..." /></SelectTrigger>
+                      <SelectContent>
+                        {delegations?.map((del: Delegation) => (
+                          <SelectItem key={del.id} value={del.id}>
+                            <span className="flex items-center gap-2">
+                              {del.groupColor && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: del.groupColor }} />}
+                              {del.groupLabel ? `${del.groupLabel} > ${del.name}` : del.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!selectedDelegationId && (
+                      <p className="text-sm text-red-600">Veuillez sélectionner une délégation</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Rôle dans la délégation <span className="text-red-500">*</span></Label>
+                    <Select value={delegationRole} onValueChange={setDelegationRole}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="TENANT">Tout le tenant</SelectItem>
-                        <SelectItem value="DIVISION">Division</SelectItem>
-                        <SelectItem value="DELEGATION">Délégation</SelectItem>
-                        <SelectItem value="SITE">Site</SelectItem>
+                        {Object.entries(DELEGATION_ROLE_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  {scopeType !== 'TENANT' && (
-                    <div className="space-y-2">
-                      <Label>
-                        {scopeType === 'DIVISION' ? 'Division' : scopeType === 'DELEGATION' ? 'Délégation' : 'Site'} <span className="text-red-500">*</span>
-                      </Label>
-                      <Select value={scopeTargetId} onValueChange={setScopeTargetId}>
-                        <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
-                        <SelectContent>
-                          {scopeType === 'DIVISION' && orgTree?.map((div: any) => (
-                            <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
-                          ))}
-                          {scopeType === 'DELEGATION' && orgTree?.flatMap((div: any) =>
-                            div.delegations.map((del: any) => (
-                              <SelectItem key={del.id} value={del.id}>
-                                {div.name} &gt; {del.name}
-                              </SelectItem>
-                            ))
-                          )}
-                          {scopeType === 'SITE' && allSites?.map((site: any) => (
-                            <SelectItem key={site.id} value={site.id}>
-                              {site.code} - {site.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {!scopeTargetId && (
-                        <p className="text-sm text-red-600">Veuillez sélectionner une cible pour la portée</p>
-                      )}
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>
@@ -299,7 +275,7 @@ export default function NewUserPage() {
               </p>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => router.push('/dashboard/users')}>Annuler</Button>
-                <Button type="submit" disabled={createMutation.isPending || !isScopeValid}>
+                <Button type="submit" disabled={createMutation.isPending || !isDelegationValid}>
                   {createMutation.isPending ? 'Création...' : 'Créer l\'utilisateur'}
                 </Button>
               </div>
@@ -371,62 +347,50 @@ export default function NewUserPage() {
                 </CardContent>
               </Card>
 
-              {/* Scope Card (mandatory) */}
+              {/* Delegation Card (mandatory) */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Shield className="h-5 w-5" />
-                    Portée d&apos;accès
+                    Délégation d&apos;accès
                     <span className="text-xs font-normal text-red-500 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded">Obligatoire</span>
                   </CardTitle>
                   <CardDescription>
-                    Sans portée, l&apos;utilisateur n&apos;aura aucun accès. Définissez au minimum une portée.
+                    Sans délégation, l&apos;utilisateur n&apos;aura aucun accès. Assignez au minimum une délégation.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Type de portée <span className="text-red-500">*</span></Label>
-                      <Select value={scopeType} onValueChange={(v) => { setScopeType(v as ScopeType); setScopeTargetId(''); }}>
+                      <Label>Délégation <span className="text-red-500">*</span></Label>
+                      <Select value={selectedDelegationId} onValueChange={setSelectedDelegationId}>
+                        <SelectTrigger><SelectValue placeholder="Sélectionner une délégation..." /></SelectTrigger>
+                        <SelectContent>
+                          {delegations?.map((del: Delegation) => (
+                            <SelectItem key={del.id} value={del.id}>
+                              <span className="flex items-center gap-2">
+                                {del.groupColor && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: del.groupColor }} />}
+                                {del.groupLabel ? `${del.groupLabel} > ${del.name}` : del.name}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {!selectedDelegationId && (
+                        <p className="text-sm text-red-600">Veuillez sélectionner une délégation</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Rôle dans la délégation <span className="text-red-500">*</span></Label>
+                      <Select value={delegationRole} onValueChange={setDelegationRole}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="TENANT">Tout le tenant</SelectItem>
-                          <SelectItem value="DIVISION">Division</SelectItem>
-                          <SelectItem value="DELEGATION">Délégation</SelectItem>
-                          <SelectItem value="SITE">Site</SelectItem>
+                          {Object.entries(DELEGATION_ROLE_LABELS).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    {scopeType !== 'TENANT' && (
-                      <div className="space-y-2">
-                        <Label>
-                          {scopeType === 'DIVISION' ? 'Division' : scopeType === 'DELEGATION' ? 'Délégation' : 'Site'} <span className="text-red-500">*</span>
-                        </Label>
-                        <Select value={scopeTargetId} onValueChange={setScopeTargetId}>
-                          <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
-                          <SelectContent>
-                            {scopeType === 'DIVISION' && orgTree?.map((div: any) => (
-                              <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
-                            ))}
-                            {scopeType === 'DELEGATION' && orgTree?.flatMap((div: any) =>
-                              div.delegations.map((del: any) => (
-                                <SelectItem key={del.id} value={del.id}>
-                                  {div.name} &gt; {del.name}
-                                </SelectItem>
-                              ))
-                            )}
-                            {scopeType === 'SITE' && allSites?.map((site: any) => (
-                              <SelectItem key={site.id} value={site.id}>
-                                {site.code} - {site.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {!scopeTargetId && (
-                          <p className="text-sm text-red-600">Veuillez sélectionner une cible pour la portée</p>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -437,7 +401,7 @@ export default function NewUserPage() {
                 </p>
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" onClick={() => router.push('/dashboard/users')}>Annuler</Button>
-                  <Button type="submit" disabled={inviteMutation.isPending || !isScopeValid}>
+                  <Button type="submit" disabled={inviteMutation.isPending || !isDelegationValid}>
                     {inviteMutation.isPending ? 'Envoi...' : 'Envoyer l\'invitation'}
                   </Button>
                 </div>

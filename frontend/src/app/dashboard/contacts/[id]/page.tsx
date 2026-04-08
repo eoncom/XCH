@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { contactsApi } from '@/lib/api/contacts';
-import { organizationApi, type OrganizationTree } from '@/lib/api/organization';
+// organizationApi no longer needed — ScopeBadge uses delegationId/siteId directly
 import { usePermissions } from '@/hooks/usePermissions';
 import { InlineEditCard } from '@/components/InlineEditCard';
 import { ScopeSelector, ScopeBadge, type ScopeValue } from '@/components/ui/scope-selector';
@@ -103,16 +103,10 @@ export default function ContactDetailPage({
     },
   });
 
-  const { data: orgTree = [] } = useQuery<OrganizationTree[]>({
-    queryKey: ['organization-tree'],
-    queryFn: () => organizationApi.getTree(),
-    staleTime: 60_000,
-  });
-
   // Inline edit state
   const [editCoords, setEditCoords] = useState({ email: '', phone: '', mobile: '' });
   const [editNotes, setEditNotes] = useState('');
-  const [editScope, setEditScope] = useState<ScopeValue>({ scopeType: null, scopeId: null });
+  const [editScope, setEditScope] = useState<ScopeValue>({ delegationId: null, siteId: null });
 
   const updateMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => contactsApi.update(id, data as any),
@@ -179,7 +173,7 @@ export default function ContactDetailPage({
               {categoryLabels[contact.type.category]}
             </Badge>
           )}
-          <ScopeBadge scopeType={contact.scopeType} scopeId={contact.scopeId} tree={orgTree} />
+          <ScopeBadge delegationId={contact.delegationId} siteId={contact.siteId} />
           <Badge variant={contact.isActive ? 'success' : 'secondary'}>
             {contact.isActive ? 'Actif' : 'Inactif'}
           </Badge>
@@ -356,16 +350,16 @@ export default function ContactDetailPage({
         icon={Building2}
         canEdit={canUpdate('contacts')}
         onEdit={() => setEditScope({
-          scopeType: contact.scopeType || null,
-          scopeId: contact.scopeId || null,
+          delegationId: contact.delegationId || null,
+          siteId: contact.siteId || null,
         })}
         onSave={async () => {
           await updateMutation.mutateAsync({
-            scopeType: editScope.scopeType || null,
-            scopeId: editScope.scopeId || null,
+            delegationId: editScope.delegationId || null,
+            siteId: editScope.siteId || null,
           });
         }}
-        onCancel={() => setEditScope({ scopeType: null, scopeId: null })}
+        onCancel={() => setEditScope({ delegationId: null, siteId: null })}
         editContent={
           <ScopeSelector
             value={editScope}
@@ -374,7 +368,7 @@ export default function ContactDetailPage({
           />
         }
       >
-        <ScopeBadge scopeType={contact.scopeType} scopeId={contact.scopeId} tree={orgTree} />
+        <ScopeBadge delegationId={contact.delegationId} siteId={contact.siteId} />
       </InlineEditCard>
 
       {/* Metadata */}

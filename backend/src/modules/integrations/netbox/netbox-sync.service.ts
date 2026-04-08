@@ -461,14 +461,8 @@ export class NetboxSyncService {
     const existing = await this.prisma.delegation.findFirst({ where: { tenantId, code: 'IMPORT' } });
     if (existing) return existing.id;
 
-    let division = await this.prisma.division.findFirst({ where: { tenantId, code: 'IMPORT' } });
-    if (!division) {
-      division = await this.prisma.division.create({
-        data: { tenantId, name: 'Imports', code: 'IMPORT', notes: 'Division auto-créée pour les imports' },
-      });
-    }
     const delegation = await this.prisma.delegation.create({
-      data: { tenantId, divisionId: division.id, name: 'Imports', code: 'IMPORT', notes: 'Délégation auto-créée pour les imports' },
+      data: { tenantId, name: 'Imports', code: 'IMPORT', notes: 'Délégation auto-créée pour les imports' },
     });
     return delegation.id;
   }

@@ -34,7 +34,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
-import { organizationApi, type OrganizationTree } from '@/lib/api/organization';
+import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { ScopeBadge } from '@/components/ui/scope-selector';
 import { Plus, Search, Eye, Pencil, Trash2, Users, Settings } from 'lucide-react';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
@@ -74,18 +74,23 @@ export default function ContactsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const { data: orgTree = [] } = useQuery<OrganizationTree[]>({
+  const { data: orgTree = [] } = useQuery<Delegation[]>({
     queryKey: ['organization-tree'],
     queryFn: () => organizationApi.getTree(),
     staleTime: 60_000,
   });
 
-  // Parse scope filter: "ALL" | "GLOBAL" | "DIVISION:id" | "DELEGATION:id" | "SITE:id"
-  const parsedScope = scopeFilter.includes(':')
-    ? { scopeType: scopeFilter.split(':')[0], scopeId: scopeFilter.split(':')[1] }
-    : scopeFilter === 'GLOBAL'
-      ? { scopeType: '_GLOBAL' as string, scopeId: undefined }
-      : { scopeType: undefined, scopeId: undefined };
+  // Parse scope filter: "ALL" | "GLOBAL" | "DELEGATION:id" | "SITE:id"
+  const parsedScope = (() => {
+    if (scopeFilter.startsWith('DELEGATION:')) {
+      return { delegationId: scopeFilter.split(':')[1], siteId: undefined };
+    }
+    if (scopeFilter.startsWith('SITE:')) {
+      return { delegationId: undefined, siteId: scopeFilter.split(':')[1] };
+    }
+    return { delegationId: undefined, siteId: undefined };
+  })();
+  const includeGlobal = scopeFilter === 'ALL' || scopeFilter === 'GLOBAL' ? true : undefined;
 
   const { data: response, isLoading, error } = useQuery<{ data: Contact[]; meta: PaginationMeta }>({
     queryKey: ['contacts', { search, categoryFilter, typeFilter, scopeFilter, page, pageSize }],
@@ -93,8 +98,9 @@ export default function ContactsPage() {
       search: search || undefined,
       category: categoryFilter !== 'ALL' ? categoryFilter : undefined,
       typeId: typeFilter !== 'ALL' ? typeFilter : undefined,
-      scopeType: parsedScope.scopeType !== '_GLOBAL' ? parsedScope.scopeType : undefined,
-      scopeId: parsedScope.scopeId,
+      delegationId: parsedScope.delegationId,
+      siteId: parsedScope.siteId,
+      includeGlobal,
       page,
       pageSize,
     }),
@@ -277,18 +283,11 @@ export default function ContactsPage() {
           <SelectContent>
             <SelectItem value="ALL">Toutes les portees</SelectItem>
             <SelectItem value="GLOBAL">Global (tenant)</SelectItem>
-            {orgTree.map((div) => (
-              <SelectItem key={div.id} value={`DIVISION:${div.id}`}>
-                Div. {div.name}
+            {orgTree.map((del) => (
+              <SelectItem key={del.id} value={`DELEGATION:${del.id}`}>
+                Del. {del.name}
               </SelectItem>
             ))}
-            {orgTree.flatMap((div) =>
-              (div.delegations || []).map((del) => (
-                <SelectItem key={del.id} value={`DELEGATION:${del.id}`}>
-                  Del. {del.name}
-                </SelectItem>
-              ))
-            )}
           </SelectContent>
         </Select>
       </div>
@@ -349,7 +348,7 @@ export default function ContactsPage() {
                       {contact.phone || contact.mobile || '-'}
                     </TableCell>
                     <TableCell>
-                      <ScopeBadge scopeType={contact.scopeType} scopeId={contact.scopeId} tree={orgTree} />
+                      <ScopeBadge delegationId={contact.delegationId} siteId={contact.siteId} />
                     </TableCell>
                     <TableCell>
                       <Badge variant={contact.isActive ? 'success' : 'secondary'}>

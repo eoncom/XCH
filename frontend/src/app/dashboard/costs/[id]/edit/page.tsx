@@ -56,7 +56,7 @@ export default function EditExpensePage() {
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
   const [bearerId, setBearerId] = useState('');
-  const [scope, setScope] = useState<ScopeValue>({ scopeType: null, scopeId: null });
+  const [scope, setScope] = useState<ScopeValue>({ delegationId: null, siteId: null });
   const [externalRef, setExternalRef] = useState('');
   const [vendorId, setVendorId] = useState<string | null>(null);
   const [assetId, setAssetId] = useState('');
@@ -94,7 +94,7 @@ export default function EditExpensePage() {
       setDateStart(expense.dateStart ? new Date(expense.dateStart).toISOString().split('T')[0] : '');
       setDateEnd(expense.dateEnd ? new Date(expense.dateEnd).toISOString().split('T')[0] : '');
       setBearerId(expense.bearerId);
-      setScope({ scopeType: expense.scopeType || null, scopeId: expense.scopeId || null });
+      setScope({ delegationId: expense.delegationId || null, siteId: expense.siteId || null });
       setAssetId(expense.assetId || '');
       setExternalRef(expense.externalRef || '');
       setVendorId(expense.vendorId || null);
@@ -140,8 +140,8 @@ export default function EditExpensePage() {
       dateStart: dateStart || undefined,
       dateEnd: dateEnd || undefined,
       bearerId,
-      scopeType: scope.scopeType || null,
-      scopeId: scope.scopeId || null,
+      delegationId: scope.delegationId || null,
+      siteId: scope.siteId || null,
       vendorId: vendorId || null,
       assetId: assetId || undefined,
       externalRef: externalRef || undefined,
@@ -256,8 +256,7 @@ export default function EditExpensePage() {
               <VendorCombobox
                 value={vendorId}
                 onChange={setVendorId}
-                scopeType={scope.scopeType}
-                scopeId={scope.scopeId}
+                delegationId={scope.delegationId}
               />
             </div>
             <div className="space-y-1">
