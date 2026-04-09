@@ -73,6 +73,22 @@ const DELEGATION_ROLE_LABELS: Record<string, string> = {
   VIEWER: 'Observateur',
 };
 
+// Role hierarchy — delegation role cannot exceed global User.role
+const ROLE_HIERARCHY: Record<string, number> = {
+  ADMIN: 4,
+  MANAGER: 3,
+  TECHNICIEN: 2,
+  VIEWER: 1,
+};
+
+/** Returns allowed delegation roles based on user's global role */
+function getAllowedDelegationRoles(globalRole: string): string[] {
+  const maxLevel = ROLE_HIERARCHY[globalRole] || 1;
+  return Object.entries(ROLE_HIERARCHY)
+    .filter(([, level]) => level <= maxLevel)
+    .map(([role]) => role);
+}
+
 const ACCESS_SCOPE_LABELS: Record<AccessScope, string> = {
   ALL_SITES: 'Tous les sites',
   DELEGATION: 'Délégation',
@@ -543,11 +559,16 @@ export default function EditUserPage() {
                       <Select value={newDelegationRole} onValueChange={setNewDelegationRole}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {Object.entries(DELEGATION_ROLE_LABELS).map(([value, label]) => (
-                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                          {getAllowedDelegationRoles(user?.role || 'VIEWER').map((value) => (
+                            <SelectItem key={value} value={value}>{DELEGATION_ROLE_LABELS[value]}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      {user?.role && ROLE_HIERARCHY[user.role] < 4 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Limité à {DELEGATION_ROLE_LABELS[user.role]} max (rôle du compte)
+                        </p>
+                      )}
                     </div>
                   </div>
 
