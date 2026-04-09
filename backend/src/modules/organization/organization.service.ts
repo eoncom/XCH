@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 import { CreateDelegationDto } from './dto/create-delegation.dto';
 import { UpdateDelegationDto } from './dto/update-delegation.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
@@ -26,6 +26,24 @@ export class OrganizationService {
     const delegation = await this.prisma.delegation.create({
       data: { tenantId, ...dto },
     });
+
+    // Auto-assign all super admins to this new delegation with ADMIN role
+    const superAdmins = await this.prisma.user.findMany({
+      where: { tenantId, isSuperAdmin: true },
+      select: { id: true },
+    });
+    if (superAdmins.length > 0) {
+      await this.prisma.userDelegation.createMany({
+        data: superAdmins.map(sa => ({
+          tenantId,
+          userId: sa.id,
+          delegationId: delegation.id,
+          role: UserRole.ADMIN,
+          grantedBy: userId,
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     await this.auditLogService.log({
       tenantId, userId, action: 'CREATE', entityType: 'delegation', entityId: delegation.id,
