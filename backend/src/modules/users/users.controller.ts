@@ -9,6 +9,8 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { FilterUserDto } from './dto/filter-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
+import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
 
@@ -62,6 +64,19 @@ export class UsersController {
   @ApiOperation({ summary: 'Delete user' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.usersService.remove(id, req.user.tenantId, req.user.userId);
+  }
+
+  // Super admin management — only super admins can promote/demote
+  @Post(':id/toggle-super-admin')
+  @SkipDelegation()
+  @UseGuards(SuperAdminGuard)
+  @ApiOperation({ summary: 'Promote or demote a user as super admin' })
+  toggleSuperAdmin(
+    @Param('id') id: string,
+    @Body() body: { promote: boolean },
+    @Request() req: AuthRequest,
+  ) {
+    return this.usersService.toggleSuperAdmin(id, req.user.tenantId, req.user.userId, body.promote);
   }
 
   // Settings endpoints - accessible to all authenticated users

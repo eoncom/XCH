@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaClient, UserRole } from '@prisma/client';
 
 @Injectable()
@@ -56,8 +56,18 @@ export class UserDelegationsService {
 
   /**
    * Remove a user from a delegation (R6 — local deletion).
+   * Super admins cannot be removed from any delegation.
    */
   async removeUserFromDelegation(userId: string, delegationId: string) {
+    // Check if target user is super admin — cannot remove from delegation
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isSuperAdmin: true },
+    });
+    if (user?.isSuperAdmin) {
+      throw new ForbiddenException('Impossible de retirer un super administrateur d\'une délégation — accès ADMIN sur toutes les délégations');
+    }
+
     const existing = await this.prisma.userDelegation.findUnique({
       where: { userId_delegationId: { userId, delegationId } },
     });
@@ -116,8 +126,18 @@ export class UserDelegationsService {
 
   /**
    * Change a user's local role within a delegation.
+   * Super admins are always ADMIN — their role cannot be changed.
    */
   async setRole(userId: string, delegationId: string, newRole: UserRole) {
+    // Check if target user is super admin — cannot change their role
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isSuperAdmin: true },
+    });
+    if (user?.isSuperAdmin) {
+      throw new ForbiddenException('Impossible de modifier le rôle d\'un super administrateur — toujours ADMIN sur toutes les délégations');
+    }
+
     const existing = await this.prisma.userDelegation.findUnique({
       where: { userId_delegationId: { userId, delegationId } },
     });

@@ -1,5 +1,5 @@
-import { Injectable, Inject, NotFoundException, ConflictException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Injectable, Inject, NotFoundException, ConflictException, UnauthorizedException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { PrismaClient, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -267,6 +267,112 @@ export class UsersService {
 
     const { passwordHash, ...result } = updatedUser;
     return result;
+  }
+
+  /**
+   * Toggle super admin status for a user.
+   * Only callable by an existing super admin.
+   * When promoting: auto-creates UserDelegation(ADMIN) on ALL delegations.
+   * When demoting: removes auto-created delegations (keeps manually assigned ones with their roles).
+   */
+  async toggleSuperAdmin(targetUserId: string, tenantId: string, requestingUserId: string, promote: boolean) {
+    // Verify requesting user is super admin
+    const requestingUser = await this.prisma.user.findUnique({
+      where: { id: requestingUserId },
+      select: { isSuperAdmin: true },
+    });
+    if (!requestingUser?.isSuperAdmin) {
+      throw new ForbiddenException('Seul un super administrateur peut gérer les super administrateurs');
+    }
+
+    // Cannot demote yourself
+    if (requestingUserId === targetUserId && !promote) {
+      throw new ForbiddenException('Vous ne pouvez pas retirer votre propre statut super administrateur');
+    }
+
+    // Verify target user exists
+    const targetUser = await this.prisma.user.findFirst({
+      where: { id: targetUserId, tenantId },
+    });
+    if (!targetUser) {
+      throw new NotFoundException('Utilisateur non trouvé');
+    }
+
+    if (promote && targetUser.isSuperAdmin) {
+      throw new BadRequestException('Cet utilisateur est déjà super administrateur');
+    }
+    if (!promote && !targetUser.isSuperAdmin) {
+      throw new BadRequestException("Cet utilisateur n'est pas super administrateur");
+    }
+
+    // Update isSuperAdmin flag
+    await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        isSuperAdmin: promote,
+        role: promote ? UserRole.ADMIN : targetUser.role, // Set default role to ADMIN when promoting
+      },
+    });
+
+    // Sync delegations
+    if (promote) {
+      await this.syncSuperAdminDelegations(targetUserId, tenantId, requestingUserId);
+    }
+
+    const updatedUser = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      include: {
+        tenant: true,
+        userDelegations: {
+          include: { delegation: { select: { id: true, name: true, code: true, groupLabel: true } } },
+        },
+      },
+    });
+
+    const { passwordHash, totpSecret, totpBackupCodes, ...result } = updatedUser!;
+    return result;
+  }
+
+  /**
+   * Ensure a super admin has ADMIN role on ALL delegations of the tenant.
+   * Creates missing UserDelegation records and upgrades existing ones to ADMIN.
+   */
+  async syncSuperAdminDelegations(userId: string, tenantId: string, grantedBy?: string) {
+    // Get all delegations in tenant
+    const allDelegations = await this.prisma.delegation.findMany({
+      where: { tenantId },
+      select: { id: true },
+    });
+
+    // Get existing user delegations
+    const existingDelegations = await this.prisma.userDelegation.findMany({
+      where: { userId, tenantId },
+      select: { delegationId: true, role: true },
+    });
+    const existingMap = new Map(existingDelegations.map(d => [d.delegationId, d.role]));
+
+    // Create missing ones & upgrade non-ADMIN ones
+    for (const delegation of allDelegations) {
+      const existingRole = existingMap.get(delegation.id);
+      if (!existingRole) {
+        // Create new UserDelegation with ADMIN role
+        await this.prisma.userDelegation.create({
+          data: {
+            tenantId,
+            userId,
+            delegationId: delegation.id,
+            role: UserRole.ADMIN,
+            grantedBy,
+          },
+        });
+      } else if (existingRole !== UserRole.ADMIN) {
+        // Upgrade to ADMIN
+        await this.prisma.userDelegation.update({
+          where: { userId_delegationId: { userId, delegationId: delegation.id } },
+          data: { role: UserRole.ADMIN },
+        });
+      }
+    }
   }
 
   async changePassword(userId: string, tenantId: string, changePasswordDto: ChangePasswordDto) {

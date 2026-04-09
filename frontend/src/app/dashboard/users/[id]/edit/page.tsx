@@ -41,10 +41,11 @@ import {
 import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { sitesApi } from '@/lib/api/sites';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, MapPin, Lock, Unlock, Info, X, Plus, Network, Shield, Calendar, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Lock, Unlock, Info, X, Plus, Network, Shield, Calendar, Trash2, Loader2, Crown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { User, UserRole } from '@/types';
 
 const userRoleLabels: Record<UserRole, string> = {
@@ -104,6 +105,8 @@ export default function EditUserPage() {
 
   const [showDisable2FADialog, setShowDisable2FADialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showSuperAdminDialog, setShowSuperAdminDialog] = useState(false);
+  const { isSuperAdmin: currentUserIsSuperAdmin } = usePermissions();
 
   // State for adding delegation/grant
   const [showAddDelegation, setShowAddDelegation] = useState(false);
@@ -226,6 +229,20 @@ export default function EditUserPage() {
     },
     onError: (err: any) => {
       toast.error(err.message || 'Erreur lors de la suppression');
+    },
+  });
+
+  const toggleSuperAdminMutation = useMutation({
+    mutationFn: (promote: boolean) => usersApi.toggleSuperAdmin(userId, promote),
+    onSuccess: (_, promote) => {
+      queryClient.invalidateQueries({ queryKey: ['user', userId] });
+      queryClient.invalidateQueries({ queryKey: ['user-delegations', userId] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success(promote ? 'Utilisateur promu super administrateur' : 'Statut super administrateur retiré');
+      setShowSuperAdminDialog(false);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Erreur');
     },
   });
 
@@ -372,6 +389,46 @@ export default function EditUserPage() {
           </CardContent>
         </Card>
 
+        {/* Section: Super Admin (visible uniquement aux super admins) */}
+        {currentUserIsSuperAdmin && (
+          <Card className={(user as any)?.isSuperAdmin ? 'border-amber-500/50 bg-amber-50/30 dark:bg-amber-950/20' : ''}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Crown className="h-5 w-5 text-amber-500" />
+                Super Administrateur
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Un super administrateur a automatiquement le rôle ADMIN sur toutes les délégations et accès à la configuration globale.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Badge
+                    variant={(user as any)?.isSuperAdmin ? 'default' : 'secondary'}
+                    className={(user as any)?.isSuperAdmin ? 'bg-amber-600' : ''}
+                  >
+                    {(user as any)?.isSuperAdmin ? 'Super Admin actif' : 'Utilisateur standard'}
+                  </Badge>
+                  {(user as any)?.isSuperAdmin && (
+                    <span className="text-sm text-amber-600 dark:text-amber-400">
+                      ADMIN sur toutes les délégations (automatique)
+                    </span>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant={(user as any)?.isSuperAdmin ? 'destructive' : 'default'}
+                  size="sm"
+                  onClick={() => setShowSuperAdminDialog(true)}
+                >
+                  {(user as any)?.isSuperAdmin ? 'Retirer le statut' : 'Promouvoir Super Admin'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Actions */}
         <div className="flex items-center justify-between">
           {!(user as any)?.isSuperAdmin ? (
@@ -414,6 +471,14 @@ export default function EditUserPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* Super admin delegation notice */}
+          {(user as any)?.isSuperAdmin && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-sm">
+              <Crown className="h-4 w-4 flex-shrink-0" />
+              Super administrateur : rôle ADMIN forcé sur toutes les délégations (non modifiable).
+            </div>
+          )}
+
           {/* Existing delegations */}
           {userDelegations.length > 0 ? (
             <div className="space-y-2">
@@ -432,15 +497,17 @@ export default function EditUserPage() {
                       {DELEGATION_ROLE_LABELS[ud.role] || ud.role}
                     </Badge>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => removeDelegationMutation.mutate(ud.delegationId)}
-                    disabled={removeDelegationMutation.isPending}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                  {!(user as any)?.isSuperAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => removeDelegationMutation.mutate(ud.delegationId)}
+                      disabled={removeDelegationMutation.isPending}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
@@ -451,58 +518,63 @@ export default function EditUserPage() {
           )}
 
           {/* Add delegation form */}
-          {showAddDelegation ? (
-            <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Délégation</Label>
-                  <Select value={newDelegationId} onValueChange={setNewDelegationId}>
-                    <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
-                    <SelectContent>
-                      {allDelegations?.map((del) => (
-                        <SelectItem key={del.id} value={del.id}>
-                          {del.groupLabel ? `${del.groupLabel} > ${del.name}` : del.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+          {/* Add delegation — hidden for super admins (auto-managed) */}
+          {!(user as any)?.isSuperAdmin && (
+            <>
+              {showAddDelegation ? (
+                <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Délégation</Label>
+                      <Select value={newDelegationId} onValueChange={setNewDelegationId}>
+                        <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+                        <SelectContent>
+                          {allDelegations?.map((del) => (
+                            <SelectItem key={del.id} value={del.id}>
+                              {del.groupLabel ? `${del.groupLabel} > ${del.name}` : del.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                <div className="space-y-1">
-                  <Label className="text-xs">Rôle</Label>
-                  <Select value={newDelegationRole} onValueChange={setNewDelegationRole}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(DELEGATION_ROLE_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Rôle</Label>
+                      <Select value={newDelegationRole} onValueChange={setNewDelegationRole}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(DELEGATION_ROLE_LABELS).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-              <div className="flex gap-2 justify-end">
-                <Button variant="ghost" size="sm" onClick={() => setShowAddDelegation(false)}>Annuler</Button>
-                <Button
-                  size="sm"
-                  disabled={addDelegationMutation.isPending || !newDelegationId}
-                  onClick={() => {
-                    addDelegationMutation.mutate({
-                      userId,
-                      delegationId: newDelegationId,
-                      role: newDelegationRole,
-                    });
-                  }}
-                >
-                  Ajouter
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="ghost" size="sm" onClick={() => setShowAddDelegation(false)}>Annuler</Button>
+                    <Button
+                      size="sm"
+                      disabled={addDelegationMutation.isPending || !newDelegationId}
+                      onClick={() => {
+                        addDelegationMutation.mutate({
+                          userId,
+                          delegationId: newDelegationId,
+                          role: newDelegationRole,
+                        });
+                      }}
+                    >
+                      Ajouter
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => setShowAddDelegation(true)}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Ajouter une délégation
                 </Button>
-              </div>
-            </div>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => setShowAddDelegation(true)}>
-              <Plus className="mr-1 h-4 w-4" />
-              Ajouter une délégation
-            </Button>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -710,6 +782,50 @@ export default function EditUserPage() {
               onClick={() => deleteMutation.mutate()}
             >
               Supprimer définitivement
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Super Admin toggle dialog */}
+      <AlertDialog open={showSuperAdminDialog} onOpenChange={setShowSuperAdminDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {(user as any)?.isSuperAdmin
+                ? 'Retirer le statut Super Administrateur'
+                : 'Promouvoir en Super Administrateur'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {(user as any)?.isSuperAdmin ? (
+                <>
+                  Êtes-vous sûr de vouloir retirer le statut super administrateur de <strong>{user?.name}</strong> ?
+                  L'utilisateur perdra l'accès à la configuration globale. Ses délégations actuelles seront conservées
+                  mais pourront être modifiées.
+                </>
+              ) : (
+                <>
+                  Êtes-vous sûr de vouloir promouvoir <strong>{user?.name}</strong> en super administrateur ?
+                  L'utilisateur obtiendra automatiquement le rôle <strong>ADMIN</strong> sur toutes les délégations
+                  et l'accès à la configuration globale de la plateforme.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className={(user as any)?.isSuperAdmin
+                ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                : 'bg-amber-600 text-white hover:bg-amber-700'}
+              onClick={() => toggleSuperAdminMutation.mutate(!(user as any)?.isSuperAdmin)}
+              disabled={toggleSuperAdminMutation.isPending}
+            >
+              {toggleSuperAdminMutation.isPending
+                ? 'En cours...'
+                : (user as any)?.isSuperAdmin
+                  ? 'Retirer le statut'
+                  : 'Confirmer la promotion'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

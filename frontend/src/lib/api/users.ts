@@ -48,4 +48,8 @@ export const usersApi = {
   getMe: async (): Promise<User> => {
     return apiClient.get<User>('/api/users/me');
   },
+
+  toggleSuperAdmin: async (id: string, promote: boolean): Promise<User> => {
+    return apiClient.post<User>(`/api/users/${id}/toggle-super-admin`, { promote });
+  },
 };
