@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -135,10 +135,32 @@ export class UsersService {
     return result;
   }
 
-  async update(id: string, tenantId: string, updateUserDto: UpdateUserDto) {
-    await this.findOne(id, tenantId);
+  async update(id: string, tenantId: string, updateUserDto: UpdateUserDto, requestingUserId?: string) {
+    const targetUser = await this.findOne(id, tenantId);
 
+    // Security: check if requesting user is super admin
+    let requestingUser = null;
+    if (requestingUserId) {
+      requestingUser = await this.prisma.user.findUnique({
+        where: { id: requestingUserId },
+        select: { isSuperAdmin: true },
+      });
+    }
+    const isSuperAdmin = requestingUser?.isSuperAdmin === true;
+
+    // Security: never allow modifying isSuperAdmin via API (only DB direct)
     const data: any = { ...updateUserDto };
+    delete data.isSuperAdmin;
+
+    // Security: protect super admin users from being modified by non-super-admins
+    if ((targetUser as any).isSuperAdmin && !isSuperAdmin) {
+      throw new ForbiddenException('Seul un super administrateur peut modifier un autre super administrateur');
+    }
+
+    // Security: prevent self-demotion of role for super admins
+    if (requestingUserId === id && isSuperAdmin && data.role && data.role !== (targetUser as any).role) {
+      throw new ForbiddenException('Un super administrateur ne peut pas modifier son propre rôle');
+    }
 
     if (updateUserDto.password) {
       data.passwordHash = await bcrypt.hash(updateUserDto.password, 10);
@@ -157,8 +179,18 @@ export class UsersService {
     return result;
   }
 
-  async remove(id: string, tenantId: string) {
-    await this.findOne(id, tenantId);
+  async remove(id: string, tenantId: string, requestingUserId?: string) {
+    const targetUser = await this.findOne(id, tenantId);
+
+    // Security: prevent deleting super admin users
+    if ((targetUser as any).isSuperAdmin) {
+      throw new ForbiddenException('Impossible de supprimer un super administrateur');
+    }
+
+    // Security: prevent self-deletion
+    if (requestingUserId === id) {
+      throw new ForbiddenException('Impossible de supprimer votre propre compte');
+    }
 
     await this.prisma.user.delete({
       where: { id },

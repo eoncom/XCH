@@ -54,14 +54,14 @@ export class UsersController {
   @Resource('users') @Action('update')
   @ApiOperation({ summary: 'Update user' })
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto, @Request() req: AuthRequest) {
-    return this.usersService.update(id, req.user.tenantId, updateUserDto);
+    return this.usersService.update(id, req.user.tenantId, updateUserDto, req.user.userId);
   }
 
   @Delete(':id')
   @Resource('users') @Action('delete')
   @ApiOperation({ summary: 'Delete user' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.usersService.remove(id, req.user.tenantId);
+    return this.usersService.remove(id, req.user.tenantId, req.user.userId);
   }
 
   // Settings endpoints - accessible to all authenticated users

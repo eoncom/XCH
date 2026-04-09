@@ -374,18 +374,25 @@ export default function EditUserPage() {
 
         {/* Actions */}
         <div className="flex items-center justify-between">
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={() => setShowDeleteDialog(true)}
-            disabled={deleteMutation.isPending}
-          >
-            {deleteMutation.isPending ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Suppression...</>
-            ) : (
-              <><Trash2 className="mr-2 h-4 w-4" />Supprimer l'utilisateur</>
-            )}
-          </Button>
+          {!(user as any)?.isSuperAdmin ? (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setShowDeleteDialog(true)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Suppression...</>
+              ) : (
+                <><Trash2 className="mr-2 h-4 w-4" />Supprimer l'utilisateur</>
+              )}
+            </Button>
+          ) : (
+            <div className="flex items-center gap-2 text-amber-500 text-sm">
+              <Shield className="h-4 w-4" />
+              Super administrateur — protégé contre la suppression
+            </div>
+          )}
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => router.push('/dashboard/users')}>Annuler</Button>
             <Button type="submit" disabled={updateMutation.isPending}>

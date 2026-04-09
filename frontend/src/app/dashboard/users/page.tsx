@@ -391,14 +391,14 @@ export default function UsersPage() {
                       Modifier
                     </Link>
                   </Button>
-                  <Button
+                  {!(user as any).isSuperAdmin && <Button
                     variant="ghost"
                     size="sm"
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => setDeleteTarget(user)}
                   >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </Button>}
                 </div>
               </div>
             ))}

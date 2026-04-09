@@ -4904,3 +4904,24 @@ fix: demo users get real bcrypt password + UserDelegation assignments
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-09
+
+**Date:** 2026-04-09 08:06:29
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix: show UserDelegation roles in users list instead of User.role
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
