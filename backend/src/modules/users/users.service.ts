@@ -91,6 +91,17 @@ export class UsersService {
               name: true,
             },
           },
+          userDelegations: {
+            include: {
+              delegation: {
+                select: {
+                  id: true,
+                  name: true,
+                  groupLabel: true,
+                },
+              },
+            },
+          },
         },
         orderBy: {
           [sortField]: sortOrder,

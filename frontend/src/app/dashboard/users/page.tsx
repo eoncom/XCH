@@ -343,11 +343,25 @@ export default function UsersPage() {
                     {user.name?.charAt(0).toUpperCase() || user.email.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold">{user.name || 'Nom non défini'}</p>
-                      <Badge className={getRoleBadgeColor(user.role)}>
-                        {getRoleLabel(user.role)}
-                      </Badge>
+                      {(user as any).userDelegations?.length > 0 ? (
+                        (user as any).userDelegations.map((ud: any) => (
+                          <Badge key={ud.id} className={getRoleBadgeColor(ud.role)}>
+                            {getRoleLabel(ud.role)}
+                            {ud.delegation?.name && (
+                              <span className="ml-1 opacity-70 text-[10px]">({ud.delegation.groupLabel ? `${ud.delegation.groupLabel} > ` : ''}{ud.delegation.name})</span>
+                            )}
+                          </Badge>
+                        ))
+                      ) : (
+                        <Badge className={getRoleBadgeColor(user.role)}>
+                          {getRoleLabel(user.role)}
+                        </Badge>
+                      )}
+                      {(user as any).isSuperAdmin && (
+                        <Badge variant="outline" className="text-xs border-amber-500 text-amber-500">Super Admin</Badge>
+                      )}
                       {user.active === false && (
                         <Badge variant="secondary" className="text-xs">Inactif</Badge>
                       )}
