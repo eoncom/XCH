@@ -1,12 +1,51 @@
 import { Injectable, BadRequestException, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaClient, UserRole } from '@prisma/client';
 
+// Role hierarchy: ADMIN > MANAGER > TECHNICIEN > VIEWER
+const ROLE_HIERARCHY: Record<string, number> = {
+  ADMIN: 4,
+  MANAGER: 3,
+  TECHNICIEN: 2,
+  VIEWER: 1,
+};
+
 @Injectable()
 export class UserDelegationsService {
   constructor(private prisma: PrismaClient) {}
 
   /**
+   * Check if the requesting user is authorized to manage roles in a delegation.
+   * Must be ADMIN of that delegation OR super admin.
+   * Returns the requesting user's info for further checks.
+   */
+  private async authorizeManagement(requestingUserId: string, delegationId: string, tenantId: string) {
+    const requestingUser = await this.prisma.user.findUnique({
+      where: { id: requestingUserId },
+      select: { isSuperAdmin: true },
+    });
+
+    if (requestingUser?.isSuperAdmin) {
+      return { isSuperAdmin: true, localRole: 'ADMIN' as UserRole };
+    }
+
+    // Check requesting user's role in this delegation
+    const requestingDelegation = await this.prisma.userDelegation.findUnique({
+      where: { userId_delegationId: { userId: requestingUserId, delegationId } },
+    });
+
+    if (!requestingDelegation || requestingDelegation.role !== UserRole.ADMIN) {
+      throw new ForbiddenException(
+        'Seul un administrateur de cette délégation peut gérer les accès'
+      );
+    }
+
+    return { isSuperAdmin: false, localRole: requestingDelegation.role };
+  }
+
+  /**
    * Add a user to a delegation with a local role.
+   * Authorization: only ADMIN of the delegation or super admin.
+   * Cannot assign a role higher than your own (unless super admin).
    */
   async addUserToDelegation(
     tenantId: string,
@@ -14,13 +53,24 @@ export class UserDelegationsService {
     delegationId: string,
     role: UserRole,
     grantedBy?: string,
+    requestingUserId?: string,
   ) {
+    // Authorization check
+    if (requestingUserId) {
+      const auth = await this.authorizeManagement(requestingUserId, delegationId, tenantId);
+
+      // Cannot assign ADMIN role unless you are super admin or ADMIN of delegation
+      if (role === UserRole.ADMIN && !auth.isSuperAdmin && auth.localRole !== UserRole.ADMIN) {
+        throw new ForbiddenException('Seul un administrateur peut attribuer le rôle administrateur');
+      }
+    }
+
     // Verify delegation exists in tenant
     const delegation = await this.prisma.delegation.findFirst({
       where: { id: delegationId, tenantId },
     });
     if (!delegation) {
-      throw new NotFoundException(`Delegation ${delegationId} not found`);
+      throw new NotFoundException(`Délégation non trouvée`);
     }
 
     // Verify user exists in tenant
@@ -28,7 +78,7 @@ export class UserDelegationsService {
       where: { id: userId, tenantId },
     });
     if (!user) {
-      throw new NotFoundException(`User ${userId} not found`);
+      throw new NotFoundException(`Utilisateur non trouvé`);
     }
 
     // Check for duplicate
@@ -36,7 +86,7 @@ export class UserDelegationsService {
       where: { userId_delegationId: { userId, delegationId } },
     });
     if (existing) {
-      throw new ConflictException('User already has access to this delegation');
+      throw new ConflictException('L\'utilisateur a déjà accès à cette délégation');
     }
 
     return this.prisma.userDelegation.create({
@@ -56,23 +106,39 @@ export class UserDelegationsService {
 
   /**
    * Remove a user from a delegation (R6 — local deletion).
-   * Super admins cannot be removed from any delegation.
+   * Authorization: only ADMIN of the delegation or super admin.
+   * Cannot remove super admin. Cannot remove yourself.
    */
-  async removeUserFromDelegation(userId: string, delegationId: string) {
+  async removeUserFromDelegation(
+    userId: string,
+    delegationId: string,
+    requestingUserId?: string,
+    tenantId?: string,
+  ) {
     // Check if target user is super admin — cannot remove from delegation
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { isSuperAdmin: true },
     });
     if (user?.isSuperAdmin) {
-      throw new ForbiddenException('Impossible de retirer un super administrateur d\'une délégation — accès ADMIN sur toutes les délégations');
+      throw new ForbiddenException('Impossible de retirer un super administrateur d\'une délégation');
+    }
+
+    // Cannot remove yourself from a delegation
+    if (requestingUserId && requestingUserId === userId) {
+      throw new ForbiddenException('Vous ne pouvez pas retirer votre propre accès à une délégation');
+    }
+
+    // Authorization check
+    if (requestingUserId && tenantId) {
+      await this.authorizeManagement(requestingUserId, delegationId, tenantId);
     }
 
     const existing = await this.prisma.userDelegation.findUnique({
       where: { userId_delegationId: { userId, delegationId } },
     });
     if (!existing) {
-      throw new NotFoundException('User delegation not found');
+      throw new NotFoundException('Accès délégation non trouvé');
     }
 
     return this.prisma.userDelegation.delete({
@@ -126,23 +192,48 @@ export class UserDelegationsService {
 
   /**
    * Change a user's local role within a delegation.
-   * Super admins are always ADMIN — their role cannot be changed.
+   * Authorization:
+   * - Only ADMIN of the delegation or super admin can change roles
+   * - Cannot change your own role
+   * - Cannot promote to ADMIN unless you are ADMIN/super admin
+   * - Super admins are always ADMIN (immutable)
    */
-  async setRole(userId: string, delegationId: string, newRole: UserRole) {
+  async setRole(
+    userId: string,
+    delegationId: string,
+    newRole: UserRole,
+    requestingUserId?: string,
+    tenantId?: string,
+  ) {
     // Check if target user is super admin — cannot change their role
-    const user = await this.prisma.user.findUnique({
+    const targetUser = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { isSuperAdmin: true },
     });
-    if (user?.isSuperAdmin) {
-      throw new ForbiddenException('Impossible de modifier le rôle d\'un super administrateur — toujours ADMIN sur toutes les délégations');
+    if (targetUser?.isSuperAdmin) {
+      throw new ForbiddenException('Impossible de modifier le rôle d\'un super administrateur — toujours ADMIN');
+    }
+
+    // Cannot change your own role
+    if (requestingUserId && requestingUserId === userId) {
+      throw new ForbiddenException('Vous ne pouvez pas modifier votre propre rôle');
+    }
+
+    // Authorization check
+    if (requestingUserId && tenantId) {
+      const auth = await this.authorizeManagement(requestingUserId, delegationId, tenantId);
+
+      // Cannot promote to ADMIN unless you are super admin
+      if (newRole === UserRole.ADMIN && !auth.isSuperAdmin) {
+        throw new ForbiddenException('Seul un super administrateur peut attribuer le rôle administrateur');
+      }
     }
 
     const existing = await this.prisma.userDelegation.findUnique({
       where: { userId_delegationId: { userId, delegationId } },
     });
     if (!existing) {
-      throw new NotFoundException('User delegation not found');
+      throw new NotFoundException('Accès délégation non trouvé');
     }
 
     return this.prisma.userDelegation.update({
