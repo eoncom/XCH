@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Put, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { SiteAccessService } from '../site-access/site-access.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -21,7 +20,6 @@ import { AuthRequest } from '../../types/request.interface';
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly siteAccessService: SiteAccessService,
   ) {}
 
   @Post()
@@ -36,34 +34,51 @@ export class UsersController {
 
   @Get()
   @Resource('users') @Action('read')
-  @ApiOperation({ summary: 'Get all users (filtered by requesting user scope)' })
+  @ApiOperation({ summary: 'Get users visible in active delegation (super admin sees all)' })
   async findAll(@Query() filters: FilterUserDto, @Request() req: AuthRequest) {
-    const visibleUserIds = await this.siteAccessService.getVisibleUserIds(
+    return this.usersService.findAll(
       req.user.tenantId,
-      req.user.userId,
+      filters,
+      req.user.isSuperAdmin ? null : req.delegationId,
     );
-    return this.usersService.findAll(req.user.tenantId, filters, visibleUserIds);
   }
 
   @Get(':id')
   @Resource('users') @Action('read')
   @ApiOperation({ summary: 'Get user by id' })
   findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.usersService.findOne(id, req.user.tenantId);
+    return this.usersService.findOne(
+      id,
+      req.user.tenantId,
+      req.user.isSuperAdmin ? null : req.delegationId,
+    );
   }
 
   @Patch(':id')
   @Resource('users') @Action('update')
   @ApiOperation({ summary: 'Update user' })
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto, @Request() req: AuthRequest) {
-    return this.usersService.update(id, req.user.tenantId, updateUserDto, req.user.userId);
+    return this.usersService.update(
+      id,
+      req.user.tenantId,
+      updateUserDto,
+      req.user.userId,
+      req.user.isSuperAdmin ? null : req.delegationId,
+      req.localRole,
+    );
   }
 
   @Delete(':id')
   @Resource('users') @Action('delete')
   @ApiOperation({ summary: 'Delete user' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.usersService.remove(id, req.user.tenantId, req.user.userId);
+    return this.usersService.remove(
+      id,
+      req.user.tenantId,
+      req.user.userId,
+      req.user.isSuperAdmin ? null : req.delegationId,
+      req.localRole,
+    );
   }
 
   // Super admin management — only super admins can promote/demote

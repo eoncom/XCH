@@ -51,11 +51,19 @@ export class UsersService {
     return result;
   }
 
-  async findAll(tenantId: string, filters: FilterUserDto = {}, visibleUserIds?: string[] | null) {
+  /**
+   * Get all users.
+   * - Super admin (activeDelegationId=null): sees ALL users
+   * - Admin local (activeDelegationId set): sees only users in that delegation
+   */
+  async findAll(tenantId: string, filters: FilterUserDto = {}, activeDelegationId?: string | null) {
     const where: any = { tenantId };
-    // If visibleUserIds is an array, filter to only those users
-    if (visibleUserIds !== null && visibleUserIds !== undefined) {
-      where.id = { in: visibleUserIds };
+
+    // Non-super-admin: filter to users in the active delegation only
+    if (activeDelegationId) {
+      where.userDelegations = {
+        some: { delegationId: activeDelegationId },
+      };
     }
 
     // Search filter (name or email)
@@ -116,7 +124,12 @@ export class UsersService {
     return buildPaginatedResponse(data, total, page, pageSize);
   }
 
-  async findOne(id: string, tenantId: string) {
+  /**
+   * Get a single user.
+   * - activeDelegationId=null → super admin, no scope check
+   * - activeDelegationId set → check target user is in that delegation
+   */
+  async findOne(id: string, tenantId: string, activeDelegationId?: string | null) {
     const user = await this.prisma.user.findFirst({
       where: {
         id,
@@ -131,11 +144,33 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    // Non-super-admin: verify target user is in their active delegation
+    if (activeDelegationId) {
+      const targetInDelegation = await this.prisma.userDelegation.findUnique({
+        where: { userId_delegationId: { userId: id, delegationId: activeDelegationId } },
+      });
+      if (!targetInDelegation) {
+        throw new ForbiddenException('Cet utilisateur ne fait pas partie de votre délégation');
+      }
+    }
+
     const { passwordHash, totpSecret, totpBackupCodes, ...result } = user;
     return result;
   }
 
-  async update(id: string, tenantId: string, updateUserDto: UpdateUserDto, requestingUserId?: string) {
+  /**
+   * Update a user.
+   * - activeDelegationId=null → super admin, full access
+   * - activeDelegationId set → must be ADMIN of that delegation, target must be in it
+   */
+  async update(
+    id: string,
+    tenantId: string,
+    updateUserDto: UpdateUserDto,
+    requestingUserId?: string,
+    activeDelegationId?: string | null,
+    localRole?: string,
+  ) {
     const targetUser = await this.findOne(id, tenantId);
 
     // Security: check if requesting user is super admin
@@ -148,13 +183,26 @@ export class UsersService {
     }
     const isSuperAdmin = requestingUser?.isSuperAdmin === true;
 
-    // Security: never allow modifying isSuperAdmin via API (only DB direct)
+    // Security: never allow modifying isSuperAdmin via API
     const data: any = { ...updateUserDto };
     delete data.isSuperAdmin;
 
     // Security: protect super admin users from being modified by non-super-admins
     if ((targetUser as any).isSuperAdmin && !isSuperAdmin) {
       throw new ForbiddenException('Seul un super administrateur peut modifier un autre super administrateur');
+    }
+
+    // Non-super-admin: must be ADMIN of active delegation and target must be in it
+    if (activeDelegationId) {
+      if (localRole !== 'ADMIN') {
+        throw new ForbiddenException('Seul un administrateur de la délégation peut modifier les utilisateurs');
+      }
+      const targetInDelegation = await this.prisma.userDelegation.findUnique({
+        where: { userId_delegationId: { userId: id, delegationId: activeDelegationId } },
+      });
+      if (!targetInDelegation) {
+        throw new ForbiddenException('Cet utilisateur ne fait pas partie de votre délégation');
+      }
     }
 
     // Security: prevent self-demotion of role for super admins
@@ -179,7 +227,18 @@ export class UsersService {
     return result;
   }
 
-  async remove(id: string, tenantId: string, requestingUserId?: string) {
+  /**
+   * Delete a user.
+   * - activeDelegationId=null → super admin, full access
+   * - activeDelegationId set → must be ADMIN of that delegation, target must be in it
+   */
+  async remove(
+    id: string,
+    tenantId: string,
+    requestingUserId?: string,
+    activeDelegationId?: string | null,
+    localRole?: string,
+  ) {
     const targetUser = await this.findOne(id, tenantId);
 
     // Security: prevent deleting super admin users
@@ -190,6 +249,19 @@ export class UsersService {
     // Security: prevent self-deletion
     if (requestingUserId === id) {
       throw new ForbiddenException('Impossible de supprimer votre propre compte');
+    }
+
+    // Non-super-admin: must be ADMIN of active delegation and target must be in it
+    if (activeDelegationId) {
+      if (localRole !== 'ADMIN') {
+        throw new ForbiddenException('Seul un administrateur de la délégation peut supprimer les utilisateurs');
+      }
+      const targetInDelegation = await this.prisma.userDelegation.findUnique({
+        where: { userId_delegationId: { userId: id, delegationId: activeDelegationId } },
+      });
+      if (!targetInDelegation) {
+        throw new ForbiddenException('Cet utilisateur ne fait pas partie de votre délégation');
+      }
     }
 
     await this.prisma.user.delete({
