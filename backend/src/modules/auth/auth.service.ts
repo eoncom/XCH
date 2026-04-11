@@ -109,7 +109,6 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role, // Legacy default — NOT used for permissions (display only)
         isSuperAdmin: user.isSuperAdmin || false,
         tenantId: user.tenantId,
         tenant: user.tenant,
@@ -176,7 +175,7 @@ export class AuthService {
         include: { tenant: true },
       });
     } else {
-      // Subsequent login — update role if it changed (IdP is the source of truth)
+      // Subsequent SSO login — sync User.role from IdP (mirror only, not used for auth)
       if (user.role !== mappedRole) {
         user = await this.prisma.user.update({
           where: { id: user.id },

@@ -135,7 +135,6 @@ export class AuthController {
         id: dbUser.id,
         email: dbUser.email,
         name: dbUser.name,
-        role: dbUser.role,
         tenantId: dbUser.tenantId,
         tenant: dbUser.tenant,
         totpEnabled: dbUser.totpEnabled || false,

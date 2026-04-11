@@ -5030,3 +5030,24 @@ fix: remove deprecated User.role selector from user creation form
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-11
+
+**Date:** 2026-04-11 17:16:05
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 10
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix: remove all User.role UI from edit page, users list, and site access
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

@@ -29,9 +29,8 @@ export class CasbinGuard implements CanActivate {
       return true;
     }
 
-    // Use localRole from DelegationGuard (R7: UserDelegation.role is source of truth)
-    // If localRole is not set, the DelegationGuard hasn't run (missing X-Delegation-Id)
-    // In that case, deny access — never fallback to user.role (security risk)
+    // localRole = UserDelegation.role set by DelegationGuard
+    // If absent, DelegationGuard hasn't run (missing X-Delegation-Id) → deny
     const role = request.localRole;
     if (!role) {
       return false;

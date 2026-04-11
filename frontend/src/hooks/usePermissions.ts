@@ -129,7 +129,7 @@ export function usePermissions() {
   const { user } = useAuthStore();
   const { localRole, isSuperAdmin, hasDelegation } = useDelegation();
 
-  // Use localRole from active delegation (R7) — NO fallback to user.role
+  // localRole = UserDelegation.role for the active delegation
   // If no localRole and not super admin → no permissions (role stays null → empty perms)
   const role = localRole || (isSuperAdmin ? 'ADMIN' : null) as string | null;
 

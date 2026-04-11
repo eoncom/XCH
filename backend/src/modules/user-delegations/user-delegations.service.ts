@@ -37,7 +37,7 @@ export class UserDelegationsService {
   /**
    * Add a user to a delegation with a local role.
    * Authorization: only ADMIN of the delegation or super admin.
-   * Role is freely assignable — no "cap" from User.role (deprecated).
+   * Role is freely assignable — no cap, managed by admin/super admin only.
    */
   async addUserToDelegation(
     tenantId: string,
@@ -167,7 +167,6 @@ export class UserDelegationsService {
             id: true,
             name: true,
             email: true,
-            role: true,
             active: true,
             lastLoginAt: true,
           },

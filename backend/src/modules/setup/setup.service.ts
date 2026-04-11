@@ -130,7 +130,6 @@ export class SetupService {
         id: adminUser.id,
         email: adminUser.email,
         name: adminUser.name,
-        role: adminUser.role,
       },
       demoData: demoStats,
     };

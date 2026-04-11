@@ -133,7 +133,7 @@ export class NotificationController {
 
   private requireAdmin(user: any) {
     if (user.isSuperAdmin) return;
-    // Use localRole from DelegationGuard only — no fallback to user.role
+    // Authorization: localRole from DelegationGuard (UserDelegation.role)
     if (user.localRole !== 'ADMIN') {
       throw new ForbiddenException('Admin access required');
     }
@@ -141,7 +141,7 @@ export class NotificationController {
 
   private requireAdminOrManager(user: any) {
     if (user.isSuperAdmin) return;
-    // Use localRole from DelegationGuard only — no fallback to user.role
+    // Authorization: localRole from DelegationGuard (UserDelegation.role)
     if (!['ADMIN', 'MANAGER'].includes(user.localRole)) {
       throw new ForbiddenException('Admin or Manager access required');
     }
@@ -156,7 +156,7 @@ export class NotificationController {
   private async checkDelegationAccess(user: any, delegationId: string | null) {
     if (user.isSuperAdmin) return;
 
-    // Use localRole from DelegationGuard only — no fallback to user.role
+    // Authorization: localRole from DelegationGuard (UserDelegation.role)
     if (!['ADMIN', 'MANAGER'].includes(user.localRole)) {
       throw new ForbiddenException('Admin or Manager access required');
     }

@@ -5,7 +5,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: UserRole;
+  role?: UserRole; // Deprecated — authorization uses UserDelegation.role via DelegationContext
   isSuperAdmin?: boolean;
   tenantId: string;
   avatarUrl?: string;

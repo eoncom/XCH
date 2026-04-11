@@ -357,7 +357,7 @@ export class SeedService {
           tenantId,
           userId: user.id,
           delegationId,
-          role: user.role, // same as User.role for demo
+          role: user.role, // mirrors User.role for initial demo setup
           grantedBy: grantedById,
         },
       });

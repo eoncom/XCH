@@ -31,7 +31,7 @@ export class AccessGrantsService {
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
       },
       include: {
-        user: { select: { id: true, name: true, email: true, role: true } },
+        user: { select: { id: true, name: true, email: true } },
       },
     });
   }
