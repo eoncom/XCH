@@ -22,6 +22,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AuthRequest } from '../../types/request.interface';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('auth')
 @SkipDelegation()
@@ -73,6 +74,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Public()
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @UseGuards(LocalAuthGuard)
   @ApiOperation({ summary: 'Login with email/password' })
@@ -146,6 +148,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Public()
   @ApiOperation({ summary: 'Refresh access token using refreshToken cookie' })
   @ApiResponse({ status: 200, description: 'Sets new accessToken cookie' })
   @ApiResponse({ status: 401, description: 'Invalid or missing refresh token' })
@@ -266,6 +269,7 @@ export class AuthController {
   }
 
   @Post('2fa/verify')
+  @Public()
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Verify TOTP code during login (uses temp token)' })
   async verify2FA(
@@ -305,6 +309,7 @@ export class AuthController {
   }
 
   @Post('2fa/backup-verify')
+  @Public()
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Verify backup code during login (uses temp token)' })
   async verifyBackupCode(
@@ -427,6 +432,7 @@ export class AuthController {
   }
 
   @Post('accept-invite')
+  @Public()
   @Throttle({ default: { ttl: 60000, limit: 10 } })
   @ApiOperation({ summary: 'Accept invitation and set password (public)' })
   @ApiResponse({ status: 200, description: 'Account activated' })
@@ -435,6 +441,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @Public()
   @Throttle({ default: { ttl: 60000, limit: 3 } })
   @ApiOperation({ summary: 'Request password reset email (public)' })
   @ApiResponse({ status: 200, description: 'Reset email sent if account exists' })
@@ -443,6 +450,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @Public()
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Reset password using token (public)' })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
@@ -453,6 +461,7 @@ export class AuthController {
   // ===== SSO / OIDC Endpoints =====
 
   @Get('sso-config')
+  @Public()
   @ApiOperation({ summary: 'Get SSO configuration status (public — for login page)' })
   @ApiResponse({ status: 200, description: 'SSO enabled status' })
   async getSsoConfig() {
@@ -478,6 +487,7 @@ export class AuthController {
   }
 
   @Get('oidc')
+  @Public()
   @UseGuards(AuthGuard('oidc'))
   @ApiOperation({ summary: 'Initiate OIDC login flow (redirects to IdP)' })
   async oidcLogin() {
@@ -485,6 +495,7 @@ export class AuthController {
   }
 
   @Get('oidc/callback')
+  @Public()
   @UseGuards(AuthGuard('oidc'))
   @ApiOperation({ summary: 'OIDC callback handler (receives code from IdP)' })
   async oidcCallback(

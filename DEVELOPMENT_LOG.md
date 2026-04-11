@@ -5072,3 +5072,24 @@ refactor: purge User.role from API responses, services, and types
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-11
+
+**Date:** 2026-04-11 19:10:01
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 0
+
+**Commit message:**
+```
+fix: register DelegationGuard as global APP_GUARD to resolve 403 for non-super-admin users
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
