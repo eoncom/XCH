@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -721,7 +722,7 @@ function SsoConfigSection() {
 
 function SecurityTabContent() {
   const { user, checkSession } = useAuthStore();
-  const isAdmin = user?.role === 'ADMIN';
+  const { isAdmin } = usePermissions();
 
   // Personal 2FA state
   const [totpEnabled, setTotpEnabled] = useState(user?.totpEnabled || false);
@@ -1185,6 +1186,7 @@ function WarrantyThresholdsSection({ tenantData, setTenantData }: { tenantData: 
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
+  const { isAdmin, isManagerOrAbove, isSuperAdmin, role: permRole } = usePermissions();
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
@@ -1431,7 +1433,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveTenant = async () => {
-    if (user?.role !== 'ADMIN') return;
+    if (!isAdmin) return;
 
     setIsSaving(true);
     try {
@@ -1458,7 +1460,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveTheme = async () => {
-    if (user?.role !== 'ADMIN') return;
+    if (!isAdmin) return;
     setIsSavingTheme(true);
     try {
       await apiClient.patch('/api/tenants/current', {
@@ -1545,7 +1547,7 @@ export default function SettingsPage() {
   };
 
   const handleLoadDemo = async () => {
-    if (user?.role !== 'ADMIN') return;
+    if (!isAdmin) return;
 
     setIsLoadingDemo(true);
     try {
@@ -1560,7 +1562,7 @@ export default function SettingsPage() {
   };
 
   const handleResetData = async () => {
-    if (user?.role !== 'ADMIN' || !showResetConfirm) return;
+    if (!isAdmin || !showResetConfirm) return;
 
     setIsResetting(true);
     try {
@@ -1600,43 +1602,43 @@ export default function SettingsPage() {
             <Palette className="mr-2 h-4 w-4" />
             Apparence
           </TabsTrigger>
-          {user?.role === 'ADMIN' && (
+          {isAdmin && (
             <TabsTrigger value="org-structure">
               <Network className="mr-2 h-4 w-4" />
               Structure
             </TabsTrigger>
           )}
-          {user?.role === 'ADMIN' && (
+          {isAdmin && (
             <TabsTrigger value="tenant">
               <Building2 className="mr-2 h-4 w-4" />
               Tenant
             </TabsTrigger>
           )}
-          {user?.role === 'ADMIN' && (
+          {isAdmin && (
             <TabsTrigger value="sso">
               <Key className="mr-2 h-4 w-4" />
               SSO
             </TabsTrigger>
           )}
-          {user?.role === 'ADMIN' && (
+          {isAdmin && (
             <TabsTrigger value="modules">
               <Blocks className="mr-2 h-4 w-4" />
               Modules
             </TabsTrigger>
           )}
-          {user?.role === 'ADMIN' && (
+          {isAdmin && (
             <TabsTrigger value="types">
               <Tags className="mr-2 h-4 w-4" />
               Types
             </TabsTrigger>
           )}
-          {user?.role === 'ADMIN' && (
+          {isAdmin && (
             <TabsTrigger value="backup">
               <HardDrive className="mr-2 h-4 w-4" />
               Sauvegardes
             </TabsTrigger>
           )}
-          {(user?.role === 'ADMIN' || user?.role === 'MANAGER') && (
+          {isManagerOrAbove && (
             <TabsTrigger value="notifications" asChild>
               <a href="/dashboard/settings/notifications" className="flex items-center">
                 <Bell className="mr-2 h-4 w-4" />
@@ -1681,7 +1683,7 @@ export default function SettingsPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="role">Rôle</Label>
-                  <Input id="role" defaultValue={user?.role} disabled />
+                  <Input id="role" defaultValue={isSuperAdmin ? 'Super Admin' : (permRole || 'N/A')} disabled />
                 </div>
               </div>
 
@@ -1792,7 +1794,7 @@ export default function SettingsPage() {
               </div>
 
               {/* Theme Presets */}
-              {user?.role === 'ADMIN' && (
+              {isAdmin && (
                 <div className="border-t pt-4">
                   <h4 className="font-medium mb-2 flex items-center gap-2">
                     <Palette className="h-4 w-4" />
@@ -1930,7 +1932,7 @@ export default function SettingsPage() {
                         id="orgName"
                         value={orgName}
                         onChange={(e) => setOrgName(e.target.value)}
-                        disabled={user?.role !== 'ADMIN'}
+                        disabled={!isAdmin}
                       />
                     </div>
 
@@ -1952,7 +1954,7 @@ export default function SettingsPage() {
                         id="domain"
                         value={domain}
                         onChange={(e) => setDomain(e.target.value)}
-                        disabled={user?.role !== 'ADMIN'}
+                        disabled={!isAdmin}
                       />
                     </div>
 
@@ -1974,7 +1976,7 @@ export default function SettingsPage() {
                         id="timezone"
                         value={timezone}
                         onChange={(e) => setTimezone(e.target.value)}
-                        disabled={user?.role !== 'ADMIN'}
+                        disabled={!isAdmin}
                       />
                     </div>
 
@@ -1984,7 +1986,7 @@ export default function SettingsPage() {
                         id="language"
                         value={language}
                         onChange={(e) => setLanguage(e.target.value)}
-                        disabled={user?.role !== 'ADMIN'}
+                        disabled={!isAdmin}
                       />
                     </div>
                   </div>
@@ -2016,7 +2018,7 @@ export default function SettingsPage() {
                         value={logoUrl}
                         onChange={(e) => setLogoUrl(e.target.value)}
                         placeholder="https://example.com/logo.png"
-                        disabled={user?.role !== 'ADMIN'}
+                        disabled={!isAdmin}
                         className="flex-1"
                       />
                     </div>
@@ -2052,10 +2054,10 @@ export default function SettingsPage() {
                               updated[idx] = { ...reminder, text: e.target.value };
                               setSecurityReminders(updated);
                             }}
-                            disabled={user?.role !== 'ADMIN'}
+                            disabled={!isAdmin}
                             className="flex-1 text-sm"
                           />
-                          {user?.role === 'ADMIN' && (
+                          {isAdmin && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -2068,7 +2070,7 @@ export default function SettingsPage() {
                         </div>
                       ))}
                     </div>
-                    {user?.role === 'ADMIN' && (
+                    {isAdmin && (
                       <div className="flex items-center gap-2">
                         <Input
                           value={newReminder}
@@ -2106,7 +2108,7 @@ export default function SettingsPage() {
                     )}
                   </div>
 
-                  {user?.role === 'ADMIN' && (
+                  {isAdmin && (
                     <div className="flex justify-end">
                       <Button onClick={handleSaveTenant} disabled={isSaving}>
                         <Save className="mr-2 h-4 w-4" />
@@ -2119,11 +2121,11 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {user?.role === 'ADMIN' && (
+          {isAdmin && (
             <WarrantyThresholdsSection tenantData={tenantData} setTenantData={setTenantData} />
           )}
 
-          {user?.role === 'ADMIN' && (
+          {isAdmin && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -2246,7 +2248,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Backup Tab */}
-        {user?.role === 'ADMIN' && (
+        {isAdmin && (
           <TabsContent value="backup" className="space-y-6">
 
             {/* Section A — Créer une sauvegarde */}

@@ -190,7 +190,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
   const [selectedAccessLevel, setSelectedAccessLevel] = useState<'READ' | 'WRITE'>('READ');
   const [expandedAccessId, setExpandedAccessId] = useState<string | null>(null);
 
-  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
+  const { isManagerOrAbove: isAdmin } = usePermissions();
 
   const { data: accessList = [], isLoading } = useQuery<UserSiteAccess[]>({
     queryKey: ['site-access', siteId],

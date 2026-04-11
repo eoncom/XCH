@@ -16,6 +16,7 @@ import { notificationsApi, type NotificationConfigData, type ChannelConfig, type
 import { organizationApi } from '@/lib/api/organization';
 import { showToast } from '@/lib/toast';
 import { useAuthStore } from '@/stores/auth-store';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   Bell, Mail, MessageSquare, Settings, Save, TestTube, ArrowLeft,
   Check, X, ChevronRight, Info, RotateCcw, History, Loader2,
@@ -39,7 +40,7 @@ export default function NotificationsSettingsPage() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
   const tenantId = user?.tenantId || '';
-  const isAdmin = user?.role === 'ADMIN';
+  const { isAdmin, isManagerOrAbove } = usePermissions();
 
   // Scope selection: global (null) or per-delegation
   const [scopeMode, setScopeMode] = useState<string>('GLOBAL');
@@ -198,7 +199,7 @@ export default function NotificationsSettingsPage() {
     return grouped;
   }, [meta, editedEvents]);
 
-  if (!isAdmin && user?.role !== 'MANAGER') {
+  if (!isManagerOrAbove) {
     return (
       <div className="p-6">
         <Card>

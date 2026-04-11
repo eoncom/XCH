@@ -4988,3 +4988,24 @@ fix: scope user management to active delegation — admin is local only
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-11
+
+**Date:** 2026-04-11 14:31:39
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 4
+
+**Commit message:**
+```
+fix: reset demo seed — cleanup + super admin on all delegations
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

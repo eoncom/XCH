@@ -258,7 +258,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="border-t p-4">
           <div className="mb-3 px-3">
             <p className="text-sm font-medium text-foreground">{user.name}</p>
-            <p className="text-xs text-muted-foreground">{isSuperAdmin ? 'Super Admin' : localRole || user.role}</p>
+            <p className="text-xs text-muted-foreground">{isSuperAdmin ? 'Super Admin' : localRole || 'N/A'}</p>
           </div>
           <Button
             variant="ghost"
