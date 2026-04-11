@@ -344,7 +344,7 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
                           <p className="text-xs text-muted-foreground">{access.user?.email}</p>
                         </div>
                         <Badge variant="outline" className="text-xs">
-                          {access.user?.role}
+                          {access.level || 'READ'}
                         </Badge>
                         {hasCustomPerms && (
                           <Badge variant="secondary" className="text-xs">

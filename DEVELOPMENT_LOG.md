@@ -5009,3 +5009,24 @@ fix: reset demo seed — cleanup + super admin on all delegations
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-11
+
+**Date:** 2026-04-11 16:40:48
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix: remove deprecated User.role selector from user creation form
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

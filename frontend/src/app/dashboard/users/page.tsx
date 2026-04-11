@@ -278,48 +278,48 @@ export default function UsersPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Admins</CardTitle>
+            <CardTitle className="text-sm font-medium">Super Admins</CardTitle>
             <Shield className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {users.filter((u) => u.role === 'ADMIN').length}
+              {users.filter((u) => (u as any).isSuperAdmin).length}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Managers</CardTitle>
+            <CardTitle className="text-sm font-medium">Actifs</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {users.filter((u) => u.role === 'MANAGER').length}
+              {users.filter((u) => u.active !== false).length}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Techniciens</CardTitle>
+            <CardTitle className="text-sm font-medium">Inactifs</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {users.filter((u) => u.role === 'TECHNICIEN').length}
+              {users.filter((u) => u.active === false).length}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Observateurs</CardTitle>
+            <CardTitle className="text-sm font-medium">Sans délégation</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {users.filter((u) => u.role === 'VIEWER').length}
+              {users.filter((u) => !(u as any).userDelegations?.length).length}
             </div>
           </CardContent>
         </Card>
@@ -355,8 +355,8 @@ export default function UsersPage() {
                           </Badge>
                         ))
                       ) : (
-                        <Badge className={getRoleBadgeColor(user.role)}>
-                          {getRoleLabel(user.role)}
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          Sans délégation
                         </Badge>
                       )}
                       {(user as any).isSuperAdmin && (

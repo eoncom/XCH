@@ -46,20 +46,12 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { usePermissions } from '@/hooks/usePermissions';
-import type { User, UserRole } from '@/types';
-
-const userRoleLabels: Record<UserRole, string> = {
-  ADMIN: 'Administrateur',
-  MANAGER: 'Manager',
-  TECHNICIEN: 'Technicien',
-  VIEWER: 'Observateur',
-};
+import type { User } from '@/types';
 
 const userSchema = z.object({
   name: z.string().min(1, 'Le nom est requis'),
   email: z.string().email('Email invalide'),
   password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères').optional().or(z.literal('')),
-  role: z.enum(['ADMIN', 'MANAGER', 'TECHNICIEN', 'VIEWER']),
   phone: z.string().optional(),
   active: z.boolean().optional(),
 });
@@ -206,7 +198,6 @@ export default function EditUserPage() {
       ? {
           name: user.name,
           email: user.email,
-          role: user.role,
           phone: user.phone || '',
           password: '',
           active: user.active !== false,
@@ -257,15 +248,6 @@ export default function EditUserPage() {
     updateMutation.mutate(updateData);
   };
 
-  const role = watch('role');
-
-  // Force sync role when user data loads (fixes Select not showing current value)
-  useEffect(() => {
-    if (user?.role) {
-      setValue('role', user.role);
-    }
-  }, [user, setValue]);
-
   if (isLoading) {
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
   }
@@ -307,29 +289,6 @@ export default function EditUserPage() {
                 <Input id="password" type="password" {...register('password')} placeholder="Laisser vide pour ne pas changer" />
                 {errors.password && <p className="text-sm text-red-600">{errors.password.message}</p>}
                 <p className="text-xs text-muted-foreground">Laisser vide pour conserver le mot de passe actuel</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Rôle global <span className="text-red-500">*</span></Label>
-                {currentUserIsSuperAdmin ? (
-                  <Select key={role || 'empty'} value={role || ''} onValueChange={(value) => setValue('role', value as UserRole, { shouldDirty: true })}>
-                    <SelectTrigger><SelectValue placeholder="Sélectionner un rôle" /></SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(userRoleLabels).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted/50">
-                    <span className="text-sm">{userRoleLabels[role as UserRole] || role}</span>
-                    <Lock className="h-3 w-3 text-muted-foreground ml-auto" />
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  {currentUserIsSuperAdmin
-                    ? 'Détermine le rôle maximum sur les délégations'
-                    : 'Seul un super administrateur peut modifier le rôle global'}
-                </p>
               </div>
             </div>
           </CardContent>
