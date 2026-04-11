@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 
 @ApiTags('tenants')
 @Controller('tenants')
@@ -16,14 +17,14 @@ export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 
   @Get('current')
-  @Resource('tenants') @Action('read')
+  @SkipDelegation()
   @ApiOperation({ summary: 'Get current tenant' })
   getCurrentTenant(@Request() req: AuthRequest) {
     return this.tenantsService.findOneSafe(req.user.tenantId);
   }
 
   @Get('current/config')
-  @Resource('tenants') @Action('read')
+  @SkipDelegation()
   @ApiOperation({ summary: 'Get current tenant config (branding)' })
   getConfig(@Request() req: AuthRequest) {
     return this.tenantsService.getConfig(req.user.tenantId);

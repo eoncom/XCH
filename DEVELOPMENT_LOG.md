@@ -5051,3 +5051,24 @@ fix: remove all User.role UI from edit page, users list, and site access
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-11
+
+**Date:** 2026-04-11 18:22:56
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 7
+- Frontend files modified: 0
+
+**Commit message:**
+```
+refactor: purge User.role from API responses, services, and types
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

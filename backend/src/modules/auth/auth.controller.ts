@@ -21,8 +21,10 @@ import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AuthRequest } from '../../types/request.interface';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 
 @ApiTags('auth')
+@SkipDelegation()
 @Controller('auth')
 export class AuthController {
   constructor(

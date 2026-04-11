@@ -33,12 +33,14 @@ export class DelegationGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    if (!user) return false;
+    // No user = public endpoint (auth not required) → skip delegation check
+    if (!user) return true;
 
     const delegationId = request.headers['x-delegation-id'] as string;
 
+    // No header = no delegation context → endpoints that need it will fail in CasbinGuard
     if (!delegationId) {
-      throw new BadRequestException('X-Delegation-Id header is required');
+      return true;
     }
 
     // Verify delegation exists and belongs to user's tenant

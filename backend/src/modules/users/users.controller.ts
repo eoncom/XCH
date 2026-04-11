@@ -94,20 +94,23 @@ export class UsersController {
     return this.usersService.toggleSuperAdmin(id, req.user.tenantId, req.user.userId, body.promote);
   }
 
-  // Settings endpoints - accessible to all authenticated users
+  // Settings endpoints - accessible to all authenticated users (no delegation required)
   @Get('me/profile')
+  @SkipDelegation()
   @ApiOperation({ summary: 'Get current user profile' })
   getProfile(@Request() req: AuthRequest) {
     return this.usersService.getProfile(req.user.userId, req.user.tenantId);
   }
 
   @Put('me/profile')
+  @SkipDelegation()
   @ApiOperation({ summary: 'Update current user profile' })
   updateProfile(@Body() updateProfileDto: UpdateProfileDto, @Request() req: AuthRequest) {
     return this.usersService.updateProfile(req.user.userId, req.user.tenantId, updateProfileDto);
   }
 
   @Post('me/change-password')
+  @SkipDelegation()
   @ApiOperation({ summary: 'Change current user password' })
   changePassword(@Body() changePasswordDto: ChangePasswordDto, @Request() req: AuthRequest) {
     return this.usersService.changePassword(req.user.userId, req.user.tenantId, changePasswordDto);

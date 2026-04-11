@@ -10,12 +10,14 @@ import {
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SetupService } from './setup.service';
 import { SetupDto } from './dto/setup.dto';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 
 /**
  * Setup controller — public endpoints (no auth required).
  * Only accessible when no tenant exists (first launch).
  */
 @ApiTags('setup')
+@SkipDelegation()
 @Controller('setup')
 export class SetupController {
   constructor(private readonly setupService: SetupService) {}

@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { UserRole } from '@prisma/client';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 
 @Controller('user-delegations')
 @UseGuards(JwtAuthGuard, CasbinGuard)
@@ -50,6 +51,7 @@ export class UserDelegationsController {
    * Get current user's accessible delegations (for delegation switcher).
    */
   @Get('mine')
+  @SkipDelegation()
   async getMyDelegations(@Req() req: any) {
     return this.service.getMyDelegations(req.user.userId, req.user.tenantId);
   }
