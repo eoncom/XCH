@@ -73,7 +73,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sessionChecked, setSessionChecked] = useState(false);
   const { logoUrl, orgName } = useBranding();
   const { isModuleEnabled } = useTenantModules();
-  const { can, hasAnySiteAccess, hasDelegation, isLoadingPerms, isSuperAdmin } = usePermissions();
+  const { can, hasAnySiteAccess, hasDelegation, isLoadingPerms, isSuperAdmin, role: localRole } = usePermissions();
 
   // Filter navigation based on enabled modules + permissions
   const filteredNavigation = useMemo(
@@ -140,7 +140,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  const isAdmin = user.role === 'ADMIN' || isSuperAdmin;
+  // Use localRole from DelegationContext — NOT user.role (legacy, never used for permissions)
+  const isAdmin = localRole === 'ADMIN' || isSuperAdmin;
 
   // No delegation = no access — show blocking screen
   const noAccess = hasDelegation === false;
@@ -257,7 +258,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="border-t p-4">
           <div className="mb-3 px-3">
             <p className="text-sm font-medium text-foreground">{user.name}</p>
-            <p className="text-xs text-muted-foreground">{user.role}</p>
+            <p className="text-xs text-muted-foreground">{isSuperAdmin ? 'Super Admin' : localRole || user.role}</p>
           </div>
           <Button
             variant="ghost"

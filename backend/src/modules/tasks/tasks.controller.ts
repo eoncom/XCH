@@ -262,7 +262,8 @@ export class TasksController {
     @Body() body: { text: string },
     @Request() req: AuthRequest,
   ) {
-    return this.tasksService.updateComment(commentId, req.user.tenantId, req.user.id, body.text, req.user.role);
+    const localRole = (req as any).localRole || (req.user.isSuperAdmin ? 'ADMIN' : 'VIEWER');
+    return this.tasksService.updateComment(commentId, req.user.tenantId, req.user.id, body.text, localRole);
   }
 
   @Delete(':id/comments/:commentId')
@@ -273,6 +274,7 @@ export class TasksController {
     @Param('commentId') commentId: string,
     @Request() req: AuthRequest,
   ) {
-    return this.tasksService.deleteComment(commentId, req.user.tenantId, req.user.id, req.user.role);
+    const localRole = (req as any).localRole || (req.user.isSuperAdmin ? 'ADMIN' : 'VIEWER');
+    return this.tasksService.deleteComment(commentId, req.user.tenantId, req.user.id, localRole);
   }
 }

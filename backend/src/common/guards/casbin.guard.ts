@@ -24,9 +24,18 @@ export class CasbinGuard implements CanActivate {
       return true;
     }
 
+    // Super admin bypasses Casbin checks entirely
+    if (user.isSuperAdmin) {
+      return true;
+    }
+
     // Use localRole from DelegationGuard (R7: UserDelegation.role is source of truth)
-    // Fallback to user.role for routes without DelegationGuard (e.g. global admin routes)
-    const role = request.localRole || user.role;
+    // If localRole is not set, the DelegationGuard hasn't run (missing X-Delegation-Id)
+    // In that case, deny access — never fallback to user.role (security risk)
+    const role = request.localRole;
+    if (!role) {
+      return false;
+    }
 
     const allowed = await this.enforcer.enforce(
       role,

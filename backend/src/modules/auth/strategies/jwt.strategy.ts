@@ -26,7 +26,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: payload.sub,
       userId: payload.sub, // Required for attachments uploadedBy field
       email: payload.email,
-      role: payload.role,
+      role: payload.role || 'VIEWER', // Legacy fallback — NOT used for permissions
+      // Actual role comes from DelegationGuard (request.localRole)
       tenantId: payload.tenantId,
       isSuperAdmin: payload.isSuperAdmin || false,
     };

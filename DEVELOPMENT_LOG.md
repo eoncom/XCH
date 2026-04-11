@@ -4967,3 +4967,24 @@ feat: auto-assign super admins to newly created delegations
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-11
+
+**Date:** 2026-04-11 13:48:41
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 8
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix: scope user management to active delegation — admin is local only
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

@@ -192,6 +192,17 @@ export class UsersService {
       throw new ForbiddenException('Seul un super administrateur peut modifier un autre super administrateur');
     }
 
+    // Security: ONLY super admin can change User.role (global role)
+    // Local admins can edit name, email, phone, password, active — but NOT role
+    if (data.role && data.role !== (targetUser as any).role && !isSuperAdmin) {
+      throw new ForbiddenException('Seul un super administrateur peut modifier le rôle global d\'un utilisateur');
+    }
+
+    // Security: prevent self-modification of own role (even for super admins)
+    if (requestingUserId === id && data.role && data.role !== (targetUser as any).role) {
+      throw new ForbiddenException('Vous ne pouvez pas modifier votre propre rôle');
+    }
+
     // Non-super-admin: must be ADMIN of active delegation and target must be in it
     if (activeDelegationId) {
       if (localRole !== 'ADMIN') {
@@ -203,11 +214,6 @@ export class UsersService {
       if (!targetInDelegation) {
         throw new ForbiddenException('Cet utilisateur ne fait pas partie de votre délégation');
       }
-    }
-
-    // Security: prevent self-demotion of role for super admins
-    if (requestingUserId === id && isSuperAdmin && data.role && data.role !== (targetUser as any).role) {
-      throw new ForbiddenException('Un super administrateur ne peut pas modifier son propre rôle');
     }
 
     if (updateUserDto.password) {

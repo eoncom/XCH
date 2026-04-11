@@ -1,14 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaClient, UserRole } from '@prisma/client';
 
-// Role hierarchy: ADMIN > MANAGER > TECHNICIEN > VIEWER
-const ROLE_HIERARCHY: Record<string, number> = {
-  ADMIN: 4,
-  MANAGER: 3,
-  TECHNICIEN: 2,
-  VIEWER: 1,
-};
-
 @Injectable()
 export class UserDelegationsService {
   constructor(private prisma: PrismaClient) {}
@@ -43,41 +35,9 @@ export class UserDelegationsService {
   }
 
   /**
-   * Validate that delegation role does not exceed user's global role.
-   * Rule: User.role = maximum role allowed on any delegation.
-   * ADMIN → all roles, MANAGER → MANAGER/TECH/VIEWER, TECHNICIEN → TECH/VIEWER, VIEWER → VIEWER only.
-   * Super admins bypass this check (always ADMIN everywhere).
-   */
-  private async validateRoleHierarchy(userId: string, delegationRole: UserRole) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true, isSuperAdmin: true, name: true },
-    });
-    if (!user) throw new NotFoundException('Utilisateur non trouvé');
-
-    // Super admins bypass
-    if (user.isSuperAdmin) return;
-
-    const globalLevel = ROLE_HIERARCHY[user.role] || 0;
-    const localLevel = ROLE_HIERARCHY[delegationRole] || 0;
-
-    if (localLevel > globalLevel) {
-      const ROLE_LABELS: Record<string, string> = {
-        ADMIN: 'Administrateur',
-        MANAGER: 'Manager',
-        TECHNICIEN: 'Technicien',
-        VIEWER: 'Observateur',
-      };
-      throw new ForbiddenException(
-        `Impossible d'attribuer le rôle "${ROLE_LABELS[delegationRole]}" — le compte de ${user.name} est "${ROLE_LABELS[user.role]}". Le rôle par délégation ne peut pas dépasser le rôle du compte.`
-      );
-    }
-  }
-
-  /**
    * Add a user to a delegation with a local role.
    * Authorization: only ADMIN of the delegation or super admin.
-   * Constraint: delegation role cannot exceed User.role.
+   * Role is freely assignable — no "cap" from User.role (deprecated).
    */
   async addUserToDelegation(
     tenantId: string,
@@ -107,9 +67,6 @@ export class UserDelegationsService {
     if (!user) {
       throw new NotFoundException(`Utilisateur non trouvé`);
     }
-
-    // Validate: delegation role cannot exceed user's global role
-    await this.validateRoleHierarchy(userId, role);
 
     // Check for duplicate
     const existing = await this.prisma.userDelegation.findUnique({
@@ -253,9 +210,6 @@ export class UserDelegationsService {
     if (requestingUserId && tenantId) {
       await this.authorizeManagement(requestingUserId, delegationId, tenantId);
     }
-
-    // Validate: delegation role cannot exceed user's global role
-    await this.validateRoleHierarchy(userId, newRole);
 
     const existing = await this.prisma.userDelegation.findUnique({
       where: { userId_delegationId: { userId, delegationId } },

@@ -82,9 +82,10 @@ export class AuthService {
     const payload = {
       sub: user.id,
       email: user.email,
-      role: user.role,
       tenantId: user.tenantId,
       isSuperAdmin: user.isSuperAdmin || false,
+      // NOTE: role deliberately excluded from JWT — source of truth is UserDelegation.role
+      // resolved per-request by DelegationGuard via X-Delegation-Id header
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: sessionTimeout });
@@ -108,7 +109,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        role: user.role, // Legacy default — NOT used for permissions (display only)
         isSuperAdmin: user.isSuperAdmin || false,
         tenantId: user.tenantId,
         tenant: user.tenant,

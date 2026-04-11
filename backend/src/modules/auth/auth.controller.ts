@@ -394,8 +394,9 @@ export class AuthController {
     @Request() req: AuthRequest,
     @Param('userId') userId: string,
   ) {
-    // Only ADMIN can do this
-    if (req.user.role !== 'ADMIN') {
+    // Only ADMIN (local delegation role) or super admin can do this
+    const localRole = (req as any).localRole;
+    if (!req.user.isSuperAdmin && localRole !== 'ADMIN') {
       throw new UnauthorizedException('Admin access required');
     }
 

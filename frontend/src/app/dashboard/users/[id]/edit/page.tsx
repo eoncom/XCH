@@ -73,21 +73,8 @@ const DELEGATION_ROLE_LABELS: Record<string, string> = {
   VIEWER: 'Observateur',
 };
 
-// Role hierarchy — delegation role cannot exceed global User.role
-const ROLE_HIERARCHY: Record<string, number> = {
-  ADMIN: 4,
-  MANAGER: 3,
-  TECHNICIEN: 2,
-  VIEWER: 1,
-};
-
-/** Returns allowed delegation roles based on user's global role */
-function getAllowedDelegationRoles(globalRole: string): string[] {
-  const maxLevel = ROLE_HIERARCHY[globalRole] || 1;
-  return Object.entries(ROLE_HIERARCHY)
-    .filter(([, level]) => level <= maxLevel)
-    .map(([role]) => role);
-}
+// All delegation roles are available — no cap from User.role (deprecated)
+// Role assignment is controlled by authorization (only ADMIN/super admin can assign)
 
 const ACCESS_SCOPE_LABELS: Record<AccessScope, string> = {
   ALL_SITES: 'Tous les sites',
@@ -322,15 +309,27 @@ export default function EditUserPage() {
                 <p className="text-xs text-muted-foreground">Laisser vide pour conserver le mot de passe actuel</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="role">Rôle <span className="text-red-500">*</span></Label>
-                <Select key={role || 'empty'} value={role || ''} onValueChange={(value) => setValue('role', value as UserRole, { shouldDirty: true })}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un rôle" /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(userRoleLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="role">Rôle global <span className="text-red-500">*</span></Label>
+                {currentUserIsSuperAdmin ? (
+                  <Select key={role || 'empty'} value={role || ''} onValueChange={(value) => setValue('role', value as UserRole, { shouldDirty: true })}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionner un rôle" /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(userRoleLabels).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted/50">
+                    <span className="text-sm">{userRoleLabels[role as UserRole] || role}</span>
+                    <Lock className="h-3 w-3 text-muted-foreground ml-auto" />
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {currentUserIsSuperAdmin
+                    ? 'Détermine le rôle maximum sur les délégations'
+                    : 'Seul un super administrateur peut modifier le rôle global'}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -559,16 +558,11 @@ export default function EditUserPage() {
                       <Select value={newDelegationRole} onValueChange={setNewDelegationRole}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {getAllowedDelegationRoles(user?.role || 'VIEWER').map((value) => (
-                            <SelectItem key={value} value={value}>{DELEGATION_ROLE_LABELS[value]}</SelectItem>
+                          {Object.entries(DELEGATION_ROLE_LABELS).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>{label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      {user?.role && ROLE_HIERARCHY[user.role] < 4 && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Limité à {DELEGATION_ROLE_LABELS[user.role]} max (rôle du compte)
-                        </p>
-                      )}
                     </div>
                   </div>
 

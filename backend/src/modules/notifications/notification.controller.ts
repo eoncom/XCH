@@ -132,30 +132,32 @@ export class NotificationController {
   // ──────────────── Access control ────────────────
 
   private requireAdmin(user: any) {
-    const role = user.localRole || user.role;
-    if (role !== 'ADMIN' && !user.isSuperAdmin) {
+    if (user.isSuperAdmin) return;
+    // Use localRole from DelegationGuard only — no fallback to user.role
+    if (user.localRole !== 'ADMIN') {
       throw new ForbiddenException('Admin access required');
     }
   }
 
   private requireAdminOrManager(user: any) {
-    const role = user.localRole || user.role;
-    if (!['ADMIN', 'MANAGER'].includes(role) && !user.isSuperAdmin) {
+    if (user.isSuperAdmin) return;
+    // Use localRole from DelegationGuard only — no fallback to user.role
+    if (!['ADMIN', 'MANAGER'].includes(user.localRole)) {
       throw new ForbiddenException('Admin or Manager access required');
     }
   }
 
   /**
    * Check access to manage notification config for a delegation.
-   * - Super admin or isSuperAdmin: can manage all (including global)
+   * - Super admin: can manage all (including global)
    * - Admin/Manager: can manage their own delegations
    * - Global config (delegationId=null): super admin only
    */
   private async checkDelegationAccess(user: any, delegationId: string | null) {
     if (user.isSuperAdmin) return;
 
-    const role = user.localRole || user.role;
-    if (!['ADMIN', 'MANAGER'].includes(role)) {
+    // Use localRole from DelegationGuard only — no fallback to user.role
+    if (!['ADMIN', 'MANAGER'].includes(user.localRole)) {
       throw new ForbiddenException('Admin or Manager access required');
     }
 

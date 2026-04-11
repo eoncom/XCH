@@ -129,8 +129,9 @@ export function usePermissions() {
   const { user } = useAuthStore();
   const { localRole, isSuperAdmin, hasDelegation } = useDelegation();
 
-  // Use localRole from active delegation (R7), fallback to user.role
-  const role = localRole || (user?.role || 'VIEWER') as string;
+  // Use localRole from active delegation (R7) — NO fallback to user.role
+  // If no localRole and not super admin → no permissions (role stays null → empty perms)
+  const role = localRole || (isSuperAdmin ? 'ADMIN' : null) as string | null;
 
   // Fetch permissions
   const { data: myPerms, isLoading: isLoadingPerms } = useQuery<MyPermissionsResponse>({
@@ -246,12 +247,12 @@ export function usePermissions() {
     canRead: (resource: string, siteId?: string) => can(resource, 'read', siteId),
     canUpdate: (resource: string, siteId?: string) => can(resource, 'update', siteId),
     canDelete: (resource: string, siteId?: string) => can(resource, 'delete', siteId),
-    isAdmin: role === 'ADMIN',
-    isManagerOrAbove: role === 'ADMIN' || role === 'MANAGER',
+    isAdmin: role === 'ADMIN' || isSuperAdmin,
+    isManagerOrAbove: role === 'ADMIN' || role === 'MANAGER' || isSuperAdmin,
     isTechnicien: role === 'TECHNICIEN',
     isViewer: role === 'VIEWER',
     isSuperAdmin,
-    role: role as UserRole,
+    role: (role || 'VIEWER') as UserRole,
     /** User delegations (for display) */
     delegations: myPerms?.delegations || [],
     /** User access grants (for display) */
