@@ -29,27 +29,19 @@ import { ArrowLeft, Info, UserPlus, Send, Copy, CheckCircle2, Shield, Network } 
 import Link from 'next/link';
 import type { UserRole } from '@/types';
 
-const userRoleLabels: Record<UserRole, string> = {
-  ADMIN: 'Administrateur',
-  MANAGER: 'Manager',
-  TECHNICIEN: 'Technicien',
-  VIEWER: 'Observateur',
-};
-
-// Schema for direct creation
+// Schema for direct creation — role is NOT in the form (deprecated User.role)
+// The real role comes from the delegation assignment below.
 const directSchema = z.object({
   name: z.string().min(1, 'Le nom est requis'),
   email: z.string().email('Email invalide'),
   password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères'),
-  role: z.enum(['ADMIN', 'MANAGER', 'TECHNICIEN', 'VIEWER']),
   phone: z.string().optional(),
 });
 
-// Schema for invitation
+// Schema for invitation — same, no role field
 const inviteSchema = z.object({
   name: z.string().min(1, 'Le nom est requis'),
   email: z.string().email('Email invalide'),
-  role: z.enum(['ADMIN', 'MANAGER', 'TECHNICIEN', 'VIEWER']),
 });
 
 type DirectFormData = z.infer<typeof directSchema>;
@@ -83,20 +75,18 @@ export default function NewUserPage() {
   // Direct creation form
   const directForm = useForm<DirectFormData>({
     resolver: zodResolver(directSchema),
-    defaultValues: { role: 'VIEWER' },
   });
 
   // Invite form
   const inviteForm = useForm<InviteFormData>({
     resolver: zodResolver(inviteSchema),
-    defaultValues: { role: 'VIEWER' },
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: DirectFormData) => {
-      // 1. Create user
-      const newUser = await usersApi.create(data);
-      // 2. Assign mandatory delegation
+      // 1. Create user — pass delegationRole as User.role (legacy field, for display only)
+      const newUser = await usersApi.create({ ...data, role: delegationRole });
+      // 2. Assign mandatory delegation (this is the REAL role)
       await userDelegationsApi.create({
         userId: newUser.id,
         delegationId: selectedDelegationId,
@@ -116,8 +106,8 @@ export default function NewUserPage() {
 
   const inviteMutation = useMutation({
     mutationFn: async (data: InviteFormData) => {
-      // 1. Create invited user
-      const result = await apiClient.post<{ user: any; inviteToken?: string }>('/api/auth/invite', data);
+      // 1. Create invited user — pass delegationRole as legacy User.role
+      const result = await apiClient.post<{ user: any; inviteToken?: string }>('/api/auth/invite', { ...data, role: delegationRole });
       // 2. Assign mandatory delegation
       if (result.user?.id) {
         await userDelegationsApi.create({
@@ -201,17 +191,6 @@ export default function NewUserPage() {
                     <Label htmlFor="d-password">Mot de passe <span className="text-red-500">*</span></Label>
                     <Input id="d-password" type="password" {...directForm.register('password')} placeholder="Minimum 8 caractères" />
                     {directForm.formState.errors.password && <p className="text-sm text-red-600">{directForm.formState.errors.password.message}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="d-role">Rôle <span className="text-red-500">*</span></Label>
-                    <Select value={directForm.watch('role')} onValueChange={(v) => directForm.setValue('role', v as UserRole)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(userRoleLabels).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>{label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="d-phone">Téléphone</Label>
@@ -331,17 +310,6 @@ export default function NewUserPage() {
                       <Label htmlFor="i-email">Email <span className="text-red-500">*</span></Label>
                       <Input id="i-email" type="email" {...inviteForm.register('email')} placeholder="jean.dupont@example.com" />
                       {inviteForm.formState.errors.email && <p className="text-sm text-red-600">{inviteForm.formState.errors.email.message}</p>}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="i-role">Rôle <span className="text-red-500">*</span></Label>
-                      <Select value={inviteForm.watch('role')} onValueChange={(v) => inviteForm.setValue('role', v as UserRole)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(userRoleLabels).map(([value, label]) => (
-                            <SelectItem key={value} value={value}>{label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                     </div>
                   </div>
                 </CardContent>
