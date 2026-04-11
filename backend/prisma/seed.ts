@@ -6,6 +6,39 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting comprehensive demo seed...');
 
+  // ── CLEANUP: delete all existing data (FK-safe order) ──
+  console.log('🗑️  Cleaning up existing data...');
+  await prisma.costAllocation.deleteMany({});
+  await prisma.expense.deleteMany({});
+  await prisma.billingEntity.deleteMany({});
+  await prisma.notificationLog.deleteMany({});
+  await prisma.notificationConfig.deleteMany({});
+  await prisma.attachment.deleteMany({});
+  await prisma.taskComment.deleteMany({});
+  await prisma.taskChecklistItem.deleteMany({});
+  await prisma.task.deleteMany({});
+  await prisma.photo.deleteMany({});
+  await prisma.externalRef.deleteMany({});
+  await prisma.integrationMapping.deleteMany({});
+  await prisma.pin.deleteMany({});
+  await prisma.floorPlan.deleteMany({});
+  await prisma.assetMovement.deleteMany({});
+  await prisma.asset.deleteMany({});
+  await prisma.rack.deleteMany({});
+  await prisma.contact.deleteMany({});
+  await prisma.contactType.deleteMany({});
+  await prisma.accessGrant.deleteMany({});
+  await prisma.userDelegation.deleteMany({});
+  await prisma.authProvider.deleteMany({});
+  await prisma.auditLog.deleteMany({});
+  await prisma.enumLabel.deleteMany({});
+  await prisma.casbinRule.deleteMany({});
+  await prisma.site.deleteMany({});
+  await prisma.delegation.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.tenant.deleteMany({});
+  console.log('✅ Cleanup complete');
+
   // 1. Create default tenant
   const tenant = await prisma.tenant.upsert({
     where: { subdomain: 'demo' },
@@ -47,7 +80,7 @@ async function main() {
       email: 'admin@xch.demo',
       passwordHash: adminPassword,
       name: 'Sophie Administrateur',
-      role: UserRole.ADMIN,
+      role: UserRole.ADMIN, // DEPRECATED — local role comes from UserDelegation
       isSuperAdmin: true,
       active: true,
       phone: '+33 6 12 34 56 78',
@@ -68,7 +101,7 @@ async function main() {
       email: 'manager@xch.demo',
       passwordHash: managerPassword,
       name: 'Marc Chef de Projet',
-      role: UserRole.MANAGER,
+      role: UserRole.MANAGER, // DEPRECATED — local role comes from UserDelegation
       active: true,
       phone: '+33 6 23 45 67 89',
     },
@@ -88,7 +121,7 @@ async function main() {
       email: 'tech@xch.demo',
       passwordHash: techPassword,
       name: 'Julie Technicien Réseau',
-      role: UserRole.TECHNICIEN,
+      role: UserRole.TECHNICIEN, // DEPRECATED — local role comes from UserDelegation
       active: true,
       phone: '+33 6 34 56 78 90',
     },
@@ -107,7 +140,7 @@ async function main() {
       email: 'tech2@xch.demo',
       passwordHash: techPassword,
       name: 'Thomas Technicien Support',
-      role: UserRole.TECHNICIEN,
+      role: UserRole.TECHNICIEN, // DEPRECATED — local role comes from UserDelegation
       active: true,
       phone: '+33 6 45 67 89 01',
     },
@@ -127,7 +160,7 @@ async function main() {
       email: 'viewer@xch.demo',
       passwordHash: viewerPassword,
       name: 'Observateur Client',
-      role: UserRole.VIEWER,
+      role: UserRole.VIEWER, // DEPRECATED — local role comes from UserDelegation
       active: true,
       phone: '+33 6 56 78 90 12',
     },
@@ -351,11 +384,14 @@ async function main() {
   console.log('✅ Sites created: 5 total (with GPS coordinates)');
 
   // 3b. Create UserDelegations (who can access where, with local role)
-  // Admin is isSuperAdmin=true, but also ADMIN on Paris Ouest for demo
-  await prisma.userDelegation.create({
-    data: { tenantId: tenant.id, userId: admin.id, delegationId: delParisOuest.id, role: 'ADMIN', grantedBy: admin.id },
-  });
-  // Manager → ADMIN on Paris Ouest + MANAGER on Bordeaux
+  // Super admin → ADMIN on ALL delegations (R7: super admin has full access everywhere)
+  const allDelegations = [delParisOuest, delLyon, delMarseille, delBordeaux, delToulouse];
+  for (const del of allDelegations) {
+    await prisma.userDelegation.create({
+      data: { tenantId: tenant.id, userId: admin.id, delegationId: del.id, role: 'ADMIN', grantedBy: admin.id },
+    });
+  }
+  // Manager → MANAGER on Paris Ouest + MANAGER on Bordeaux
   await prisma.userDelegation.create({
     data: { tenantId: tenant.id, userId: manager.id, delegationId: delParisOuest.id, role: 'MANAGER', grantedBy: admin.id },
   });
@@ -393,7 +429,7 @@ async function main() {
     data: { tenantId: tenant.id, userId: viewer.id, delegationId: delToulouse.id, role: 'VIEWER', grantedBy: admin.id },
   });
 
-  console.log('✅ UserDelegations created: 12 (admin=PAR-O+superAdmin, manager=PAR-O+BDX, tech1=LYN+MRS, tech2=BDX+TLS, viewer=all)');
+  console.log('✅ UserDelegations created: 16 (superAdmin=ALL 5, manager=PAR-O+BDX, tech1=LYN+MRS, tech2=BDX+TLS, viewer=ALL 5)');
 
   // 3c. Create BillingEntities (cost centers)
   const beDSI = await prisma.billingEntity.create({
