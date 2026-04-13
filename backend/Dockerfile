@@ -56,9 +56,6 @@ COPY --from=builder /app/node_modules/bcrypt ./node_modules/bcrypt
 # Copy built application
 COPY --from=builder /app/dist ./dist
 
-# Copy Casbin configuration
-COPY --from=builder /app/casbin /casbin
-
 # Copy entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
