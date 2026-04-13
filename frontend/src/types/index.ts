@@ -1,11 +1,14 @@
 // User & Auth types
+/** @deprecated Use DelegationRight instead */
 export type UserRole = 'ADMIN' | 'MANAGER' | 'TECHNICIEN' | 'VIEWER';
+
+/** New authorization rights: MANAGE > WRITE > READ */
+export type DelegationRight = 'MANAGE' | 'WRITE' | 'READ';
 
 export interface User {
   id: string;
   email: string;
   name: string;
-  role?: UserRole; // Deprecated — authorization uses UserDelegation.role via DelegationContext
   isSuperAdmin?: boolean;
   tenantId: string;
   avatarUrl?: string;

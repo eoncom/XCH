@@ -15,20 +15,18 @@ import {
 import { ContactsService } from './contacts.service';
 import { QueryContactDto } from './dto/query-contact.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
-import { Resource, Action } from '../../common/decorators/permissions.decorator';
+import { RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('providers')
 @Controller('providers')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ProvidersLegacyController {
   constructor(private readonly contactsService: ContactsService) {}
 
   @Get()
-  @Resource('contacts')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({
     summary: 'Get all contacts (legacy providers endpoint)',
     description: 'This endpoint is deprecated. Use /contacts instead. Maintained for backward compatibility.',
@@ -42,8 +40,7 @@ export class ProvidersLegacyController {
   }
 
   @Get(':id')
-  @Resource('contacts')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({
     summary: 'Get a contact by ID (legacy providers endpoint)',
     description: 'This endpoint is deprecated. Use /contacts/:id instead. Maintained for backward compatibility.',

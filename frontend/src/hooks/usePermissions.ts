@@ -3,137 +3,62 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useDelegation } from '@/contexts/DelegationContext';
-import { siteAccessApi, type ResourcePermissionLevel, type ResourcePermissions, type MyPermissionsResponse } from '@/lib/api/site-access';
-import type { UserRole } from '@/types';
+import { siteAccessApi, type MyPermissionsResponse } from '@/lib/api/site-access';
+import type { DelegationRight } from '@/types';
 
 /**
- * Permission definitions based on Casbin policy.csv
- * Maps role -> resource -> allowed actions
+ * Right hierarchy: MANAGE > WRITE > READ.
  */
-const ROLE_PERMISSIONS: Record<string, Record<string, string[]>> = {
-  ADMIN: {
-    sites: ['create', 'read', 'update', 'delete'],
-    assets: ['create', 'read', 'update', 'delete'],
-    racks: ['create', 'read', 'update', 'delete'],
-    tasks: ['create', 'read', 'update', 'delete'],
-    'floor-plans': ['create', 'read', 'update', 'delete'],
-    integrations: ['read', 'create', 'update'],
-    monitoring: ['read', 'manage'],
-    netbox: ['read', 'manage'],
-    users: ['create', 'read', 'update', 'delete'],
-    tenants: ['read', 'update'],
-    contacts: ['create', 'read', 'update', 'delete'],
-    'contact-types': ['create', 'read', 'update', 'delete'],
-    delegations: ['create', 'read', 'update', 'delete'],
-    'billing-entities': ['create', 'read', 'update', 'delete'],
-    expenses: ['create', 'read', 'update', 'delete'],
-  },
-  MANAGER: {
-    sites: ['read'],
-    assets: ['read'],
-    racks: ['read'],
-    tasks: ['create', 'read', 'update'],
-    'floor-plans': ['read', 'update'],
-    integrations: ['read'],
-    monitoring: ['read'],
-    tenants: ['read'],
-    users: ['read'],
-    contacts: ['create', 'read', 'update'],
-    'contact-types': ['read'],
-    delegations: ['read'],
-    'billing-entities': ['read'],
-    expenses: ['create', 'read', 'update'],
-  },
-  TECHNICIEN: {
-    sites: ['read'],
-    tenants: ['read'],
-    assets: ['create', 'read', 'update'],
-    racks: ['create', 'read', 'update'],
-    tasks: ['create', 'read', 'update'],
-    'floor-plans': ['read', 'create', 'update'],
-    integrations: ['read'],
-    monitoring: ['read'],
-    contacts: ['read'],
-    'contact-types': ['read'],
-    delegations: ['read'],
-  },
-  VIEWER: {
-    sites: ['read'],
-    tenants: ['read'],
-    assets: ['read'],
-    racks: ['read'],
-    tasks: ['read'],
-    'floor-plans': ['read'],
-    integrations: ['read'],
-    monitoring: ['read'],
-    contacts: ['read'],
-    'contact-types': ['read'],
-    delegations: ['read'],
-  },
+const RIGHT_RANK: Record<string, number> = {
+  MANAGE: 3,
+  WRITE: 2,
+  READ: 1,
 };
+
+function rightSatisfies(actual: string | null, required: string): boolean {
+  if (!actual) return false;
+  return (RIGHT_RANK[actual] ?? 0) >= (RIGHT_RANK[required] ?? 0);
+}
 
 /**
- * Map from kebab-case resource names to camelCase keys (for resourcePermissions JSON)
+ * Map actions to the minimum right needed.
  */
-const RESOURCE_KEY_MAP: Record<string, string> = {
-  'floor-plans': 'floorPlans',
-  assets: 'assets',
-  racks: 'racks',
-  tasks: 'tasks',
-  sites: 'sites',
-  contacts: 'contacts',
-  monitoring: 'monitoring',
-  netbox: 'netbox',
-  'billing-entities': 'billingEntities',
-  expenses: 'expenses',
-};
-
-function permLevelToActions(level: ResourcePermissionLevel): string[] {
-  switch (level) {
-    case 'WRITE':
-      return ['create', 'read', 'update', 'delete'];
-    case 'READ':
-      return ['read'];
-    case 'NONE':
-      return [];
+function actionToRight(action: string): string {
+  switch (action) {
+    case 'create':
+    case 'update':
+    case 'delete':
+      return 'WRITE';
+    case 'manage':
+      return 'MANAGE';
+    case 'read':
     default:
-      return ['read'];
+      return 'READ';
   }
-}
-
-function roleToPermLevel(role: string, resource: string): ResourcePermissionLevel {
-  const rolePerms = ROLE_PERMISSIONS[role];
-  if (!rolePerms || !rolePerms[resource]) return 'NONE';
-  const actions = rolePerms[resource];
-  if (actions.includes('create') || actions.includes('update') || actions.includes('delete') || actions.includes('manage')) {
-    return 'WRITE';
-  }
-  if (actions.includes('read')) return 'READ';
-  return 'NONE';
-}
-
-function maxPerm(a: ResourcePermissionLevel, b: ResourcePermissionLevel): ResourcePermissionLevel {
-  const order: Record<string, number> = { NONE: 0, READ: 1, WRITE: 2 };
-  return (order[a] || 0) >= (order[b] || 0) ? a : b;
 }
 
 /**
- * usePermissions hook — Delegation-first version.
+ * Resources that require MANAGE right (not just WRITE).
+ */
+const MANAGE_ONLY_RESOURCES = ['users', 'delegations', 'tenants'];
+
+/**
+ * usePermissions hook — v2 (MANAGE/WRITE/READ model).
  *
- * Uses UserDelegation + AccessGrant for permission resolution.
- * Role comes from localRole in the active delegation (R7).
+ * Uses UserDelegation.right for delegation-level permissions.
+ * AccessOverride (ALLOW/DENY) is resolved server-side by PermissionService.
+ * Frontend caches delegation rights for UX (show/hide buttons), but backend is authoritative.
  *
- * RULE: No delegation + no grant = NO ACCESS to anything (unless super admin).
+ * RULE: No delegation = NO ACCESS (unless super admin).
  */
 export function usePermissions() {
   const { user } = useAuthStore();
-  const { localRole, isSuperAdmin, hasDelegation } = useDelegation();
+  const { localRight, isSuperAdmin, hasDelegation } = useDelegation();
 
-  // localRole = UserDelegation.role for the active delegation
-  // If no localRole and not super admin → no permissions (role stays null → empty perms)
-  const role = localRole || (isSuperAdmin ? 'ADMIN' : null) as string | null;
+  // localRight = UserDelegation.right for the active delegation (MANAGE/WRITE/READ)
+  // Super admin with no delegation selected → acts as MANAGE
+  const effectiveRight: DelegationRight | null = localRight || (isSuperAdmin ? 'MANAGE' : null);
 
-  // Fetch permissions
   const { data: myPerms, isLoading: isLoadingPerms } = useQuery<MyPermissionsResponse>({
     queryKey: ['my-permissions'],
     queryFn: () => siteAccessApi.myPermissions(),
@@ -142,91 +67,37 @@ export function usePermissions() {
     retry: 1,
   });
 
-  /**
-   * Whether the user has at least one delegation or grant.
-   * Super admin always has access.
-   */
   const hasDelegationAccess = (() => {
-    if (!myPerms) return undefined; // Still loading
+    if (!myPerms) return undefined;
     return myPerms.isSuperAdmin || myPerms.hasDelegation;
   })();
 
   /**
-   * Check if user can do action on resource.
+   * Check if user can perform action on resource.
    *
-   * CRITICAL: If user has no delegation AND no grant AND is not super admin, ALWAYS returns false.
+   * Frontend uses delegation-level right for UX decisions.
+   * Backend enforces full resolution (AccessOverride + delegation inheritance).
    */
-  const can = (resource: string, action: string, siteId?: string): boolean => {
-    if (!myPerms) return false;
-
+  const can = (resource: string, action: string, _siteId?: string): boolean => {
     // Super admin can do everything
-    if (myPerms.isSuperAdmin) return true;
+    if (isSuperAdmin) return true;
 
-    // No delegation + no grant = NO ACCESS
-    if (!myPerms.hasDelegation) return false;
+    // No delegation = no access
+    if (!effectiveRight) return false;
+    if (myPerms && !myPerms.hasDelegation) return false;
 
-    // Org-level resources (not site-scoped) — use role-based check
-    const orgResources = ['users', 'tenants', 'delegations', 'contact-types', 'integrations', 'billing-entities', 'expenses'];
-    if (orgResources.includes(resource)) {
-      const rolePerms = ROLE_PERMISSIONS[role];
-      if (!rolePerms) return false;
-      return rolePerms[resource]?.includes(action) ?? false;
-    }
-
-    // If user has allSitesAccess and no siteId specified, use role-based
-    if (!siteId && myPerms.allSitesAccess) {
-      const rolePerms = ROLE_PERMISSIONS[role];
-      if (!rolePerms) return false;
-      return rolePerms[resource]?.includes(action) ?? false;
-    }
-
-    // If no siteId, check if user has any delegation
-    if (!siteId) {
-      if (myPerms.delegations.length > 0) {
-        const rolePerms = ROLE_PERMISSIONS[role];
-        if (!rolePerms) return false;
-        return rolePerms[resource]?.includes(action) ?? false;
+    // MANAGE-only resources require MANAGE right
+    if (MANAGE_ONLY_RESOURCES.includes(resource)) {
+      if (action !== 'read') {
+        return rightSatisfies(effectiveRight, 'MANAGE');
       }
-
-      // No delegations — check if any grant covers this resource
-      const resourceKey = RESOURCE_KEY_MAP[resource] || resource;
-      for (const grant of myPerms.accessGrants) {
-        const grantPerms = grant.resourcePermissions as ResourcePermissions;
-        if (grantPerms && resourceKey in grantPerms) {
-          const level = (grantPerms as any)[resourceKey] as ResourcePermissionLevel;
-          if (level && permLevelToActions(level).includes(action)) {
-            return true;
-          }
-        }
-      }
-
-      return false;
+      // Reading users/delegations/tenants requires at least READ
+      return rightSatisfies(effectiveRight, 'READ');
     }
 
-    // With siteId: compute effective permission level
-    const resourceKey = RESOURCE_KEY_MAP[resource] || resource;
-    let effectiveLevel: ResourcePermissionLevel = 'NONE';
-
-    // SOURCE 1: UserDelegations — if site is in accessibleSiteIds, role applies
-    if (myPerms.allSitesAccess || (myPerms.accessibleSiteIds && myPerms.accessibleSiteIds.includes(siteId))) {
-      if (myPerms.delegations.length > 0) {
-        const rolePerm = roleToPermLevel(role, resource);
-        effectiveLevel = maxPerm(effectiveLevel, rolePerm);
-      }
-    }
-
-    // SOURCE 2: AccessGrants — additive, only listed resourcePermissions
-    for (const grant of myPerms.accessGrants) {
-      const grantPerms = grant.resourcePermissions as ResourcePermissions;
-      if (grantPerms && resourceKey in grantPerms) {
-        const grantLevel = (grantPerms as any)[resourceKey] as ResourcePermissionLevel;
-        if (grantLevel) {
-          effectiveLevel = maxPerm(effectiveLevel, grantLevel);
-        }
-      }
-    }
-
-    return permLevelToActions(effectiveLevel).includes(action);
+    // Standard resources: map action to required right
+    const requiredRight = actionToRight(action);
+    return rightSatisfies(effectiveRight, requiredRight);
   };
 
   const canForSite = (resource: string, action: string, siteId: string): boolean => {
@@ -234,8 +105,8 @@ export function usePermissions() {
   };
 
   const hasAnySiteAccess = (): boolean => {
+    if (isSuperAdmin) return true;
     if (!myPerms) return false;
-    if (myPerms.isSuperAdmin) return true;
     if (!myPerms.hasDelegation) return false;
     return myPerms.allSitesAccess || (myPerms.accessibleSiteIds !== null && myPerms.accessibleSiteIds.length > 0);
   };
@@ -247,22 +118,27 @@ export function usePermissions() {
     canRead: (resource: string, siteId?: string) => can(resource, 'read', siteId),
     canUpdate: (resource: string, siteId?: string) => can(resource, 'update', siteId),
     canDelete: (resource: string, siteId?: string) => can(resource, 'delete', siteId),
-    isAdmin: role === 'ADMIN' || isSuperAdmin,
-    isManagerOrAbove: role === 'ADMIN' || role === 'MANAGER' || isSuperAdmin,
-    isTechnicien: role === 'TECHNICIEN',
-    isViewer: role === 'VIEWER',
+
+    // Right-based checks (new model)
+    canManage: rightSatisfies(effectiveRight, 'MANAGE'),
+    canWrite: rightSatisfies(effectiveRight, 'WRITE'),
+
+    // Backward-compatible role-like helpers
+    isAdmin: effectiveRight === 'MANAGE' || isSuperAdmin,
+    isManagerOrAbove: rightSatisfies(effectiveRight, 'WRITE') || isSuperAdmin,
+    isTechnicien: effectiveRight === 'WRITE',
+    isViewer: effectiveRight === 'READ',
     isSuperAdmin,
-    role: (role || 'VIEWER') as UserRole,
-    /** User delegations (for display) */
+
+    /** Effective delegation right */
+    right: effectiveRight,
+    /** @deprecated Use right instead */
+    role: (effectiveRight || 'READ') as string,
+
     delegations: myPerms?.delegations || [],
-    /** User access grants (for display) */
-    accessGrants: myPerms?.accessGrants || [],
-    /** All sites access flag */
     allSitesAccess: myPerms?.allSitesAccess ?? false,
     hasAnySiteAccess,
-    /** Whether user has at least one delegation or grant (undefined = loading) */
     hasDelegation: hasDelegationAccess,
-    /** Whether permissions are still loading */
     isLoadingPerms,
   };
 }

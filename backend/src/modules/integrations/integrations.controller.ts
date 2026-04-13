@@ -5,65 +5,57 @@ import {
   Patch,
   Body,
   Param,
-  UseGuards,
   Request,
   Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IntegrationsService } from './integrations.service';
 import { SyncNetBoxSitesDto, SyncNetBoxDevicesDto, MapAssetToNetBoxDto } from './dto/sync-netbox.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
-import { Resource } from '../../common/decorators/permissions.decorator';
-import { Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
-import { SiteAccessService } from '../site-access/site-access.service';
+import { PermissionService } from '../../common/services/permission.service';
+import { RequireRead, RequireWrite, RequireManage } from '../../common/decorators/require-right.decorator';
+import { PrismaClient } from '@prisma/client';
 
 @ApiTags('integrations')
 @ApiBearerAuth()
 @Controller('integrations')
-@UseGuards(JwtAuthGuard, CasbinGuard)
 export class IntegrationsController {
   constructor(
     private readonly integrationsService: IntegrationsService,
-    private readonly siteAccessService: SiteAccessService,
+    private readonly permissionService: PermissionService,
+    private readonly prisma: PrismaClient,
   ) {}
 
   @Get('status')
-  @Resource('integrations')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get all integrations status' })
   getStatus() {
     return this.integrationsService.getStatus();
   }
 
   @Get('config')
-  @Resource('integrations')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get integration configuration (tokens masked)' })
   getConfig(@Request() req: AuthRequest) {
     return this.integrationsService.getIntegrationConfig(req.user.tenantId);
   }
 
   @Patch('config')
-  @Resource('integrations')
-  @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update integration configuration' })
   updateConfig(@Body() body: Record<string, any>, @Request() req: AuthRequest) {
     return this.integrationsService.updateIntegrationConfig(req.user.tenantId, body);
   }
 
   @Post('test/:provider')
-  @Resource('integrations')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Test connection to specific provider (netbox, uptime_kuma)' })
   testConnection(@Param('provider') provider: 'netbox' | 'uptime_kuma', @Request() req: AuthRequest) {
     return this.integrationsService.testConnection(provider, req.user.tenantId);
   }
 
   @Post('test-all')
-  @Resource('integrations')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Test all integrations connections' })
   testAllConnections() {
     return this.integrationsService.testAllConnections();
@@ -72,24 +64,21 @@ export class IntegrationsController {
   // ==================== NETBOX ====================
 
   @Post('netbox/sync/sites')
-  @Resource('netbox')
-  @Action('manage')
+  @RequireManage()
   @ApiOperation({ summary: 'Sync sites from NetBox to XCH (READ-ONLY)' })
   syncNetBoxSites(@Request() req: AuthRequest, @Body() syncDto: SyncNetBoxSitesDto) {
     return this.integrationsService.syncNetBoxSites(req.user.tenantId, syncDto);
   }
 
   @Post('netbox/sync/devices')
-  @Resource('netbox')
-  @Action('manage')
+  @RequireManage()
   @ApiOperation({ summary: 'Sync devices from NetBox for a specific site (READ-ONLY)' })
   syncNetBoxDevices(@Request() req: AuthRequest, @Body() syncDto: SyncNetBoxDevicesDto) {
     return this.integrationsService.syncNetBoxDevices(req.user.tenantId, syncDto);
   }
 
   @Post('netbox/map-asset')
-  @Resource('netbox')
-  @Action('manage')
+  @RequireManage()
   @ApiOperation({ summary: 'Manually map XCH asset to NetBox device' })
   mapAssetToNetBox(@Request() req: AuthRequest, @Body() mapDto: MapAssetToNetBoxDto) {
     return this.integrationsService.mapAssetToNetBox(req.user.tenantId, mapDto);
@@ -98,8 +87,7 @@ export class IntegrationsController {
   // ==================== NETBOX CONTACTS ====================
 
   @Get('netbox/contacts')
-  @Resource('netbox')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'List contacts from NetBox' })
   getNetBoxContacts(
     @Query('limit') limit?: number,
@@ -116,8 +104,7 @@ export class IntegrationsController {
   }
 
   @Get('netbox/contact-groups')
-  @Resource('netbox')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'List contact groups from NetBox' })
   getNetBoxContactGroups(
     @Query('limit') limit?: number,
@@ -127,8 +114,7 @@ export class IntegrationsController {
   }
 
   @Post('netbox/sync/contacts')
-  @Resource('netbox')
-  @Action('manage')
+  @RequireManage()
   @ApiOperation({ summary: 'Sync contacts from NetBox to XCH (READ-ONLY)' })
   syncNetBoxContacts(@Request() req: AuthRequest) {
     return this.integrationsService.syncNetBoxContacts(req.user.tenantId);
@@ -137,14 +123,13 @@ export class IntegrationsController {
   // ==================== MONITORING (generic) ====================
 
   @Get('monitoring/monitors')
-  @Resource('monitoring')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'List monitors from the active monitoring provider (filtered by site access)' })
   async getMonitors(@Request() req: AuthRequest) {
     const result = await this.integrationsService.getMonitors(req.user.tenantId);
 
     // Site-based filtering for TECHNICIEN/VIEWER
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
     );
@@ -166,8 +151,7 @@ export class IntegrationsController {
     // We need to know which monitors belong to which sites
     // The frontend does enrichment, but we also need to filter server-side
     // Get all assets for accessible sites to match monitor names
-    const prisma = this.siteAccessService['prisma'];
-    const accessibleAssets = await prisma.asset.findMany({
+    const accessibleAssets = await this.prisma.asset.findMany({
       where: {
         tenantId: req.user.tenantId,
         siteId: { in: accessibleSiteIds },
@@ -176,7 +160,7 @@ export class IntegrationsController {
     });
 
     // Get accessible sites with connectivity info for link/sdwan monitors
-    const accessibleSites = await prisma.site.findMany({
+    const accessibleSites = await this.prisma.site.findMany({
       where: {
         id: { in: accessibleSiteIds },
         tenantId: req.user.tenantId,
@@ -219,8 +203,7 @@ export class IntegrationsController {
   }
 
   @Patch('monitoring/map-monitor')
-  @Resource('monitoring')
-  @Action('manage')
+  @RequireManage()
   @ApiOperation({ summary: 'Map a monitor to a site' })
   mapMonitorToSite(
     @Request() req: AuthRequest,
@@ -234,16 +217,14 @@ export class IntegrationsController {
   }
 
   @Get('monitoring/monitor-mappings')
-  @Resource('monitoring')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get all monitor-to-site mappings' })
   getMonitorMappings(@Request() req: AuthRequest) {
     return this.integrationsService.getMonitorMappings(req.user.tenantId);
   }
 
   @Post('monitoring/sync/health/:siteId')
-  @Resource('monitoring')
-  @Action('manage')
+  @RequireManage()
   @ApiOperation({ summary: 'Update site health status from monitoring provider' })
   updateSiteHealth(
     @Param('siteId') siteId: string,
@@ -258,16 +239,14 @@ export class IntegrationsController {
   }
 
   @Post('monitoring/sync/health-all')
-  @Resource('monitoring')
-  @Action('manage')
+  @RequireManage()
   @ApiOperation({ summary: 'Sync all sites health from monitoring provider (intelligent aggregation)' })
   syncAllSitesHealth(@Request() req: AuthRequest) {
     return this.integrationsService.syncAllSitesHealth(req.user.tenantId);
   }
 
   @Patch('monitoring/map-monitor-to-asset')
-  @Resource('monitoring')
-  @Action('manage')
+  @RequireManage()
   @ApiOperation({ summary: 'Map a monitor to an asset' })
   mapMonitorToAsset(
     @Request() req: AuthRequest,
@@ -283,24 +262,21 @@ export class IntegrationsController {
   // ==================== LEGACY ALIASES (backward compat) ====================
 
   @Get('uptime-kuma/monitors')
-  @Resource('monitoring')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: '[Deprecated] Use /monitoring/monitors instead' })
   getUptimeKumaMonitors(@Request() req: AuthRequest) {
     return this.getMonitors(req);
   }
 
   @Post('uptime-kuma/sync/health-all')
-  @Resource('monitoring')
-  @Action('manage')
+  @RequireManage()
   @ApiOperation({ summary: '[Deprecated] Use /monitoring/sync/health-all instead' })
   syncAllSitesHealthLegacy(@Request() req: AuthRequest) {
     return this.integrationsService.syncAllSitesHealth(req.user.tenantId);
   }
 
   @Get('sites/:siteId/health-breakdown')
-  @Resource('monitoring')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get health breakdown details for a site' })
   getSiteHealthBreakdown(
     @Param('siteId') siteId: string,

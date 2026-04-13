@@ -4,40 +4,39 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { attachmentFileFilter } from '../../common/utils/upload-security';
 import { SitesService } from './sites.service';
-import { SiteAccessService } from '../site-access/site-access.service';
+import { PermissionService } from '../../common/services/permission.service';
 import { CreateSiteDto } from './dto/create-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
 import { FilterSiteDto } from './dto/filter-site.dto';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { PaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
-import { Resource, Action } from '../../common/decorators/permissions.decorator';
+import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('sites')
 @Controller('sites')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class SitesController {
   constructor(
     private readonly sitesService: SitesService,
-    private readonly siteAccessService: SiteAccessService,
+    private readonly permissionService: PermissionService,
   ) {}
 
   @Post()
-  @Resource('sites') @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Create new site' })
   create(@Body() createSiteDto: CreateSiteDto, @Request() req: AuthRequest) {
     return this.sitesService.create(req.user.tenantId, createSiteDto, req.user.userId);
   }
 
   @Get()
-  @Resource('sites') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get all sites (filtered by user access for TECHNICIEN/VIEWER)' })
   async findAll(@Query() filter: FilterSiteDto, @Request() req: AuthRequest): Promise<PaginatedResponse<any>> {
     // Get accessible site IDs (null = all sites for ADMIN/MANAGER)
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIds(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
     );
@@ -46,7 +45,7 @@ export class SitesController {
   }
 
   @Get('nearby')
-  @Resource('sites') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Find sites nearby a location' })
   findNearby(
     @Query('latitude') latitude: number,
@@ -58,21 +57,21 @@ export class SitesController {
   }
 
   @Get(':id')
-  @Resource('sites') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get site by id' })
   findOne(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.sitesService.findOne(id, req.user.tenantId);
   }
 
   @Patch(':id')
-  @Resource('sites') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update site' })
   update(@Param('id') id: string, @Body() updateSiteDto: UpdateSiteDto, @Request() req: AuthRequest) {
     return this.sitesService.update(id, req.user.tenantId, updateSiteDto, req.user.userId);
   }
 
   @Delete(':id')
-  @Resource('sites') @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete site' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.sitesService.remove(id, req.user.tenantId, req.user.userId);
@@ -83,7 +82,7 @@ export class SitesController {
   // ============================================================================
 
   @Get(':id/history')
-  @Resource('sites') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get modification history for a site' })
   getAuditHistory(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.sitesService.getAuditHistory(id, req.user.tenantId);
@@ -94,7 +93,7 @@ export class SitesController {
   // ============================================================================
 
   @Post(':id/attachments')
-  @Resource('sites') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Upload attachment to site' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -122,21 +121,21 @@ export class SitesController {
   }
 
   @Get(':id/attachments')
-  @Resource('sites') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'List attachments for site' })
   listAttachments(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.sitesService.listAttachments(id, req.user.tenantId);
   }
 
   @Get(':id/documents')
-  @Resource('sites') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'List ALL documents for site (aggregated: site + assets + racks + tasks)' })
   listAllDocuments(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.sitesService.listAllDocuments(id, req.user.tenantId);
   }
 
   @Delete(':id/attachments/:attachmentId')
-  @Resource('sites') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete attachment from site' })
   deleteAttachment(
     @Param('id') id: string,

@@ -38,7 +38,7 @@ export class DelegationGuard implements CanActivate {
 
     const delegationId = request.headers['x-delegation-id'] as string;
 
-    // No header = no delegation context → endpoints that need it will fail in CasbinGuard
+    // No header = no delegation context → endpoints that need it will fail in PermissionGuard
     if (!delegationId) {
       return true;
     }
@@ -55,7 +55,7 @@ export class DelegationGuard implements CanActivate {
     // Super admin bypass — access any delegation
     if (user.isSuperAdmin) {
       request.delegationId = delegationId;
-      request.localRole = 'ADMIN'; // Super admin acts as ADMIN in any delegation
+      request.localRole = 'MANAGE'; // Super admin acts as MANAGE in any delegation
       return true;
     }
 
@@ -75,7 +75,7 @@ export class DelegationGuard implements CanActivate {
 
     // Attach delegation context to request
     request.delegationId = delegationId;
-    request.localRole = userDelegation.role;
+    request.localRole = userDelegation.right;
 
     return true;
   }

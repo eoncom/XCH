@@ -3,10 +3,8 @@ import { RacksService } from './racks.service';
 import { RacksController } from './racks.controller';
 import { StorageService } from '../../common/services/storage.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
-import { SiteAccessModule } from '../site-access/site-access.module';
-
 @Module({
-  imports: [SiteAccessModule],
+  imports: [],
   controllers: [RacksController],
   providers: [RacksService, StorageService, AuditLogService],
   exports: [RacksService],

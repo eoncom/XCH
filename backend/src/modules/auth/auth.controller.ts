@@ -11,8 +11,6 @@ import { AuthService } from './auth.service';
 import { TotpService } from './totp.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
-import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -23,6 +21,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AuthRequest } from '../../types/request.interface';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { RequireWrite, RequireManage } from '../../common/decorators/require-right.decorator';
 
 @ApiTags('auth')
 @SkipDelegation()
@@ -187,10 +186,8 @@ export class AuthController {
   }
 
   @Post('register')
-  @UseGuards(JwtAuthGuard, CasbinGuard)
+  @RequireManage()
   @ApiBearerAuth()
-  @Resource('users')
-  @Action('create')
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Register new user (ADMIN only)' })
   async register(@Body() registerDto: RegisterDto) {
@@ -393,7 +390,7 @@ export class AuthController {
   }
 
   @Delete('2fa/user/:userId')
-  @UseGuards(JwtAuthGuard)
+  @RequireManage()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Admin: disable 2FA for a specific user' })
   async adminDisable2FA(
@@ -421,14 +418,12 @@ export class AuthController {
   // ===== Invite & Password Reset Endpoints =====
 
   @Post('invite')
-  @UseGuards(JwtAuthGuard, CasbinGuard)
+  @RequireManage()
   @ApiBearerAuth()
-  @Resource('users')
-  @Action('create')
   @ApiOperation({ summary: 'Invite a new user by email (ADMIN/MANAGER)' })
   @ApiResponse({ status: 201, description: 'Invitation sent' })
   async invite(@Body() body: InviteUserDto, @Request() req: AuthRequest) {
-    return this.authService.invite(req.user.tenantId, body.email, body.name, body.role);
+    return this.authService.invite(req.user.tenantId, body.email, body.name);
   }
 
   @Post('accept-invite')

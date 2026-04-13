@@ -21,23 +21,21 @@ import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { QueryContactDto } from './dto/query-contact.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
-import { Resource, Action } from '../../common/decorators/permissions.decorator';
+import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
 
 @RequireModule('contacts')
 @ApiTags('contacts')
 @Controller('contacts')
-@UseGuards(JwtAuthGuard, CasbinGuard, ModuleGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard)
 @ApiBearerAuth()
 export class ContactsController {
   constructor(private readonly contactsService: ContactsService) {}
 
   @Post()
-  @Resource('contacts')
-  @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Create a new contact' })
   @ApiResponse({
     status: 201,
@@ -53,8 +51,7 @@ export class ContactsController {
   }
 
   @Get()
-  @Resource('contacts')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get all contacts' })
   @ApiResponse({
     status: 200,
@@ -65,8 +62,7 @@ export class ContactsController {
   }
 
   @Get(':id')
-  @Resource('contacts')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get a contact by ID' })
   @ApiResponse({ status: 200, description: 'Return the contact.' })
   @ApiResponse({ status: 404, description: 'Contact not found.' })
@@ -75,8 +71,7 @@ export class ContactsController {
   }
 
   @Patch(':id')
-  @Resource('contacts')
-  @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update a contact' })
   @ApiResponse({
     status: 200,
@@ -96,8 +91,7 @@ export class ContactsController {
   }
 
   @Delete(':id')
-  @Resource('contacts')
-  @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete a contact' })
   @ApiResponse({
     status: 200,

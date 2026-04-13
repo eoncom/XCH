@@ -22,23 +22,18 @@ import { ContactTypesService } from './contact-types.service';
 import { CreateContactTypeDto } from './dto/create-contact-type.dto';
 import { UpdateContactTypeDto } from './dto/update-contact-type.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
-import {
-  Resource,
-  Action,
-} from '../../common/decorators/permissions.decorator';
+import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('contact-types')
 @ApiBearerAuth()
 @Controller('contact-types')
-@UseGuards(JwtAuthGuard, CasbinGuard)
-@Resource('contact-types')
+@UseGuards(JwtAuthGuard)
 export class ContactTypesController {
   constructor(private readonly contactTypesService: ContactTypesService) {}
 
   @Post()
-  @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Create a new contact type' })
   @ApiResponse({
     status: 201,
@@ -59,7 +54,7 @@ export class ContactTypesController {
   }
 
   @Get()
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get all contact types' })
   @ApiQuery({
     name: 'category',
@@ -96,7 +91,7 @@ export class ContactTypesController {
   }
 
   @Get(':id')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get a contact type by ID' })
   @ApiResponse({ status: 200, description: 'Contact type found' })
   @ApiResponse({ status: 404, description: 'Contact type not found' })
@@ -105,7 +100,7 @@ export class ContactTypesController {
   }
 
   @Patch(':id')
-  @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update a contact type' })
   @ApiResponse({ status: 200, description: 'Contact type updated' })
   @ApiResponse({
@@ -130,7 +125,7 @@ export class ContactTypesController {
   }
 
   @Delete(':id')
-  @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete a contact type' })
   @ApiResponse({ status: 200, description: 'Contact type deleted' })
   @ApiResponse({ status: 403, description: 'Cannot delete system types' })

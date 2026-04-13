@@ -9,34 +9,32 @@ import { UpdateChecklistDto } from './dto/update-checklist.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
-import { Resource, Action } from '../../common/decorators/permissions.decorator';
+import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
-import { SiteAccessService } from '../site-access/site-access.service';
-import { ResourcePermissionLevel } from '../site-access/dto/grant-site-access.dto';
+import { PermissionService } from '../../common/services/permission.service';
 
 @RequireModule('tasks')
 @ApiTags('tasks')
 @Controller('tasks')
-@UseGuards(JwtAuthGuard, CasbinGuard, ModuleGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard)
 @ApiBearerAuth()
 export class TasksController {
   constructor(
     private readonly tasksService: TasksService,
-    private readonly siteAccessService: SiteAccessService,
+    private readonly permissionService: PermissionService,
   ) {}
 
   @Post()
-  @Resource('tasks') @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Create new task' })
   async create(@Body() createTaskDto: CreateTaskDto, @Request() req: AuthRequest) {
     if (createTaskDto.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, createTaskDto.siteId, 'tasks',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, createTaskDto.siteId, 'tasks', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions for tasks on this site');
       }
     }
@@ -44,75 +42,70 @@ export class TasksController {
   }
 
   @Get()
-  @Resource('tasks') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get all tasks (filtered by user site access + resource permissions)' })
   async findAll(@Query() filter: FilterTaskDto, @Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
-      'tasks',
     );
     return this.tasksService.findAll(req.user.tenantId, filter, accessibleSiteIds);
   }
 
   @Get('my-tasks')
-  @Resource('tasks') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get tasks assigned to me' })
   async getMyTasks(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
-      'tasks',
     );
     return this.tasksService.getMyTasks(req.user.tenantId, req.user.id, accessibleSiteIds);
   }
 
   @Get('overdue')
-  @Resource('tasks') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get overdue tasks' })
   async getOverdueTasks(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
-      'tasks',
     );
     return this.tasksService.getOverdueTasks(req.user.tenantId, accessibleSiteIds);
   }
 
   @Get('stats/by-status')
-  @Resource('tasks') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get tasks statistics by status' })
   async getStatsByStatus(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
-      'tasks',
     );
     return this.tasksService.getStatsByStatus(req.user.tenantId, accessibleSiteIds);
   }
 
   @Get('stats/by-priority')
-  @Resource('tasks') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get tasks statistics by priority' })
   async getStatsByPriority(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
-      'tasks',
     );
     return this.tasksService.getStatsByPriority(req.user.tenantId, accessibleSiteIds);
   }
 
   @Get(':id')
-  @Resource('tasks') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get task by id' })
   async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
     const task = await this.tasksService.findOne(id, req.user.tenantId);
     if (task.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, task.siteId, 'tasks',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, task.siteId, 'tasks', req.user.tenantId,
       );
-      if (perm === ResourcePermissionLevel.NONE) {
+      if (perm === null) {
         throw new ForbiddenException('No access to tasks on this site');
       }
     }
@@ -120,15 +113,15 @@ export class TasksController {
   }
 
   @Patch(':id')
-  @Resource('tasks') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update task' })
   async update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto, @Request() req: AuthRequest) {
     const task = await this.tasksService.findOne(id, req.user.tenantId);
     if (task.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, task.siteId, 'tasks',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, task.siteId, 'tasks', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to modify tasks on this site');
       }
     }
@@ -136,7 +129,7 @@ export class TasksController {
   }
 
   @Patch(':id/checklist')
-  @Resource('tasks') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update task checklist' })
   async updateChecklist(
     @Param('id') id: string,
@@ -145,10 +138,10 @@ export class TasksController {
   ) {
     const task = await this.tasksService.findOne(id, req.user.tenantId);
     if (task.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, task.siteId, 'tasks',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, task.siteId, 'tasks', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to modify tasks on this site');
       }
     }
@@ -156,15 +149,15 @@ export class TasksController {
   }
 
   @Delete(':id')
-  @Resource('tasks') @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete task' })
   async remove(@Param('id') id: string, @Request() req: AuthRequest) {
     const task = await this.tasksService.findOne(id, req.user.tenantId);
     if (task.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, task.siteId, 'tasks',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, task.siteId, 'tasks', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to delete tasks on this site');
       }
     }
@@ -176,7 +169,7 @@ export class TasksController {
   // ============================================================================
 
   @Post(':id/attachments')
-  @Resource('tasks') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Upload attachment to task' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -214,14 +207,14 @@ export class TasksController {
   }
 
   @Get(':id/attachments')
-  @Resource('tasks') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'List attachments for task' })
   listAttachments(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.tasksService.listAttachments(id, req.user.tenantId);
   }
 
   @Delete(':id/attachments/:attachmentId')
-  @Resource('tasks') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete attachment from task' })
   deleteAttachment(
     @Param('id') id: string,
@@ -236,7 +229,7 @@ export class TasksController {
   // ============================================================================
 
   @Post(':id/comments')
-  @Resource('tasks') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Add comment to task' })
   createComment(
     @Param('id') id: string,
@@ -247,14 +240,14 @@ export class TasksController {
   }
 
   @Get(':id/comments')
-  @Resource('tasks') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get comments for task' })
   getComments(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.tasksService.getComments(id, req.user.tenantId);
   }
 
   @Patch(':id/comments/:commentId')
-  @Resource('tasks') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update comment' })
   updateComment(
     @Param('id') id: string,
@@ -267,7 +260,7 @@ export class TasksController {
   }
 
   @Delete(':id/comments/:commentId')
-  @Resource('tasks') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete comment' })
   deleteComment(
     @Param('id') id: string,

@@ -7,15 +7,13 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { FilterUserDto } from './dto/filter-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
-import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
-import { Resource, Action } from '../../common/decorators/permissions.decorator';
+import { RequireManage, RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('users')
 @Controller('users')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class UsersController {
   constructor(
@@ -23,7 +21,7 @@ export class UsersController {
   ) {}
 
   @Post()
-  @Resource('users') @Action('create')
+  @RequireManage()
   @ApiOperation({ summary: 'Create new user' })
   create(@Body() createUserDto: CreateUserDto, @Request() req: AuthRequest) {
     return this.usersService.create({
@@ -33,7 +31,7 @@ export class UsersController {
   }
 
   @Get()
-  @Resource('users') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get users visible in active delegation (super admin sees all)' })
   async findAll(@Query() filters: FilterUserDto, @Request() req: AuthRequest) {
     return this.usersService.findAll(
@@ -44,7 +42,7 @@ export class UsersController {
   }
 
   @Get(':id')
-  @Resource('users') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get user by id' })
   findOne(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.usersService.findOne(
@@ -55,7 +53,7 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @Resource('users') @Action('update')
+  @RequireManage()
   @ApiOperation({ summary: 'Update user' })
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto, @Request() req: AuthRequest) {
     return this.usersService.update(
@@ -69,7 +67,7 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Resource('users') @Action('delete')
+  @RequireManage()
   @ApiOperation({ summary: 'Delete user' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.usersService.remove(
@@ -84,7 +82,7 @@ export class UsersController {
   // Super admin management — only super admins can promote/demote
   @Post(':id/toggle-super-admin')
   @SkipDelegation()
-  @UseGuards(SuperAdminGuard)
+  @RequireManage()
   @ApiOperation({ summary: 'Promote or demote a user as super admin' })
   toggleSuperAdmin(
     @Param('id') id: string,

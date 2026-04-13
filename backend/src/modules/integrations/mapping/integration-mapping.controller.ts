@@ -5,26 +5,21 @@ import {
   Delete,
   Body,
   Param,
-  UseGuards,
   Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IntegrationMappingService } from './integration-mapping.service';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../../common/guards/casbin.guard';
-import { Resource, Action } from '../../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../../types/request.interface';
+import { RequireRead, RequireWrite } from '../../../common/decorators/require-right.decorator';
 
 @ApiTags('integration-mapping')
 @ApiBearerAuth()
 @Controller('integrations/mapping')
-@UseGuards(JwtAuthGuard, CasbinGuard)
 export class IntegrationMappingController {
   constructor(private readonly mappingService: IntegrationMappingService) {}
 
   @Get(':provider/:entityType')
-  @Resource('integrations')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get mappings for a provider and entity type' })
   getMappings(
     @Request() req: AuthRequest,
@@ -35,8 +30,7 @@ export class IntegrationMappingController {
   }
 
   @Post(':provider/:entityType')
-  @Resource('integrations')
-  @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Save mappings for a provider and entity type' })
   saveMappings(
     @Request() req: AuthRequest,
@@ -61,8 +55,7 @@ export class IntegrationMappingController {
   }
 
   @Delete(':provider/:entityType')
-  @Resource('integrations')
-  @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete all mappings for a provider and entity type' })
   deleteMappings(
     @Request() req: AuthRequest,
@@ -73,8 +66,7 @@ export class IntegrationMappingController {
   }
 
   @Delete('single/:id')
-  @Resource('integrations')
-  @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete a single mapping' })
   deleteMapping(
     @Request() req: AuthRequest,

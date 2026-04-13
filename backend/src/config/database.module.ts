@@ -1,5 +1,6 @@
 import { Module, Global, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { PermissionService } from '../common/services/permission.service';
 
 @Global()
 @Module({
@@ -13,8 +14,9 @@ import { PrismaClient } from '@prisma/client';
         return prisma;
       },
     },
+    PermissionService,
   ],
-  exports: [PrismaClient],
+  exports: [PrismaClient, PermissionService],
 })
 export class DatabaseModule implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly prisma: PrismaClient) {}

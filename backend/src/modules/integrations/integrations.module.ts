@@ -11,10 +11,8 @@ import { MonitoringProviderFactory } from './providers/monitoring-provider.facto
 import { HealthAggregationService } from './health-aggregation.service';
 import { HealthSyncScheduler } from './health-sync.scheduler';
 import { IntegrationMappingModule } from './mapping/integration-mapping.module';
-import { SiteAccessModule } from '../site-access/site-access.module';
-
 @Module({
-  imports: [DatabaseModule, IntegrationMappingModule, SiteAccessModule],
+  imports: [DatabaseModule, IntegrationMappingModule],
   controllers: [IntegrationsController, MonitoringWebhookController],
   providers: [
     IntegrationsService,

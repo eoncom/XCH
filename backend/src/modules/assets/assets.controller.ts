@@ -9,32 +9,30 @@ import { BatchUpdateAssetsDto } from './dto/batch-update-asset.dto';
 import { BulkQRCodeDto } from './dto/bulk-qrcode.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
-import { Resource, Action } from '../../common/decorators/permissions.decorator';
+import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
-import { SiteAccessService } from '../site-access/site-access.service';
-import { ResourcePermissionLevel } from '../site-access/dto/grant-site-access.dto';
+import { PermissionService } from '../../common/services/permission.service';
 
 @ApiTags('assets')
 @Controller('assets')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class AssetsController {
   constructor(
     private readonly assetsService: AssetsService,
-    private readonly siteAccessService: SiteAccessService,
+    private readonly permissionService: PermissionService,
   ) {}
 
   @Post()
-  @Resource('assets') @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Create new asset' })
   async create(@Body() createAssetDto: CreateAssetDto, @Request() req: AuthRequest) {
     // Check per-resource permission on the target site
     if (createAssetDto.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, createAssetDto.siteId, 'assets',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, createAssetDto.siteId, 'assets', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions for assets on this site');
       }
     }
@@ -42,7 +40,7 @@ export class AssetsController {
   }
 
   @Post('import')
-  @Resource('assets') @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Import assets from CSV file' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -66,10 +64,10 @@ export class AssetsController {
     }
     // Validate site access if siteId is provided
     if (siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, siteId, 'assets',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, siteId, 'assets', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions for assets on this site');
       }
     }
@@ -78,59 +76,56 @@ export class AssetsController {
   }
 
   @Get()
-  @Resource('assets') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get all assets (filtered by user site access + resource permissions)' })
   async findAll(@Query() filter: FilterAssetDto, @Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
-      'assets',
     );
     return this.assetsService.findAll(req.user.tenantId, filter, accessibleSiteIds);
   }
 
   @Get('stats/by-type')
-  @Resource('assets') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get assets statistics by type' })
   async getStatsByType(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
-      'assets',
     );
     return this.assetsService.getStatsByType(req.user.tenantId, accessibleSiteIds);
   }
 
   @Get('stats/by-site')
-  @Resource('assets') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get assets statistics by site' })
   async getStatsBySite(@Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
-      'assets',
     );
     return this.assetsService.getStatsBySite(req.user.tenantId, accessibleSiteIds);
   }
 
   @Patch('batch')
-  @Resource('assets') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Batch update multiple assets (status and/or site)' })
   async batchUpdate(@Body() body: BatchUpdateAssetsDto, @Request() req: AuthRequest) {
     return this.assetsService.batchUpdate(req.user.tenantId, body);
   }
 
   @Get(':id')
-  @Resource('assets') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get asset by id' })
   async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
     const asset = await this.assetsService.findOne(id, req.user.tenantId);
     // Check per-resource read permission
     if (asset.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, asset.siteId, 'assets',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, asset.siteId, 'assets', req.user.tenantId,
       );
-      if (perm === ResourcePermissionLevel.NONE) {
+      if (perm === null) {
         throw new ForbiddenException('No access to assets on this site');
       }
     }
@@ -138,30 +133,30 @@ export class AssetsController {
   }
 
   @Post(':id/qr-code')
-  @Resource('assets') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Generate QR code for asset' })
   generateQRCode(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.assetsService.generateQRCode(id, req.user.tenantId);
   }
 
   @Post('qrcodes/bulk')
-  @Resource('assets') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Generate QR codes for multiple assets' })
   bulkGenerateQRCodes(@Body() bulkQRCodeDto: BulkQRCodeDto, @Request() req: AuthRequest) {
     return this.assetsService.bulkGenerateQRCodes(bulkQRCodeDto.assetIds, req.user.tenantId);
   }
 
   @Patch(':id')
-  @Resource('assets') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update asset' })
   async update(@Param('id') id: string, @Body() updateAssetDto: UpdateAssetDto, @Request() req: AuthRequest) {
     // Get asset to check siteId
     const asset = await this.assetsService.findOne(id, req.user.tenantId);
     if (asset.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, asset.siteId, 'assets',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, asset.siteId, 'assets', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to modify assets on this site');
       }
     }
@@ -169,15 +164,15 @@ export class AssetsController {
   }
 
   @Delete(':id')
-  @Resource('assets') @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete asset' })
   async remove(@Param('id') id: string, @Request() req: AuthRequest) {
     const asset = await this.assetsService.findOne(id, req.user.tenantId);
     if (asset.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, asset.siteId, 'assets',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, asset.siteId, 'assets', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to delete assets on this site');
       }
     }
@@ -189,7 +184,7 @@ export class AssetsController {
   // ============================================================================
 
   @Get(':id/movements')
-  @Resource('assets') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get movement history for asset' })
   getMovementHistory(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.assetsService.getMovementHistory(id, req.user.tenantId);
@@ -200,7 +195,7 @@ export class AssetsController {
   // ============================================================================
 
   @Post(':id/attachments')
-  @Resource('assets') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Upload attachment to asset' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -238,14 +233,14 @@ export class AssetsController {
   }
 
   @Get(':id/attachments')
-  @Resource('assets') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'List attachments for asset' })
   listAttachments(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.assetsService.listAttachments(id, req.user.tenantId);
   }
 
   @Delete(':id/attachments/:attachmentId')
-  @Resource('assets') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete attachment from asset' })
   deleteAttachment(
     @Param('id') id: string,

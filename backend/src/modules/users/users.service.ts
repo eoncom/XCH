@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException, ConflictException, UnauthorizedException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, DelegationRight } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -74,10 +74,7 @@ export class UsersService {
       ];
     }
 
-    // Role filter
-    if (filters.role) {
-      where.role = filters.role;
-    }
+    // Delegation-based filtering handled via delegation context in controller
 
     // Active filter
     if (filters.active !== undefined) {
@@ -192,13 +189,12 @@ export class UsersService {
       throw new ForbiddenException('Seul un super administrateur peut modifier un autre super administrateur');
     }
 
-    // Security: strip role field — User.role is deprecated, cannot be changed via API
-    // Role management goes through UserDelegation only
-    delete data.role;
+    // Role management goes through UserDelegation only — strip any stale role field
+    delete (data as any).role;
 
     // Non-super-admin: must be ADMIN of active delegation and target must be in it
     if (activeDelegationId) {
-      if (localRole !== 'ADMIN') {
+      if (localRole !== 'MANAGE') {
         throw new ForbiddenException('Seul un administrateur de la délégation peut modifier les utilisateurs');
       }
       const targetInDelegation = await this.prisma.userDelegation.findUnique({
@@ -252,7 +248,7 @@ export class UsersService {
 
     // Non-super-admin: must be ADMIN of active delegation and target must be in it
     if (activeDelegationId) {
-      if (localRole !== 'ADMIN') {
+      if (localRole !== 'MANAGE') {
         throw new ForbiddenException('Seul un administrateur de la délégation peut supprimer les utilisateurs');
       }
       const targetInDelegation = await this.prisma.userDelegation.findUnique({
@@ -417,9 +413,9 @@ export class UsersService {
     // Get existing user delegations
     const existingDelegations = await this.prisma.userDelegation.findMany({
       where: { userId, tenantId },
-      select: { delegationId: true, role: true },
+      select: { delegationId: true, right: true },
     });
-    const existingMap = new Map(existingDelegations.map(d => [d.delegationId, d.role]));
+    const existingMap = new Map(existingDelegations.map(d => [d.delegationId, d.right]));
 
     // Create missing ones & upgrade non-ADMIN ones
     for (const delegation of allDelegations) {
@@ -431,15 +427,15 @@ export class UsersService {
             tenantId,
             userId,
             delegationId: delegation.id,
-            role: UserRole.ADMIN,
+            right: DelegationRight.MANAGE,
             grantedBy,
           },
         });
-      } else if (existingRole !== UserRole.ADMIN) {
-        // Upgrade to ADMIN
+      } else if (existingRole !== DelegationRight.MANAGE) {
+        // Upgrade to MANAGE
         await this.prisma.userDelegation.update({
           where: { userId_delegationId: { userId, delegationId: delegation.id } },
-          data: { role: UserRole.ADMIN },
+          data: { right: DelegationRight.MANAGE },
         });
       }
     }

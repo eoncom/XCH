@@ -4,11 +4,11 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { DelegationGuard } from './common/guards/delegation.guard';
+import { PermissionGuard } from './common/guards/permission.guard';
 import { BullModule } from '@nestjs/bull';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './config/database.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { RbacModule } from './modules/rbac/rbac.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { SitesModule } from './modules/sites/sites.module';
@@ -19,9 +19,8 @@ import { FloorPlansModule } from './modules/floor-plans/floor-plans.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { ContactTypesModule } from './modules/contact-types/contact-types.module';
-import { SiteAccessModule } from './modules/site-access/site-access.module';
 import { UserDelegationsModule } from './modules/user-delegations/user-delegations.module';
-import { AccessGrantsModule } from './modules/access-grants/access-grants.module';
+import { AccessOverridesModule } from './modules/access-overrides/access-overrides.module';
 import { BillingEntitiesModule } from './modules/billing-entities/billing-entities.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { SeedModule } from './modules/seed/seed.module';
@@ -64,7 +63,6 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 
     // Core modules
     AuthModule,
-    RbacModule,
     TenantsModule,
     UsersModule,
 
@@ -78,9 +76,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     ContactsModule,
     ContactTypesModule,
     IntegrationsModule,
-    SiteAccessModule,
     UserDelegationsModule,
-    AccessGrantsModule,
+    AccessOverridesModule,
     BillingEntitiesModule,
     ExpensesModule,
     SeedModule,
@@ -101,6 +98,10 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     {
       provide: APP_GUARD,
       useClass: DelegationGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionGuard,
     },
   ],
 })

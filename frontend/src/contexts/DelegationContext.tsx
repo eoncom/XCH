@@ -3,12 +3,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
 import { apiClient } from '@/lib/api-client';
+import type { DelegationRight } from '@/types';
 
 export interface UserDelegation {
   id: string;
   userId: string;
   delegationId: string;
-  role: string;
+  right: DelegationRight;
   grantedAt: string;
   delegation: {
     id: string;
@@ -21,19 +22,15 @@ export interface UserDelegation {
 }
 
 interface DelegationContextValue {
-  /** Currently active delegation (null if super admin with no selection, or loading) */
   currentDelegation: UserDelegation | null;
-  /** All delegations accessible to this user */
   delegations: UserDelegation[];
-  /** Switch active delegation */
   switchDelegation: (delegationId: string) => void;
-  /** Local role in current delegation */
+  /** MANAGE | WRITE | READ in current delegation */
+  localRight: DelegationRight | null;
+  /** @deprecated Use localRight instead */
   localRole: string | null;
-  /** Whether user is super admin */
   isSuperAdmin: boolean;
-  /** Whether delegations are still loading */
   isLoading: boolean;
-  /** Whether user has at least one delegation */
   hasDelegation: boolean;
 }
 
@@ -41,6 +38,7 @@ const DelegationContext = createContext<DelegationContextValue>({
   currentDelegation: null,
   delegations: [],
   switchDelegation: () => {},
+  localRight: null,
   localRole: null,
   isSuperAdmin: false,
   isLoading: true,
@@ -62,7 +60,6 @@ export function DelegationProvider({ children }: { children: ReactNode }) {
 
   const isSuperAdmin = !!(user as any)?.isSuperAdmin;
 
-  // Fetch user's delegations after login
   useEffect(() => {
     if (!isAuthenticated || !user) {
       setDelegations([]);
@@ -78,13 +75,11 @@ export function DelegationProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setDelegations(data);
 
-          // Auto-select if only one delegation and no stored preference
           if (data.length === 1 && !activeDelegationId) {
             setActiveDelegationId(data[0].delegationId);
             localStorage.setItem(STORAGE_KEY, data[0].delegationId);
           }
 
-          // Validate stored preference still exists
           if (activeDelegationId && !data.some(d => d.delegationId === activeDelegationId)) {
             if (data.length > 0) {
               setActiveDelegationId(data[0].delegationId);
@@ -120,17 +115,18 @@ export function DelegationProvider({ children }: { children: ReactNode }) {
     return delegations.find(d => d.delegationId === activeDelegationId) || delegations[0] || null;
   }, [delegations, activeDelegationId]);
 
-  const localRole = currentDelegation?.role || null;
+  const localRight = currentDelegation?.right || null;
 
   const value = useMemo<DelegationContextValue>(() => ({
     currentDelegation,
     delegations,
     switchDelegation,
-    localRole,
+    localRight,
+    localRole: localRight, // backward compat
     isSuperAdmin,
     isLoading,
     hasDelegation: isSuperAdmin || delegations.length > 0,
-  }), [currentDelegation, delegations, switchDelegation, localRole, isSuperAdmin, isLoading]);
+  }), [currentDelegation, delegations, switchDelegation, localRight, isSuperAdmin, isLoading]);
 
   return (
     <DelegationContext.Provider value={value}>

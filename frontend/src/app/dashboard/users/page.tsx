@@ -27,28 +27,27 @@ import { EmptyState } from '@/components/ui/empty-state';
 import Link from 'next/link';
 import type { User } from '@/types';
 
-const roleLabels: Record<string, string> = {
-  ADMIN: 'Administrateur',
-  MANAGER: 'Manager',
-  TECHNICIEN: 'Technicien',
-  VIEWER: 'Observateur',
+const rightLabels: Record<string, string> = {
+  MANAGE: 'Administrateur',
+  WRITE: 'Écriture',
+  READ: 'Lecture',
 };
 
 export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [rightFilter, setRightFilter] = useState<string>('all');
   const queryClient = useQueryClient();
 
   // Reset page when filters change
-  useEffect(() => { setPage(1); }, [search, roleFilter]);
+  useEffect(() => { setPage(1); }, [search, rightFilter]);
 
   // Invite dialog state
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
-  const [inviteRole, setInviteRole] = useState('VIEWER');
+  const [inviteRight, setInviteRight] = useState('READ');
 
   // Delete user state
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
@@ -66,14 +65,14 @@ export default function UsersPage() {
   });
 
   const inviteMutation = useMutation({
-    mutationFn: (data: { email: string; name: string; role: string }) =>
+    mutationFn: (data: { email: string; name: string; right: string }) =>
       apiClient.post('/api/auth/invite', data),
     onSuccess: () => {
       showToast.success('Invitation envoyée avec succès !');
       setInviteOpen(false);
       setInviteEmail('');
       setInviteName('');
-      setInviteRole('VIEWER');
+      setInviteRight('READ');
       queryClient.invalidateQueries({ queryKey: ['users'] });
     },
     onError: (err: any) => {
@@ -83,48 +82,43 @@ export default function UsersPage() {
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
-    inviteMutation.mutate({ email: inviteEmail, name: inviteName, role: inviteRole });
+    inviteMutation.mutate({ email: inviteEmail, name: inviteName, right: inviteRight });
   };
 
   const { data: response, isLoading, error } = useQuery({
-    queryKey: ['users', page, pageSize, search, roleFilter],
+    queryKey: ['users', page, pageSize, search, rightFilter],
     queryFn: () => usersApi.getAllPaginated({
       page,
       pageSize,
       search: search || undefined,
-      role: roleFilter !== 'all' ? roleFilter : undefined,
     }),
   });
   const users = response?.data ?? [];
   const meta = response?.meta;
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'ADMIN':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300';
-      case 'MANAGER':
+  const getRightBadgeColor = (right: string) => {
+    switch (right) {
+      case 'MANAGE':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300';
+      case 'WRITE':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300';
-      case 'TECHNICIEN':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
-      case 'VIEWER':
+      case 'READ':
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700/50 dark:text-gray-300';
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700/50 dark:text-gray-300';
     }
   };
 
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'ADMIN':
+  const getRightLabel = (right: string) => {
+    switch (right) {
+      case 'MANAGE':
         return 'Administrateur';
-      case 'MANAGER':
-        return 'Manager';
-      case 'TECHNICIEN':
-        return 'Technicien';
-      case 'VIEWER':
-        return 'Observateur';
+      case 'WRITE':
+        return 'Écriture';
+      case 'READ':
+        return 'Lecture';
       default:
-        return role;
+        return right;
     }
   };
 
@@ -191,16 +185,15 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label htmlFor="invite-role" className="text-sm font-medium">Rôle</label>
-                  <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <label htmlFor="invite-right" className="text-sm font-medium">Droit</label>
+                  <Select value={inviteRight} onValueChange={setInviteRight}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ADMIN">Administrateur</SelectItem>
-                      <SelectItem value="MANAGER">Manager</SelectItem>
-                      <SelectItem value="TECHNICIEN">Technicien</SelectItem>
-                      <SelectItem value="VIEWER">Observateur</SelectItem>
+                      <SelectItem value="MANAGE">Administrateur</SelectItem>
+                      <SelectItem value="WRITE">Écriture</SelectItem>
+                      <SelectItem value="READ">Lecture</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -245,19 +238,19 @@ export default function UsersPage() {
             className="pl-10"
           />
         </div>
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
+        <Select value={rightFilter} onValueChange={setRightFilter}>
           <SelectTrigger>
-            <SelectValue placeholder="Tous les rôles" />
+            <SelectValue placeholder="Tous les droits" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tous les rôles</SelectItem>
-            {Object.entries(roleLabels).map(([value, label]) => (
+            <SelectItem value="all">Tous les droits</SelectItem>
+            {Object.entries(rightLabels).map(([value, label]) => (
               <SelectItem key={value} value={value}>{label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {(search || roleFilter !== 'all') && (
-          <Button variant="ghost" onClick={() => { setSearch(''); setRoleFilter('all'); }} className="flex items-center gap-2">
+        {(search || rightFilter !== 'all') && (
+          <Button variant="ghost" onClick={() => { setSearch(''); setRightFilter('all'); }} className="flex items-center gap-2">
             <X className="h-4 w-4" />
             Effacer les filtres
           </Button>
@@ -347,8 +340,8 @@ export default function UsersPage() {
                       <p className="font-semibold">{user.name || 'Nom non défini'}</p>
                       {(user as any).userDelegations?.length > 0 ? (
                         (user as any).userDelegations.map((ud: any) => (
-                          <Badge key={ud.id} className={getRoleBadgeColor(ud.role)}>
-                            {getRoleLabel(ud.role)}
+                          <Badge key={ud.id} className={getRightBadgeColor(ud.right)}>
+                            {getRightLabel(ud.right)}
                             {ud.delegation?.name && (
                               <span className="ml-1 opacity-70 text-[10px]">({ud.delegation.groupLabel ? `${ud.delegation.groupLabel} > ` : ''}{ud.delegation.name})</span>
                             )}

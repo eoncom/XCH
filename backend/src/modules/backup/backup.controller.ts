@@ -4,7 +4,6 @@ import {
   Get,
   Delete,
   Param,
-  UseGuards,
   Request,
   Res,
   UploadedFile,
@@ -16,25 +15,24 @@ import { memoryStorage } from 'multer';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Response } from 'express';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
-import { Resource, Action } from '../../common/decorators/permissions.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { BackupService } from './backup.service';
 import { backupFileFilter } from '../../common/utils/upload-security';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
+import { RequireManage, RequireRead, RequireWrite } from '../../common/decorators/require-right.decorator';
 
 @ApiTags('backup')
 @ApiBearerAuth()
 @Controller('backup')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@SkipDelegation()
+@RequireManage()
 export class BackupController {
   constructor(private readonly backupService: BackupService) {}
 
   // ===== Full Backup =====
 
   @Post('full')
-  @Resource('backup')
-  @Action('create')
+  @RequireWrite()
   @SkipThrottle()
   @ApiOperation({ summary: '[ADMIN] Create full database + files backup' })
   async createFullBackup(@Request() req: AuthRequest) {
@@ -45,8 +43,7 @@ export class BackupController {
   // ===== Full Restore =====
 
   @Post('full/restore')
-  @Resource('backup')
-  @Action('create')
+  @RequireWrite()
   @SkipThrottle()
   @UseInterceptors(
     FileInterceptor('file', {
@@ -70,8 +67,7 @@ export class BackupController {
   // ===== Site Restore (MUST be before :siteId to avoid route conflict) =====
 
   @Post('site/restore')
-  @Resource('backup')
-  @Action('create')
+  @RequireWrite()
   @SkipThrottle()
   @UseInterceptors(
     FileInterceptor('file', {
@@ -95,8 +91,7 @@ export class BackupController {
   // ===== Site Backup =====
 
   @Post('site/:siteId')
-  @Resource('backup')
-  @Action('create')
+  @RequireWrite()
   @SkipThrottle()
   @ApiOperation({ summary: '[ADMIN] Create site-specific backup (ZIP)' })
   async createSiteBackup(
@@ -121,8 +116,7 @@ export class BackupController {
   // ===== Storage Cleanup =====
 
   @Post('cleanup-storage')
-  @Resource('backup')
-  @Action('delete')
+  @RequireWrite()
   @SkipThrottle()
   @ApiOperation({ summary: '[ADMIN] Clean up orphaned files in storage' })
   async cleanupStorage(@Request() req: AuthRequest) {
@@ -136,8 +130,7 @@ export class BackupController {
   // ===== Backup Management =====
 
   @Get('list')
-  @Resource('backup')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: '[ADMIN] List available backups' })
   async listBackups(@Request() req: AuthRequest) {
     const backups = await this.backupService.listBackups(req.user.tenantId);
@@ -145,8 +138,7 @@ export class BackupController {
   }
 
   @Get(':id/download')
-  @Resource('backup')
-  @Action('read')
+  @RequireRead()
   @SkipThrottle()
   @ApiOperation({ summary: '[ADMIN] Download a backup file' })
   async downloadBackup(
@@ -168,8 +160,7 @@ export class BackupController {
   }
 
   @Delete(':id')
-  @Resource('backup')
-  @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: '[ADMIN] Delete a backup' })
   async deleteBackup(
     @Param('id') id: string,

@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, DelegationRight } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -8,7 +8,7 @@ import { EmailService } from '../../common/services/email.service';
 
 interface SsoDelegationEntry {
   delegationId: string;
-  role?: UserRole;
+  right?: DelegationRight;
 }
 
 @Injectable()
@@ -84,7 +84,7 @@ export class AuthService {
       email: user.email,
       tenantId: user.tenantId,
       isSuperAdmin: user.isSuperAdmin || false,
-      // NOTE: role deliberately excluded from JWT — source of truth is UserDelegation.role
+      // NOTE: role excluded from JWT — source of truth is UserDelegation.right
       // resolved per-request by DelegationGuard via X-Delegation-Id header
     };
 
@@ -140,7 +140,6 @@ export class AuthService {
         passwordHash: hashedPassword,
         name: data.name,
         tenantId: data.tenantId,
-        role: 'VIEWER',
         authProvider: 'local',
       },
       include: { tenant: true },
@@ -151,8 +150,6 @@ export class AuthService {
   }
 
   async oidcLogin(profile: any, tenantId: string, role?: string, scopes?: SsoDelegationEntry[]) {
-    const mappedRole = (role || 'VIEWER') as UserRole;
-
     let user = await this.prisma.user.findFirst({
       where: {
         tenantId,
@@ -162,7 +159,7 @@ export class AuthService {
     });
 
     if (!user) {
-      // First login — create user with mapped role
+      // First login — create user
       user = await this.prisma.user.create({
         data: {
           email: profile.emails?.[0]?.value || profile.email,
@@ -170,19 +167,9 @@ export class AuthService {
           externalId: profile.id,
           authProvider: 'oidc',
           tenantId,
-          role: mappedRole,
         },
         include: { tenant: true },
       });
-    } else {
-      // Subsequent SSO login — sync User.role from IdP (mirror only, not used for auth)
-      if (user.role !== mappedRole) {
-        user = await this.prisma.user.update({
-          where: { id: user.id },
-          data: { role: mappedRole },
-          include: { tenant: true },
-        });
-      }
     }
 
     // Sync UserDelegations from SSO mapping (IdP is source of truth for delegation access)
@@ -209,7 +196,7 @@ export class AuthService {
         tenantId,
         userId,
         delegationId: d.delegationId,
-        role: d.role || ('VIEWER' as UserRole),
+        right: d.right || ('READ' as DelegationRight),
         grantedBy: 'sso',
       }));
 
@@ -263,7 +250,6 @@ export class AuthService {
       data: {
         email,
         name,
-        role: (role as UserRole) || 'VIEWER',
         active: false,
         tenantId: adminTenantId,
         authProvider: 'local',

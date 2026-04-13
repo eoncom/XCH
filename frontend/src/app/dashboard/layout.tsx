@@ -140,8 +140,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  // localRole = UserDelegation.role for the active delegation
-  const isAdmin = localRole === 'ADMIN' || isSuperAdmin;
+  // localRole = UserDelegation.right for the active delegation (MANAGE/WRITE/READ)
+  const isAdmin = localRole === 'MANAGE' || isSuperAdmin;
 
   // No delegation = no access — show blocking screen
   const noAccess = hasDelegation === false;

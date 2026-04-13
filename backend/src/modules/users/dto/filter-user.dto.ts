@@ -9,11 +9,6 @@ export class FilterUserDto extends PaginationDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by role' })
-  @IsOptional()
-  @IsString()
-  role?: string;
-
   @ApiPropertyOptional({ description: 'Filter by active status' })
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
@@ -22,9 +17,9 @@ export class FilterUserDto extends PaginationDto {
 
   @ApiPropertyOptional({
     description: 'Field to sort by',
-    enum: ['createdAt', 'name', 'email', 'role'],
+    enum: ['createdAt', 'name', 'email'],
   })
   @IsOptional()
-  @IsIn(['createdAt', 'name', 'email', 'role'])
+  @IsIn(['createdAt', 'name', 'email'])
   sortBy?: string;
 }

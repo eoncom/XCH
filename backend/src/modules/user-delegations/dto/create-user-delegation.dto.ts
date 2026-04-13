@@ -1,10 +1,9 @@
 import { IsString, IsNotEmpty, IsEnum, IsOptional } from 'class-validator';
 
-export enum UserRoleDto {
-  ADMIN = 'ADMIN',
-  MANAGER = 'MANAGER',
-  TECHNICIEN = 'TECHNICIEN',
-  VIEWER = 'VIEWER',
+export enum DelegationRightDto {
+  MANAGE = 'MANAGE',
+  WRITE = 'WRITE',
+  READ = 'READ',
 }
 
 export class CreateUserDelegationDto {
@@ -16,13 +15,13 @@ export class CreateUserDelegationDto {
   @IsNotEmpty()
   delegationId: string;
 
-  @IsEnum(UserRoleDto)
-  role: UserRoleDto;
+  @IsEnum(DelegationRightDto)
+  right: DelegationRightDto;
 }
 
-export class UpdateUserDelegationRoleDto {
-  @IsEnum(UserRoleDto)
-  role: UserRoleDto;
+export class UpdateUserDelegationRightDto {
+  @IsEnum(DelegationRightDto)
+  right: DelegationRightDto;
 }
 
 export class BulkSetUserDelegationsDto {
@@ -30,5 +29,5 @@ export class BulkSetUserDelegationsDto {
   @IsNotEmpty()
   userId: string;
 
-  delegations: { delegationId: string; role: UserRoleDto }[];
+  delegations: { delegationId: string; right: DelegationRightDto }[];
 }

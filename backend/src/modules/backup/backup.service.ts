@@ -246,6 +246,7 @@ export class BackupService {
             data: {
               tenantId,
               siteId: newSite.id,
+              delegationId: siteData.delegationId || defaultDelegationId,
               name: asset.name,
               type: asset.type,
               status: asset.status || 'IN_SERVICE',
@@ -649,6 +650,7 @@ export class BackupService {
           const newAsset = await tx.asset.create({
             data: {
               tenantId, siteId: newSite.id,
+              delegationId: siteData.delegationId || defaultDelegationId,
               name: asset.name, type: asset.type, status: asset.status || 'IN_SERVICE',
               manufacturer: asset.manufacturer, model: asset.model,
               serialNumber: asset.serialNumber, networkInfo: asset.networkInfo,
@@ -969,7 +971,7 @@ export class BackupService {
         this.prisma.user.findMany({
           where: { tenantId },
           select: {
-            id: true, email: true, name: true, role: true,
+            id: true, email: true, name: true,
             active: true, phone: true, authProvider: true,
           },
         }),

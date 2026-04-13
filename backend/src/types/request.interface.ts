@@ -5,7 +5,6 @@ export interface AuthenticatedUser {
   userId: string;    // User ID (full property name)
   tenantId: string;
   email: string;
-  role: string;
   isSuperAdmin: boolean;
   totpEnabled?: boolean;
 }

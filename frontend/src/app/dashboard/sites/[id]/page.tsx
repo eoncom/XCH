@@ -268,14 +268,14 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
     });
   };
 
-  const handleGrantByRole = (role: string, accessLevel: 'READ' | 'WRITE') => {
-    const usersOfRole = allUsers.filter((u) => u.role === role && !accessList.some((a) => a.userId === u.id));
-    if (usersOfRole.length === 0) {
-      showToast.error(`Tous les ${role === 'TECHNICIEN' ? 'techniciens' : 'observateurs'} ont déjà accès`);
+  const handleGrantAllUsers = (accessLevel: 'READ' | 'WRITE') => {
+    const usersWithoutAccess = allUsers.filter((u) => !accessList.some((a) => a.userId === u.id));
+    if (usersWithoutAccess.length === 0) {
+      showToast.error('Tous les utilisateurs ont déjà accès');
       return;
     }
     bulkGrantMutation.mutate({
-      userIds: usersOfRole.map((u) => u.id),
+      userIds: usersWithoutAccess.map((u) => u.id),
       siteId,
       accessLevel,
     });
@@ -305,18 +305,18 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
               Droits d&apos;accès ({accessList.length})
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Les administrateurs et managers ont accès à tous les sites. Les techniciens et observateurs nécessitent un accès explicite.
+              Les utilisateurs avec le droit MANAGE ont accès à tous les sites. Les autres nécessitent un accès explicite.
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="outline"
-              onClick={() => handleGrantByRole('TECHNICIEN', 'WRITE')}
+              onClick={() => handleGrantAllUsers('WRITE')}
               disabled={bulkGrantMutation.isPending}
             >
               {bulkGrantMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
-              Tous les techniciens
+              Tous les utilisateurs
             </Button>
             <Button size="sm" onClick={() => setShowAddDialog(true)}>
               <UserPlus className="mr-2 h-4 w-4" />

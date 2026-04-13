@@ -51,10 +51,21 @@ export class AssetsService {
       }
     }
 
+    // Derive delegationId from the site if siteId is provided
+    let delegationId = (createAssetDto as any).delegationId;
+    if (!delegationId && createAssetDto.siteId) {
+      const site = await this.prisma.site.findUnique({
+        where: { id: createAssetDto.siteId },
+        select: { delegationId: true },
+      });
+      delegationId = site?.delegationId;
+    }
+
     const asset = await this.prisma.asset.create({
       data: {
         ...createAssetDto,
         tenantId,
+        delegationId,
       },
       include: {
         site: {

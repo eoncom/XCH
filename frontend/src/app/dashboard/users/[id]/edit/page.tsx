@@ -31,12 +31,11 @@ import {
 import { usersApi } from '@/lib/api/users';
 import {
   userDelegationsApi,
-  accessGrantsApi,
+  accessOverridesApi,
   type UserDelegation,
-  type AccessGrant,
-  type AccessScope,
+  type AccessOverride,
+  type OverrideEffect,
   type ResourcePermissionLevel,
-  type ResourcePermissions,
 } from '@/lib/api/site-access';
 import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { sitesApi } from '@/lib/api/sites';
@@ -58,21 +57,13 @@ const userSchema = z.object({
 
 type UserFormData = z.infer<typeof userSchema>;
 
-const DELEGATION_ROLE_LABELS: Record<string, string> = {
-  ADMIN: 'Administrateur',
-  MANAGER: 'Manager',
-  TECHNICIEN: 'Technicien',
-  VIEWER: 'Observateur',
+const DELEGATION_RIGHT_LABELS: Record<string, string> = {
+  MANAGE: 'Administrateur',
+  WRITE: 'Écriture',
+  READ: 'Lecture',
 };
 
-// All delegation roles are available — no cap from User.role (deprecated)
-// Role assignment is controlled by authorization (only ADMIN/super admin can assign)
-
-const ACCESS_SCOPE_LABELS: Record<AccessScope, string> = {
-  ALL_SITES: 'Tous les sites',
-  DELEGATION: 'Délégation',
-  SITE: 'Site',
-};
+// All delegation rights are available — assignment controlled by authorization
 
 const RESOURCE_LABELS: Record<string, string> = {
   sites: 'Sites',
@@ -106,13 +97,14 @@ export default function EditUserPage() {
   // State for adding delegation/grant
   const [showAddDelegation, setShowAddDelegation] = useState(false);
   const [newDelegationId, setNewDelegationId] = useState('');
-  const [newDelegationRole, setNewDelegationRole] = useState('VIEWER');
-  const [showAddGrant, setShowAddGrant] = useState(false);
-  const [newGrantScope, setNewGrantScope] = useState<AccessScope>('ALL_SITES');
-  const [newGrantScopeId, setNewGrantScopeId] = useState('');
-  const [newGrantLabel, setNewGrantLabel] = useState('');
-  const [newGrantExpiry, setNewGrantExpiry] = useState('');
-  const [newGrantPerms, setNewGrantPerms] = useState<ResourcePermissions>({});
+  const [newDelegationRight, setNewDelegationRight] = useState('READ');
+  const [showAddOverride, setShowAddOverride] = useState(false);
+  const [newOverrideSiteId, setNewOverrideSiteId] = useState('');
+  const [newOverrideResource, setNewOverrideResource] = useState('*');
+  const [newOverrideEffect, setNewOverrideEffect] = useState<OverrideEffect>('ALLOW');
+  const [newOverridePermission, setNewOverridePermission] = useState<ResourcePermissionLevel>('READ');
+  const [newOverrideLabel, setNewOverrideLabel] = useState('');
+  const [newOverrideExpiry, setNewOverrideExpiry] = useState('');
 
   const { data: user, isLoading } = useQuery<User>({
     queryKey: ['user', userId],
@@ -126,10 +118,10 @@ export default function EditUserPage() {
     enabled: !!userId,
   });
 
-  // AccessGrants
-  const { data: userGrants = [] } = useQuery<AccessGrant[]>({
-    queryKey: ['access-grants', userId],
-    queryFn: () => accessGrantsApi.getByUser(userId),
+  // AccessOverrides
+  const { data: userOverrides = [] } = useQuery<AccessOverride[]>({
+    queryKey: ['access-overrides', userId],
+    queryFn: () => accessOverridesApi.getByUser(userId),
     enabled: !!userId,
   });
 
@@ -146,13 +138,13 @@ export default function EditUserPage() {
 
   // Mutations for delegations
   const addDelegationMutation = useMutation({
-    mutationFn: (data: { userId: string; delegationId: string; role: string }) =>
-      userDelegationsApi.create(data),
+    mutationFn: (data: { userId: string; delegationId: string; right: string }) =>
+      userDelegationsApi.create(data as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-delegations', userId] });
       setShowAddDelegation(false);
       setNewDelegationId('');
-      setNewDelegationRole('VIEWER');
+      setNewDelegationRight('READ');
     },
   });
 
@@ -161,29 +153,32 @@ export default function EditUserPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['user-delegations', userId] }),
   });
 
-  // Mutations for grants
-  const addGrantMutation = useMutation({
+  // Mutations for overrides
+  const addOverrideMutation = useMutation({
     mutationFn: (data: {
       userId: string;
-      scope: AccessScope;
-      scopeId?: string;
-      resourcePermissions: ResourcePermissions;
+      siteId: string;
+      resource: string;
+      effect: OverrideEffect;
+      permission?: ResourcePermissionLevel;
       label?: string;
       expiresAt?: string;
-    }) => accessGrantsApi.create(data),
+    }) => accessOverridesApi.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['access-grants', userId] });
-      setShowAddGrant(false);
-      setNewGrantPerms({});
-      setNewGrantLabel('');
-      setNewGrantExpiry('');
-      setNewGrantScopeId('');
+      queryClient.invalidateQueries({ queryKey: ['access-overrides', userId] });
+      setShowAddOverride(false);
+      setNewOverrideSiteId('');
+      setNewOverrideResource('*');
+      setNewOverrideEffect('ALLOW');
+      setNewOverridePermission('READ');
+      setNewOverrideLabel('');
+      setNewOverrideExpiry('');
     },
   });
 
-  const removeGrantMutation = useMutation({
-    mutationFn: (grantId: string) => accessGrantsApi.remove(grantId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['access-grants', userId] }),
+  const removeOverrideMutation = useMutation({
+    mutationFn: (overrideId: string) => accessOverridesApi.remove(overrideId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['access-overrides', userId] }),
   });
 
   const {
@@ -441,7 +436,7 @@ export default function EditUserPage() {
             Délégations d'accès
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Définit les délégations auxquelles l'utilisateur a accès et son rôle dans chacune.
+            Définit les délégations auxquelles l'utilisateur a accès et son droit dans chacune.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -468,7 +463,7 @@ export default function EditUserPage() {
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ud.delegation.groupColor }} />
                     )}
                     <Badge variant="outline" className="text-xs">
-                      {DELEGATION_ROLE_LABELS[ud.role] || ud.role}
+                      {DELEGATION_RIGHT_LABELS[ud.right] || ud.right}
                     </Badge>
                   </div>
                   {!(user as any)?.isSuperAdmin && (
@@ -513,11 +508,11 @@ export default function EditUserPage() {
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="text-xs">Rôle</Label>
-                      <Select value={newDelegationRole} onValueChange={setNewDelegationRole}>
+                      <Label className="text-xs">Droit</Label>
+                      <Select value={newDelegationRight} onValueChange={setNewDelegationRight}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {Object.entries(DELEGATION_ROLE_LABELS).map(([value, label]) => (
+                          {Object.entries(DELEGATION_RIGHT_LABELS).map(([value, label]) => (
                             <SelectItem key={value} value={value}>{label}</SelectItem>
                           ))}
                         </SelectContent>
@@ -534,7 +529,7 @@ export default function EditUserPage() {
                         addDelegationMutation.mutate({
                           userId,
                           delegationId: newDelegationId,
-                          role: newDelegationRole,
+                          right: newDelegationRight,
                         });
                       }}
                     >
@@ -553,7 +548,7 @@ export default function EditUserPage() {
         </CardContent>
       </Card>
 
-      {/* Section: Accès par exception (AccessGrant) */}
+      {/* Section: Accès par exception (AccessOverride) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -561,92 +556,110 @@ export default function EditUserPage() {
             Accès par exception
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Accès complémentaires (partiels, temporaires). Purement additifs — ne remplacent pas les portées.
+            Exceptions d'accès par site (ALLOW/DENY). Permettent d'accorder ou retirer l'accès à des ressources spécifiques.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
-          {/* Existing grants */}
-          {userGrants.length > 0 ? (
+          {/* Existing overrides */}
+          {userOverrides.length > 0 ? (
             <div className="space-y-2">
-              {userGrants.map((grant) => {
-                const perms = grant.resourcePermissions as ResourcePermissions;
-                const permSummary = Object.entries(perms || {})
-                  .filter(([, v]) => v && v !== 'NONE')
-                  .map(([k, v]) => `${RESOURCE_LABELS[k] || k}: ${PERM_LEVEL_LABELS[v] || v}`)
-                  .join(', ');
-
-                return (
-                  <div key={grant.id} className="p-3 border rounded-lg space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {ACCESS_SCOPE_LABELS[grant.scope]}
+              {userOverrides.map((override) => (
+                <div key={override.id} className="p-3 border rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={override.effect === 'ALLOW' ? 'default' : 'destructive'} className="text-xs">
+                        {override.effect}
+                      </Badge>
+                      <span className="text-sm font-medium">
+                        {override.site?.name || override.siteId}
+                      </span>
+                      <Badge variant="outline" className="text-xs">
+                        {override.resource === '*' ? 'Tout le site' : RESOURCE_LABELS[override.resource] || override.resource}
+                      </Badge>
+                      {override.permission && (
+                        <Badge variant="secondary" className="text-xs">
+                          {PERM_LEVEL_LABELS[override.permission] || override.permission}
                         </Badge>
-                        {grant.label && (
-                          <span className="text-sm font-medium">{grant.label}</span>
-                        )}
-                        {grant.expiresAt && (
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            Expire: {new Date(grant.expiresAt).toLocaleDateString('fr-FR')}
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => removeGrantMutation.mutate(grant.id)}
-                        disabled={removeGrantMutation.isPending}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                      )}
+                      {override.label && (
+                        <span className="text-sm text-muted-foreground">{override.label}</span>
+                      )}
+                      {override.expiresAt && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          Expire: {new Date(override.expiresAt).toLocaleDateString('fr-FR')}
+                        </span>
+                      )}
                     </div>
-                    {permSummary && (
-                      <p className="text-xs text-muted-foreground">{permSummary}</p>
-                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => removeOverrideMutation.mutate(override.id)}
+                      disabled={removeOverrideMutation.isPending}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Aucun accès complémentaire. Les portées ci-dessus suffisent pour la plupart des cas.
+              Aucune exception d'accès. Les délégations ci-dessus suffisent pour la plupart des cas.
             </p>
           )}
 
-          {/* Add grant form */}
-          {showAddGrant ? (
+          {/* Add override form */}
+          {showAddOverride ? (
             <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">Portée du grant</Label>
-                  <Select value={newGrantScope} onValueChange={(v) => { setNewGrantScope(v as AccessScope); setNewGrantScopeId(''); }}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Label className="text-xs">Site</Label>
+                  <Select value={newOverrideSiteId} onValueChange={setNewOverrideSiteId}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionner un site..." /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ALL_SITES">Tous les sites</SelectItem>
-                      <SelectItem value="DELEGATION">Délégation</SelectItem>
-                      <SelectItem value="SITE">Site</SelectItem>
+                      {allSites?.map((site: any) => (
+                        <SelectItem key={site.id} value={site.id}>
+                          {site.code} - {site.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Ressource</Label>
+                  <Select value={newOverrideResource} onValueChange={setNewOverrideResource}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="*">Tout le site</SelectItem>
+                      {Object.entries(RESOURCE_LABELS).map(([key, label]) => (
+                        <SelectItem key={key} value={key}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-                {newGrantScope !== 'ALL_SITES' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Effet</Label>
+                  <Select value={newOverrideEffect} onValueChange={(v) => setNewOverrideEffect(v as OverrideEffect)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALLOW">ALLOW (accorder)</SelectItem>
+                      <SelectItem value="DENY">DENY (retirer)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {newOverrideEffect === 'ALLOW' && (
                   <div className="space-y-1">
-                    <Label className="text-xs">Cible</Label>
-                    <Select value={newGrantScopeId} onValueChange={setNewGrantScopeId}>
-                      <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+                    <Label className="text-xs">Permission</Label>
+                    <Select value={newOverridePermission} onValueChange={(v) => setNewOverridePermission(v as ResourcePermissionLevel)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {newGrantScope === 'DELEGATION' && allDelegations?.map((del) => (
-                          <SelectItem key={del.id} value={del.id}>
-                            {del.groupLabel ? `${del.groupLabel} > ${del.name}` : del.name}
-                          </SelectItem>
-                        ))}
-                        {newGrantScope === 'SITE' && allSites?.map((site) => (
-                          <SelectItem key={site.id} value={site.id}>
-                            {site.code} - {site.name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="READ">Lecture</SelectItem>
+                        <SelectItem value="WRITE">Écriture</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -657,72 +670,35 @@ export default function EditUserPage() {
                 <div className="space-y-1">
                   <Label className="text-xs">Label (optionnel)</Label>
                   <Input
-                    value={newGrantLabel}
-                    onChange={(e) => setNewGrantLabel(e.target.value)}
-                    placeholder="ex: Partenaire plans"
+                    value={newOverrideLabel}
+                    onChange={(e) => setNewOverrideLabel(e.target.value)}
+                    placeholder="ex: Accès temporaire plans"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Expiration (optionnel)</Label>
                   <Input
                     type="date"
-                    value={newGrantExpiry}
-                    onChange={(e) => setNewGrantExpiry(e.target.value)}
+                    value={newOverrideExpiry}
+                    onChange={(e) => setNewOverrideExpiry(e.target.value)}
                   />
                 </div>
               </div>
 
-              {/* Permission grid */}
-              <div className="space-y-2">
-                <Label className="text-xs">Permissions par module</Label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {Object.entries(RESOURCE_LABELS).map(([key, label]) => (
-                    <div key={key} className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">{label}</Label>
-                      <Select
-                        value={(newGrantPerms as any)[key] || 'NONE'}
-                        onValueChange={(v) => setNewGrantPerms(prev => ({ ...prev, [key]: v }))}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PERM_LEVELS.map((level) => (
-                            <SelectItem key={level} value={level}>
-                              {PERM_LEVEL_LABELS[level]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               <div className="flex gap-2 justify-end">
-                <Button variant="ghost" size="sm" onClick={() => setShowAddGrant(false)}>Annuler</Button>
+                <Button variant="ghost" size="sm" onClick={() => setShowAddOverride(false)}>Annuler</Button>
                 <Button
                   size="sm"
-                  disabled={
-                    addGrantMutation.isPending ||
-                    (newGrantScope !== 'ALL_SITES' && !newGrantScopeId) ||
-                    Object.values(newGrantPerms).every(v => !v || v === 'NONE')
-                  }
+                  disabled={addOverrideMutation.isPending || !newOverrideSiteId}
                   onClick={() => {
-                    // Filter out NONE values
-                    const cleanPerms: ResourcePermissions = {};
-                    for (const [k, v] of Object.entries(newGrantPerms)) {
-                      if (v && v !== 'NONE') {
-                        (cleanPerms as any)[k] = v;
-                      }
-                    }
-                    addGrantMutation.mutate({
+                    addOverrideMutation.mutate({
                       userId,
-                      scope: newGrantScope,
-                      scopeId: newGrantScope === 'ALL_SITES' ? undefined : newGrantScopeId,
-                      resourcePermissions: cleanPerms,
-                      label: newGrantLabel || undefined,
-                      expiresAt: newGrantExpiry || undefined,
+                      siteId: newOverrideSiteId,
+                      resource: newOverrideResource,
+                      effect: newOverrideEffect,
+                      permission: newOverrideEffect === 'ALLOW' ? newOverridePermission : undefined,
+                      label: newOverrideLabel || undefined,
+                      expiresAt: newOverrideExpiry || undefined,
                     });
                   }}
                 >
@@ -731,9 +707,9 @@ export default function EditUserPage() {
               </div>
             </div>
           ) : (
-            <Button variant="outline" size="sm" onClick={() => setShowAddGrant(true)}>
+            <Button variant="outline" size="sm" onClick={() => setShowAddOverride(true)}>
               <Plus className="mr-1 h-4 w-4" />
-              Ajouter un accès complémentaire
+              Ajouter une exception d'accès
             </Button>
           )}
         </CardContent>

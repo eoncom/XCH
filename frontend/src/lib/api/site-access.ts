@@ -1,26 +1,16 @@
 import { apiClient } from '../api-client';
+import type { DelegationRight } from '@/types';
 
 export type ResourcePermissionLevel = 'NONE' | 'READ' | 'WRITE';
 
-export interface ResourcePermissions {
-  sites?: ResourcePermissionLevel;
-  assets?: ResourcePermissionLevel;
-  racks?: ResourcePermissionLevel;
-  tasks?: ResourcePermissionLevel;
-  floorPlans?: ResourcePermissionLevel;
-  contacts?: ResourcePermissionLevel;
-  monitoring?: ResourcePermissionLevel;
-  netbox?: ResourcePermissionLevel;
-}
-
-export type AccessScope = 'ALL_SITES' | 'DELEGATION' | 'SITE';
+export type OverrideEffect = 'ALLOW' | 'DENY';
 
 export interface UserDelegation {
   id: string;
   tenantId: string;
   userId: string;
   delegationId: string;
-  role: string;
+  right: DelegationRight;
   grantedBy?: string;
   grantedAt: string;
   delegation?: {
@@ -32,17 +22,20 @@ export interface UserDelegation {
   };
 }
 
-export interface AccessGrant {
+export interface AccessOverride {
   id: string;
   tenantId: string;
   userId: string;
-  scope: AccessScope;
-  scopeId: string | null;
-  resourcePermissions: ResourcePermissions;
+  siteId: string;
+  resource: string; // "*" = whole site, or "assets", "racks", "tasks", "plans", "contacts", "expenses", "monitoring"
+  effect: OverrideEffect;
+  permission: ResourcePermissionLevel | null; // required for ALLOW, null for DENY
   label?: string;
   grantedBy?: string;
   grantedAt: string;
   expiresAt?: string | null;
+  site?: { id: string; name: string };
+  user?: { id: string; name: string; email: string };
 }
 
 export interface MyPermissionsResponse {
@@ -51,15 +44,12 @@ export interface MyPermissionsResponse {
   allSitesAccess: boolean;
   accessibleSiteIds: string[] | null;
   delegations: UserDelegation[];
-  accessGrants: AccessGrant[];
 }
 
 export const siteAccessApi = {
-  // Check if current user has access
   checkAccess: (siteId: string) =>
     apiClient.get<{ hasAccess: boolean }>(`/api/site-access/check?siteId=${siteId}`),
 
-  // Get current user's permissions (delegations + grants)
   myPermissions: () =>
     apiClient.get<MyPermissionsResponse>('/api/site-access/my-permissions'),
 };
@@ -75,38 +65,46 @@ export const userDelegationsApi = {
   getMine: () =>
     apiClient.get<UserDelegation[]>('/api/user-delegations/mine'),
 
-  create: (data: { userId: string; delegationId: string; role: string }) =>
+  create: (data: { userId: string; delegationId: string; right: DelegationRight }) =>
     apiClient.post<UserDelegation>('/api/user-delegations', data),
 
-  setRole: (userId: string, delegationId: string, role: string) =>
-    apiClient.patch<UserDelegation>(`/api/user-delegations/${userId}/${delegationId}`, { role }),
+  setRight: (userId: string, delegationId: string, right: DelegationRight) =>
+    apiClient.patch<UserDelegation>(`/api/user-delegations/${userId}/${delegationId}`, { right }),
 
   remove: (userId: string, delegationId: string) =>
     apiClient.delete(`/api/user-delegations/${userId}/${delegationId}`),
 };
 
-// Access grants API
-export const accessGrantsApi = {
+// Access overrides API (replaces access grants)
+export const accessOverridesApi = {
   getByUser: (userId: string) =>
-    apiClient.get<AccessGrant[]>(`/api/access-grants/user/${userId}`),
+    apiClient.get<AccessOverride[]>(`/api/access-overrides/by-user/${userId}`),
+
+  getBySite: (siteId: string) =>
+    apiClient.get<AccessOverride[]>(`/api/access-overrides/by-site/${siteId}`),
+
+  getOne: (id: string) =>
+    apiClient.get<AccessOverride>(`/api/access-overrides/${id}`),
 
   create: (data: {
     userId: string;
-    scope: AccessScope;
-    scopeId?: string;
-    resourcePermissions: ResourcePermissions;
+    siteId: string;
+    resource: string;
+    effect: OverrideEffect;
+    permission?: ResourcePermissionLevel;
     label?: string;
     expiresAt?: string;
   }) =>
-    apiClient.post<AccessGrant>('/api/access-grants', data),
+    apiClient.post<AccessOverride>('/api/access-overrides', data),
 
   update: (id: string, data: {
-    resourcePermissions?: ResourcePermissions;
+    effect?: OverrideEffect;
+    permission?: ResourcePermissionLevel;
     label?: string;
     expiresAt?: string | null;
   }) =>
-    apiClient.patch<AccessGrant>(`/api/access-grants/${id}`, data),
+    apiClient.patch<AccessOverride>(`/api/access-overrides/${id}`, data),
 
   remove: (id: string) =>
-    apiClient.delete(`/api/access-grants/${id}`),
+    apiClient.delete(`/api/access-overrides/${id}`),
 };

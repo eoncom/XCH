@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, DelegationRight } from '@prisma/client';
 
 @Injectable()
 export class UserDelegationsService {
@@ -17,7 +17,7 @@ export class UserDelegationsService {
     });
 
     if (requestingUser?.isSuperAdmin) {
-      return { isSuperAdmin: true, localRole: 'ADMIN' as UserRole };
+      return { isSuperAdmin: true, localRole: 'MANAGE' as DelegationRight };
     }
 
     // Check requesting user's role in this delegation
@@ -25,13 +25,13 @@ export class UserDelegationsService {
       where: { userId_delegationId: { userId: requestingUserId, delegationId } },
     });
 
-    if (!requestingDelegation || requestingDelegation.role !== UserRole.ADMIN) {
+    if (!requestingDelegation || requestingDelegation.right !== DelegationRight.MANAGE) {
       throw new ForbiddenException(
         'Seul un administrateur de cette délégation peut gérer les accès'
       );
     }
 
-    return { isSuperAdmin: false, localRole: requestingDelegation.role };
+    return { isSuperAdmin: false, localRole: requestingDelegation.right };
   }
 
   /**
@@ -43,7 +43,7 @@ export class UserDelegationsService {
     tenantId: string,
     userId: string,
     delegationId: string,
-    role: UserRole,
+    right: DelegationRight,
     grantedBy?: string,
     requestingUserId?: string,
   ) {
@@ -81,7 +81,7 @@ export class UserDelegationsService {
         tenantId,
         userId,
         delegationId,
-        role,
+        right,
         grantedBy,
       },
       include: {
@@ -187,7 +187,7 @@ export class UserDelegationsService {
   async setRole(
     userId: string,
     delegationId: string,
-    newRole: UserRole,
+    newRight: DelegationRight,
     requestingUserId?: string,
     tenantId?: string,
   ) {
@@ -219,7 +219,7 @@ export class UserDelegationsService {
 
     return this.prisma.userDelegation.update({
       where: { userId_delegationId: { userId, delegationId } },
-      data: { role: newRole },
+      data: { right: newRight },
       include: {
         user: { select: { id: true, name: true, email: true } },
         delegation: { select: { id: true, name: true, code: true } },

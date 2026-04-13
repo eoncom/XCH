@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, DelegationRight } from '@prisma/client';
 import { CreateDelegationDto } from './dto/create-delegation.dto';
 import { UpdateDelegationDto } from './dto/update-delegation.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
@@ -38,7 +38,7 @@ export class OrganizationService {
           tenantId,
           userId: sa.id,
           delegationId: delegation.id,
-          role: UserRole.ADMIN,
+          right: DelegationRight.MANAGE,
           grantedBy: userId,
         })),
         skipDuplicates: true,

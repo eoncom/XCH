@@ -304,11 +304,19 @@ export class NetboxSyncService {
       });
       result.updated++;
     } else {
+      // Derive delegationId from the linked site
+      const linkedSite = await this.prisma.site.findUnique({
+        where: { id: siteRef.entityId },
+        select: { delegationId: true },
+      });
+      const assetDelegationId = linkedSite?.delegationId || await this.getOrCreateDefaultDelegation(tenantId);
+
       // Create new asset
       const newAsset = await this.prisma.asset.create({
         data: {
           tenantId,
           siteId: siteRef.entityId,
+          delegationId: assetDelegationId,
           ...assetData,
         },
       });

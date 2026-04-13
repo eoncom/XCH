@@ -4,27 +4,26 @@ import { ExpensesService } from './expenses.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
 import { FilterExpenseDto } from './dto/filter-expense.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
-import { Resource, Action } from '../../common/decorators/permissions.decorator';
+import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { Response } from 'express';
 
 @ApiTags('expenses')
 @Controller('expenses')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ExpensesController {
   constructor(private readonly expensesService: ExpensesService) {}
 
   @Post()
-  @Resource('expenses') @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Create an expense with optional allocations' })
   create(@Body() dto: CreateExpenseDto, @Request() req: AuthRequest) {
     return this.expensesService.create(req.user.tenantId, dto, req.user.userId);
   }
 
   @Get()
-  @Resource('expenses') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'List all expenses' })
   findAll(
     @Query() filters: FilterExpenseDto,
@@ -34,7 +33,7 @@ export class ExpensesController {
   }
 
   @Get('reports/by-bearer')
-  @Resource('expenses') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Report: total by bearer' })
   @ApiQuery({ name: 'dateFrom', required: false })
   @ApiQuery({ name: 'dateTo', required: false })
@@ -47,7 +46,7 @@ export class ExpensesController {
   }
 
   @Get('reports/by-target')
-  @Resource('expenses') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Report: total by target' })
   @ApiQuery({ name: 'dateFrom', required: false })
   @ApiQuery({ name: 'dateTo', required: false })
@@ -60,7 +59,7 @@ export class ExpensesController {
   }
 
   @Get('reports/chargeback')
-  @Resource('expenses') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Report: chargeback detail' })
   @ApiQuery({ name: 'dateFrom', required: false })
   @ApiQuery({ name: 'dateTo', required: false })
@@ -73,7 +72,7 @@ export class ExpensesController {
   }
 
   @Get('export')
-  @Resource('expenses') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Export expenses to Excel' })
   @ApiQuery({ name: 'type', required: false })
   @ApiQuery({ name: 'dateFrom', required: false })
@@ -117,21 +116,21 @@ export class ExpensesController {
   }
 
   @Get(':id')
-  @Resource('expenses') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get an expense with allocations' })
   findOne(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.expensesService.findOne(req.user.tenantId, id);
   }
 
   @Patch(':id')
-  @Resource('expenses') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update an expense' })
   update(@Param('id') id: string, @Body() dto: UpdateExpenseDto, @Request() req: AuthRequest) {
     return this.expensesService.update(req.user.tenantId, id, dto);
   }
 
   @Delete(':id')
-  @Resource('expenses') @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete an expense' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.expensesService.remove(req.user.tenantId, id);

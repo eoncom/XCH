@@ -3,26 +3,25 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { BillingEntitiesService } from './billing-entities.service';
 import { CreateBillingEntityDto, UpdateBillingEntityDto } from './dto/create-billing-entity.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
-import { Resource, Action } from '../../common/decorators/permissions.decorator';
+import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('billing-entities')
 @Controller('billing-entities')
-@UseGuards(JwtAuthGuard, CasbinGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class BillingEntitiesController {
   constructor(private readonly billingEntitiesService: BillingEntitiesService) {}
 
   @Post()
-  @Resource('billing-entities') @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Create a billing entity' })
   create(@Body() dto: CreateBillingEntityDto, @Request() req: AuthRequest) {
     return this.billingEntitiesService.create(req.user.tenantId, dto);
   }
 
   @Get()
-  @Resource('billing-entities') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'List all billing entities' })
   @ApiQuery({ name: 'type', required: false })
   @ApiQuery({ name: 'isActive', required: false })
@@ -45,28 +44,28 @@ export class BillingEntitiesController {
   }
 
   @Get(':id')
-  @Resource('billing-entities') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get a billing entity' })
   findOne(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.billingEntitiesService.findOne(req.user.tenantId, id);
   }
 
   @Get(':id/summary')
-  @Resource('billing-entities') @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get billing entity summary (totals)' })
   getSummary(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.billingEntitiesService.getSummary(req.user.tenantId, id);
   }
 
   @Patch(':id')
-  @Resource('billing-entities') @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update a billing entity' })
   update(@Param('id') id: string, @Body() dto: UpdateBillingEntityDto, @Request() req: AuthRequest) {
     return this.billingEntitiesService.update(req.user.tenantId, id, dto);
   }
 
   @Delete(':id')
-  @Resource('billing-entities') @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete a billing entity' })
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.billingEntitiesService.remove(req.user.tenantId, id);

@@ -27,10 +27,10 @@ import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { showToast } from '@/lib/toast';
 import { ArrowLeft, Info, UserPlus, Send, Copy, CheckCircle2, Shield, Network } from 'lucide-react';
 import Link from 'next/link';
-import type { UserRole } from '@/types';
+import type { DelegationRight } from '@/types';
 
-// Schema for direct creation — role is NOT in the form (deprecated User.role)
-// The real role comes from the delegation assignment below.
+// Schema for direct creation — no role field (User.role removed)
+// The real right comes from the delegation assignment below.
 const directSchema = z.object({
   name: z.string().min(1, 'Le nom est requis'),
   email: z.string().email('Email invalide'),
@@ -38,7 +38,7 @@ const directSchema = z.object({
   phone: z.string().optional(),
 });
 
-// Schema for invitation — same, no role field
+// Schema for invitation — same, no right field in the user form
 const inviteSchema = z.object({
   name: z.string().min(1, 'Le nom est requis'),
   email: z.string().email('Email invalide'),
@@ -47,11 +47,10 @@ const inviteSchema = z.object({
 type DirectFormData = z.infer<typeof directSchema>;
 type InviteFormData = z.infer<typeof inviteSchema>;
 
-const DELEGATION_ROLE_LABELS: Record<string, string> = {
-  ADMIN: 'Administrateur',
-  MANAGER: 'Manager',
-  TECHNICIEN: 'Technicien',
-  VIEWER: 'Observateur',
+const DELEGATION_RIGHT_LABELS: Record<string, string> = {
+  MANAGE: 'Administrateur',
+  WRITE: 'Écriture',
+  READ: 'Lecture',
 };
 
 export default function NewUserPage() {
@@ -62,7 +61,7 @@ export default function NewUserPage() {
 
   // Delegation state (mandatory)
   const [selectedDelegationId, setSelectedDelegationId] = useState('');
-  const [delegationRole, setDelegationRole] = useState('VIEWER');
+  const [delegationRight, setDelegationRight] = useState<string>('READ');
 
   // Org data for delegation selector
   const { data: delegations } = useQuery({
@@ -84,13 +83,13 @@ export default function NewUserPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: DirectFormData) => {
-      // 1. Create user — pass delegationRole as User.role (legacy field, for display only)
-      const newUser = await usersApi.create({ ...data, role: delegationRole });
-      // 2. Assign mandatory delegation (this is the REAL role)
+      // 1. Create user
+      const newUser = await usersApi.create(data);
+      // 2. Assign mandatory delegation with the selected right
       await userDelegationsApi.create({
         userId: newUser.id,
         delegationId: selectedDelegationId,
-        role: delegationRole,
+        right: delegationRight as DelegationRight,
       });
       return newUser;
     },
@@ -106,14 +105,14 @@ export default function NewUserPage() {
 
   const inviteMutation = useMutation({
     mutationFn: async (data: InviteFormData) => {
-      // 1. Create invited user — pass delegationRole as legacy User.role
-      const result = await apiClient.post<{ user: any; inviteToken?: string }>('/api/auth/invite', { ...data, role: delegationRole });
-      // 2. Assign mandatory delegation
+      // 1. Create invited user
+      const result = await apiClient.post<{ user: any; inviteToken?: string }>('/api/auth/invite', data);
+      // 2. Assign mandatory delegation with the selected right
       if (result.user?.id) {
         await userDelegationsApi.create({
           userId: result.user.id,
           delegationId: selectedDelegationId,
-          role: delegationRole,
+          right: delegationRight as DelegationRight,
         });
       }
       return result;
@@ -234,11 +233,11 @@ export default function NewUserPage() {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label>Rôle dans la délégation <span className="text-red-500">*</span></Label>
-                    <Select value={delegationRole} onValueChange={setDelegationRole}>
+                    <Label>Droit dans la délégation <span className="text-red-500">*</span></Label>
+                    <Select value={delegationRight} onValueChange={setDelegationRight}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(DELEGATION_ROLE_LABELS).map(([value, label]) => (
+                        {Object.entries(DELEGATION_RIGHT_LABELS).map(([value, label]) => (
                           <SelectItem key={value} value={value}>{label}</SelectItem>
                         ))}
                       </SelectContent>
@@ -349,11 +348,11 @@ export default function NewUserPage() {
                       )}
                     </div>
                     <div className="space-y-2">
-                      <Label>Rôle dans la délégation <span className="text-red-500">*</span></Label>
-                      <Select value={delegationRole} onValueChange={setDelegationRole}>
+                      <Label>Droit dans la délégation <span className="text-red-500">*</span></Label>
+                      <Select value={delegationRight} onValueChange={setDelegationRight}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {Object.entries(DELEGATION_ROLE_LABELS).map(([value, label]) => (
+                          {Object.entries(DELEGATION_RIGHT_LABELS).map(([value, label]) => (
                             <SelectItem key={value} value={value}>{label}</SelectItem>
                           ))}
                         </SelectContent>

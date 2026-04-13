@@ -23,10 +23,10 @@ enum TenantStatus {
 }
 
 model Tenant {
-  id       String       @id @default(cuid())
-  name     String
-  subdomain String      @unique
-  status   TenantStatus @default(ACTIVE)
+  id        String       @id @default(cuid())
+  name      String
+  subdomain String       @unique
+  status    TenantStatus @default(ACTIVE)
 
   // Branding
   logoUrl      String?
@@ -40,32 +40,46 @@ model Tenant {
 
   // Relations
   users               User[]
-  authProviders        AuthProvider[]
-  delegations          Delegation[]
-  sites                Site[]
-  assets               Asset[]
-  racks                Rack[]
-  tasks                Task[]
-  contacts             Contact[]
-  contactTypes         ContactType[]
-  integrationMappings  IntegrationMapping[]
-  auditLogs            AuditLog[]
-  enumLabels           EnumLabel[]
-  billingEntities      BillingEntity[]
-  expenses             Expense[]
-  notificationConfigs  NotificationConfig[]
-  notificationLogs     NotificationLog[]
-  userDelegations      UserDelegation[]
+  authProviders       AuthProvider[]
+  delegations         Delegation[]
+  sites               Site[]
+  assets              Asset[]
+  racks               Rack[]
+  tasks               Task[]
+  contacts            Contact[]
+  contactTypes        ContactType[]
+  integrationMappings IntegrationMapping[]
+  auditLogs           AuditLog[]
+  enumLabels          EnumLabel[]
+  billingEntities     BillingEntity[]
+  expenses            Expense[]
+  notificationConfigs NotificationConfig[]
+  notificationLogs    NotificationLog[]
+  userDelegations     UserDelegation[]
+  accessOverrides     AccessOverride[]
 
   @@index([status])
   @@map("tenants")
 }
 
-enum UserRole {
-  ADMIN
-  MANAGER
-  TECHNICIEN
-  VIEWER
+// ============================================================================
+// AUTHORIZATION ENUMS (v3.0 — MANAGE/WRITE/READ model)
+// ============================================================================
+
+enum DelegationRight {
+  MANAGE // Gere la delegation : users, affectations, notifications, CRUD sites, + tout WRITE
+  WRITE // Utilise l'application : CRUD assets, tasks, racks, plans, contacts, depenses
+  READ // Consultation uniquement
+}
+
+enum OverrideEffect {
+  ALLOW
+  DENY
+}
+
+enum PermissionLevel {
+  READ
+  WRITE
 }
 
 model User {
@@ -83,9 +97,8 @@ model User {
   avatarUrl String?
 
   // Permissions
-  role         UserRole @default(VIEWER) // Default role (R7 — NOT used by guards, only as initial value)
-  isSuperAdmin Boolean  @default(false)  // Platform-level access (R9)
-  active       Boolean  @default(true)
+  isSuperAdmin Boolean @default(false) // Platform-level global access
+  active       Boolean @default(true)
 
   // External auth
   externalId   String? // OIDC 'sub' or SAML nameID
@@ -93,14 +106,14 @@ model User {
 
   // TOTP 2FA
   totpSecret      String?
-  totpEnabled     Boolean   @default(false)
+  totpEnabled     Boolean  @default(false)
   totpBackupCodes String[]
 
   // Invite & password reset tokens
-  inviteToken        String?   @unique
-  inviteTokenExpiry  DateTime?
-  resetToken         String?   @unique
-  resetTokenExpiry   DateTime?
+  inviteToken       String?   @unique
+  inviteTokenExpiry DateTime?
+  resetToken        String?   @unique
+  resetTokenExpiry  DateTime?
 
   // Account lockout
   failedLoginAttempts Int       @default(0)
@@ -112,19 +125,18 @@ model User {
   updatedAt   DateTime  @updatedAt
 
   // Relations
-  assignedTasks    Task[]            @relation("AssignedTo")
-  createdTasks     Task[]            @relation("CreatedBy")
-  taskComments     TaskComment[]     @relation("TaskComments")
-  auditLogs        AuditLog[]
-  photos           Photo[]
-  accessGrants     AccessGrant[]
-  assetMovements   AssetMovement[]
-  userDelegations  UserDelegation[]
+  assignedTasks   Task[]           @relation("AssignedTo")
+  createdTasks    Task[]           @relation("CreatedBy")
+  taskComments    TaskComment[]    @relation("TaskComments")
+  auditLogs       AuditLog[]
+  photos          Photo[]
+  accessOverrides AccessOverride[]
+  assetMovements  AssetMovement[]
+  userDelegations UserDelegation[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
   @@index([tenantId, externalId])
-  @@index([tenantId, role])
   @@map("users")
 }
 
@@ -170,8 +182,8 @@ model Delegation {
   tenantId String
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  name     String @db.VarChar(100)
-  code     String @db.VarChar(20)
+  name     String  @db.VarChar(100)
+  code     String  @db.VarChar(20)
   notes    String? @db.Text
   isActive Boolean @default(true)
 
@@ -184,11 +196,12 @@ model Delegation {
 
   // Relations
   sites               Site[]
-  userDelegations      UserDelegation[]
-  contacts             Contact[]
-  billingEntities      BillingEntity[]
-  expenses             Expense[]
-  notificationConfigs  NotificationConfig[]
+  assets              Asset[]
+  userDelegations     UserDelegation[]
+  contacts            Contact[]
+  billingEntities     BillingEntity[]
+  expenses            Expense[]
+  notificationConfigs NotificationConfig[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -196,20 +209,20 @@ model Delegation {
 }
 
 // ============================================================================
-// USER DELEGATIONS (R7 — role local = source de verite permissions)
+// USER DELEGATIONS (right = source de verite permissions par delegation)
 // ============================================================================
 
 model UserDelegation {
-  id           String     @id @default(cuid())
+  id           String          @id @default(cuid())
   tenantId     String
-  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userId       String
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   delegationId String
-  delegation   Delegation @relation(fields: [delegationId], references: [id], onDelete: Cascade)
-  role         UserRole   // ADMIN | MANAGER | TECHNICIEN | VIEWER — local to this delegation
+  delegation   Delegation      @relation(fields: [delegationId], references: [id], onDelete: Cascade)
+  right        DelegationRight // MANAGE | WRITE | READ
   grantedBy    String?
-  grantedAt    DateTime   @default(now())
+  grantedAt    DateTime        @default(now())
 
   @@unique([userId, delegationId])
   @@index([tenantId, userId])
@@ -235,16 +248,16 @@ enum HealthStatus {
 }
 
 model Site {
-  id       String     @id @default(cuid())
+  id       String @id @default(cuid())
   tenantId String
-  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   delegationId String
   delegation   Delegation @relation(fields: [delegationId], references: [id], onDelete: Restrict)
 
-  code     String
-  name     String
-  status   SiteStatus @default(ACTIVE)
+  code   String
+  name   String
+  status SiteStatus @default(ACTIVE)
 
   // Location
   address    String
@@ -271,7 +284,7 @@ model Site {
   governanceDocsRef String? // URL to "Referentiel droits documents"
 
   // Monitoring
-  monitoringEnabled Boolean      @default(true)
+  monitoringEnabled Boolean @default(true)
 
   // Health
   healthStatus    HealthStatus @default(UNKNOWN)
@@ -284,17 +297,18 @@ model Site {
   updatedAt DateTime @updatedAt
 
   // Relations
-  assets              Asset[]
-  racks               Rack[]
-  floorPlans          FloorPlan[]
-  tasks               Task[]
-  externalRefs        ExternalRef[]
-  photos              Photo[]
-  billingEntities     BillingEntity[]
-  expenses            Expense[]
-  contactsOnSite      Contact[]
-  movementsFrom       AssetMovement[] @relation("movementFromSite")
-  movementsTo         AssetMovement[] @relation("movementToSite")
+  assets          Asset[]
+  racks           Rack[]
+  floorPlans      FloorPlan[]
+  tasks           Task[]
+  externalRefs    ExternalRef[]
+  photos          Photo[]
+  billingEntities BillingEntity[]
+  expenses        Expense[]
+  contactsOnSite  Contact[]
+  accessOverrides AccessOverride[]
+  movementsFrom   AssetMovement[]  @relation("movementFromSite")
+  movementsTo     AssetMovement[]  @relation("movementToSite")
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -337,14 +351,16 @@ enum AssetStatus {
 }
 
 model Asset {
-  id       String     @id @default(cuid())
-  tenantId String
-  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  siteId   String?
-  site     Site?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  type     AssetType
-  name     String?
-  model    String?
+  id           String      @id @default(cuid())
+  tenantId     String
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  delegationId String
+  delegation   Delegation  @relation(fields: [delegationId], references: [id])
+  siteId       String?
+  site         Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  type         AssetType
+  name         String?
+  model        String?
   manufacturer String?
   serialNumber String?
   inventoryTag String?
@@ -364,8 +380,8 @@ model Asset {
   rackNotes     String? // Notes for this asset when mounted in rack
 
   // QR Code
-  qrCodeUrl   String?   @db.Text  // Base64 data URL of QR code image
-  qrCodeToken String?             // Secure token for QR validation
+  qrCodeUrl   String? @db.Text // Base64 data URL of QR code image
+  qrCodeToken String? // Secure token for QR validation
 
   // Metadata
   purchaseDate     DateTime?
@@ -386,6 +402,7 @@ model Asset {
 
   @@unique([tenantId, serialNumber])
   @@index([tenantId])
+  @@index([tenantId, delegationId])
   @@index([tenantId, siteId])
   @@index([tenantId, type])
   @@index([tenantId, status])
@@ -398,35 +415,35 @@ model Asset {
 // ============================================================================
 
 enum AssetMovementType {
-  SITE_CHANGE        // Changed site
-  RACK_MOUNT         // Mounted in rack
-  RACK_UNMOUNT       // Unmounted from rack
-  RACK_MOVE          // Moved within rack (position change)
-  RACK_CHANGE        // Moved to different rack
-  STATUS_CHANGE      // Status changed
-  CREATED            // Asset created
+  SITE_CHANGE // Changed site
+  RACK_MOUNT // Mounted in rack
+  RACK_UNMOUNT // Unmounted from rack
+  RACK_MOVE // Moved within rack (position change)
+  RACK_CHANGE // Moved to different rack
+  STATUS_CHANGE // Status changed
+  CREATED // Asset created
 }
 
 model AssetMovement {
-  id        String            @id @default(cuid())
-  tenantId  String
-  assetId   String
-  asset     Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  userId    String?
-  user      User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
-  type      AssetMovementType
+  id       String            @id @default(cuid())
+  tenantId String
+  assetId  String
+  asset    Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  userId   String?
+  user     User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type     AssetMovementType
 
   // Site change tracking
   fromSiteId String?
-  fromSite   Site?  @relation("movementFromSite", fields: [fromSiteId], references: [id], onDelete: SetNull)
+  fromSite   Site?   @relation("movementFromSite", fields: [fromSiteId], references: [id], onDelete: SetNull)
   toSiteId   String?
-  toSite     Site?  @relation("movementToSite", fields: [toSiteId], references: [id], onDelete: SetNull)
+  toSite     Site?   @relation("movementToSite", fields: [toSiteId], references: [id], onDelete: SetNull)
 
   // Rack change tracking
-  fromRackId      String?
-  fromRack        Rack?  @relation("movementFromRack", fields: [fromRackId], references: [id], onDelete: SetNull)
-  toRackId        String?
-  toRack          Rack?  @relation("movementToRack", fields: [toRackId], references: [id], onDelete: SetNull)
+  fromRackId        String?
+  fromRack          Rack?   @relation("movementFromRack", fields: [fromRackId], references: [id], onDelete: SetNull)
+  toRackId          String?
+  toRack            Rack?   @relation("movementToRack", fields: [toRackId], references: [id], onDelete: SetNull)
   fromRackPositionU Int?
   toRackPositionU   Int?
 
@@ -435,8 +452,8 @@ model AssetMovement {
   toStatus   String?
 
   // Metadata
-  notes     String?   @db.Text
-  timestamp DateTime  @default(now())
+  notes     String?  @db.Text
+  timestamp DateTime @default(now())
 
   @@index([tenantId, assetId])
   @@index([assetId, timestamp])
@@ -460,12 +477,12 @@ enum RackStatus {
 }
 
 model Rack {
-  id       String     @id @default(cuid())
-  tenantId String
-  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  siteId   String
-  site     Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  name     String
+  id           String     @id @default(cuid())
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  siteId       String
+  site         Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name         String
   serialNumber String?
   model        String?
   manufacturer String?
@@ -482,10 +499,10 @@ model Rack {
   updatedAt DateTime @updatedAt
 
   // Relations
-  assets         Asset[]
-  pins           Pin[]
-  movementsFrom  AssetMovement[] @relation("movementFromRack")
-  movementsTo    AssetMovement[] @relation("movementToRack")
+  assets        Asset[]
+  pins          Pin[]
+  movementsFrom AssetMovement[] @relation("movementFromRack")
+  movementsTo   AssetMovement[] @relation("movementToRack")
 
   @@unique([tenantId, siteId, name])
   @@index([tenantId])
@@ -498,11 +515,11 @@ model Rack {
 // ============================================================================
 
 model FloorPlan {
-  id         String  @id @default(cuid())
-  siteId     String
-  site       Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  title      String
-  version    Int     @default(1)
+  id          String  @id @default(cuid())
+  siteId      String
+  site        Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  title       String
+  version     Int     @default(1)
   planGroupId String? // Groups versions of the same plan together
 
   // File
@@ -516,8 +533,8 @@ model FloorPlan {
   uploadedAt DateTime @default(now())
 
   // Scale calibration (for heatmap / measurements)
-  scaleMetersPerPixel Float?  // Meters per normalized unit (0-1)
-  scaleRefLine        Json?   @db.JsonB // {x1,y1,x2,y2,meters} reference line
+  scaleMetersPerPixel Float? // Meters per normalized unit (0-1)
+  scaleRefLine        Json?  @db.JsonB // {x1,y1,x2,y2,meters} reference line
 
   // Relations
   pins Pin[]
@@ -657,12 +674,12 @@ model TaskChecklistItem {
 }
 
 model TaskComment {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   taskId   String
-  task     Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task     Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
   authorId String
-  author   User   @relation("TaskComments", fields: [authorId], references: [id])
-  text     String @db.Text
+  author   User    @relation("TaskComments", fields: [authorId], references: [id])
+  text     String  @db.Text
   // isSystem: true = auto-generated comment (status change, blocking reason, etc.)
   isSystem Boolean @default(false)
 
@@ -679,29 +696,29 @@ model TaskComment {
 // ============================================================================
 
 enum ContactCategory {
-  PROVIDER       // Fournisseurs externes (telecom, cloud, energie...)
-  INTERNAL       // Equipes internes (responsable site, gardien...)
-  PARTNER        // Partenaires IT externes (integrateurs, sous-traitants)
-  TECHNICAL      // Support technique (NetBox, monitoring)
-  EMERGENCY      // Contacts urgence
+  PROVIDER // Fournisseurs externes (telecom, cloud, energie...)
+  INTERNAL // Equipes internes (responsable site, gardien...)
+  PARTNER // Partenaires IT externes (integrateurs, sous-traitants)
+  TECHNICAL // Support technique (NetBox, monitoring)
+  EMERGENCY // Contacts urgence
 }
 
 model ContactType {
-  id       String          @id @default(cuid())
+  id       String @id @default(cuid())
   tenantId String
-  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  name     String          @db.VarChar(50)    // "Telecommunications", "Plomberie"
-  slug     String          @db.VarChar(50)    // "telecom", "plomberie"
-  category ContactCategory                    // Categorisation fonctionnelle
-  color    String?         @db.VarChar(7)     // Hex color "#3b82f6"
-  icon     String?         @db.VarChar(50)    // Lucide icon name
+  name     String          @db.VarChar(50) // "Telecommunications", "Plomberie"
+  slug     String          @db.VarChar(50) // "telecom", "plomberie"
+  category ContactCategory // Categorisation fonctionnelle
+  color    String?         @db.VarChar(7) // Hex color "#3b82f6"
+  icon     String?         @db.VarChar(50) // Lucide icon name
 
-  isSystem Boolean         @default(false)    // true = predefini, non supprimable
-  isActive Boolean         @default(true)
+  isSystem Boolean @default(false) // true = predefini, non supprimable
+  isActive Boolean @default(true)
 
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   contacts Contact[]
@@ -712,27 +729,27 @@ model ContactType {
 }
 
 model Contact {
-  id       String      @id @default(cuid())
+  id       String @id @default(cuid())
   tenantId String
-  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  name     String      @db.VarChar(100)
+  name String @db.VarChar(100)
 
   // FK vers ContactType
-  typeId   String
-  type     ContactType @relation(fields: [typeId], references: [id])
+  typeId String
+  type   ContactType @relation(fields: [typeId], references: [id])
 
   // Coordonnees enrichies
-  email    String?     @db.VarChar(100)
-  phone    String?     @db.VarChar(50)
-  mobile   String?     @db.VarChar(50)
-  address  String?     @db.Text
+  email   String? @db.VarChar(100)
+  phone   String? @db.VarChar(50)
+  mobile  String? @db.VarChar(50)
+  address String? @db.Text
 
   // Contexte professionnel
-  company  String?     @db.VarChar(100)   // Entreprise
-  role     String?     @db.VarChar(100)   // Fonction/role
+  company String? @db.VarChar(100) // Entreprise
+  role    String? @db.VarChar(100) // Fonction/role
 
-  notes    String?     @db.Text
+  notes String? @db.Text
 
   // Rattachement organisationnel (R3)
   // delegationId=null → global (super admin only, visible en lecture partout)
@@ -742,9 +759,9 @@ model Contact {
   siteId       String?
   site         Site?       @relation(fields: [siteId], references: [id])
 
-  isActive Boolean     @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   externalRefs     ExternalRef[]
@@ -761,22 +778,22 @@ model Contact {
 // ============================================================================
 
 model IntegrationMapping {
-  id            String   @id @default(cuid())
-  tenantId      String
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Source externe
-  provider      String   // "netbox", "uptime_kuma", "checkmk"
-  entityType    String   // "contact_group", "site_status", "device_role"
-  externalId    String   // ID ou slug dans le systeme externe
-  externalLabel String   // Nom affiche (cache)
+  provider      String // "netbox", "uptime_kuma", "checkmk"
+  entityType    String // "contact_group", "site_status", "device_role"
+  externalId    String // ID ou slug dans le systeme externe
+  externalLabel String // Nom affiche (cache)
 
   // Cible XCH
-  targetType    String   // "contact_type", "site_status", "asset_type"
-  targetId      String   // ID de l'entite XCH cible
+  targetType String // "contact_type", "site_status", "asset_type"
+  targetId   String // ID de l'entite XCH cible
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([tenantId, provider, entityType, externalId])
   @@index([tenantId, provider, entityType])
@@ -814,7 +831,7 @@ model Photo {
   // Metadata
   caption    String?
   uploadedBy String
-  uploader   User    @relation(fields: [uploadedBy], references: [id])
+  uploader   User     @relation(fields: [uploadedBy], references: [id])
   uploadedAt DateTime @default(now())
 
   @@index([entityType, entityId])
@@ -842,9 +859,9 @@ model ExternalRef {
   externalUrl String?
 
   // Metadata (JSON)
-  metadata Json?     @db.JsonB
-  lastSync DateTime?
-  createdAt DateTime @default(now())
+  metadata  Json?     @db.JsonB
+  lastSync  DateTime?
+  createdAt DateTime  @default(now())
 
   @@unique([entityType, entityId, provider])
   @@index([entityType, entityId])
@@ -920,51 +937,32 @@ model AuditLog {
 }
 
 // ============================================================================
-// ACCESS GRANTS (additive permissions — R5)
+// ACCESS OVERRIDES (exceptions ALLOW/DENY par site ou ressource)
 // ============================================================================
 
-enum AccessScope {
-  ALL_SITES  // All delegations (super admin)
-  DELEGATION // A specific delegation
-  SITE       // A specific site
-}
-
-model AccessGrant {
-  id       String      @id @default(cuid())
+model AccessOverride {
+  id       String @id @default(cuid())
   tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userId   String
-  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  siteId   String
+  site     Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
-  scope    AccessScope
-  scopeId  String?     // delegationId or siteId depending on scope
+  // "*" = site complet, ou "assets","racks","tasks","plans","contacts","expenses","monitoring"
+  resource   String           @default("*")
+  effect     OverrideEffect
+  permission PermissionLevel? // obligatoire si ALLOW, null si DENY
 
-  resourcePermissions Json @db.JsonB // {"floorPlans":"READ","tasks":"READ",...} — ADDITIVE ONLY
-  label    String?     @db.VarChar(100) // e.g. "Partenaire plans"
-
+  label     String?   @db.VarChar(100)
   grantedBy String?
-  grantedAt DateTime   @default(now())
-  expiresAt DateTime?  // Temporary access
+  grantedAt DateTime  @default(now())
+  expiresAt DateTime?
 
+  @@unique([tenantId, userId, siteId, resource])
   @@index([tenantId, userId])
-  @@map("access_grants")
-}
-
-// ============================================================================
-// CASBIN (RBAC/ABAC)
-// ============================================================================
-
-model CasbinRule {
-  id    Int     @id @default(autoincrement())
-  ptype String // 'p' or 'g'
-  v0    String?
-  v1    String?
-  v2    String?
-  v3    String?
-  v4    String?
-  v5    String?
-
-  @@index([ptype, v0, v1, v2, v3])
-  @@map("casbin_rule")
+  @@index([tenantId, siteId])
+  @@map("access_overrides")
 }
 
 // ============================================================================
@@ -975,9 +973,9 @@ model EnumLabel {
   id        String  @id @default(cuid())
   tenantId  String
   tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  enumType  String  // "AssetType", "PinType", "AssetStatus"
-  enumValue String  // "SWITCH", "FIREWALL", etc.
-  label     String  // Custom display label
+  enumType  String // "AssetType", "PinType", "AssetStatus"
+  enumValue String // "SWITCH", "FIREWALL", etc.
+  label     String // Custom display label
   icon      String? // Custom icon name
   color     String? // Custom color hex
   sortOrder Int     @default(0)
@@ -1049,9 +1047,9 @@ model Expense {
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // What
-  label       String       @db.VarChar(200)
-  description String?      @db.Text
-  type        ExpenseType  @default(OTHER)
+  label       String      @db.VarChar(200)
+  description String?     @db.Text
+  type        ExpenseType @default(OTHER)
 
   // How much
   totalAmount Float
@@ -1086,7 +1084,7 @@ model Expense {
   invoiceRef String? @db.VarChar(100)
   poNumber   String? @db.VarChar(50)
 
-  notes     String? @db.Text
+  notes     String?  @db.Text
   createdBy String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1129,19 +1127,19 @@ model CostAllocation {
 /// Configuration des notifications par delegation (R4)
 /// Heritage : global (delegationId=null) → delegation
 model NotificationConfig {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Rattachement : null = global tenant config, sinon = delegation-specific
   delegationId String?
   delegation   Delegation? @relation(fields: [delegationId], references: [id], onDelete: Cascade)
 
   /// Config canaux : { email: { inherit, enabled, recipients[] }, teams: { inherit, enabled, webhookUrl } }
-  channels  Json     @db.JsonB
+  channels Json @db.JsonB
 
   /// Config evenements : { TASK_ASSIGNED: { inherit, enabled, channels[] }, ... }
-  events    Json     @db.JsonB
+  events Json @db.JsonB
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1153,28 +1151,28 @@ model NotificationConfig {
 
 /// Journal des notifications envoyees (audit) (R12)
 model NotificationLog {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   /// Type d'evenement (TASK_ASSIGNED, SITE_STATUS_CHANGED, etc.)
-  eventType String   @db.VarChar(50)
+  eventType    String  @db.VarChar(50)
   /// Canal utilise (email, teams)
-  channel   String   @db.VarChar(20)
+  channel      String  @db.VarChar(20)
   /// Delegation qui a declenche
   delegationId String?
 
   /// Destinataire (email ou webhook URL)
-  recipient String
+  recipient    String
   /// Sujet/titre
-  subject   String
+  subject      String
   /// Succes ou echec
-  success   Boolean  @default(true)
+  success      Boolean @default(true)
   /// Message d'erreur si echec
   errorMessage String? @db.Text
 
   /// Contexte de l'evenement (JSON: entityId, entityType, siteId, details...)
-  context   Json?    @db.JsonB
+  context Json? @db.JsonB
 
   createdAt DateTime @default(now())
 

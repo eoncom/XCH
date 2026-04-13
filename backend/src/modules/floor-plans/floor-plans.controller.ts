@@ -23,29 +23,25 @@ import { CreatePinDto } from './dto/create-pin.dto';
 import { UpdatePinDto } from './dto/update-pin.dto';
 import { FilterFloorPlanDto } from './dto/filter-floor-plan.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CasbinGuard } from '../../common/guards/casbin.guard';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
-import { Resource } from '../../common/decorators/permissions.decorator';
-import { Action } from '../../common/decorators/permissions.decorator';
+import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
-import { SiteAccessService } from '../site-access/site-access.service';
-import { ResourcePermissionLevel } from '../site-access/dto/grant-site-access.dto';
+import { PermissionService } from '../../common/services/permission.service';
 
 @RequireModule('floor_plans')
 @ApiTags('floor-plans')
 @ApiBearerAuth()
 @Controller('floor-plans')
-@UseGuards(JwtAuthGuard, CasbinGuard, ModuleGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard)
 export class FloorPlansController {
   constructor(
     private readonly floorPlansService: FloorPlansService,
-    private readonly siteAccessService: SiteAccessService,
+    private readonly permissionService: PermissionService,
   ) {}
 
   @Post('inspect-pdf')
-  @Resource('floor-plans')
-  @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Inspect a PDF file: get page count and thumbnails' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -68,8 +64,7 @@ export class FloorPlansController {
   }
 
   @Post()
-  @Resource('floor-plans')
-  @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Create a new floor plan with optional file upload' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -98,10 +93,10 @@ export class FloorPlansController {
   ) {
     // Check per-resource permission
     if (createFloorPlanDto.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, createFloorPlanDto.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, createFloorPlanDto.siteId, 'plans', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions for floor plans on this site');
       }
     }
@@ -118,8 +113,7 @@ export class FloorPlansController {
   }
 
   @Post(':id/upload')
-  @Resource('floor-plans')
-  @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Upload floor plan file (PDF, PNG, JPG)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -146,10 +140,10 @@ export class FloorPlansController {
 
     const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
     if (floorPlan.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to modify floor plans on this site');
       }
     }
@@ -159,37 +153,33 @@ export class FloorPlansController {
   }
 
   @Get()
-  @Resource('floor-plans')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get all floor plans (filtered by user site access + resource permissions)' })
   async findAll(@Query() filters: FilterFloorPlanDto, @Request() req: AuthRequest) {
-    const accessibleSiteIds = await this.siteAccessService.getAccessibleSiteIdsForResource(
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
-      'floorPlans',
     );
     return this.floorPlansService.findAll(req.user.tenantId, filters, accessibleSiteIds);
   }
 
   @Get('site/:siteId/latest')
-  @Resource('floor-plans')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get latest floor plan version for site' })
   findLatestForSite(@Param('siteId') siteId: string, @Request() req: AuthRequest) {
     return this.floorPlansService.findLatestForSite(siteId, req.user.tenantId);
   }
 
   @Get(':id')
-  @Resource('floor-plans')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get floor plan by ID with all pins' })
   async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
     const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
     if (floorPlan.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
       );
-      if (perm === ResourcePermissionLevel.NONE) {
+      if (perm === null) {
         throw new ForbiddenException('No access to floor plans on this site');
       }
     }
@@ -197,16 +187,15 @@ export class FloorPlansController {
   }
 
   @Get(':id/heatmap-data')
-  @Resource('floor-plans')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get heatmap data: AP pins with linked assets and scale info' })
   async getHeatmapData(@Param('id') id: string, @Request() req: AuthRequest) {
     const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
     if (floorPlan.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
       );
-      if (perm === ResourcePermissionLevel.NONE) {
+      if (perm === null) {
         throw new ForbiddenException('No access to floor plans on this site');
       }
     }
@@ -214,8 +203,7 @@ export class FloorPlansController {
   }
 
   @Patch(':id/scale')
-  @Resource('floor-plans')
-  @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update floor plan scale calibration' })
   async updateScale(
     @Param('id') id: string,
@@ -224,10 +212,10 @@ export class FloorPlansController {
   ) {
     const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
     if (floorPlan.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to modify floor plan scale');
       }
     }
@@ -235,24 +223,21 @@ export class FloorPlansController {
   }
 
   @Get(':id/stats')
-  @Resource('floor-plans')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get floor plan statistics (pins count by type)' })
   getStats(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.floorPlansService.getStats(id, req.user.tenantId);
   }
 
   @Get(':id/versions')
-  @Resource('floor-plans')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get version history for a floor plan' })
   getVersionHistory(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.floorPlansService.getVersionHistory(id, req.user.tenantId);
   }
 
   @Post(':id/new-version')
-  @Resource('floor-plans')
-  @Action('create')
+  @RequireWrite()
   @ApiOperation({ summary: 'Create a new version of a floor plan (copies pins)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -274,10 +259,10 @@ export class FloorPlansController {
   ) {
     const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
     if (floorPlan.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to create floor plan versions on this site');
       }
     }
@@ -292,8 +277,7 @@ export class FloorPlansController {
   }
 
   @Patch(':id')
-  @Resource('floor-plans')
-  @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update floor plan metadata' })
   async update(
     @Param('id') id: string,
@@ -302,10 +286,10 @@ export class FloorPlansController {
   ) {
     const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
     if (floorPlan.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to modify floor plans on this site');
       }
     }
@@ -313,16 +297,15 @@ export class FloorPlansController {
   }
 
   @Delete(':id')
-  @Resource('floor-plans')
-  @Action('delete')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete floor plan (and file)' })
   async remove(@Param('id') id: string, @Request() req: AuthRequest) {
     const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
     if (floorPlan.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to delete floor plans on this site');
       }
     }
@@ -332,8 +315,7 @@ export class FloorPlansController {
   // ==================== PINS ENDPOINTS ====================
 
   @Post(':id/pins')
-  @Resource('floor-plans')
-  @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Create a pin on floor plan' })
   async createPin(
     @Param('id') floorPlanId: string,
@@ -342,10 +324,10 @@ export class FloorPlansController {
   ) {
     const floorPlan = await this.floorPlansService.findOne(floorPlanId, req.user.tenantId);
     if (floorPlan.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to modify floor plans on this site');
       }
     }
@@ -353,8 +335,7 @@ export class FloorPlansController {
   }
 
   @Get(':id/pins')
-  @Resource('floor-plans')
-  @Action('read')
+  @RequireRead()
   @ApiOperation({ summary: 'Get all pins for floor plan (optionally filtered by type)' })
   findPins(
     @Param('id') floorPlanId: string,
@@ -365,8 +346,7 @@ export class FloorPlansController {
   }
 
   @Patch(':id/pins/:pinId')
-  @Resource('floor-plans')
-  @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Update pin' })
   async updatePin(
     @Param('id') floorPlanId: string,
@@ -376,10 +356,10 @@ export class FloorPlansController {
   ) {
     const floorPlan = await this.floorPlansService.findOne(floorPlanId, req.user.tenantId);
     if (floorPlan.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to modify floor plans on this site');
       }
     }
@@ -392,8 +372,7 @@ export class FloorPlansController {
   }
 
   @Delete(':id/pins/:pinId')
-  @Resource('floor-plans')
-  @Action('update')
+  @RequireWrite()
   @ApiOperation({ summary: 'Delete pin' })
   async removePin(
     @Param('id') floorPlanId: string,
@@ -402,10 +381,10 @@ export class FloorPlansController {
   ) {
     const floorPlan = await this.floorPlansService.findOne(floorPlanId, req.user.tenantId);
     if (floorPlan.siteId) {
-      const perm = await this.siteAccessService.getResourcePermission(
-        req.user.tenantId, req.user.userId, floorPlan.siteId, 'floorPlans',
+      const perm = await this.permissionService.resolve(
+        req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
       );
-      if (perm !== ResourcePermissionLevel.WRITE) {
+      if (perm !== 'WRITE') {
         throw new ForbiddenException('Insufficient permissions to modify floor plans on this site');
       }
     }

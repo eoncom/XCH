@@ -1,6 +1,6 @@
 import { IsEmail, IsString, IsEnum, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import { DelegationRight } from '@prisma/client';
 
 export class InviteUserDto {
   @ApiProperty({ example: 'user@example.com' })
@@ -11,8 +11,8 @@ export class InviteUserDto {
   @IsString()
   name: string;
 
-  @ApiPropertyOptional({ enum: UserRole, default: UserRole.VIEWER })
+  @ApiPropertyOptional({ enum: DelegationRight, default: DelegationRight.READ })
   @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
+  @IsEnum(DelegationRight)
+  right?: DelegationRight;
 }

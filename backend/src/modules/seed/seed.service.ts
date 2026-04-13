@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaClient, UserRole, SiteStatus, HealthStatus, AssetType, AssetStatus, RackType, RackStatus, TaskStatus, TaskPriority, ContactCategory } from '@prisma/client';
+import { PrismaClient, DelegationRight, SiteStatus, HealthStatus, AssetType, AssetStatus, RackType, RackStatus, TaskStatus, TaskPriority, ContactCategory } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -72,7 +72,7 @@ export class SeedService {
       await this.prisma.expense.deleteMany({ where: { tenantId } });
       await this.prisma.billingEntity.deleteMany({ where: { tenantId } });
       // Access model tables
-      await this.prisma.accessGrant.deleteMany({ where: { tenantId } });
+      await this.prisma.accessOverride.deleteMany({ where: { tenantId } });
       await this.prisma.userDelegation.deleteMany({ where: { tenantId } });
       // Sites (must delete before delegations)
       await this.prisma.site.deleteMany({ where: { tenantId } });
@@ -289,28 +289,28 @@ export class SeedService {
         id: `demo-user-manager-${tenantId}`,
         email: 'manager@demo.fr',
         name: 'Sophie Martin',
-        role: UserRole.MANAGER,
+        _right: DelegationRight.MANAGE,
         phone: '+33 6 12 34 56 78',
       },
       {
         id: `demo-user-tech1-${tenantId}`,
         email: 'technicien@demo.fr',
         name: 'Marc Leroy',
-        role: UserRole.TECHNICIEN,
+        _right: DelegationRight.WRITE,
         phone: '+33 6 98 76 54 32',
       },
       {
         id: `demo-user-tech2-${tenantId}`,
         email: 'technicien2@demo.fr',
         name: 'Karim Benali',
-        role: UserRole.TECHNICIEN,
+        _right: DelegationRight.WRITE,
         phone: '+33 6 55 44 33 22',
       },
       {
         id: `demo-user-viewer-${tenantId}`,
         email: 'viewer@demo.fr',
         name: 'Nathalie Rousseau',
-        role: UserRole.VIEWER,
+        _right: DelegationRight.READ,
         phone: '+33 6 11 22 33 44',
       },
     ];
@@ -320,15 +320,17 @@ export class SeedService {
 
     const users = [];
     for (const u of usersData) {
+      const { _right, ...userData } = u;
       const user = await this.prisma.user.upsert({
         where: { id: u.id },
         update: {},
         create: {
-          ...u,
+          ...userData,
           tenantId,
           passwordHash: demoPasswordHash,
         },
       });
+      (user as any)._right = _right;
       users.push(user);
     }
 
@@ -357,7 +359,7 @@ export class SeedService {
           tenantId,
           userId: user.id,
           delegationId,
-          role: user.role, // mirrors User.role for initial demo setup
+          right: (user as any)._right || DelegationRight.READ,
           grantedBy: grantedById,
         },
       });
@@ -579,9 +581,11 @@ export class SeedService {
 
     const assets = [];
     for (const a of assetsData) {
+      const site = sites.find(s => s.id === a.siteId);
       const asset = await this.prisma.asset.create({
         data: {
           tenantId,
+          delegationId: site?.delegationId,
           ...a,
         },
       });
@@ -628,7 +632,7 @@ export class SeedService {
     const massy = sites.find(s => s.code === 'MAS-01');
     const boulogne = sites.find(s => s.code === 'BOU-01');
 
-    const manager = users.find(u => u.role === UserRole.MANAGER);
+    const manager = users.find(u => u.name === 'Sophie Martin');
     const tech1 = users.find(u => u.name === 'Marc Leroy');
     const tech2 = users.find(u => u.name === 'Karim Benali');
 
