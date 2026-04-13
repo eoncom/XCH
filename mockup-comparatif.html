@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XCH - Maquettes comparatives</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --panel: #ffffff;
+    --primary: #2563eb;
+    --primary-light: #eff6ff;
+    --text: #1f2937;
+    --text-muted: #6b7280;
+    --border: #e5e7eb;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --radius: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+
+  /* === Top Nav === */
+  .top-nav {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 16px 32px; display: flex; align-items: center; gap: 24px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .top-nav h1 { font-size: 18px; font-weight: 700; color: var(--primary); }
+  .top-nav .subtitle { color: var(--text-muted); font-size: 14px; }
+
+  /* === Page Tabs (Actuel vs Proposé) === */
+  .page-tabs {
+    display: flex; gap: 0; background: var(--panel); border-bottom: 2px solid var(--border);
+    padding: 0 32px; position: sticky; top: 57px; z-index: 99;
+  }
+  .page-tab {
+    padding: 12px 24px; cursor: pointer; font-weight: 600; font-size: 14px;
+    color: var(--text-muted); border-bottom: 3px solid transparent;
+    transition: all 0.2s; user-select: none;
+  }
+  .page-tab:hover { color: var(--text); }
+  .page-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .page-tab.tab-proposed { color: #059669; }
+  .page-tab.tab-proposed.active { color: #059669; border-bottom-color: #059669; }
+
+  /* === Content === */
+  .content { max-width: 1200px; margin: 0 auto; padding: 24px 32px; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* === Section Header === */
+  .section-title {
+    font-size: 20px; font-weight: 700; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .badge {
+    font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+    background: var(--primary-light); color: var(--primary);
+  }
+  .section-title .badge-new {
+    background: #dcfce7; color: #059669;
+  }
+
+  /* === Card === */
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 16px; overflow: hidden;
+  }
+  .card-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-header h3 { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card-body { padding: 20px; }
+
+  /* === Grid === */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+
+  /* === Data Block === */
+  .data-block {
+    background: var(--bg); border-radius: 6px; padding: 14px 16px;
+  }
+  .data-block .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px; }
+  .data-block .value { font-size: 14px; font-weight: 600; color: var(--text); }
+  .data-block .sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* === Status Badge === */
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
+  .status-actif { background: #dcfce7; color: #059669; }
+  .status-degrade { background: #fef3c7; color: #d97706; }
+  .status-inactif { background: #fee2e2; color: #dc2626; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .status-actif .status-dot { background: #059669; }
+  .status-degrade .status-dot { background: #d97706; }
+  .status-inactif .status-dot { background: #dc2626; }
+
+  /* === Contact Card === */
+  .contact-card {
+    border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .contact-card .contact-name { font-weight: 600; font-size: 14px; }
+  .contact-card .contact-role { font-size: 12px; color: var(--text-muted); }
+  .contact-card .contact-info { font-size: 13px; color: var(--primary); text-decoration: none; }
+  .contact-card .contact-info:hover { text-decoration: underline; }
+  .contact-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #f3f4f6; color: var(--text-muted); margin-right: 4px; margin-top: 4px; }
+  .contact-tag.primary { background: var(--primary-light); color: var(--primary); }
+
+  /* === Flat List (actuel) === */
+  .flat-list { display: flex; flex-direction: column; gap: 8px; }
+  .flat-list-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; background: var(--bg); border-radius: 6px;
+  }
+  .flat-list-item .name { font-weight: 500; }
+  .flat-list-item .meta { font-size: 13px; color: var(--text-muted); }
+
+  /* === Connectivity === */
+  .connectivity-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .provider-name { font-size: 16px; font-weight: 700; }
+  .support-card { background: var(--bg); border-radius: 6px; padding: 14px 16px; }
+  .support-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 6px; }
+  .copy-btn {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+    padding: 3px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--panel); cursor: pointer; color: var(--text-muted);
+    margin-top: 4px;
+  }
+  .copy-btn:hover { background: var(--bg); color: var(--text); }
+
+  /* === Referent === */
+  .referent-bar {
+    display: flex; align-items: center; gap: 16px; padding: 12px 16px;
+    background: var(--primary-light); border-radius: 6px; margin-bottom: 16px;
+  }
+  .referent-bar .ref-label { font-size: 12px; color: var(--text-muted); }
+  .referent-bar .ref-name { font-weight: 600; font-size: 14px; }
+  .referent-avatar {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--primary);
+    color: white; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600;
+  }
+
+  /* === Alert box === */
+  .alert-box { padding: 12px 16px; border-radius: 6px; display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+  .alert-yellow { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .alert-blue { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+
+  /* === Comparison Arrow === */
+  .comparison-divider {
+    text-align: center; padding: 24px; color: var(--text-muted); font-size: 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .comparison-divider::before, .comparison-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* === Infos Pratiques Grouped === */
+  .info-category { margin-bottom: 20px; }
+  .info-category-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 8px;
+    padding-bottom: 4px; border-bottom: 1px solid var(--border);
+  }
+
+  /* === Server Info === */
+  .copyable-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: var(--bg); border-radius: 6px; margin-bottom: 6px;
+  }
+  .copyable-row .path { font-family: monospace; font-size: 13px; }
+
+  /* === Annotation === */
+  .annotation {
+    border-left: 3px solid var(--primary); padding: 8px 12px; margin: 12px 0;
+    background: var(--primary-light); font-size: 13px; color: #1e40af; border-radius: 0 6px 6px 0;
+  }
+  .annotation.green { border-left-color: #059669; background: #dcfce7; color: #065f46; }
+
+  /* === Icon placeholder === */
+  .icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; font-size: 14px; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .content { padding: 16px; }
+    .top-nav, .page-tabs { padding-left: 16px; padding-right: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top Navigation -->
+<div class="top-nav">
+  <h1>XCH</h1>
+  <span class="subtitle">Maquettes comparatives — Page Détail Chantier</span>
+</div>
+
+<!-- Page Tabs -->
+<div class="page-tabs">
+  <div class="page-tab active" data-section="contacts">Contacts</div>
+  <div class="page-tab" data-section="connectivity">Connectivité</div>
+  <div class="page-tab" data-section="referents">Référents IT</div>
+  <div class="page-tab" data-section="infos-pratiques">Infos Pratiques</div>
+  <div class="page-tab" data-section="server-info">Serveurs & Données</div>
+</div>
+
+<div class="content">
+
+  <!-- ============================================ -->
+  <!-- SECTION 1: CONTACTS                          -->
+  <!-- ============================================ -->
+  <div class="tab-content active" id="contacts">
+    <div class="section-title">Contacts du chantier <span class="badge">Comparaison</span></div>
+
+    <!-- ACTUEL -->
+    <div class="card">
+      <div class="card-header">
+        <h3>🔵 Version actuelle (XCH)</h3>
+      </div>
+      <div class="card-body">
+        <p class="annotation">Actuellement : liste plate de contacts, tous au même niveau, avec recherche.</p>
+        <br>
+        <div class="flat-list">
+          <div class="flat-list-item">
+            <div>
+              <div class="name">Marc Legrand</div>
+              <div class="meta">Chef de chantier • +33 1 22 33 44 55</div>
+            </div>
+            <span class="contact-tag primary">Principal</span>
+          </div>
+          <div class="flat-list-item">
+            <div>
+              <div class="name">Sarah Giraud</div>
+              <div class="meta">Assistante • +33 1 11 22 33 44</div>
+            </div>
+            <span class="contact-tag">Contact</span>
+          </div>
+          <div class="flat-list-item">
+            <div>
+              <div class="name">Jean-Pierre Colin</div>
+              <div class="meta">IT réseau (Client Final) • +33 1 99 88 77 66</div>
+            </div>
+            <span class="contact-tag">Contact</span>
+          </div>
+          <div class="flat-list-item">
+            <div>
+              <div class="name">Accueil Sécurité - Hall A</div>
+              <div class="meta">Accueil • +33 1 55 66 77 88</div>
+            </div>
+            <span class="contact-tag">Contact</span>
+          </div>
+          <div class="flat-list-item">
+            <div>
+              <div class="name">Paul Dupont</div>
+              <div class="meta">Support IT Client • +33 6 12 34 56 78</div>
+            </div>
+            <span class="contact-tag">Contact</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="comparison-divider">vs</div>
+
+    <!-- PROPOSÉ -->
+    <div class="card" style="border-color: #86efac;">
+      <div class="card-header" style="background: #f0fdf4;">
+        <h3>🟢 Version proposée — Contacts groupés par catégorie</h3>
+      </div>
+      <div class="card-body">
+        <p class="annotation green">Contacts regroupés par catégorie avec icônes, tags de rôle, et copie rapide.</p>
+        <br>
+
+        <!-- Catégorie: Responsable -->
+        <div class="info-category">
+          <div class="info-category-title">👷 Responsable chantier</div>
+          <div class="grid-2">
+            <div class="contact-card">
+              <div class="contact-name">Marc Legrand</div>
+              <div class="contact-role">Chef de chantier (sur place)</div>
+              <a class="contact-info" href="#">📞 +33 1 22 33 44 55</a>
+              <a class="contact-info" href="#">✉️ marc.legrand@site.com</a>
+              <div style="margin-top: 4px; font-size: 12px; color: #6b7280;">Accès local technique via badge vert</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Catégorie: Assistante -->
+        <div class="info-category">
+          <div class="info-category-title">📋 Assistante de chantier</div>
+          <div class="grid-2">
+            <div class="contact-card">
+              <div class="contact-name">Sarah Giraud</div>
+              <a class="contact-info" href="#">📞 +33 1 11 22 33 44</a>
+              <a class="contact-info" href="#">✉️ sarah.giraud@site.com</a>
+              <div style="margin-top: 6px;">
+                <span class="contact-tag">Droits / partages</span>
+                <span class="contact-tag">Commandes matériel</span>
+                <span class="contact-tag">Autorisations</span>
+              </div>
+              <div style="margin-top: 4px; font-size: 12px; color: #6b7280;">Validation sous 48h</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Catégorie: Accueil / Sécurité -->
+        <div class="info-category">
+          <div class="info-category-title">🔒 Accueil / Sécurité</div>
+          <div class="grid-2">
+            <div class="contact-card">
+              <div class="contact-name">Accueil Sécurité - Hall A</div>
+              <a class="contact-info" href="#">📞 +33 1 55 66 77 88</a>
+              <div style="margin-top: 4px; font-size: 12px; color: #6b7280;">Badge obligatoire, horaires 8h-18h</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Catégorie: IT Partenaires -->
+        <div class="info-category">
+          <div class="info-category-title">🤝 IT Partenaires</div>
+          <div class="grid-2">
+            <div class="contact-card">
+              <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                <span class="contact-tag">Partenaire</span>
+                <span class="contact-tag primary">IT réseau</span>
+              </div>
+              <div class="contact-name">Jean-Pierre Colin <span style="font-weight: 400; color: #6b7280;">(Client Final)</span></div>
+              <a class="contact-info" href="#">📞 +33 1 99 88 77 66</a>
+              <a class="contact-info" href="#">✉️ jp.colin@client.com</a>
+              <div style="margin-top: 4px; font-size: 12px; color: #6b7280;">Réseau client et Wi-Fi invité • Valide les ouvertures de flux</div>
+            </div>
+            <div class="contact-card">
+              <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                <span class="contact-tag">Partenaire</span>
+                <span class="contact-tag primary">Support IT</span>
+              </div>
+              <div class="contact-name">Paul Dupont <span style="font-weight: 400; color: #6b7280;">(Client Final)</span></div>
+              <a class="contact-info" href="#">📞 +33 6 12 34 56 78</a>
+              <a class="contact-info" href="#">✉️ paul.dupont@client.com</a>
+              <div style="margin-top: 4px; font-size: 12px; color: #6b7280;">Support N2 poste de travail</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- SECTION 2: CONNECTIVITÉ                      -->
+  <!-- ============================================ -->
+  <div class="tab-content" id="connectivity">
+    <div class="section-title">Connectivité Internet <span class="badge">Comparaison</span></div>
+
+    <!-- ACTUEL -->
+    <div class="card">
+      <div class="card-header">
+        <h3>🔵 Version actuelle (XCH)</h3>
+      </div>
+      <div class="card-body">
+        <p class="annotation">Actuellement : 2 colonnes (primaire/backup) avec type, provider, ref. Basique.</p>
+        <br>
+        <div class="grid-2">
+          <div>
+            <h4 style="font-size: 14px; margin-bottom: 8px;">🟢 Connexion primaire</h4>
+            <div class="data-block" style="margin-bottom: 6px;">
+              <div class="label">Type</div>
+              <div class="value">Fibre</div>
+            </div>
+            <div class="data-block" style="margin-bottom: 6px;">
+              <div class="label">Fournisseur</div>
+              <div class="value">Orange Business</div>
+            </div>
+            <div class="data-block">
+              <div class="label">Référence</div>
+              <div class="value">OB-123456-PAR</div>
+            </div>
+          </div>
+          <div>
+            <h4 style="font-size: 14px; margin-bottom: 8px;">🔵 Connexion backup</h4>
+            <div class="data-block" style="margin-bottom: 6px;">
+              <div class="label">Type</div>
+              <div class="value">4G</div>
+            </div>
+            <div class="data-block" style="margin-bottom: 6px;">
+              <div class="label">Fournisseur</div>
+              <div class="value">SFR</div>
+            </div>
+            <div class="data-block">
+              <div class="label">Référence</div>
+              <div class="value">SFR-789012</div>
+            </div>
+          </div>
+        </div>
+        <br>
+        <div class="alert-yellow alert-box">
+          ⚠️ <strong>Procédure en cas de coupure :</strong> Appeler le N° support Orange, ouvrir ticket ITSM, basculer sur backup 4G.
+        </div>
+      </div>
+    </div>
+
+    <div class="comparison-divider">vs</div>
+
+    <!-- PROPOSÉ -->
+    <div class="card" style="border-color: #86efac;">
+      <div class="card-header" style="background: #f0fdf4;">
+        <h3>🟢 Version proposée — Connectivité enrichie</h3>
+      </div>
+      <div class="card-body">
+        <p class="annotation green">Badge statut en temps réel, infos débit, date mise en service, contacts support avec copie rapide.</p>
+        <br>
+
+        <!-- Header avec statut -->
+        <div class="connectivity-header">
+          <div>
+            <div class="provider-name">🌐 Orange Business</div>
+            <div style="font-size: 13px; color: #6b7280;">Fibre • Lien primaire</div>
+          </div>
+          <span class="status status-actif"><span class="status-dot"></span> Actif</span>
+        </div>
+
+        <!-- Info pills -->
+        <div class="grid-4" style="margin-bottom: 16px;">
+          <div class="data-block">
+            <div class="label">Fournisseur</div>
+            <div class="value">Orange Business</div>
+            <div class="sub">Fibre • Primaire</div>
+          </div>
+          <div class="data-block">
+            <div class="label">Mise en service</div>
+            <div class="value">10/02/2022</div>
+            <div class="sub">Fibre mutualisée sur site</div>
+          </div>
+          <div class="data-block">
+            <div class="label">Débit contractuel</div>
+            <div class="value">1 Gbps / 500 Mbps</div>
+          </div>
+          <div class="data-block">
+            <div class="label">Référence ligne</div>
+            <div class="value">OB-123456-PAR</div>
+          </div>
+        </div>
+
+        <!-- Support contacts -->
+        <div class="grid-2" style="margin-bottom: 16px;">
+          <div class="support-card">
+            <div class="label">Contacts opérateur</div>
+            <div style="font-size: 13px;"><strong>Tél :</strong> +33 800 12 34 56</div>
+            <div style="font-size: 13px;"><strong>Email :</strong> support@orange-business.com</div>
+            <div style="margin-top: 6px;">
+              <button class="copy-btn">📋 Copier tél</button>
+              <button class="copy-btn">📋 Copier email</button>
+            </div>
+          </div>
+          <div class="support-card">
+            <div class="label">Référent interne</div>
+            <div style="font-size: 14px; font-weight: 600;">Alice Martin</div>
+            <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Aucune coupure depuis 6 mois.</div>
+          </div>
+        </div>
+
+        <!-- Backup -->
+        <div style="border-top: 1px solid #e5e7eb; padding-top: 16px;">
+          <div class="connectivity-header">
+            <div>
+              <div class="provider-name" style="font-size: 15px;">📡 SFR Business</div>
+              <div style="font-size: 13px; color: #6b7280;">4G • Lien backup</div>
+            </div>
+            <span class="status status-degrade"><span class="status-dot"></span> Veille</span>
+          </div>
+          <div class="grid-4">
+            <div class="data-block">
+              <div class="label">Type</div>
+              <div class="value">4G LTE</div>
+            </div>
+            <div class="data-block">
+              <div class="label">Débit estimé</div>
+              <div class="value">50 Mbps / 20 Mbps</div>
+            </div>
+            <div class="data-block">
+              <div class="label">Référence</div>
+              <div class="value">SFR-789012</div>
+            </div>
+            <div class="data-block">
+              <div class="label">Basculement</div>
+              <div class="value">Automatique</div>
+              <div class="sub">via failover routeur</div>
+            </div>
+          </div>
+        </div>
+
+        <br>
+        <div class="alert-yellow alert-box">
+          ⚠️ <strong>Procédure en cas de coupure :</strong> Appeler le N° support Orange, ouvrir ticket ITSM, basculer sur backup 4G.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- SECTION 3: RÉFÉRENTS IT                      -->
+  <!-- ============================================ -->
+  <div class="tab-content" id="referents">
+    <div class="section-title">Référents IT du chantier <span class="badge">Comparaison</span></div>
+
+    <!-- ACTUEL -->
+    <div class="card">
+      <div class="card-header">
+        <h3>🔵 Version actuelle (XCH)</h3>
+      </div>
+      <div class="card-body">
+        <p class="annotation">Actuellement : pas de notion de "référent IT" assigné au chantier. On a les accès (READ/WRITE) dans l'onglet Accès, mais pas de responsable IT désigné.</p>
+        <br>
+        <div style="text-align: center; padding: 24px; color: #9ca3af;">
+          <div style="font-size: 32px; margin-bottom: 8px;">🚫</div>
+          <div>Pas de référent IT assigné dans la version actuelle</div>
+          <div style="font-size: 13px; margin-top: 4px;">Les utilisateurs ont des accès READ/WRITE mais sans rôle de suivi</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="comparison-divider">vs</div>
+
+    <!-- PROPOSÉ -->
+    <div class="card" style="border-color: #86efac;">
+      <div class="card-header" style="background: #f0fdf4;">
+        <h3>🟢 Version proposée — Référent IT dans le header du chantier</h3>
+      </div>
+      <div class="card-body">
+        <p class="annotation green">Ajouter un champ "Référent IT" au site. Affiché dans l'en-tête du chantier. Le référent est responsable du suivi IT même si d'autres techs ont des accès.</p>
+        <br>
+
+        <!-- Simulation header chantier -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <h2 style="font-size: 22px; font-weight: 700;">Siège Paris - Tour Montparnasse</h2>
+              <div style="font-size: 13px; color: #6b7280; margin-top: 4px;">
+                33 Avenue du Maine, 75015 Paris • Période: 15/01/2024 - 30/06/2025
+              </div>
+              <div style="margin-top: 12px; display: flex; gap: 12px;">
+                <div class="referent-bar">
+                  <div class="referent-avatar">AM</div>
+                  <div>
+                    <div class="ref-label">Référent IT</div>
+                    <div class="ref-name">Alice Martin</div>
+                  </div>
+                </div>
+                <div class="referent-bar" style="background: #fef3c7;">
+                  <div class="referent-avatar" style="background: #d97706;">BL</div>
+                  <div>
+                    <div class="ref-label">Chef de Projet</div>
+                    <div class="ref-name">Bernard Loiseau</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <span class="status status-actif"><span class="status-dot"></span> En cours</span>
+            </div>
+          </div>
+        </div>
+
+        <br>
+        <p class="annotation green">
+          <strong>Implémentation :</strong> Ajouter un champ <code>referentId</code> (FK vers User) au model Site. Le référent IT est le tech principal responsable du suivi. Les autres ont des accès via le système d'accès existant.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- SECTION 4: INFOS PRATIQUES                   -->
+  <!-- ============================================ -->
+  <div class="tab-content" id="infos-pratiques">
+    <div class="section-title">Infos Pratiques <span class="badge">Comparaison</span></div>
+
+    <!-- ACTUEL -->
+    <div class="card">
+      <div class="card-header">
+        <h3>🔵 Version actuelle (XCH)</h3>
+      </div>
+      <div class="card-body">
+        <p class="annotation">Actuellement : les infos sont réparties en sections séparées (Contacts, Connectivité, Accès, Serveurs). Chaque section est une Card indépendante empilée verticalement.</p>
+        <br>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div class="data-block">📇 <strong>Card Contacts</strong> — liste plate avec recherche</div>
+          <div class="data-block">🌐 <strong>Card Connectivité</strong> — primaire/backup simple</div>
+          <div class="data-block">🔒 <strong>Card Accès</strong> — horaires, badges, procédures, sécurité</div>
+          <div class="data-block">💾 <strong>Card Serveurs</strong> — SMB, SharePoint, GED</div>
+          <div class="data-block">📊 <strong>Card Statistiques</strong> — compteurs</div>
+        </div>
+        <br>
+        <p style="font-size: 13px; color: #6b7280;">Tout est au même niveau, pas de regroupement logique. Beaucoup de scroll.</p>
+      </div>
+    </div>
+
+    <div class="comparison-divider">vs</div>
+
+    <!-- PROPOSÉ -->
+    <div class="card" style="border-color: #86efac;">
+      <div class="card-header" style="background: #f0fdf4;">
+        <h3>🟢 Version proposée — Onglet "Infos Pratiques" dédié (inspiré ITCHI)</h3>
+      </div>
+      <div class="card-body">
+        <p class="annotation green">Regrouper toutes les infos pratiques dans un onglet dédié avec sections visuelles. L'onglet "Info" actuel garde les données générales + stats, et un nouvel onglet "Infos Pratiques" regroupe contacts, connectivité, accès, ressources.</p>
+        <br>
+
+        <!-- Simulation de l'onglet -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
+
+          <!-- Sous-section: Contacts groupés -->
+          <div style="margin-bottom: 24px;">
+            <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              📇 Contacts du chantier
+            </h4>
+            <div class="grid-2">
+              <div class="contact-card">
+                <span class="contact-tag primary">Responsable</span>
+                <div class="contact-name" style="margin-top: 6px;">Marc Legrand</div>
+                <div class="contact-role">Chef de chantier</div>
+                <a class="contact-info" href="#">📞 +33 1 22 33 44 55</a>
+              </div>
+              <div class="contact-card">
+                <span class="contact-tag">Assistante</span>
+                <div class="contact-name" style="margin-top: 6px;">Sarah Giraud</div>
+                <a class="contact-info" href="#">📞 +33 1 11 22 33 44</a>
+              </div>
+              <div class="contact-card">
+                <span class="contact-tag">Accueil</span>
+                <div class="contact-name" style="margin-top: 6px;">Sécurité Hall A</div>
+                <a class="contact-info" href="#">📞 +33 1 55 66 77 88</a>
+              </div>
+              <div class="contact-card">
+                <span class="contact-tag primary">IT Partenaire</span>
+                <div class="contact-name" style="margin-top: 6px;">Jean-Pierre Colin</div>
+                <div class="contact-role">IT réseau (Client Final)</div>
+                <a class="contact-info" href="#">📞 +33 1 99 88 77 66</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sous-section: Connectivité -->
+          <div style="margin-bottom: 24px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
+            <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              🌐 Connectivité
+              <span class="status status-actif" style="font-size: 11px;"><span class="status-dot"></span> Actif</span>
+            </h4>
+            <div class="grid-4">
+              <div class="data-block">
+                <div class="label">Fournisseur</div>
+                <div class="value">Orange Business</div>
+                <div class="sub">Fibre • 1 Gbps / 500 Mbps</div>
+              </div>
+              <div class="data-block">
+                <div class="label">Backup</div>
+                <div class="value">SFR 4G</div>
+                <div class="sub">50 Mbps • failover auto</div>
+              </div>
+              <div class="data-block">
+                <div class="label">Support</div>
+                <div class="value">+33 800 12 34 56</div>
+                <div class="sub">support@orange-biz.com</div>
+              </div>
+              <div class="data-block">
+                <div class="label">Référence</div>
+                <div class="value">OB-123456-PAR</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sous-section: Accès site -->
+          <div style="margin-bottom: 24px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
+            <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 12px;">🔒 Accès au site</h4>
+            <div class="grid-2">
+              <div class="data-block">
+                <div class="label">🕐 Horaires</div>
+                <div class="value" style="font-size: 13px;">Lundi-Vendredi 7h30-19h00</div>
+              </div>
+              <div class="data-block">
+                <div class="label">🛡️ Badges</div>
+                <div class="value" style="font-size: 13px;">Badge vert obligatoire, demander 48h avant</div>
+              </div>
+              <div class="data-block">
+                <div class="label">📝 Procédures</div>
+                <div class="value" style="font-size: 13px;">Pièce identité, gilet jaune, casque</div>
+              </div>
+              <div class="data-block">
+                <div class="label">⚠️ Sécurité</div>
+                <div class="value" style="font-size: 13px;">EPI obligatoires zone chantier</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sous-section: Ressources -->
+          <div style="border-top: 1px solid #e2e8f0; padding-top: 20px;">
+            <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 12px;">💾 Ressources & Partages</h4>
+            <div class="copyable-row">
+              <div>
+                <div style="font-size: 12px; color: #6b7280;">Partage réseau (SMB)</div>
+                <div class="path">\\srv-files\chantiers\siege-paris</div>
+              </div>
+              <button class="copy-btn">📋 Copier</button>
+            </div>
+            <div class="copyable-row">
+              <div>
+                <div style="font-size: 12px; color: #6b7280;">SharePoint</div>
+                <a class="contact-info" href="#" style="font-size: 13px;">https://sharepoint.com/sites/siege-paris</a>
+              </div>
+              <button class="copy-btn">🔗 Ouvrir</button>
+            </div>
+            <div class="copyable-row">
+              <div>
+                <div style="font-size: 12px; color: #6b7280;">GED</div>
+                <a class="contact-info" href="#" style="font-size: 13px;">https://ged.company.com/siege-paris</a>
+              </div>
+              <button class="copy-btn">🔗 Ouvrir</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- SECTION 5: SERVEURS & DONNÉES                -->
+  <!-- ============================================ -->
+  <div class="tab-content" id="server-info">
+    <div class="section-title">Serveurs & Données de production <span class="badge">Comparaison</span></div>
+
+    <!-- ACTUEL -->
+    <div class="card">
+      <div class="card-header">
+        <h3>🔵 Version actuelle (XCH)</h3>
+      </div>
+      <div class="card-body">
+        <p class="annotation">Actuellement : card séparée dans l'onglet Info avec CopyableField (SMB, SharePoint, GED, droits). Fonctionnel mais pas visuellement distinct.</p>
+        <br>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div class="copyable-row">
+            <div>
+              <div style="font-size: 12px; color: #6b7280;">📁 Chemin SMB</div>
+              <div class="path">\\srv-files\chantiers\siege-paris</div>
+            </div>
+            <button class="copy-btn">📋</button>
+          </div>
+          <div class="copyable-row">
+            <div>
+              <div style="font-size: 12px; color: #6b7280;">🌐 SharePoint</div>
+              <a class="contact-info" href="#" style="font-size: 13px;">https://sharepoint.com/sites/siege-paris</a>
+            </div>
+            <button class="copy-btn">🔗</button>
+          </div>
+          <div class="copyable-row">
+            <div>
+              <div style="font-size: 12px; color: #6b7280;">📄 GED</div>
+              <a class="contact-info" href="#" style="font-size: 13px;">https://ged.company.com/siege-paris</a>
+            </div>
+            <button class="copy-btn">🔗</button>
+          </div>
+          <div class="copyable-row">
+            <div>
+              <div style="font-size: 12px; color: #6b7280;">🔐 Droits d'accès</div>
+              <a class="contact-info" href="#" style="font-size: 13px;">https://access.company.com/siege-paris</a>
+            </div>
+            <button class="copy-btn">🔗</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="comparison-divider">vs</div>
+
+    <!-- PROPOSÉ -->
+    <div class="card" style="border-color: #86efac;">
+      <div class="card-header" style="background: #f0fdf4;">
+        <h3>🟢 Proposition — Intégré dans "Infos Pratiques"</h3>
+      </div>
+      <div class="card-body">
+        <p class="annotation green">Plutôt qu'une card séparée, intégrer dans l'onglet Infos Pratiques (section "Ressources & Partages" vue ci-dessus). Même composant CopyableField mais dans un contexte plus logique.</p>
+        <br>
+        <div class="alert-blue alert-box">
+          ℹ️ Pas de changement de composant — juste un déplacement dans l'onglet "Infos Pratiques" pour tout avoir au même endroit. Le CopyableField actuel est déjà bien fait.
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Tab switching
+  document.querySelectorAll('.page-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.section).classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>

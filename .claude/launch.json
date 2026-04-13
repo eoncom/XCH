@@ -1,0 +1,32 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "XCH Backend (NestJS)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev"],
+      "port": 3000,
+      "cwd": "backend"
+    },
+    {
+      "name": "XCH Frontend (Next.js)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3001,
+      "cwd": "frontend"
+    },
+    {
+      "name": "Prisma Studio",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["prisma", "studio"],
+      "port": 5555,
+      "cwd": "backend"
+    },
+    {
+      "name": "Docker Infra (PostgreSQL + Redis + MinIO)",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "-d", "postgres", "redis", "minio", "minio-init"],
+      "port": 5432
+    }
+  ]
+}

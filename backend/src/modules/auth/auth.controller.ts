@@ -22,6 +22,7 @@ import { AuthRequest } from '../../types/request.interface';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequireWrite, RequireManage } from '../../common/decorators/require-right.decorator';
+import { PermissionService } from '../../common/services/permission.service';
 
 @ApiTags('auth')
 @SkipDelegation()
@@ -33,6 +34,7 @@ export class AuthController {
     private jwtService: JwtService,
     private configService: ConfigService,
     private prisma: PrismaClient,
+    private permissionService: PermissionService,
   ) {}
 
   /**
@@ -141,6 +143,7 @@ export class AuthController {
         tenantId: dbUser.tenantId,
         tenant: dbUser.tenant,
         totpEnabled: dbUser.totpEnabled || false,
+        isSuperAdmin: dbUser.isSuperAdmin || false,
       },
       isAuthenticated: true,
     };
@@ -200,6 +203,40 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile' })
   getProfile(@Request() req: AuthRequest) {
     return req.user;
+  }
+
+  @Get('my-permissions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user permissions summary' })
+  async getMyPermissions(@Request() req: AuthRequest) {
+    const userId = req.user.userId || req.user.id;
+    const tenantId = req.user.tenantId;
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { isSuperAdmin: true },
+    });
+
+    const delegations = await this.prisma.userDelegation.findMany({
+      where: { tenantId, userId },
+      include: {
+        delegation: { select: { id: true, name: true, code: true, groupLabel: true, groupColor: true } },
+      },
+    });
+
+    const hasDelegation = delegations.length > 0;
+    const isSuperAdmin = user?.isSuperAdmin ?? false;
+
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(tenantId, userId);
+
+    return {
+      isSuperAdmin,
+      hasDelegation,
+      allSitesAccess: isSuperAdmin || accessibleSiteIds === null,
+      accessibleSiteIds,
+      delegations,
+    };
   }
 
   // ===== TOTP 2FA Endpoints =====
@@ -397,9 +434,9 @@ export class AuthController {
     @Request() req: AuthRequest,
     @Param('userId') userId: string,
   ) {
-    // Only ADMIN (local delegation role) or super admin can do this
+    // Only MANAGE (local delegation role) or super admin can do this
     const localRole = (req as any).localRole;
-    if (!req.user.isSuperAdmin && localRole !== 'ADMIN') {
+    if (!req.user.isSuperAdmin && localRole !== 'MANAGE') {
       throw new UnauthorizedException('Admin access required');
     }
 

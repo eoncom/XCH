@@ -51,7 +51,7 @@ export const siteAccessApi = {
     apiClient.get<{ hasAccess: boolean }>(`/api/site-access/check?siteId=${siteId}`),
 
   myPermissions: () =>
-    apiClient.get<MyPermissionsResponse>('/api/site-access/my-permissions'),
+    apiClient.get<MyPermissionsResponse>('/api/auth/my-permissions'),
 };
 
 // User delegations API

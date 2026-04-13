@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XCH - Maquette Page Détail Chantier</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --primary: #2563eb;
+    --primary-light: #eff6ff;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; font-size: 14px; }
+
+  /* === Layout === */
+  .page { display: flex; min-height: 100vh; }
+  .sidebar { width: 240px; background: var(--panel); border-right: 1px solid var(--border); padding: 20px 0; position: fixed; top: 0; bottom: 0; overflow-y: auto; }
+  .sidebar .logo { padding: 0 20px 20px; font-size: 20px; font-weight: 800; color: var(--primary); border-bottom: 1px solid var(--border); }
+  .sidebar-nav { padding: 12px 0; }
+  .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 9px 20px; font-size: 13px; color: var(--text-muted); cursor: pointer; transition: all 0.15s; text-decoration: none; }
+  .sidebar-item:hover { background: var(--bg); color: var(--text); }
+  .sidebar-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; border-right: 3px solid var(--primary); }
+  .main { margin-left: 240px; flex: 1; min-width: 0; }
+
+  /* === Top Bar === */
+  .topbar { background: var(--panel); border-bottom: 1px solid var(--border); padding: 12px 28px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+  .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
+  .breadcrumb a { color: var(--text-muted); text-decoration: none; }
+  .breadcrumb a:hover { color: var(--primary); }
+  .breadcrumb .sep { color: #cbd5e1; }
+  .breadcrumb .current { color: var(--text); font-weight: 600; }
+  .topbar-actions { display: flex; gap: 8px; }
+
+  /* === Content === */
+  .content { padding: 24px 28px; max-width: 1280px; }
+
+  /* === Header chantier === */
+  .site-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+  .site-header-left { flex: 1; }
+  .site-header h1 { font-size: 26px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+  .site-header .site-code { font-size: 13px; color: var(--text-muted); }
+  .site-header .site-address { font-size: 13px; color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; gap: 4px; }
+  .referents-row { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .referent-chip { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 8px; font-size: 13px; }
+  .referent-chip.it { background: var(--primary-light); }
+  .referent-chip.pm { background: #fef3c7; }
+  .referent-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; flex-shrink: 0; }
+  .referent-chip.it .referent-avatar { background: var(--primary); }
+  .referent-chip.pm .referent-avatar { background: #d97706; }
+  .ref-label { font-size: 11px; color: var(--text-muted); line-height: 1; }
+  .ref-name { font-weight: 600; font-size: 13px; line-height: 1.2; }
+
+  /* === Buttons === */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--panel); color: var(--text); transition: all 0.15s; text-decoration: none; }
+  .btn:hover { background: var(--bg); }
+  .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-danger { background: #fee2e2; color: #dc2626; border-color: #fecaca; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-ghost { border: none; background: none; color: var(--text-muted); }
+  .btn-ghost:hover { color: var(--text); background: var(--bg); }
+
+  /* === Badge === */
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+  .badge-green { background: #dcfce7; color: #059669; }
+  .badge-yellow { background: #fef3c7; color: #d97706; }
+  .badge-red { background: #fee2e2; color: #dc2626; }
+  .badge-blue { background: #dbeafe; color: #2563eb; }
+  .badge-gray { background: #f1f5f9; color: #64748b; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .dot-green { background: #059669; }
+  .dot-yellow { background: #d97706; }
+
+  /* === Tabs === */
+  .tabs-nav { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; overflow-x: auto; }
+  .tab-btn { padding: 10px 18px; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: all 0.15s; user-select: none; background: none; border-top: none; border-left: none; border-right: none; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .tab-btn .count { font-size: 11px; background: var(--bg); padding: 1px 6px; border-radius: 999px; margin-left: 4px; color: var(--text-muted); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; animation: fadeIn 0.2s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* === Card === */
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden; }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-header h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card-body { padding: 20px; }
+
+  /* === Grid === */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+
+  /* === Stat Card === */
+  .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; }
+  .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+  .stat-value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+  .stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* === Data block === */
+  .data-block { background: var(--bg); border-radius: 8px; padding: 12px 14px; }
+  .data-block .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 3px; font-weight: 500; }
+  .data-block .value { font-size: 14px; font-weight: 600; }
+  .data-block .sub { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+  /* === Contact card === */
+  .contact-card { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; transition: box-shadow 0.15s; }
+  .contact-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .contact-name { font-weight: 600; font-size: 14px; }
+  .contact-role { font-size: 12px; color: var(--text-muted); }
+  .contact-info { font-size: 13px; color: var(--primary); text-decoration: none; display: flex; align-items: center; gap: 4px; }
+  .contact-info:hover { text-decoration: underline; }
+  .contact-note { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #f1f5f9; color: var(--text-muted); margin-right: 4px; font-weight: 500; }
+  .tag-blue { background: var(--primary-light); color: var(--primary); }
+
+  /* === Category title === */
+  .cat-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
+
+  /* === Connectivity === */
+  .conn-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .conn-provider { font-size: 16px; font-weight: 700; }
+  .conn-type { font-size: 13px; color: var(--text-muted); }
+  .support-box { background: var(--bg); border-radius: 8px; padding: 14px 16px; }
+  .support-box .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; }
+  .copy-btn { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); cursor: pointer; color: var(--text-muted); margin-top: 4px; margin-right: 4px; }
+  .copy-btn:hover { background: var(--bg); color: var(--text); }
+
+  /* === Copyable row === */
+  .copyable-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg); border-radius: 8px; margin-bottom: 8px; }
+  .copyable-row .path { font-family: 'SFMono-Regular', 'Consolas', monospace; font-size: 13px; }
+
+  /* === Alert === */
+  .alert { padding: 12px 16px; border-radius: 8px; display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+  .alert-yellow { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .alert-blue { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+
+  /* === List item === */
+  .list-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; transition: all 0.15s; cursor: pointer; text-decoration: none; color: inherit; }
+  .list-item:hover { background: var(--bg); border-color: #cbd5e1; }
+  .list-item .item-name { font-weight: 600; font-size: 14px; }
+  .list-item .item-meta { font-size: 12px; color: var(--text-muted); }
+  .list-item-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+  .list-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  .list-icon-blue { background: #dbeafe; }
+  .list-icon-purple { background: #ede9fe; }
+  .list-icon-orange { background: #ffedd5; }
+  .list-icon-green { background: #dcfce7; }
+
+  /* === Empty state === */
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+  .empty-state .empty-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
+
+  /* === Access row === */
+  .access-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; }
+  .access-row .user-info { display: flex; align-items: center; gap: 10px; }
+  .access-row .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+  .access-row .user-name { font-weight: 600; font-size: 13px; }
+  .access-row .user-email { font-size: 12px; color: var(--text-muted); }
+  .access-actions { display: flex; align-items: center; gap: 8px; }
+
+  /* Responsive */
+  @media (max-width: 1024px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="logo">XCH</div>
+    <nav class="sidebar-nav">
+      <a class="sidebar-item" href="#">📊 Dashboard</a>
+      <a class="sidebar-item active" href="#">📍 Chantiers</a>
+      <a class="sidebar-item" href="#">📦 Équipements</a>
+      <a class="sidebar-item" href="#">🗄️ Baies</a>
+      <a class="sidebar-item" href="#">🗺️ Plans</a>
+      <a class="sidebar-item" href="#">✅ Tâches</a>
+      <a class="sidebar-item" href="#">👥 Contacts</a>
+      <a class="sidebar-item" href="#">👤 Utilisateurs</a>
+      <a class="sidebar-item" href="#">🔌 Intégrations</a>
+      <a class="sidebar-item" href="#">⚙️ Paramètres</a>
+    </nav>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="breadcrumb">
+        <a href="#">Chantiers</a>
+        <span class="sep">/</span>
+        <span class="current">Siège Paris - Tour Montparnasse</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn">📥 Exporter</button>
+        <a class="btn" href="#">✏️ Modifier</a>
+        <button class="btn btn-danger">🗑️ Supprimer</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- Site Header -->
+      <div class="site-header">
+        <div class="site-header-left">
+          <h1>
+            Siège Paris - Tour Montparnasse
+            <span class="badge badge-green"><span class="dot dot-green"></span> HEALTHY</span>
+          </h1>
+          <div class="site-code">Code : PAR-SIEGE-001</div>
+          <div class="site-address">📍 33 Avenue du Maine, 75015 Paris</div>
+          <div class="referents-row">
+            <div class="referent-chip it">
+              <div class="referent-avatar">AM</div>
+              <div>
+                <div class="ref-label">Référent IT</div>
+                <div class="ref-name">Alice Martin</div>
+              </div>
+            </div>
+            <div class="referent-chip pm">
+              <div class="referent-avatar">BL</div>
+              <div>
+                <div class="ref-label">Chef de Projet</div>
+                <div class="ref-name">Bernard Loiseau</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs-nav">
+        <button class="tab-btn active" data-tab="info">Vue générale</button>
+        <button class="tab-btn" data-tab="infos-pratiques">ℹ️ Infos pratiques</button>
+        <button class="tab-btn" data-tab="assets">Équipements <span class="count">12</span></button>
+        <button class="tab-btn" data-tab="racks">Baies <span class="count">3</span></button>
+        <button class="tab-btn" data-tab="tasks">Tâches <span class="count">5</span></button>
+        <button class="tab-btn" data-tab="plans">Plans <span class="count">2</span></button>
+        <button class="tab-btn" data-tab="documents">Documents <span class="count">8</span></button>
+        <button class="tab-btn" data-tab="access">🔒 Accès</button>
+      </div>
+
+      <!-- ============================== -->
+      <!-- TAB: VUE GENERALE              -->
+      <!-- ============================== -->
+      <div class="tab-content active" id="tab-info">
+        <!-- Infos générales -->
+        <div class="card">
+          <div class="card-header"><h3>📋 Informations générales</h3></div>
+          <div class="card-body">
+            <div class="grid-2" style="margin-bottom: 16px;">
+              <div>
+                <div class="data-block" style="margin-bottom: 8px;">
+                  <div class="label">Code</div>
+                  <div class="value">PAR-SIEGE-001</div>
+                </div>
+                <div class="data-block">
+                  <div class="label">Statut</div>
+                  <div class="value">ACTIVE</div>
+                </div>
+              </div>
+              <div>
+                <div class="data-block" style="margin-bottom: 8px;">
+                  <div class="label">Ville</div>
+                  <div class="value">Paris</div>
+                </div>
+                <div class="data-block">
+                  <div class="label">Code postal</div>
+                  <div class="value">75015</div>
+                </div>
+              </div>
+            </div>
+            <div class="data-block" style="margin-bottom: 8px;">
+              <div class="label">Adresse</div>
+              <div class="value">33 Avenue du Maine, 75015 Paris</div>
+            </div>
+            <div class="data-block" style="margin-bottom: 8px;">
+              <div class="label">Coordonnées GPS</div>
+              <div class="value">📍 48.842153, 2.321789</div>
+            </div>
+            <div class="data-block">
+              <div class="label">Notes</div>
+              <div class="value" style="font-weight: 400; font-size: 13px;">Chantier principal - Phase 2 en cours. Accès parking sous-sol niveau -2.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid-3" style="margin-bottom: 16px;">
+          <div class="stat-card">
+            <div class="stat-label">Équipements</div>
+            <div class="stat-value">12</div>
+            <div class="stat-sub">Total sur le site</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Baies</div>
+            <div class="stat-value">3</div>
+            <div class="stat-sub">En service</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Tâches</div>
+            <div class="stat-value">5</div>
+            <div class="stat-sub">En cours</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================== -->
+      <!-- TAB: INFOS PRATIQUES           -->
+      <!-- ============================== -->
+      <div class="tab-content" id="tab-infos-pratiques">
+
+        <!-- Ressources & Partages (bien visible en haut) -->
+        <div class="card" style="border-left: 3px solid var(--primary);">
+          <div class="card-header"><h3>💾 Ressources & Partages</h3></div>
+          <div class="card-body">
+            <div class="grid-2">
+              <div class="copyable-row">
+                <div>
+                  <div style="font-size: 12px; color: var(--text-muted);">📁 Partage réseau (SMB)</div>
+                  <div class="path">\\srv-files\chantiers\siege-paris</div>
+                </div>
+                <button class="copy-btn">📋 Copier</button>
+              </div>
+              <div class="copyable-row">
+                <div>
+                  <div style="font-size: 12px; color: var(--text-muted);">🌐 SharePoint</div>
+                  <a class="contact-info" href="#" style="font-size: 13px;">https://sharepoint.com/sites/siege-paris</a>
+                </div>
+                <button class="copy-btn">🔗 Ouvrir</button>
+              </div>
+              <div class="copyable-row">
+                <div>
+                  <div style="font-size: 12px; color: var(--text-muted);">📄 GED</div>
+                  <a class="contact-info" href="#" style="font-size: 13px;">https://ged.company.com/siege-paris</a>
+                </div>
+                <button class="copy-btn">🔗 Ouvrir</button>
+              </div>
+              <div class="copyable-row">
+                <div>
+                  <div style="font-size: 12px; color: var(--text-muted);">🔐 Droits d'accès serveur</div>
+                  <a class="contact-info" href="#" style="font-size: 13px;">https://access.company.com/siege-paris</a>
+                </div>
+                <button class="copy-btn">🔗 Ouvrir</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contacts internes (3 par ligne) -->
+        <div class="card">
+          <div class="card-header">
+            <h3>👥 Contacts internes du chantier</h3>
+            <span style="font-size: 12px; color: var(--text-muted);">Source : module Contacts</span>
+          </div>
+          <div class="card-body">
+            <div class="grid-3">
+              <div class="contact-card">
+                <span class="tag tag-blue" style="align-self: flex-start;">Responsable</span>
+                <div class="contact-name" style="margin-top: 6px;">Marc Legrand</div>
+                <div class="contact-role">Chef de chantier (sur place)</div>
+                <a class="contact-info" href="#">📞 +33 1 22 33 44 55</a>
+                <a class="contact-info" href="#">✉️ marc.legrand@site.com</a>
+                <div class="contact-note">Accès local technique via badge vert</div>
+              </div>
+              <div class="contact-card">
+                <span class="tag" style="align-self: flex-start;">Assistante</span>
+                <div class="contact-name" style="margin-top: 6px;">Sarah Giraud</div>
+                <div class="contact-role">Assistante de chantier</div>
+                <a class="contact-info" href="#">📞 +33 1 11 22 33 44</a>
+                <a class="contact-info" href="#">✉️ sarah.giraud@site.com</a>
+                <div style="margin-top: 4px;">
+                  <span class="tag">Droits</span>
+                  <span class="tag">Commandes</span>
+                  <span class="tag">Autorisations</span>
+                </div>
+              </div>
+              <div class="contact-card">
+                <span class="tag" style="align-self: flex-start;">Accueil / Sécurité</span>
+                <div class="contact-name" style="margin-top: 6px;">Accueil Hall A</div>
+                <div class="contact-role">Service sécurité</div>
+                <a class="contact-info" href="#">📞 +33 1 55 66 77 88</a>
+                <div class="contact-note">Badge obligatoire, 8h-18h</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contacts externes (3 par ligne) -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🤝 Contacts externes / IT Partenaires</h3>
+            <span style="font-size: 12px; color: var(--text-muted);">Source : module Contacts</span>
+          </div>
+          <div class="card-body">
+            <div class="grid-3">
+              <div class="contact-card">
+                <div style="margin-bottom: 4px;">
+                  <span class="tag tag-blue">IT réseau</span>
+                </div>
+                <div class="contact-name">Jean-Pierre Colin</div>
+                <div class="contact-role">Client Final</div>
+                <a class="contact-info" href="#">📞 +33 1 99 88 77 66</a>
+                <a class="contact-info" href="#">✉️ jp.colin@client.com</a>
+                <div class="contact-note">Réseau client, Wi-Fi invité, ouvertures de flux</div>
+              </div>
+              <div class="contact-card">
+                <div style="margin-bottom: 4px;">
+                  <span class="tag tag-blue">Support IT</span>
+                </div>
+                <div class="contact-name">Paul Dupont</div>
+                <div class="contact-role">Client Final</div>
+                <a class="contact-info" href="#">📞 +33 6 12 34 56 78</a>
+                <a class="contact-info" href="#">✉️ paul.dupont@client.com</a>
+                <div class="contact-note">Support N2 poste de travail</div>
+              </div>
+              <div class="contact-card">
+                <div style="margin-bottom: 4px;">
+                  <span class="tag tag-blue">Sous-traitant câblage</span>
+                </div>
+                <div class="contact-name">Éric Moreau</div>
+                <div class="contact-role">CableNet SARL</div>
+                <a class="contact-info" href="#">📞 +33 6 98 76 54 32</a>
+                <a class="contact-info" href="#">✉️ e.moreau@cablenet.fr</a>
+                <div class="contact-note">Tirage fibre et cuivre</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Connectivité : Primary + Backup côte à côte -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🌐 Connectivité</h3>
+          </div>
+          <div class="card-body">
+            <div class="grid-2">
+              <!-- Lien Primaire -->
+              <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                  <div>
+                    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600;">Lien primaire</div>
+                    <div style="font-size: 16px; font-weight: 700; margin-top: 2px;">Orange Business</div>
+                    <div style="font-size: 13px; color: var(--text-muted);">Fibre optique</div>
+                  </div>
+                  <span class="badge badge-green"><span class="dot dot-green"></span> Actif</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                  <div class="data-block">
+                    <div class="label">Débit</div>
+                    <div class="value" style="font-size: 13px;">1 Gbps / 500 Mbps</div>
+                  </div>
+                  <div class="data-block">
+                    <div class="label">Réf. ligne</div>
+                    <div class="value" style="font-size: 13px;">OB-123456-PAR</div>
+                  </div>
+                  <div class="data-block">
+                    <div class="label">Mise en service</div>
+                    <div class="value" style="font-size: 13px;">10/02/2022</div>
+                  </div>
+                  <div class="data-block">
+                    <div class="label">Type</div>
+                    <div class="value" style="font-size: 13px;">Fibre mutualisée</div>
+                  </div>
+                </div>
+                <div class="support-box">
+                  <div class="label">Support opérateur</div>
+                  <div style="font-size: 13px;">📞 +33 800 12 34 56</div>
+                  <div style="font-size: 13px;">✉️ support@orange-business.com</div>
+                  <div style="margin-top: 6px;">
+                    <button class="copy-btn">📋 Tél</button>
+                    <button class="copy-btn">📋 Email</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Lien Backup -->
+              <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fefce8;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                  <div>
+                    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600;">Lien backup</div>
+                    <div style="font-size: 16px; font-weight: 700; margin-top: 2px;">📡 SFR Business</div>
+                    <div style="font-size: 13px; color: var(--text-muted);">4G LTE</div>
+                  </div>
+                  <span class="badge badge-yellow"><span class="dot dot-yellow"></span> Veille</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                  <div class="data-block">
+                    <div class="label">Débit estimé</div>
+                    <div class="value" style="font-size: 13px;">50 / 20 Mbps</div>
+                  </div>
+                  <div class="data-block">
+                    <div class="label">Référence</div>
+                    <div class="value" style="font-size: 13px;">SFR-789012</div>
+                  </div>
+                  <div class="data-block">
+                    <div class="label">Basculement</div>
+                    <div class="value" style="font-size: 13px;">Automatique</div>
+                    <div class="sub">via failover routeur</div>
+                  </div>
+                  <div class="data-block">
+                    <div class="label">SIM</div>
+                    <div class="value" style="font-size: 13px;">+33 6 XX XX XX XX</div>
+                  </div>
+                </div>
+                <div class="support-box" style="background: #fef9c3;">
+                  <div class="label">Support opérateur</div>
+                  <div style="font-size: 13px;">📞 +33 800 99 88 77</div>
+                  <div style="font-size: 13px;">✉️ support@sfr-business.com</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="alert alert-yellow" style="margin-top: 16px;">
+              ⚠️ <div><strong>Procédure en cas de coupure :</strong> Appeler le N° support Orange, ouvrir ticket ITSM, basculer sur backup 4G.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accès au site -->
+        <div class="card">
+          <div class="card-header"><h3>🛡️ Accès au site</h3></div>
+          <div class="card-body">
+            <div class="grid-2">
+              <div class="data-block">
+                <div class="label">🕐 Horaires</div>
+                <div class="value" style="font-size: 13px; font-weight: 500;">Lundi-Vendredi 7h30-19h00</div>
+              </div>
+              <div class="data-block">
+                <div class="label">🛡️ Badges</div>
+                <div class="value" style="font-size: 13px; font-weight: 500;">Badge vert obligatoire, demander 48h avant</div>
+              </div>
+              <div class="data-block">
+                <div class="label">📝 Procédures</div>
+                <div class="value" style="font-size: 13px; font-weight: 500;">Pièce identité + gilet jaune + casque</div>
+              </div>
+              <div class="data-block">
+                <div class="label">⚠️ Sécurité</div>
+                <div class="value" style="font-size: 13px; font-weight: 500;">EPI obligatoires zone chantier</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ============================== -->
+      <!-- TAB: ÉQUIPEMENTS               -->
+      <!-- ============================== -->
+      <div class="tab-content" id="tab-assets">
+        <div class="card">
+          <div class="card-header">
+            <h3>📦 Équipements (12)</h3>
+            <a class="btn btn-sm btn-primary" href="#">+ Ajouter</a>
+          </div>
+          <div class="card-body">
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-blue">🔌</div>
+                <div>
+                  <div class="item-name">Switch Cisco 2960X</div>
+                  <div class="item-meta">SWITCH - SN: CSC2960X-001 - Baie A1, U12</div>
+                </div>
+              </div>
+              <span class="badge badge-green">En service</span>
+            </a>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-blue">🔥</div>
+                <div>
+                  <div class="item-name">Firewall Fortinet 60F</div>
+                  <div class="item-meta">FIREWALL - SN: FGT60F-789 - Baie A1, U8</div>
+                </div>
+              </div>
+              <span class="badge badge-green">En service</span>
+            </a>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-blue">📡</div>
+                <div>
+                  <div class="item-name">AP WiFi Aruba 535</div>
+                  <div class="item-meta">WIFI_AP - SN: ARUBA535-012</div>
+                </div>
+              </div>
+              <span class="badge badge-green">En service</span>
+            </a>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-blue">🖨️</div>
+                <div>
+                  <div class="item-name">Imprimante HP LaserJet M404</div>
+                  <div class="item-meta">PRINTER - SN: HPM404-456</div>
+                </div>
+              </div>
+              <span class="badge badge-yellow">En transit</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================== -->
+      <!-- TAB: BAIES                     -->
+      <!-- ============================== -->
+      <div class="tab-content" id="tab-racks">
+        <div class="card">
+          <div class="card-header">
+            <h3>🗄️ Baies (3)</h3>
+            <a class="btn btn-sm btn-primary" href="#">+ Ajouter</a>
+          </div>
+          <div class="card-body">
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-purple">🗄️</div>
+                <div>
+                  <div class="item-name">Baie A1</div>
+                  <div class="item-meta">42U - Salle serveur, rangée A - 8/42U utilisés</div>
+                </div>
+              </div>
+              <span class="badge badge-green">En service</span>
+            </a>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-purple">🗄️</div>
+                <div>
+                  <div class="item-name">Baie B1</div>
+                  <div class="item-meta">24U - Salle technique - 4/24U utilisés</div>
+                </div>
+              </div>
+              <span class="badge badge-green">En service</span>
+            </a>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-purple">🗄️</div>
+                <div>
+                  <div class="item-name">Baie C1</div>
+                  <div class="item-meta">12U - Bureau IT - 0/12U utilisés</div>
+                </div>
+              </div>
+              <span class="badge badge-yellow">Préparation</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================== -->
+      <!-- TAB: TÂCHES                    -->
+      <!-- ============================== -->
+      <div class="tab-content" id="tab-tasks">
+        <div class="card">
+          <div class="card-header">
+            <h3>✅ Tâches (5)</h3>
+            <a class="btn btn-sm btn-primary" href="#">+ Nouvelle tâche</a>
+          </div>
+          <div class="card-body">
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-orange">⏳</div>
+                <div>
+                  <div class="item-name">Installation switch principal</div>
+                  <div class="item-meta">Assigné à Alice Martin - Échéance: 15/02/2026</div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <span class="badge badge-blue">En cours</span>
+                <span class="badge badge-red">Urgente</span>
+              </div>
+            </a>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-orange">📋</div>
+                <div>
+                  <div class="item-name">Configuration WiFi étage 3</div>
+                  <div class="item-meta">Non assigné - Échéance: 20/02/2026</div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <span class="badge badge-gray">À faire</span>
+                <span class="badge badge-yellow">Haute</span>
+              </div>
+            </a>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-orange">🚫</div>
+                <div>
+                  <div class="item-name">Mise à jour firmware firewall</div>
+                  <div class="item-meta">Assigné à Alice Martin - Bloqué par fournisseur</div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <span class="badge badge-red">Bloquée</span>
+              </div>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================== -->
+      <!-- TAB: PLANS                     -->
+      <!-- ============================== -->
+      <div class="tab-content" id="tab-plans">
+        <div class="card">
+          <div class="card-header">
+            <h3>🗺️ Plans (2)</h3>
+            <a class="btn btn-sm btn-primary" href="#">+ Nouveau plan</a>
+          </div>
+          <div class="card-body">
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-green">🗺️</div>
+                <div>
+                  <div class="item-name">RDC - Zone principale</div>
+                  <div class="item-meta">Bâtiment A - RDC - 4 pins</div>
+                </div>
+              </div>
+              <span class="badge badge-gray">PNG</span>
+            </a>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-green">🗺️</div>
+                <div>
+                  <div class="item-name">Étage 3 - Salle serveur</div>
+                  <div class="item-meta">Bâtiment A - Étage 3 - 2 pins</div>
+                </div>
+              </div>
+              <span class="badge badge-gray">PDF</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================== -->
+      <!-- TAB: DOCUMENTS                 -->
+      <!-- ============================== -->
+      <div class="tab-content" id="tab-documents">
+        <div class="card">
+          <div class="card-header">
+            <h3>📄 Tous les documents du chantier (8)</h3>
+          </div>
+          <div class="card-body">
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Agrège les documents du site, des équipements, des baies et des tâches.</p>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-blue">📄</div>
+                <div>
+                  <div class="item-name">Schema_reseau_v3.pdf</div>
+                  <div class="item-meta">
+                    <span class="tag tag-blue">Site: Siège Paris</span>
+                    2.4 MB - 05/01/2026
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-sm">📥</button>
+            </a>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-green">📄</div>
+                <div>
+                  <div class="item-name">Config_switch_2960X.txt</div>
+                  <div class="item-meta">
+                    <span class="tag" style="background: #dcfce7; color: #059669;">Équipement: Switch 2960X</span>
+                    45 KB - 12/01/2026
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-sm">📥</button>
+            </a>
+            <a class="list-item" href="#">
+              <div class="list-item-left">
+                <div class="list-icon list-icon-purple">📄</div>
+                <div>
+                  <div class="item-name">Photo_baie_A1.jpg</div>
+                  <div class="item-meta">
+                    <span class="tag" style="background: #ede9fe; color: #7c3aed;">Baie: A1</span>
+                    1.8 MB - 08/01/2026
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-sm">📥</button>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================== -->
+      <!-- TAB: ACCÈS                     -->
+      <!-- ============================== -->
+      <div class="tab-content" id="tab-access">
+        <div class="card">
+          <div class="card-header">
+            <h3>🔒 Droits d'accès (4)</h3>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm">👥 Tous les techniciens</button>
+              <button class="btn btn-sm btn-primary">+ Ajouter</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Les administrateurs et managers ont accès à tous les chantiers. Les techniciens et observateurs nécessitent un accès explicite.</p>
+
+            <div class="access-row">
+              <div class="user-info">
+                <div class="user-avatar">AM</div>
+                <div>
+                  <div class="user-name">Alice Martin</div>
+                  <div class="user-email">alice.martin@company.com</div>
+                </div>
+              </div>
+              <div class="access-actions">
+                <span class="badge badge-blue">TECHNICIEN</span>
+                <span class="badge badge-green">WRITE</span>
+                <button class="btn btn-sm btn-ghost">✏️</button>
+                <button class="btn btn-sm btn-ghost" style="color: #dc2626;">✕</button>
+              </div>
+            </div>
+            <div class="access-row">
+              <div class="user-info">
+                <div class="user-avatar">TD</div>
+                <div>
+                  <div class="user-name">Thomas Durand</div>
+                  <div class="user-email">thomas.durand@company.com</div>
+                </div>
+              </div>
+              <div class="access-actions">
+                <span class="badge badge-blue">TECHNICIEN</span>
+                <span class="badge badge-green">WRITE</span>
+                <button class="btn btn-sm btn-ghost">✏️</button>
+                <button class="btn btn-sm btn-ghost" style="color: #dc2626;">✕</button>
+              </div>
+            </div>
+            <div class="access-row">
+              <div class="user-info">
+                <div class="user-avatar">LB</div>
+                <div>
+                  <div class="user-name">Léa Bonnet</div>
+                  <div class="user-email">lea.bonnet@company.com</div>
+                </div>
+              </div>
+              <div class="access-actions">
+                <span class="badge badge-gray">VIEWER</span>
+                <span class="badge badge-yellow">READ</span>
+                <button class="btn btn-sm btn-ghost">✏️</button>
+                <button class="btn btn-sm btn-ghost" style="color: #dc2626;">✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============================== -->
+<!-- THEME SWITCHER (flottant)      -->
+<!-- ============================== -->
+<div id="theme-switcher" style="position: fixed; bottom: 20px; right: 20px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.12); padding: 16px 20px; z-index: 999; width: 280px;">
+  <div style="font-size: 13px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+    🎨 Thèmes XCH
+    <span style="font-size: 11px; font-weight: 400; color: #64748b; margin-left: auto;">Presets</span>
+  </div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+    <button class="theme-btn" onclick="setTheme('default')" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid #2563eb; border-radius: 8px; background: white; cursor: pointer; font-size: 12px; font-weight: 600;">
+      <span style="width: 20px; height: 20px; border-radius: 50%; background: #2563eb; display: inline-block;"></span>
+      XCH Bleu
+    </button>
+    <button class="theme-btn" onclick="setTheme('emerald')" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid transparent; border-radius: 8px; background: white; cursor: pointer; font-size: 12px; font-weight: 600;">
+      <span style="width: 20px; height: 20px; border-radius: 50%; background: #059669; display: inline-block;"></span>
+      Emeraude
+    </button>
+    <button class="theme-btn" onclick="setTheme('purple')" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid transparent; border-radius: 8px; background: white; cursor: pointer; font-size: 12px; font-weight: 600;">
+      <span style="width: 20px; height: 20px; border-radius: 50%; background: #7c3aed; display: inline-block;"></span>
+      Violet
+    </button>
+    <button class="theme-btn" onclick="setTheme('orange')" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid transparent; border-radius: 8px; background: white; cursor: pointer; font-size: 12px; font-weight: 600;">
+      <span style="width: 20px; height: 20px; border-radius: 50%; background: #ea580c; display: inline-block;"></span>
+      Orange
+    </button>
+    <button class="theme-btn" onclick="setTheme('slate')" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid transparent; border-radius: 8px; background: white; cursor: pointer; font-size: 12px; font-weight: 600;">
+      <span style="width: 20px; height: 20px; border-radius: 50%; background: #475569; display: inline-block;"></span>
+      Ardoise
+    </button>
+    <button class="theme-btn" onclick="setTheme('dark')" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid transparent; border-radius: 8px; background: white; cursor: pointer; font-size: 12px; font-weight: 600;">
+      <span style="width: 20px; height: 20px; border-radius: 50%; background: #1e293b; display: inline-block; border: 1px solid #cbd5e1;"></span>
+      Dark
+    </button>
+  </div>
+  <div style="font-size: 11px; color: #94a3b8; margin-top: 10px; text-align: center;">
+    Le module Branding existant supporte deja les couleurs personnalisees
+  </div>
+</div>
+
+<script>
+  // Tab switching
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // Theme switcher
+  const themes = {
+    default: { primary: '#2563eb', primaryLight: '#eff6ff', bg: '#f4f5f7', panel: '#ffffff', text: '#1e293b', textMuted: '#64748b', border: '#e2e8f0', sidebarBg: '#ffffff', sidebarText: null },
+    emerald: { primary: '#059669', primaryLight: '#ecfdf5', bg: '#f0fdf4', panel: '#ffffff', text: '#1e293b', textMuted: '#64748b', border: '#d1fae5', sidebarBg: '#ffffff', sidebarText: null },
+    purple: { primary: '#7c3aed', primaryLight: '#f5f3ff', bg: '#faf5ff', panel: '#ffffff', text: '#1e293b', textMuted: '#64748b', border: '#e9d5ff', sidebarBg: '#ffffff', sidebarText: null },
+    orange: { primary: '#ea580c', primaryLight: '#fff7ed', bg: '#fffbeb', panel: '#ffffff', text: '#1e293b', textMuted: '#64748b', border: '#fed7aa', sidebarBg: '#ffffff', sidebarText: null },
+    slate: { primary: '#475569', primaryLight: '#f1f5f9', bg: '#f8fafc', panel: '#ffffff', text: '#0f172a', textMuted: '#64748b', border: '#cbd5e1', sidebarBg: '#1e293b', sidebarText: '#e2e8f0' },
+    dark: { primary: '#60a5fa', primaryLight: '#1e3a5f', bg: '#0f172a', panel: '#1e293b', text: '#e2e8f0', textMuted: '#94a3b8', border: '#334155', sidebarBg: '#0f172a', sidebarText: '#e2e8f0' }
+  };
+
+  function setTheme(name) {
+    const t = themes[name];
+    const r = document.documentElement.style;
+    r.setProperty('--primary', t.primary);
+    r.setProperty('--primary-light', t.primaryLight);
+    r.setProperty('--bg', t.bg);
+    r.setProperty('--panel', t.panel);
+    r.setProperty('--text', t.text);
+    r.setProperty('--text-muted', t.textMuted);
+    r.setProperty('--border', t.border);
+
+    // Sidebar
+    const sidebar = document.querySelector('.sidebar');
+    if (t.sidebarBg) sidebar.style.background = t.sidebarBg;
+    else sidebar.style.background = '';
+    if (t.sidebarText) {
+      sidebar.style.color = t.sidebarText;
+      document.querySelector('.logo').style.color = t.sidebarText;
+      document.querySelectorAll('.sidebar-item').forEach(i => {
+        if (!i.classList.contains('active')) i.style.color = t.sidebarText;
+      });
+    } else {
+      sidebar.style.color = '';
+      document.querySelector('.logo').style.color = t.primary;
+      document.querySelectorAll('.sidebar-item').forEach(i => { i.style.color = ''; });
+    }
+
+    // Active state
+    document.querySelectorAll('.sidebar-item.active').forEach(i => {
+      i.style.color = t.primary;
+      i.style.borderRightColor = t.primary;
+      i.style.background = t.primaryLight;
+    });
+
+    // Badge updates
+    document.querySelectorAll('.badge-blue').forEach(b => {
+      b.style.background = t.primaryLight;
+      b.style.color = t.primary;
+    });
+
+    // Theme buttons border
+    document.querySelectorAll('.theme-btn').forEach(b => b.style.borderColor = 'transparent');
+    event.currentTarget.style.borderColor = t.primary;
+
+    // Switcher itself
+    const sw = document.getElementById('theme-switcher');
+    sw.style.background = t.panel;
+    sw.style.borderColor = t.border;
+    sw.style.color = t.text;
+  }
+</script>
+</body>
+</html>
