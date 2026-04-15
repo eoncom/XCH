@@ -15,7 +15,7 @@ export class PaginationDto {
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(500)
   pageSize?: number = 25;
 
   @ApiPropertyOptional({ description: 'Field to sort by' })
