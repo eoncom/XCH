@@ -27,7 +27,7 @@ import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
 import { floorPlansApi } from '@/lib/api/floor-plans';
-import { siteAccessApi, type UserSiteAccess, type ResourcePermissions, type ResourcePermissionLevel } from '@/lib/api/site-access';
+import { accessOverridesApi, userDelegationsApi, type AccessOverride, type OverrideEffect, type ResourcePermissionLevel, type UserDelegation } from '@/lib/api/site-access';
 import { usersApi } from '@/lib/api/users';
 import { useAuthStore } from '@/stores/auth-store';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -171,31 +171,61 @@ function AggregatedDocuments({ siteId }: { siteId: string }) {
   );
 }
 
-const RESOURCE_LABELS: Record<string, string> = {
-  sites: 'Site',
+const OVERRIDE_RESOURCE_LABELS: Record<string, string> = {
+  '*': 'Site entier',
   assets: 'Équipements',
   racks: 'Baies',
   tasks: 'Tâches',
-  floorPlans: 'Plans',
+  plans: 'Plans',
   contacts: 'Contacts',
+  expenses: 'Dépenses',
+  monitoring: 'Monitoring',
 };
 
-const RESOURCE_KEYS = ['sites', 'assets', 'racks', 'tasks', 'floorPlans', 'contacts'] as const;
+const OVERRIDE_RESOURCE_KEYS = ['*', 'assets', 'racks', 'tasks', 'plans', 'contacts', 'expenses', 'monitoring'] as const;
 
-function SiteAccessManager({ siteId }: { siteId: string }) {
+const DELEGATION_RIGHT_COLORS: Record<string, 'default' | 'secondary' | 'outline'> = {
+  MANAGE: 'default',
+  WRITE: 'secondary',
+  READ: 'outline',
+};
+
+interface AccessOverrideFormState {
+  userId: string;
+  resource: string;
+  effect: OverrideEffect;
+  permission: ResourcePermissionLevel;
+  label: string;
+  expiresAt: string;
+}
+
+const EMPTY_OVERRIDE_FORM: AccessOverrideFormState = {
+  userId: '',
+  resource: '*',
+  effect: 'ALLOW',
+  permission: 'READ',
+  label: '',
+  expiresAt: '',
+};
+
+function SiteAccessManager({ siteId, delegationId }: { siteId: string; delegationId?: string }) {
   const queryClient = useQueryClient();
-  const { user: currentUser } = useAuthStore();
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState('');
-  const [selectedAccessLevel, setSelectedAccessLevel] = useState<'READ' | 'WRITE'>('READ');
-  const [expandedAccessId, setExpandedAccessId] = useState<string | null>(null);
+  const [editingOverrideId, setEditingOverrideId] = useState<string | null>(null);
+  const [formState, setFormState] = useState<AccessOverrideFormState>(EMPTY_OVERRIDE_FORM);
 
   const { isManagerOrAbove: isAdmin } = usePermissions();
 
-  const { data: accessList = [], isLoading } = useQuery<UserSiteAccess[]>({
-    queryKey: ['site-access', siteId],
-    queryFn: () => siteAccessApi.listBySite(siteId),
+  const { data: overrides = [], isLoading: overridesLoading } = useQuery<AccessOverride[]>({
+    queryKey: ['access-overrides', siteId],
+    queryFn: () => accessOverridesApi.getBySite(siteId),
     enabled: isAdmin,
+  });
+
+  const { data: delegationUsers = [], isLoading: delegationLoading } = useQuery<UserDelegation[]>({
+    queryKey: ['user-delegations', delegationId],
+    queryFn: () => userDelegationsApi.getByDelegation(delegationId as string),
+    enabled: isAdmin && !!delegationId,
   });
 
   const { data: allUsers = [] } = useQuery({
@@ -204,86 +234,134 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
     enabled: isAdmin,
   });
 
-  // Filter out users that already have access
-  const availableUsers = allUsers.filter(
-    (u) => !accessList.some((a) => a.userId === u.id)
-  );
+  const usersById = useMemo(() => {
+    const map: Record<string, { id: string; name: string; email: string }> = {};
+    allUsers.forEach((u) => {
+      map[u.id] = { id: u.id, name: u.name, email: u.email };
+    });
+    return map;
+  }, [allUsers]);
 
-  const grantMutation = useMutation({
-    mutationFn: (data: { userId: string; siteId: string; accessLevel: 'READ' | 'WRITE' }) =>
-      siteAccessApi.grant(data),
+  const createMutation = useMutation({
+    mutationFn: (data: {
+      userId: string;
+      siteId: string;
+      resource: string;
+      effect: OverrideEffect;
+      permission?: ResourcePermissionLevel;
+      label?: string;
+      expiresAt?: string;
+    }) => accessOverridesApi.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['site-access', siteId] });
-      showToast.success('Accès accordé avec succès');
-      setShowAddDialog(false);
-      setSelectedUserId('');
-      setSelectedAccessLevel('READ');
+      queryClient.invalidateQueries({ queryKey: ['access-overrides', siteId] });
+      showToast.success('Exception créée');
+      closeDialog();
     },
     onError: () => {
-      showToast.error("Erreur lors de l'attribution de l'accès");
+      showToast.error("Erreur lors de la création de l'exception");
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, accessLevel, resourcePermissions }: { id: string; accessLevel?: 'READ' | 'WRITE'; resourcePermissions?: ResourcePermissions }) =>
-      siteAccessApi.update(id, { ...(accessLevel && { accessLevel }), ...(resourcePermissions !== undefined && { resourcePermissions }) }),
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: {
+        effect?: OverrideEffect;
+        permission?: ResourcePermissionLevel;
+        label?: string;
+        expiresAt?: string | null;
+      };
+    }) => accessOverridesApi.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['site-access', siteId] });
-      showToast.success('Permissions mises à jour');
+      queryClient.invalidateQueries({ queryKey: ['access-overrides', siteId] });
+      showToast.success('Exception mise à jour');
+      closeDialog();
     },
     onError: () => {
       showToast.error('Erreur lors de la mise à jour');
     },
   });
 
-  const revokeMutation = useMutation({
-    mutationFn: (accessId: string) => siteAccessApi.revoke(accessId),
+  const removeMutation = useMutation({
+    mutationFn: (id: string) => accessOverridesApi.remove(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['site-access', siteId] });
-      showToast.success('Accès révoqué');
+      queryClient.invalidateQueries({ queryKey: ['access-overrides', siteId] });
+      showToast.success('Exception supprimée');
     },
     onError: () => {
-      showToast.error("Erreur lors de la révocation de l'accès");
+      showToast.error('Erreur lors de la suppression');
     },
   });
 
-  const bulkGrantMutation = useMutation({
-    mutationFn: (data: { userIds: string[]; siteId: string; accessLevel: 'READ' | 'WRITE' }) =>
-      siteAccessApi.bulkGrant(data),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['site-access', siteId] });
-      showToast.success(`Accès accordé à ${result.granted} utilisateur(s)`);
-    },
-    onError: () => {
-      showToast.error("Erreur lors de l'attribution en masse");
-    },
-  });
-
-  const handleGrant = () => {
-    if (!selectedUserId) return;
-    grantMutation.mutate({
-      userId: selectedUserId,
-      siteId,
-      accessLevel: selectedAccessLevel,
-    });
+  const closeDialog = () => {
+    setShowAddDialog(false);
+    setEditingOverrideId(null);
+    setFormState(EMPTY_OVERRIDE_FORM);
   };
 
-  const handleGrantAllUsers = (accessLevel: 'READ' | 'WRITE') => {
-    const usersWithoutAccess = allUsers.filter((u) => !accessList.some((a) => a.userId === u.id));
-    if (usersWithoutAccess.length === 0) {
-      showToast.error('Tous les utilisateurs ont déjà accès');
-      return;
-    }
-    bulkGrantMutation.mutate({
-      userIds: usersWithoutAccess.map((u) => u.id),
-      siteId,
-      accessLevel,
+  const openCreateDialog = () => {
+    setEditingOverrideId(null);
+    setFormState(EMPTY_OVERRIDE_FORM);
+    setShowAddDialog(true);
+  };
+
+  const openEditDialog = (override: AccessOverride) => {
+    setEditingOverrideId(override.id);
+    setFormState({
+      userId: override.userId,
+      resource: override.resource,
+      effect: override.effect,
+      permission: (override.permission ?? 'READ') as ResourcePermissionLevel,
+      label: override.label ?? '',
+      expiresAt: override.expiresAt ? override.expiresAt.slice(0, 10) : '',
     });
+    setShowAddDialog(true);
+  };
+
+  const handleSubmit = () => {
+    if (!formState.userId || !formState.resource || !formState.effect) return;
+
+    const expiresAtIso = formState.expiresAt
+      ? new Date(formState.expiresAt).toISOString()
+      : undefined;
+
+    if (editingOverrideId) {
+      updateMutation.mutate({
+        id: editingOverrideId,
+        data: {
+          effect: formState.effect,
+          permission: formState.effect === 'ALLOW' ? formState.permission : undefined,
+          label: formState.label || undefined,
+          expiresAt: expiresAtIso ?? null,
+        },
+      });
+    } else {
+      createMutation.mutate({
+        userId: formState.userId,
+        siteId,
+        resource: formState.resource,
+        effect: formState.effect,
+        permission: formState.effect === 'ALLOW' ? formState.permission : undefined,
+        label: formState.label || undefined,
+        expiresAt: expiresAtIso,
+      });
+    }
+  };
+
+  const formatExpiresAt = (iso?: string | null) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
   if (!isAdmin) {
     return null;
   }
+
+  const isLoading = overridesLoading || delegationLoading;
 
   if (isLoading) {
     return (
@@ -295,168 +373,55 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
     );
   }
 
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+
   return (
     <>
+      {/* Delegation users (read-only) */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Droits d&apos;accès ({accessList.length})
-            </CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
-              Les utilisateurs avec le droit MANAGE ont accès à tous les sites. Les autres nécessitent un accès explicite.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => handleGrantAllUsers('WRITE')}
-              disabled={bulkGrantMutation.isPending}
-            >
-              {bulkGrantMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
-              Tous les utilisateurs
-            </Button>
-            <Button size="sm" onClick={() => setShowAddDialog(true)}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Ajouter
-            </Button>
-          </div>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Utilisateurs avec accès délégation ({delegationUsers.length})
+          </CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Ces utilisateurs ont accès à ce site via leur délégation. Gérez les droits de délégation depuis la page Administration.
+          </p>
         </CardHeader>
         <CardContent>
-          {accessList.length > 0 ? (
-            <div className="space-y-3">
-              {accessList.map((access) => {
-                const isExpanded = expandedAccessId === access.id;
-                const resPerms = (access.resourcePermissions || {}) as ResourcePermissions;
-                const hasCustomPerms = Object.keys(resPerms).length > 0;
-
+          {!delegationId ? (
+            <div className="text-center py-8">
+              <ShieldAlert className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+              <p className="text-muted-foreground mb-2">Ce site n&apos;est rattaché à aucune délégation</p>
+              <p className="text-xs text-muted-foreground">
+                Seuls les super-administrateurs peuvent accéder à ce site tant qu&apos;aucune délégation n&apos;est configurée.
+              </p>
+            </div>
+          ) : delegationUsers.length > 0 ? (
+            <div className="space-y-2">
+              {delegationUsers.map((ud) => {
+                const userInfo = usersById[ud.userId];
+                const displayName = userInfo?.name ?? ud.userId;
+                const displayEmail = userInfo?.email ?? '';
                 return (
-                  <div key={access.id} className="border rounded-lg overflow-hidden">
-                    <div className="flex items-center justify-between p-3 hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
-                          <User className="h-4 w-4 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">{access.user?.name}</p>
-                          <p className="text-xs text-muted-foreground">{access.user?.email}</p>
-                        </div>
-                        <Badge variant="outline" className="text-xs">
-                          {access.level || 'READ'}
-                        </Badge>
-                        {hasCustomPerms && (
-                          <Badge variant="secondary" className="text-xs">
-                            <Settings className="h-3 w-3 mr-1" />
-                            Personnalisé
-                          </Badge>
-                        )}
+                  <div
+                    key={ud.id}
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+                        <User className="h-4 w-4 text-primary" />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Select
-                          value={access.accessLevel}
-                          onValueChange={(value: 'READ' | 'WRITE') =>
-                            updateMutation.mutate({ id: access.id, accessLevel: value })
-                          }
-                        >
-                          <SelectTrigger className="w-[120px] h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="READ">
-                              <span className="flex items-center gap-1">
-                                <Lock className="h-3 w-3" /> Lecture
-                              </span>
-                            </SelectItem>
-                            <SelectItem value="WRITE">
-                              <span className="flex items-center gap-1">
-                                <Unlock className="h-3 w-3" /> Écriture
-                              </span>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => setExpandedAccessId(isExpanded ? null : access.id)}
-                          title="Permissions par ressource"
-                        >
-                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => revokeMutation.mutate(access.id)}
-                          disabled={revokeMutation.isPending}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                      <div>
+                        <p className="font-medium text-sm">{displayName}</p>
+                        {displayEmail && (
+                          <p className="text-xs text-muted-foreground">{displayEmail}</p>
+                        )}
                       </div>
                     </div>
-
-                    {/* Per-resource permissions panel */}
-                    {isExpanded && (
-                      <div className="border-t bg-muted/30 p-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-2">
-                          Permissions par ressource (vide = hérite du niveau global)
-                        </p>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                          {RESOURCE_KEYS.map((resource) => {
-                            const currentLevel = resPerms[resource] || '';
-                            return (
-                              <div key={resource} className="flex items-center gap-2">
-                                <span className="text-xs font-medium w-20">{RESOURCE_LABELS[resource]}</span>
-                                <Select
-                                  value={currentLevel || 'inherit'}
-                                  onValueChange={(value: string) => {
-                                    const newPerms = { ...resPerms };
-                                    if (value === 'inherit') {
-                                      delete newPerms[resource];
-                                    } else {
-                                      newPerms[resource] = value as ResourcePermissionLevel;
-                                    }
-                                    updateMutation.mutate({
-                                      id: access.id,
-                                      resourcePermissions: newPerms,
-                                    });
-                                  }}
-                                >
-                                  <SelectTrigger className="h-7 text-xs flex-1">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="inherit">
-                                      <span className="text-muted-foreground">— Hérité</span>
-                                    </SelectItem>
-                                    <SelectItem value="NONE">Aucun</SelectItem>
-                                    <SelectItem value="READ">Lecture</SelectItem>
-                                    <SelectItem value="WRITE">Écriture</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {hasCustomPerms && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="mt-2 text-xs"
-                            onClick={() => {
-                              updateMutation.mutate({
-                                id: access.id,
-                                resourcePermissions: {},
-                              });
-                            }}
-                          >
-                            Réinitialiser les permissions
-                          </Button>
-                        )}
-                      </div>
-                    )}
+                    <Badge variant={DELEGATION_RIGHT_COLORS[ud.right] ?? 'outline'} className="text-xs">
+                      {ud.right}
+                    </Badge>
                   </div>
                 );
               })}
@@ -464,80 +429,264 @@ function SiteAccessManager({ siteId }: { siteId: string }) {
           ) : (
             <div className="text-center py-8">
               <Shield className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-              <p className="text-muted-foreground mb-2">Aucun accès spécifique configuré</p>
+              <p className="text-muted-foreground mb-2">Aucun utilisateur n&apos;a de droit sur cette délégation</p>
               <p className="text-xs text-muted-foreground">
-                Les administrateurs et managers ont accès à tous les sites par défaut.
-                Ajoutez des accès pour les techniciens et observateurs.
+                Ajoutez des droits de délégation depuis la page Administration pour donner accès à ce site.
               </p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Add Access Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      {/* Access overrides */}
+      <Card className="mt-4">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5" />
+              Exceptions d&apos;accès ({overrides.length})
+            </CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Autorisations explicites (ALLOW) ou interdictions (DENY) par utilisateur et ressource, en plus des droits délégation.
+            </p>
+          </div>
+          <Button size="sm" onClick={openCreateDialog}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Ajouter une exception
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {overrides.length > 0 ? (
+            <div className="space-y-2">
+              {overrides.map((ov) => {
+                const userInfo = ov.user ?? usersById[ov.userId];
+                const displayName = userInfo?.name ?? ov.userId;
+                const displayEmail = userInfo?.email ?? '';
+                const resourceLabel = OVERRIDE_RESOURCE_LABELS[ov.resource] ?? ov.resource;
+                const expiresLabel = formatExpiresAt(ov.expiresAt);
+                return (
+                  <div
+                    key={ov.id}
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <User className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{displayName}</p>
+                        {displayEmail && (
+                          <p className="text-xs text-muted-foreground truncate">{displayEmail}</p>
+                        )}
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <Badge variant="outline" className="text-xs">
+                            {resourceLabel}
+                          </Badge>
+                          {ov.effect === 'ALLOW' ? (
+                            <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-200">
+                              <Unlock className="h-3 w-3 mr-1" /> ALLOW
+                            </Badge>
+                          ) : (
+                            <Badge className="text-xs bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-900 dark:text-red-200">
+                              <Lock className="h-3 w-3 mr-1" /> DENY
+                            </Badge>
+                          )}
+                          {ov.effect === 'ALLOW' && ov.permission && (
+                            <Badge variant="secondary" className="text-xs">
+                              {ov.permission}
+                            </Badge>
+                          )}
+                          {expiresLabel && (
+                            <Badge variant="outline" className="text-xs">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Jusqu&apos;au {expiresLabel}
+                            </Badge>
+                          )}
+                          {ov.label && (
+                            <span className="text-xs text-muted-foreground truncate">
+                              « {ov.label} »
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => openEditDialog(ov)}
+                        title="Modifier"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => removeMutation.mutate(ov.id)}
+                        disabled={removeMutation.isPending}
+                        title="Supprimer"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Shield className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+              <p className="text-muted-foreground mb-2">Aucune exception configurée</p>
+              <p className="text-xs text-muted-foreground">
+                Les exceptions permettent d&apos;autoriser un utilisateur externe à la délégation,
+                ou au contraire de restreindre un utilisateur qui y a accès.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add / Edit override dialog */}
+      <Dialog
+        open={showAddDialog}
+        onOpenChange={(open: boolean) => {
+          if (!open) closeDialog();
+          else setShowAddDialog(true);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ajouter un accès au site</DialogTitle>
+            <DialogTitle>
+              {editingOverrideId ? "Modifier l'exception d'accès" : "Ajouter une exception d'accès"}
+            </DialogTitle>
             <DialogDescription>
-              Sélectionnez un utilisateur et le niveau d&apos;accès à accorder.
+              {editingOverrideId
+                ? 'Ajustez les paramètres de cette exception.'
+                : "Créez une autorisation explicite ou une interdiction pour un utilisateur sur ce site."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Utilisateur</label>
-              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+              <Select
+                value={formState.userId}
+                onValueChange={(v) => setFormState((s) => ({ ...s, userId: v }))}
+                disabled={!!editingOverrideId}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Sélectionner un utilisateur..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableUsers.map((u) => (
+                  {allUsers.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
                       <span className="flex items-center gap-2">
                         {u.name} <span className="text-muted-foreground text-xs">({u.email})</span>
                       </span>
                     </SelectItem>
                   ))}
-                  {availableUsers.length === 0 && (
-                    <div className="p-2 text-sm text-muted-foreground text-center">
-                      Tous les utilisateurs ont déjà accès
-                    </div>
-                  )}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Niveau d&apos;accès</label>
-              <Select value={selectedAccessLevel} onValueChange={(v: 'READ' | 'WRITE') => setSelectedAccessLevel(v)}>
+              <label className="text-sm font-medium">Ressource</label>
+              <Select
+                value={formState.resource}
+                onValueChange={(v) => setFormState((s) => ({ ...s, resource: v }))}
+                disabled={!!editingOverrideId}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="READ">
+                  {OVERRIDE_RESOURCE_KEYS.map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {OVERRIDE_RESOURCE_LABELS[key]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Effet</label>
+              <Select
+                value={formState.effect}
+                onValueChange={(v: OverrideEffect) => setFormState((s) => ({ ...s, effect: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALLOW">
                     <span className="flex items-center gap-2">
-                      <Lock className="h-3 w-3" /> Lecture seule — peut consulter le site
+                      <Unlock className="h-3 w-3" /> ALLOW — autoriser l&apos;accès
                     </span>
                   </SelectItem>
-                  <SelectItem value="WRITE">
+                  <SelectItem value="DENY">
                     <span className="flex items-center gap-2">
-                      <Unlock className="h-3 w-3" /> Lecture/Écriture — peut modifier le site
+                      <Lock className="h-3 w-3" /> DENY — interdire l&apos;accès
                     </span>
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {formState.effect === 'ALLOW' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Permission</label>
+                <Select
+                  value={formState.permission}
+                  onValueChange={(v: ResourcePermissionLevel) =>
+                    setFormState((s) => ({ ...s, permission: v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="READ">READ — lecture seule</SelectItem>
+                    <SelectItem value="WRITE">WRITE — lecture et écriture</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Libellé (optionnel)</label>
+              <Input
+                value={formState.label}
+                onChange={(e) => setFormState((s) => ({ ...s, label: e.target.value }))}
+                placeholder="Ex: Intervention ponctuelle — ticket #1234"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Expire le (optionnel)</label>
+              <Input
+                type="date"
+                value={formState.expiresAt}
+                onChange={(e) => setFormState((s) => ({ ...s, expiresAt: e.target.value }))}
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+            <Button variant="outline" onClick={closeDialog}>
               Annuler
             </Button>
             <Button
-              onClick={handleGrant}
-              disabled={!selectedUserId || grantMutation.isPending}
+              onClick={handleSubmit}
+              disabled={
+                !formState.userId ||
+                !formState.resource ||
+                !formState.effect ||
+                isSaving
+              }
             >
-              {grantMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Accorder l&apos;accès
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {editingOverrideId ? 'Enregistrer' : 'Créer l\'exception'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1076,7 +1225,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
       });
       showToast.success('Export téléchargé avec succès');
     } catch (error) {
-      showToast.error("Erreur lors de l'export du site");
+      console.error('Export error:', error);
+      const msg = error instanceof Error ? error.message : String(error);
+      showToast.error(`Erreur lors de l'export du site: ${msg}`);
     } finally {
       setIsExporting(false);
       setExportProgress('');
@@ -2135,7 +2286,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
         {/* TAB: ACCÈS                     */}
         {/* ============================== */}
         <TabsContent value="access">
-          <SiteAccessManager siteId={id} />
+          <SiteAccessManager siteId={id} delegationId={site?.delegationId} />
         </TabsContent>
 
         {/* ============================== */}

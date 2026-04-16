@@ -11,7 +11,8 @@ import { racksApi } from '@/lib/api/racks';
 import { SiteFilterSelect } from '@/components/ui/grouped-site-selector';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Server, MapPin } from 'lucide-react';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Plus, Search, Server, MapPin, LayoutGrid, List } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
@@ -37,6 +38,7 @@ export default function RacksPage() {
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
@@ -231,7 +233,66 @@ export default function RacksPage() {
         </Select>
       </div>
 
-      {/* Racks Grid */}
+      {/* View mode toggle */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{filteredRacks.length} baie(s)</p>
+        <div className="flex items-center gap-1 border rounded-lg p-1">
+          <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')}>
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')}>
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Racks List/Grid */}
+      {viewMode === 'list' ? (
+        <Card>
+          <CardContent className="pt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nom</TableHead>
+                  <TableHead className="hidden md:table-cell">Emplacement</TableHead>
+                  <TableHead className="hidden md:table-cell">Site</TableHead>
+                  <TableHead>Taille</TableHead>
+                  <TableHead>Équipements</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRacks.map((rack) => (
+                  <TableRow key={rack.id}>
+                    <TableCell className="font-medium">
+                      <Link href={`/dashboard/racks/${rack.id}`} className="hover:underline">
+                        {rack.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
+                      {rack.location || '—'}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {rack.site ? (
+                        <Link href={`/dashboard/sites/${rack.siteId}`} className="text-primary hover:underline text-sm">
+                          {rack.site.name}
+                        </Link>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell>{rack.heightU}U</TableCell>
+                    <TableCell>{rack.assets?.length || 0}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link href={`/dashboard/racks/${rack.id}`}>Voir</Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : (
       <div data-testid="racks-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredRacks.map((rack) => {
           const occupiedUnits = rack.assets?.reduce(
@@ -312,6 +373,7 @@ export default function RacksPage() {
           );
         })}
       </div>
+      )}
 
       {filteredRacks.length === 0 && (
         <EmptyState

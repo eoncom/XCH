@@ -17,7 +17,8 @@ import {
 import { tasksApi } from '@/lib/api/tasks';
 import { sitesApi } from '@/lib/api/sites';
 import { usersApi } from '@/lib/api/users';
-import { Plus, Calendar, User, AlertCircle, Clock, AlertTriangle, Search, X, ClipboardList } from 'lucide-react';
+import { Plus, Calendar, User, AlertCircle, Clock, AlertTriangle, Search, X, ClipboardList, LayoutGrid, List, Columns } from 'lucide-react';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ExportMenu } from '@/components/ui/export-menu';
@@ -43,7 +44,7 @@ function isTaskDueSoon(task: Task): boolean {
   return diffDays <= 2;
 }
 
-import { taskStatusLabels, taskPriorityLabels, taskPriorityColors } from '@/lib/status-labels';
+import { taskStatusLabels, taskStatusColors, taskPriorityLabels, taskPriorityColors } from '@/lib/status-labels';
 
 const kanbanColumns: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE'];
 
@@ -203,6 +204,7 @@ export default function TasksPage() {
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [assignedFilter, setAssignedFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'grid'>('kanban');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
@@ -414,18 +416,149 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Kanban Board */}
-      <div data-testid="kanban-board" className="flex gap-6 overflow-x-auto pb-4">
-        {kanbanColumns.map((status) => (
-          <KanbanColumn
-            key={status}
-            status={status}
-            tasks={getTasksByStatus(status)}
-            onTaskClick={handleTaskClick}
-            onDrop={handleDrop}
-          />
-        ))}
+      {/* View mode toggle */}
+      <div className="flex items-center justify-end">
+        <div className="flex items-center gap-1 border rounded-lg p-1">
+          <Button variant={viewMode === 'kanban' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('kanban')} title="Kanban">
+            <Columns className="h-4 w-4" />
+          </Button>
+          <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')} title="Grille">
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')} title="Liste">
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      {/* Kanban / List / Grid */}
+      {viewMode === 'kanban' && (
+        <div data-testid="kanban-board" className="flex gap-6 overflow-x-auto pb-4">
+          {kanbanColumns.map((status) => (
+            <KanbanColumn
+              key={status}
+              status={status}
+              tasks={getTasksByStatus(status)}
+              onTaskClick={handleTaskClick}
+              onDrop={handleDrop}
+            />
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'list' && (
+        <Card>
+          <CardContent className="pt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Titre</TableHead>
+                  <TableHead>Priorité</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead className="hidden md:table-cell">Assigné à</TableHead>
+                  <TableHead className="hidden md:table-cell">Site</TableHead>
+                  <TableHead className="hidden lg:table-cell">Date limite</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTasks.map((task) => {
+                  const overdue = isTaskOverdue(task);
+                  return (
+                    <TableRow key={task.id} className={overdue ? 'bg-red-50/50 dark:bg-red-950/20' : ''}>
+                      <TableCell className="font-medium">
+                        <Link href={`/dashboard/tasks/${task.id}`} className="hover:underline">
+                          {task.title}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={taskPriorityColors[task.priority] as 'secondary' | 'default' | 'warning' | 'error'}>
+                          {taskPriorityLabels[task.priority]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={taskStatusColors[task.status] as 'secondary' | 'default' | 'warning' | 'error' | 'success'}>
+                          {taskStatusLabels[task.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {task.assignedUser?.name || <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {task.site?.name || <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm">
+                        {task.dueDate ? (
+                          <span className={overdue ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
+                            {new Date(task.dueDate).toLocaleDateString('fr-FR')}
+                          </span>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/dashboard/tasks/${task.id}`}>Voir</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {viewMode === 'grid' && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredTasks.map((task) => {
+            const overdue = isTaskOverdue(task);
+            const dueSoon = isTaskDueSoon(task);
+            return (
+              <Card
+                key={task.id}
+                className={`hover:shadow-md transition-shadow cursor-pointer ${
+                  overdue ? 'border-red-400 dark:border-red-600' :
+                  dueSoon ? 'border-amber-400 dark:border-amber-600' : ''
+                }`}
+                onClick={() => handleTaskClick(task)}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-base flex-1">{task.title}</CardTitle>
+                    <Badge variant={taskPriorityColors[task.priority] as 'secondary' | 'default' | 'warning' | 'error'}>
+                      {taskPriorityLabels[task.priority]}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div>
+                    <Badge variant={taskStatusColors[task.status] as 'secondary' | 'default' | 'warning' | 'error' | 'success'}>
+                      {taskStatusLabels[task.status]}
+                    </Badge>
+                  </div>
+                  {task.assignedUser && (
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <User className="h-3.5 w-3.5" />
+                      {task.assignedUser.name}
+                    </div>
+                  )}
+                  {task.site && (
+                    <div className="text-muted-foreground text-xs">
+                      Site: {task.site.name}
+                    </div>
+                  )}
+                  {task.dueDate && (
+                    <div className={`flex items-center gap-1.5 text-xs ${overdue ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
+                      <Calendar className="h-3.5 w-3.5" />
+                      {new Date(task.dueDate).toLocaleDateString('fr-FR')}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {meta && <Pagination meta={meta} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />}
 

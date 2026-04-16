@@ -17,7 +17,8 @@ import {
 import { floorPlansApi } from '@/lib/api/floor-plans';
 import { sitesApi } from '@/lib/api/sites';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
-import { Plus, Search, FileImage, MapPin, Layers } from 'lucide-react';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Plus, Search, FileImage, MapPin, Layers, LayoutGrid, List } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
@@ -59,6 +60,7 @@ function getVersionCounts(plans: FloorPlan[]): Map<string, number> {
 export default function FloorPlansPage() {
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
@@ -147,7 +149,84 @@ export default function FloorPlansPage() {
         </Select>
       </div>
 
-      {/* Floor Plans Grid */}
+      {/* View mode toggle */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{filteredFloorPlans.length} plan(s)</p>
+        <div className="flex items-center gap-1 border rounded-lg p-1">
+          <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')}>
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')}>
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Floor Plans List/Grid */}
+      {viewMode === 'list' ? (
+        <Card>
+          <CardContent className="pt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Titre</TableHead>
+                  <TableHead className="hidden md:table-cell">Site</TableHead>
+                  <TableHead className="hidden md:table-cell">Bâtiment / Étage</TableHead>
+                  <TableHead>Version</TableHead>
+                  <TableHead>Pins</TableHead>
+                  <TableHead className="hidden lg:table-cell">Type</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredFloorPlans.map((plan) => {
+                  const groupKey = plan.planGroupId || plan.id;
+                  const totalVersions = versionCounts.get(groupKey) || 1;
+                  const buildingFloor = [
+                    plan.building ? `Bâtiment ${plan.building}` : null,
+                    plan.floor ? `Étage ${plan.floor}` : null,
+                  ].filter(Boolean).join(' - ');
+                  return (
+                    <TableRow key={plan.id}>
+                      <TableCell className="font-medium">
+                        <Link href={`/dashboard/floor-plans/${plan.id}`} className="hover:underline">
+                          {plan.title}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {plan.site?.name || <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                        {buildingFloor || '—'}
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-1.5">
+                          v{plan.version}
+                          {totalVersions > 1 && (
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                              <Layers className="h-3 w-3 mr-1" />
+                              {totalVersions}
+                            </Badge>
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell>{plan.pins?.length || 0}</TableCell>
+                      <TableCell className="hidden lg:table-cell text-muted-foreground text-xs font-mono">
+                        {plan.fileType || plan.mimeType || '—'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/dashboard/floor-plans/${plan.id}`}>Voir</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : (
       <div data-testid="floor-plans-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredFloorPlans.map((plan) => {
           const groupKey = plan.planGroupId || plan.id;
@@ -225,6 +304,7 @@ export default function FloorPlansPage() {
           );
         })}
       </div>
+      )}
 
       {filteredFloorPlans.length === 0 && (
         <EmptyState
