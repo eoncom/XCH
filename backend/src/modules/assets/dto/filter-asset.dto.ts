@@ -1,6 +1,5 @@
-import { IsString, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { AssetType, AssetStatus } from '@prisma/client';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 export class FilterAssetDto extends PaginationDto {
@@ -9,15 +8,15 @@ export class FilterAssetDto extends PaginationDto {
   @IsOptional()
   search?: string;
 
-  @ApiProperty({ enum: AssetType, required: false })
-  @IsEnum(AssetType)
+  @ApiProperty({ required: false, description: 'Asset type (dynamic via EnumLabel)' })
+  @IsString()
   @IsOptional()
-  type?: AssetType;
+  type?: string;
 
-  @ApiProperty({ enum: AssetStatus, required: false })
-  @IsEnum(AssetStatus)
+  @ApiProperty({ required: false, description: 'Asset status (dynamic via EnumLabel)' })
+  @IsString()
   @IsOptional()
-  status?: AssetStatus;
+  status?: string;
 
   @ApiProperty({ required: false })
   @IsString()

@@ -455,7 +455,7 @@ export default function AssetsPage() {
                         ) : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={assetStatusColors[asset.status]}>
+                        <Badge variant={(assetStatusColors[asset.status] as any) || 'secondary'}>
                           {assetStatusLabels[asset.status]}
                         </Badge>
                       </TableCell>
@@ -519,7 +519,7 @@ export default function AssetsPage() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        <Badge variant={assetStatusColors[asset.status]}>
+                        <Badge variant={(assetStatusColors[asset.status] as any) || 'secondary'}>
                           {assetStatusLabels[asset.status]}
                         </Badge>
                         <WarrantyBadge warrantyEnd={asset.warrantyEnd} />

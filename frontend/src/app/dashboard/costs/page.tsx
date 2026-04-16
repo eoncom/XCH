@@ -141,6 +141,12 @@ export default function CostsPage() {
               Rapports
             </Link>
           </Button>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/costs/budgets">
+              <DollarSign className="mr-2 h-4 w-4" />
+              Budgets
+            </Link>
+          </Button>
           {canCreate('expenses') && (
             <Button asChild>
               <Link href="/dashboard/costs/new">

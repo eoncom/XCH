@@ -16,11 +16,11 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network, X, Bell } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network, X, Bell, Zap } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 import Link from 'next/link';
 import { useTenantModules } from '@/hooks/useTenantModules';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
@@ -41,6 +41,7 @@ import { cn } from '@/lib/utils';
 import { authApi } from '@/lib/api/auth';
 import { integrationsApi, type IntegrationConfigResponse } from '@/lib/api/integrations';
 import { backupApi, type BackupMetadata } from '@/lib/api/backup';
+import { assetModelsApi, type AssetModel, type CreateAssetModelData } from '@/lib/api/asset-models';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { OrganizationTab } from './organization-tab';
 
@@ -143,12 +144,28 @@ const ENUM_TYPE_LABELS: Record<string, string> = {
 };
 
 function EnumLabelsTabContent() {
-  const { labels, isLoading, updateLabel, isUpdating, resetLabels, isResetting } = useEnumLabels();
+  const {
+    isLoading,
+    updateLabel,
+    isUpdating,
+    resetLabels,
+    isResetting,
+    getAllLabelsForType,
+    createValue,
+    isCreating,
+    deleteValue,
+    isDeleting,
+  } = useEnumLabels();
   const [activeType, setActiveType] = useState('AssetType');
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editColor, setEditColor] = useState('');
   const [showResetDialog, setShowResetDialog] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newValue, setNewValue] = useState('');
+  const [newLabel, setNewLabel] = useState('');
+  const [newColor, setNewColor] = useState('#9ca3af');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -160,7 +177,7 @@ function EnumLabelsTabContent() {
     );
   }
 
-  const currentItems = labels[activeType] || [];
+  const currentItems = getAllLabelsForType(activeType);
 
   const handleStartEdit = (enumValue: string, currentLabel: string, currentColor: string | null) => {
     setEditingItem(enumValue);
@@ -189,6 +206,58 @@ function EnumLabelsTabContent() {
     setShowResetDialog(false);
   };
 
+  const resetAddForm = () => {
+    setShowAddForm(false);
+    setNewValue('');
+    setNewLabel('');
+    setNewColor('#9ca3af');
+  };
+
+  const handleCreate = async () => {
+    const trimmedValue = newValue.trim();
+    const trimmedLabel = newLabel.trim();
+    if (!trimmedValue || !trimmedLabel) {
+      toast.error('La valeur et le label sont requis');
+      return;
+    }
+    if (!/^[A-Z][A-Z0-9_]*$/.test(trimmedValue)) {
+      toast.error('La valeur doit être en UPPER_SNAKE_CASE (ex: MY_VALUE)');
+      return;
+    }
+    try {
+      await createValue({
+        enumType: activeType,
+        enumValue: trimmedValue,
+        label: trimmedLabel,
+        color: newColor,
+      });
+      toast.success('Valeur créée');
+      resetAddForm();
+    } catch (err: any) {
+      const status = err?.response?.status || err?.status;
+      if (status === 409) {
+        toast.error('Cette valeur existe déjà');
+      } else {
+        toast.error(err?.message || 'Erreur lors de la création');
+      }
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteValue(id);
+      toast.success('Valeur supprimée');
+      setDeleteConfirmId(null);
+    } catch (err: any) {
+      const status = err?.response?.status || err?.status;
+      if (status === 409) {
+        toast.error('Impossible de supprimer : cette valeur est utilisée par des enregistrements existants');
+      } else {
+        toast.error(err?.message || 'Erreur lors de la suppression');
+      }
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -208,7 +277,7 @@ function EnumLabelsTabContent() {
               key={key}
               variant={activeType === key ? 'default' : 'outline'}
               size="sm"
-              onClick={() => { setActiveType(key); setEditingItem(null); }}
+              onClick={() => { setActiveType(key); setEditingItem(null); resetAddForm(); }}
             >
               {label}
             </Button>
@@ -230,7 +299,10 @@ function EnumLabelsTabContent() {
           {currentItems.map((item) => (
             <div
               key={item.enumValue}
-              className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors"
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors",
+                !item.isActive && "opacity-50",
+              )}
             >
               {/* Color indicator */}
               <div
@@ -279,8 +351,13 @@ function EnumLabelsTabContent() {
                   {/* View mode */}
                   <span className="flex-1 text-sm font-medium">{item.label}</span>
                   <span className="text-xs text-muted-foreground font-mono">{item.enumValue}</span>
-                  {item.isCustom && (
-                    <Badge variant="outline" className="text-xs">Personnalisé</Badge>
+                  {item.isHidden && (
+                    <Badge variant="secondary" className="text-xs">Masqué</Badge>
+                  )}
+                  {item.isBuiltIn ? (
+                    <Badge variant="outline" className="text-xs border-blue-300 text-blue-600">Système</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs border-green-300 text-green-600">Personnalisé</Badge>
                   )}
                   <Button
                     size="sm"
@@ -290,11 +367,115 @@ function EnumLabelsTabContent() {
                   >
                     Modifier
                   </Button>
+                  {!item.isBuiltIn && item.id && (
+                    deleteConfirmId === item.id ? (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-8 text-xs"
+                          disabled={isDeleting}
+                          onClick={() => handleDelete(item.id!)}
+                        >
+                          {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirmer'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8"
+                          onClick={() => setDeleteConfirmId(null)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setDeleteConfirmId(item.id!)}
+                        title="Supprimer cette valeur"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )
+                  )}
                 </>
               )}
             </div>
           ))}
         </div>
+
+        {/* Add new value form */}
+        {showAddForm ? (
+          <div className="p-4 rounded-lg border border-dashed border-primary/40 bg-primary/5 space-y-3">
+            <p className="text-sm font-medium">Ajouter une valeur</p>
+            <div className="flex gap-3 flex-wrap items-end">
+              <div className="space-y-1">
+                <Label className="text-xs">Valeur (UPPER_SNAKE_CASE)</Label>
+                <Input
+                  value={newValue}
+                  onChange={(e) => setNewValue(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                  placeholder="EX: MY_VALUE"
+                  className="h-8 w-48 font-mono text-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreate();
+                    if (e.key === 'Escape') resetAddForm();
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Label</Label>
+                <Input
+                  value={newLabel}
+                  onChange={(e) => setNewLabel(e.target.value)}
+                  placeholder="Mon label"
+                  className="h-8 w-48"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreate();
+                    if (e.key === 'Escape') resetAddForm();
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Couleur</Label>
+                <input
+                  type="color"
+                  value={newColor}
+                  onChange={(e) => setNewColor(e.target.value)}
+                  className="w-8 h-8 rounded cursor-pointer border"
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={handleCreate}
+                disabled={isCreating}
+                className="h-8"
+              >
+                {isCreating ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
+                Créer
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={resetAddForm}
+                className="h-8"
+              >
+                Annuler
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAddForm(true)}
+            className="w-full border-dashed"
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Ajouter une valeur
+          </Button>
+        )}
 
         <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
           <p className="flex items-center gap-2">
@@ -1184,6 +1365,334 @@ function WarrantyThresholdsSection({ tenantData, setTenantData }: { tenantData: 
   );
 }
 
+// ========== ELECTRICITY CONFIG TAB ==========
+
+function ElectricityConfigTab() {
+  const [costPerKwh, setCostPerKwh] = useState<string>('0.20');
+  const [currency, setCurrency] = useState<string>('EUR');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    tenantsApi.getElectricityConfig()
+      .then((cfg) => {
+        setCostPerKwh(String(cfg.costPerKwh ?? 0.20));
+        setCurrency(cfg.currency || 'EUR');
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await tenantsApi.updateElectricityConfig({
+        costPerKwh: parseFloat(costPerKwh) || 0,
+        currency,
+      });
+      showToast.success('Configuration électricité mise à jour');
+    } catch {
+      showToast.error("Échec de l'enregistrement");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Zap className="h-5 w-5 text-yellow-500" />
+          Configuration électricité
+        </CardTitle>
+        <CardDescription>
+          Tarif kWh utilisé pour estimer la consommation et les coûts électriques par site.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Chargement...</p>
+        ) : (
+          <>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="costPerKwh">Coût par kWh</Label>
+                <Input
+                  id="costPerKwh"
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  value={costPerKwh}
+                  onChange={(e) => setCostPerKwh(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Ex: 0.20 pour 20 centimes le kWh</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="currency">Devise</Label>
+                <Input
+                  id="currency"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  placeholder="EUR"
+                />
+              </div>
+            </div>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Enregistrer
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ========== ASSET MODELS TAB ==========
+
+function AssetModelsTabContent() {
+  const queryClient = useQueryClient();
+  const [models, setModels] = useState<AssetModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [formData, setFormData] = useState<CreateAssetModelData>({
+    name: '', type: '', manufacturer: '', pricingMode: 'ONE_TIME',
+    acquisitionPrice: undefined, monthlyPrice: undefined, currency: 'EUR',
+    powerConsumption: undefined, weight: undefined, defaultUHeight: undefined, notes: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const loadModels = async () => {
+    setLoading(true);
+    try {
+      const res = await assetModelsApi.getAll({ pageSize: 200 });
+      setModels(res.data);
+    } catch { toast.error('Erreur chargement modèles'); }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadModels(); }, []);
+
+  const resetForm = () => {
+    setFormData({ name: '', type: '', manufacturer: '', pricingMode: 'ONE_TIME',
+      acquisitionPrice: undefined, monthlyPrice: undefined, currency: 'EUR',
+      powerConsumption: undefined, weight: undefined, defaultUHeight: undefined, notes: '' });
+    setShowAddForm(false);
+    setEditingId(null);
+  };
+
+  const handleSave = async () => {
+    if (!formData.name || !formData.type) { toast.error('Nom et type requis'); return; }
+    setSaving(true);
+    try {
+      if (editingId) {
+        await assetModelsApi.update(editingId, formData);
+        toast.success('Modèle mis à jour');
+      } else {
+        await assetModelsApi.create(formData);
+        toast.success('Modèle créé');
+      }
+      resetForm();
+      loadModels();
+    } catch (e: any) {
+      toast.error(e?.message || 'Erreur');
+    }
+    setSaving(false);
+  };
+
+  const handleEdit = (model: AssetModel) => {
+    setEditingId(model.id);
+    setFormData({
+      name: model.name, type: model.type, manufacturer: model.manufacturer || '',
+      pricingMode: model.pricingMode, acquisitionPrice: model.acquisitionPrice ?? undefined,
+      monthlyPrice: model.monthlyPrice ?? undefined, currency: model.currency,
+      powerConsumption: model.powerConsumption ?? undefined, weight: model.weight ?? undefined,
+      defaultUHeight: model.defaultUHeight ?? undefined, notes: model.notes || '',
+    });
+    setShowAddForm(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await assetModelsApi.delete(id);
+      toast.success('Modèle supprimé');
+      setDeleteConfirmId(null);
+      loadModels();
+    } catch (e: any) {
+      toast.error(e?.message || 'Impossible de supprimer ce modèle');
+      setDeleteConfirmId(null);
+    }
+  };
+
+  const formatPrice = (model: AssetModel) => {
+    if (model.pricingMode === 'MONTHLY' && model.monthlyPrice) {
+      return `${model.monthlyPrice} ${model.currency}/mois`;
+    }
+    if (model.acquisitionPrice) {
+      return `${model.acquisitionPrice} ${model.currency}`;
+    }
+    return '-';
+  };
+
+  if (loading) {
+    return <Card><CardContent className="py-8"><p className="text-center text-muted-foreground">Chargement des modèles...</p></CardContent></Card>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" />Modèles d'équipement</CardTitle>
+            <CardDescription>Catalogue de modèles avec prix pré-définis. Lors de la création d'un asset, sélectionner un modèle pré-remplit les champs.</CardDescription>
+          </div>
+          <Button onClick={() => { resetForm(); setShowAddForm(true); }} size="sm">
+            <Plus className="h-4 w-4 mr-1" />{editingId ? 'Modifier' : 'Ajouter un modèle'}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {showAddForm && (
+          <div className="mb-6 p-4 border rounded-lg bg-muted/30 space-y-4">
+            <h4 className="font-medium">{editingId ? 'Modifier le modèle' : 'Nouveau modèle'}</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label>Nom *</Label>
+                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="HP LaserJet Pro M404n" />
+              </div>
+              <div>
+                <Label>Fabricant</Label>
+                <Input value={formData.manufacturer || ''} onChange={(e) => setFormData({...formData, manufacturer: e.target.value})} placeholder="HP" />
+              </div>
+              <div>
+                <Label>Type *</Label>
+                <Input value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})} placeholder="PRINTER" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <Label>Mode tarification</Label>
+                <Select value={formData.pricingMode || 'ONE_TIME'} onValueChange={(v) => setFormData({...formData, pricingMode: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ONE_TIME">Achat unique</SelectItem>
+                    <SelectItem value="MONTHLY">Mensuel</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{formData.pricingMode === 'MONTHLY' ? 'Prix mensuel' : 'Prix d\'achat'}</Label>
+                <Input type="number" min="0" step="0.01"
+                  value={formData.pricingMode === 'MONTHLY' ? (formData.monthlyPrice ?? '') : (formData.acquisitionPrice ?? '')}
+                  onChange={(e) => {
+                    const val = e.target.value ? parseFloat(e.target.value) : undefined;
+                    if (formData.pricingMode === 'MONTHLY') setFormData({...formData, monthlyPrice: val});
+                    else setFormData({...formData, acquisitionPrice: val});
+                  }}
+                  placeholder="0.00" />
+              </div>
+              <div>
+                <Label>Devise</Label>
+                <Input value={formData.currency || 'EUR'} onChange={(e) => setFormData({...formData, currency: e.target.value})} />
+              </div>
+              <div>
+                <Label>Consommation (W)</Label>
+                <Input type="number" min="0" value={formData.powerConsumption ?? ''} onChange={(e) => setFormData({...formData, powerConsumption: e.target.value ? parseFloat(e.target.value) : undefined})} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label>Poids (kg)</Label>
+                <Input type="number" min="0" step="0.1" value={formData.weight ?? ''} onChange={(e) => setFormData({...formData, weight: e.target.value ? parseFloat(e.target.value) : undefined})} />
+              </div>
+              <div>
+                <Label>Hauteur U par défaut</Label>
+                <Input type="number" min="1" value={formData.defaultUHeight ?? ''} onChange={(e) => setFormData({...formData, defaultUHeight: e.target.value ? parseInt(e.target.value) : undefined})} />
+              </div>
+              <div>
+                <Label>Notes</Label>
+                <Input value={formData.notes || ''} onChange={(e) => setFormData({...formData, notes: e.target.value})} />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleSave} disabled={saving} size="sm">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Check className="h-4 w-4 mr-1" />}
+                {editingId ? 'Mettre à jour' : 'Créer'}
+              </Button>
+              <Button variant="outline" onClick={resetForm} size="sm">
+                <X className="h-4 w-4 mr-1" />Annuler
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {models.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">Aucun modèle d'équipement. Cliquez sur "Ajouter un modèle" pour commencer.</p>
+        ) : (
+          <div className="border rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left p-3 font-medium">Nom</th>
+                  <th className="text-left p-3 font-medium">Fabricant</th>
+                  <th className="text-left p-3 font-medium">Type</th>
+                  <th className="text-left p-3 font-medium">Prix</th>
+                  <th className="text-left p-3 font-medium">Watts</th>
+                  <th className="text-left p-3 font-medium">U</th>
+                  <th className="text-left p-3 font-medium">Assets</th>
+                  <th className="text-right p-3 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {models.map((model) => (
+                  <tr key={model.id} className="border-t hover:bg-muted/30">
+                    <td className="p-3 font-medium">{model.name}</td>
+                    <td className="p-3 text-muted-foreground">{model.manufacturer || '-'}</td>
+                    <td className="p-3"><Badge variant="secondary">{model.type}</Badge></td>
+                    <td className="p-3">{formatPrice(model)}</td>
+                    <td className="p-3">{model.powerConsumption ? `${model.powerConsumption}W` : '-'}</td>
+                    <td className="p-3">{model.defaultUHeight ?? '-'}</td>
+                    <td className="p-3">{model._count?.assets ?? 0}</td>
+                    <td className="p-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(model)}>
+                          <Palette className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-destructive"
+                          onClick={() => setDeleteConfirmId(model.id)}
+                          disabled={!!(model._count?.assets && model._count.assets > 0)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer ce modèle ?</AlertDialogTitle>
+            <AlertDialogDescription>Cette action est irréversible. Le modèle sera supprimé du catalogue.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const { user } = useAuthStore();
   const { isAdmin, isManagerOrAbove, isSuperAdmin, role: permRole } = usePermissions();
@@ -1630,6 +2139,18 @@ export default function SettingsPage() {
             <TabsTrigger value="types">
               <Tags className="mr-2 h-4 w-4" />
               Types
+            </TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger value="models">
+              <Database className="mr-2 h-4 w-4" />
+              Modèles
+            </TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger value="electricity">
+              <Zap className="mr-2 h-4 w-4" />
+              Électricité
             </TabsTrigger>
           )}
           {isAdmin && (
@@ -2227,6 +2748,16 @@ export default function SettingsPage() {
         {/* Types Tab */}
         <TabsContent value="types" className="space-y-6">
           <EnumLabelsTabContent />
+        </TabsContent>
+
+        {/* Models Tab */}
+        <TabsContent value="models" className="space-y-6">
+          <AssetModelsTabContent />
+        </TabsContent>
+
+        {/* Electricity Tab */}
+        <TabsContent value="electricity" className="space-y-6">
+          <ElectricityConfigTab />
         </TabsContent>
 
         {/* SSO Tab */}

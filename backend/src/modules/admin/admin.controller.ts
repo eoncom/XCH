@@ -3,17 +3,19 @@ import {
   Get,
   Put,
   Post,
+  Delete,
   Body,
+  Param,
   Query,
   Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { UpdateEnumLabelDto } from './dto/update-enum-label.dto';
+import { CreateEnumValueDto } from './dto/create-enum-value.dto';
 import { AuthRequest } from '../../types/request.interface';
-import { RequireRead, RequireWrite } from '../../common/decorators/require-right.decorator';
+import { RequireRead, RequireWrite, RequireManage } from '../../common/decorators/require-right.decorator';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
-import { RequireManage } from '../../common/decorators/require-right.decorator';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -36,7 +38,7 @@ export class AdminController {
 
   @Put('enum-labels')
   @RequireWrite()
-  @ApiOperation({ summary: 'Update or create a custom enum label (ADMIN only)' })
+  @ApiOperation({ summary: 'Update or create a custom enum label' })
   async updateEnumLabel(
     @Request() req: AuthRequest,
     @Body() dto: UpdateEnumLabelDto,
@@ -44,9 +46,29 @@ export class AdminController {
     return this.adminService.updateEnumLabel(req.user.tenantId, dto);
   }
 
+  @Post('enum-labels')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Create a new custom enum value (e.g., new asset type)' })
+  async createEnumValue(
+    @Request() req: AuthRequest,
+    @Body() dto: CreateEnumValueDto,
+  ) {
+    return this.adminService.createEnumValue(req.user.tenantId, dto);
+  }
+
+  @Delete('enum-labels/:id')
+  @RequireManage()
+  @ApiOperation({ summary: 'Delete a custom enum value (refuses if built-in or in use)' })
+  async deleteEnumValue(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+  ) {
+    return this.adminService.deleteEnumValue(req.user.tenantId, id);
+  }
+
   @Post('enum-labels/reset')
   @RequireWrite()
-  @ApiOperation({ summary: 'Reset enum labels to defaults (ADMIN only)' })
+  @ApiOperation({ summary: 'Reset enum labels to defaults' })
   @ApiQuery({ name: 'type', required: false, description: 'Reset only this enum type' })
   async resetEnumLabels(
     @Request() req: AuthRequest,

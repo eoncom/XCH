@@ -29,6 +29,12 @@ import { AdminModule } from './modules/admin/admin.module';
 import { BackupModule } from './modules/backup/backup.module';
 import { OrganizationModule } from './modules/organization/organization.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AssetModelsModule } from './modules/asset-models/asset-models.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
+import { ConnectivityModule } from './modules/connectivity/connectivity.module';
+import { ConsumptionModule } from './modules/consumption/consumption.module';
+import { SearchModule } from './modules/search/search.module';
+import { AuditModule } from './modules/audit/audit.module';
 
 @Module({
   imports: [
@@ -85,6 +91,12 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     AdminModule,
     BackupModule,
     NotificationsModule,
+    AssetModelsModule,
+    BudgetsModule,
+    ConnectivityModule,
+    ConsumptionModule,
+    SearchModule,
+    AuditModule,
   ],
   providers: [
     {

@@ -257,6 +257,15 @@ export class SitesService {
 
     const site = (sites as any[])[0];
 
+    // Load structured connectivity links (replaces legacy Site.connectivity JSON)
+    const connectivityLinks = await this.prisma.connectivityLink.findMany({
+      where: { siteId: id, tenantId },
+      include: {
+        expense: { select: { id: true, label: true, totalAmount: true, frequency: true } },
+      },
+      orderBy: [{ role: 'asc' }, { provider: 'asc' }],
+    });
+
     // Transform counts and org info to match structured format
     return {
       ...site,
@@ -267,6 +276,7 @@ export class SitesService {
         groupLabel: site.delegation_groupLabel,
         groupColor: site.delegation_groupColor,
       } : null,
+      connectivityLinks,
       _count: {
         assets: Number(site._count_assets) || 0,
         racks: Number(site._count_racks) || 0,

@@ -75,4 +75,11 @@ export const tenantsApi = {
 
   updateSecurityConfig: (data: Partial<SecurityConfig>) =>
     apiClient.patch<SecurityConfig>('/api/tenants/security-config', data),
+
+  // Electricity Configuration
+  getElectricityConfig: () =>
+    apiClient.get<{ costPerKwh: number; currency: string }>('/api/tenants/electricity-config'),
+
+  updateElectricityConfig: (data: { costPerKwh?: number; currency?: string }) =>
+    apiClient.patch<{ costPerKwh: number; currency: string }>('/api/tenants/electricity-config', data),
 };

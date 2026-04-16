@@ -1,13 +1,12 @@
-import { IsString, IsOptional, IsEnum, IsDateString } from 'class-validator';
-import { AssetType, AssetStatus } from '@prisma/client';
+import { IsString, IsOptional, IsDateString } from 'class-validator';
 
 export class ImportAssetRowDto {
-  @IsEnum(AssetType)
-  type: AssetType;
+  @IsString()
+  type: string;
 
-  @IsEnum(AssetStatus)
+  @IsString()
   @IsOptional()
-  status?: AssetStatus;
+  status?: string;
 
   @IsString()
   @IsOptional()

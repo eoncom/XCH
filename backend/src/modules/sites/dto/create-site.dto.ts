@@ -91,4 +91,9 @@ export class CreateSiteDto {
   @IsBoolean()
   @IsOptional()
   monitoringEnabled?: boolean;
+
+  @ApiProperty({ required: false, description: 'Auto-generate a monthly electricity expense for this site', default: false })
+  @IsBoolean()
+  @IsOptional()
+  autoGenerateElectricityExpense?: boolean;
 }

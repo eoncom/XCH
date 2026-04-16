@@ -258,4 +258,38 @@ export class TenantsService {
 
     return this.getSecurityConfig(tenantId);
   }
+
+  /**
+   * Get electricity configuration (cost per kWh, currency).
+   */
+  async getElectricityConfig(tenantId: string) {
+    const tenant = await this.findOne(tenantId);
+    const config = tenant.config as Record<string, any> | null;
+    const electricity = config?.electricity || {};
+    return {
+      costPerKwh: Number(electricity.costPerKwh) || 0.20,
+      currency: electricity.currency || 'EUR',
+    };
+  }
+
+  /**
+   * Update electricity configuration.
+   */
+  async updateElectricityConfig(tenantId: string, body: { costPerKwh?: number; currency?: string }) {
+    const tenant = await this.findOne(tenantId);
+    const config = (tenant.config as Record<string, any>) || {};
+    const existing = config.electricity || {};
+
+    const updated = {
+      costPerKwh: body.costPerKwh !== undefined ? Number(body.costPerKwh) : existing.costPerKwh ?? 0.20,
+      currency: body.currency ?? existing.currency ?? 'EUR',
+    };
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { config: { ...config, electricity: updated } },
+    });
+
+    return this.getElectricityConfig(tenantId);
+  }
 }

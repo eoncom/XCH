@@ -6,6 +6,8 @@ import { NotificationController } from './notification.controller';
 import { EmailChannel } from './channels/email.channel';
 import { TeamsChannel } from './channels/teams.channel';
 import { NotificationEmitter } from './notification-emitter';
+import { UserNotificationService } from './user-notification.service';
+import { UserNotificationController } from './user-notification.controller';
 
 /**
  * Global module — NotificationService can be injected anywhere
@@ -14,14 +16,20 @@ import { NotificationEmitter } from './notification-emitter';
 @Global()
 @Module({
   imports: [ConfigModule],
-  controllers: [NotificationController],
+  controllers: [NotificationController, UserNotificationController],
   providers: [
     NotificationService,
     NotificationConfigService,
     NotificationEmitter,
     EmailChannel,
     TeamsChannel,
+    UserNotificationService,
   ],
-  exports: [NotificationService, NotificationConfigService, NotificationEmitter],
+  exports: [
+    NotificationService,
+    NotificationConfigService,
+    NotificationEmitter,
+    UserNotificationService,
+  ],
 })
 export class NotificationsModule {}

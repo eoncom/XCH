@@ -71,6 +71,21 @@ export class ExpensesController {
     return this.expensesService.reportChargeback(req.user.tenantId, { dateFrom, dateTo });
   }
 
+  @Get('projection')
+  @RequireRead()
+  @ApiOperation({ summary: 'Project expenses over a date range (monthly breakdown)' })
+  @ApiQuery({ name: 'from', required: true, description: 'Start month YYYY-MM' })
+  @ApiQuery({ name: 'to', required: true, description: 'End month YYYY-MM' })
+  @ApiQuery({ name: 'groupBy', required: false, enum: ['type', 'delegation', 'site'] })
+  projection(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('groupBy') groupBy: 'type' | 'delegation' | 'site',
+    @Request() req: AuthRequest,
+  ) {
+    return this.expensesService.projection(req.user.tenantId, from, to, groupBy);
+  }
+
   @Get('export')
   @RequireRead()
   @ApiOperation({ summary: 'Export expenses to Excel' })

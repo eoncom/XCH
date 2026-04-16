@@ -1,6 +1,6 @@
 {
   "name": "xch",
-  "version": "1.0.3",
+  "version": "1.3.0",
   "description": "XCH - IT Management System for Temporary Sites",
   "scripts": {
     "update-docs": "bash scripts/auto-update-docs.sh",

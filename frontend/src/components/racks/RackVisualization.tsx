@@ -3,9 +3,19 @@
 import { Stage, Layer, Rect, Text, Group } from 'react-konva';
 import type { Rack, Asset } from '@/types';
 
+export interface OccupyingAssetInfo {
+  id: string;
+  name?: string;
+  manufacturer?: string;
+  model?: string;
+  serialNumber?: string;
+  rackPositionU: number;
+  rackHeightU: number;
+}
+
 interface RackVisualizationProps {
   rack: Rack;
-  onUnitClick?: (unitNumber: number) => void;
+  onUnitClick?: (unitNumber: number, occupyingAsset: OccupyingAssetInfo | null) => void;
   selectedUnit?: number;
 }
 
@@ -57,8 +67,30 @@ export default function RackVisualization({
           }
           stroke={isSelected ? '#2563eb' : '#d1d5db'}
           strokeWidth={isSelected ? 3 : 1}
-          onClick={() => onUnitClick?.(u)}
-          onTap={() => onUnitClick?.(u)}
+          onClick={() => {
+            const occupying = asset ? {
+              id: asset.id,
+              name: asset.name,
+              manufacturer: asset.manufacturer,
+              model: asset.model,
+              serialNumber: asset.serialNumber,
+              rackPositionU: asset.rackPositionU!,
+              rackHeightU: asset.rackHeightU!,
+            } : null;
+            onUnitClick?.(u, occupying);
+          }}
+          onTap={() => {
+            const occupying = asset ? {
+              id: asset.id,
+              name: asset.name,
+              manufacturer: asset.manufacturer,
+              model: asset.model,
+              serialNumber: asset.serialNumber,
+              rackPositionU: asset.rackPositionU!,
+              rackHeightU: asset.rackHeightU!,
+            } : null;
+            onUnitClick?.(u, occupying);
+          }}
           cornerRadius={2}
         />
 

@@ -98,4 +98,21 @@ export class TenantsController {
   ) {
     return this.tenantsService.updateSecurityConfig(req.user.tenantId, securityConfig);
   }
+
+  @Get('electricity-config')
+  @RequireRead()
+  @ApiOperation({ summary: 'Get electricity configuration (cost per kWh, currency)' })
+  getElectricityConfig(@Request() req: AuthRequest) {
+    return this.tenantsService.getElectricityConfig(req.user.tenantId);
+  }
+
+  @Patch('electricity-config')
+  @RequireManage()
+  @ApiOperation({ summary: 'Update electricity configuration' })
+  updateElectricityConfig(
+    @Body() body: { costPerKwh?: number; currency?: string },
+    @Request() req: AuthRequest,
+  ) {
+    return this.tenantsService.updateElectricityConfig(req.user.tenantId, body);
+  }
 }

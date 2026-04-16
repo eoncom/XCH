@@ -1,0 +1,38 @@
+import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ConsumptionService } from './consumption.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RequireRead } from '../../common/decorators/require-right.decorator';
+import { AuthRequest } from '../../types/request.interface';
+
+@ApiTags('consumption')
+@Controller('consumption')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+export class ConsumptionController {
+  constructor(private readonly service: ConsumptionService) {}
+
+  @Get('summary')
+  @RequireRead()
+  @ApiOperation({ summary: 'Tenant-wide electrical consumption summary (per site)' })
+  summary(@Request() req: AuthRequest) {
+    return this.service.summary(req.user.tenantId);
+  }
+
+  @Get()
+  @RequireRead()
+  @ApiOperation({ summary: 'Compute consumption for a site or rack' })
+  compute(
+    @Query('siteId') siteId: string | undefined,
+    @Query('rackId') rackId: string | undefined,
+    @Request() req: AuthRequest,
+  ) {
+    if (siteId) {
+      return this.service.computeSite(req.user.tenantId, siteId);
+    }
+    if (rackId) {
+      return this.service.computeRack(req.user.tenantId, rackId);
+    }
+    return this.service.summary(req.user.tenantId);
+  }
+}

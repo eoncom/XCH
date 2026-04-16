@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { UpdateEnumLabelDto } from './dto/update-enum-label.dto';
+import { CreateEnumValueDto } from './dto/create-enum-value.dto';
 import { PIN_TYPE_DEFAULTS } from '../../common/constants/pin-config';
 
-// Default labels for all enum types — MUST match Prisma schema enums exactly
+// Default labels for all enum types — built-in values
 const DEFAULT_LABELS: Record<string, Record<string, { label: string; color: string; icon?: string }>> = {
   AssetType: {
     PRINTER:      { label: 'Imprimante',          color: '#a855f7' },
@@ -40,40 +41,63 @@ export class AdminService {
 
   /**
    * Get all enum labels for a tenant + enum type.
-   * Returns custom labels merged with defaults.
+   * Returns built-in defaults merged with custom DB entries (including user-created values).
    */
   async getEnumLabels(tenantId: string, enumType?: string) {
-    // Get custom labels from DB
     const where: any = { tenantId };
     if (enumType) where.enumType = enumType;
 
-    const customLabels = await this.prisma.enumLabel.findMany({
+    const dbLabels = await this.prisma.enumLabel.findMany({
       where,
       orderBy: [{ sortOrder: 'asc' }, { enumValue: 'asc' }],
     });
 
-    // Build result: merge defaults with custom
     const result: Record<string, any[]> = {};
     const types = enumType ? [enumType] : Object.keys(DEFAULT_LABELS);
 
     for (const type of types) {
       const defaults = DEFAULT_LABELS[type] || {};
-      const customs = customLabels.filter((c) => c.enumType === type);
-      const customMap = new Map(customs.map((c) => [c.enumValue, c]));
+      const dbForType = dbLabels.filter((c) => c.enumType === type);
+      const dbMap = new Map(dbForType.map((c) => [c.enumValue, c]));
 
-      result[type] = Object.entries(defaults).map(([value, def], idx) => {
-        const custom = customMap.get(value);
+      // Start with built-in values
+      const items = Object.entries(defaults).map(([value, def], idx) => {
+        const db = dbMap.get(value);
         return {
+          id: db?.id || null,
           enumType: type,
           enumValue: value,
-          label: custom?.label || def.label,
-          color: custom?.color || def.color,
-          icon: custom?.icon || def.icon || null,
-          sortOrder: custom?.sortOrder ?? idx,
-          isHidden: custom?.isHidden ?? false,
-          isCustom: !!custom,
+          label: db?.label || def.label,
+          color: db?.color || def.color,
+          icon: db?.icon || def.icon || null,
+          sortOrder: db?.sortOrder ?? idx,
+          isHidden: db?.isHidden ?? false,
+          isBuiltIn: true,
+          isActive: db?.isActive ?? true,
         };
       });
+
+      // Add custom (non-built-in) values from DB
+      for (const db of dbForType) {
+        if (!defaults[db.enumValue]) {
+          items.push({
+            id: db.id,
+            enumType: type,
+            enumValue: db.enumValue,
+            label: db.label,
+            color: db.color || '#9ca3af',
+            icon: db.icon,
+            sortOrder: db.sortOrder,
+            isHidden: db.isHidden,
+            isBuiltIn: db.isBuiltIn,
+            isActive: db.isActive,
+          });
+        }
+      }
+
+      // Sort by sortOrder
+      items.sort((a, b) => a.sortOrder - b.sortOrder);
+      result[type] = items;
     }
 
     return result;
@@ -100,6 +124,8 @@ export class AdminService {
         color: dto.color,
         sortOrder: dto.sortOrder ?? 0,
         isHidden: dto.isHidden ?? false,
+        isBuiltIn: false,
+        isActive: true,
       },
       update: {
         label: dto.label,
@@ -109,6 +135,112 @@ export class AdminService {
         isHidden: dto.isHidden,
       },
     });
+  }
+
+  /**
+   * Create a new custom enum value (user-defined type/status/pin type).
+   */
+  async createEnumValue(tenantId: string, dto: CreateEnumValueDto) {
+    const validTypes = ['AssetType', 'AssetStatus', 'PinType'];
+    if (!validTypes.includes(dto.enumType)) {
+      throw new BadRequestException(`enumType must be one of: ${validTypes.join(', ')}`);
+    }
+
+    // Check if value already exists (built-in or custom)
+    const defaults = DEFAULT_LABELS[dto.enumType] || {};
+    if (defaults[dto.enumValue]) {
+      throw new ConflictException(`"${dto.enumValue}" is a built-in value for ${dto.enumType}`);
+    }
+
+    const existing = await this.prisma.enumLabel.findUnique({
+      where: {
+        tenantId_enumType_enumValue: {
+          tenantId,
+          enumType: dto.enumType,
+          enumValue: dto.enumValue,
+        },
+      },
+    });
+    if (existing) {
+      throw new ConflictException(`"${dto.enumValue}" already exists for ${dto.enumType}`);
+    }
+
+    // Get max sortOrder
+    const maxSort = await this.prisma.enumLabel.findFirst({
+      where: { tenantId, enumType: dto.enumType },
+      orderBy: { sortOrder: 'desc' },
+      select: { sortOrder: true },
+    });
+
+    return this.prisma.enumLabel.create({
+      data: {
+        tenantId,
+        enumType: dto.enumType,
+        enumValue: dto.enumValue,
+        label: dto.label,
+        icon: dto.icon || null,
+        color: dto.color || '#9ca3af',
+        sortOrder: (maxSort?.sortOrder ?? Object.keys(defaults).length) + 1,
+        isHidden: false,
+        isBuiltIn: false,
+        isActive: true,
+      },
+    });
+  }
+
+  /**
+   * Delete a custom enum value (refuses if built-in or currently used).
+   */
+  async deleteEnumValue(tenantId: string, id: string) {
+    const label = await this.prisma.enumLabel.findFirst({
+      where: { id, tenantId },
+    });
+    if (!label) {
+      throw new BadRequestException('Enum value not found');
+    }
+
+    // Cannot delete built-in values
+    if (label.isBuiltIn) {
+      throw new ConflictException('Cannot delete a built-in value. You can hide it instead.');
+    }
+
+    // Also refuse if it's a default value
+    const defaults = DEFAULT_LABELS[label.enumType] || {};
+    if (defaults[label.enumValue]) {
+      throw new ConflictException('Cannot delete a built-in value. You can hide it instead.');
+    }
+
+    // Check usage
+    const usageCount = await this.countUsage(tenantId, label.enumType, label.enumValue);
+    if (usageCount > 0) {
+      throw new ConflictException(
+        `Cannot delete "${label.enumValue}": used by ${usageCount} ${label.enumType === 'PinType' ? 'pin(s)' : 'asset(s)'}. Reassign them first.`,
+      );
+    }
+
+    await this.prisma.enumLabel.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  /**
+   * Count how many entities use a specific enum value.
+   */
+  async countUsage(tenantId: string, enumType: string, enumValue: string): Promise<number> {
+    if (enumType === 'AssetType') {
+      return this.prisma.asset.count({ where: { tenantId, type: enumValue } });
+    }
+    if (enumType === 'AssetStatus') {
+      return this.prisma.asset.count({ where: { tenantId, status: enumValue } });
+    }
+    if (enumType === 'PinType') {
+      return this.prisma.pin.count({
+        where: {
+          pinType: enumValue,
+          floorPlan: { site: { tenantId } },
+        },
+      });
+    }
+    return 0;
   }
 
   /**

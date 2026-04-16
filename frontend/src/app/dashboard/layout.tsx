@@ -20,6 +20,7 @@ import {
   Monitor,
   Database,
   Receipt,
+  Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,8 @@ import { useMemo } from 'react';
 import { useTenantModules } from '@/hooks/useTenantModules';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ShieldAlert } from 'lucide-react';
+import { GlobalSearch } from '@/components/layout/GlobalSearch';
+import { NotificationInbox } from '@/components/layout/NotificationInbox';
 
 // Navigation items with optional moduleKey for feature-flag filtering
 // permResource: if set, requires can(permResource, 'read') to show
@@ -58,10 +61,12 @@ const navigation: Array<{
   { name: 'Dashboard TV', href: '/tv', icon: Monitor, external: true },
   { name: 'Alertes', href: '/dashboard/alerts', icon: AlertTriangle, moduleKey: 'alerts' },
   { name: 'Coûts', href: '/dashboard/costs', icon: Receipt, moduleKey: 'costs', permResource: 'expenses' },
+  { name: 'Consommation', href: '/dashboard/consumption', icon: Zap, moduleKey: 'consumption' },
 ];
 
 const adminNavigation = [
   { name: 'Utilisateurs', href: '/dashboard/users', icon: Users },
+  { name: 'Journal d\'audit', href: '/dashboard/admin/audit', icon: Activity },
   { name: 'Paramètres', href: '/dashboard/settings', icon: Settings },
 ];
 
@@ -289,8 +294,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </h1>
             </div>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            {!noAccess && <GlobalSearch />}
+            {!noAccess && <NotificationInbox />}
+            <ThemeToggle />
+          </div>
         </div>
+
+        {/* Desktop top bar with search + notifications */}
+        {!noAccess && (
+          <div className="hidden lg:flex h-14 items-center justify-end border-b bg-card px-6 gap-3">
+            <GlobalSearch />
+            <NotificationInbox />
+          </div>
+        )}
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-6 bg-background">

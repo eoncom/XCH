@@ -8,6 +8,7 @@ import { CreateCommentDto } from './dto/create-comment.dto';
 import { StorageService } from '../../common/services/storage.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { NotificationEmitter } from '../notifications/notification-emitter';
+import { UserNotificationService } from '../notifications/user-notification.service';
 import { createId } from '@paralleldrive/cuid2';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
@@ -20,6 +21,7 @@ export class TasksService {
     private storageService: StorageService,
     private auditLogService: AuditLogService,
     private notificationEmitter: NotificationEmitter,
+    private userNotificationService: UserNotificationService,
   ) {}
 
   async create(tenantId: string, userId: string, createTaskDto: CreateTaskDto) {
@@ -107,6 +109,18 @@ export class TasksService {
         assignee: task.assignedUser,
         actor: task.creator || undefined,
       }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
+
+      // In-app inbox notification
+      this.userNotificationService
+        .create({
+          tenantId,
+          userId: task.assignedUser.id,
+          type: 'TASK_ASSIGNED',
+          title: `Tâche assignée : ${task.title}`,
+          body: task.creator ? `Assignée par ${task.creator.name}` : undefined,
+          link: `/dashboard/tasks/${task.id}`,
+        })
+        .catch((e) => this.logger.warn(`Inbox notification failed: ${e.message}`));
     }
 
     return task;
@@ -390,6 +404,18 @@ export class TasksService {
         assignee: task.assignedUser,
         actor: actor || undefined,
       }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
+
+      // In-app inbox notification
+      this.userNotificationService
+        .create({
+          tenantId,
+          userId: task.assignedUser.id,
+          type: 'TASK_ASSIGNED',
+          title: `Tâche assignée : ${task.title}`,
+          body: actor ? `Assignée par ${actor.name}` : undefined,
+          link: `/dashboard/tasks/${task.id}`,
+        })
+        .catch((e) => this.logger.warn(`Inbox notification failed: ${e.message}`));
     }
 
     return task;

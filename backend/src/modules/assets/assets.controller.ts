@@ -75,6 +75,80 @@ export class AssetsController {
     return this.assetsService.importFromCsv(req.user.tenantId, csvContent, siteId);
   }
 
+  @Post('import/preview')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Preview CSV import (dry-run): returns valid rows + invalid rows with errors' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        siteId: { type: 'string' },
+      },
+      required: ['file'],
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async importPreview(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('siteId') siteId: string,
+    @Request() req: AuthRequest,
+  ) {
+    if (!file) throw new BadRequestException('CSV file is required');
+    if (siteId) {
+      const perm = await this.permissionService.resolve(
+        req.user.userId, siteId, 'assets', req.user.tenantId,
+      );
+      if (perm !== 'WRITE') {
+        throw new ForbiddenException('Insufficient permissions for assets on this site');
+      }
+    }
+    const csvContent = file.buffer.toString('utf-8');
+    return this.assetsService.previewImportFromCsv(req.user.tenantId, csvContent, siteId);
+  }
+
+  @Post('import/commit')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Commit CSV import (writes to DB) — same as /import but named for clarity' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        siteId: { type: 'string' },
+      },
+      required: ['file'],
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async importCommit(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('siteId') siteId: string,
+    @Request() req: AuthRequest,
+  ) {
+    if (!file) throw new BadRequestException('CSV file is required');
+    if (siteId) {
+      const perm = await this.permissionService.resolve(
+        req.user.userId, siteId, 'assets', req.user.tenantId,
+      );
+      if (perm !== 'WRITE') {
+        throw new ForbiddenException('Insufficient permissions for assets on this site');
+      }
+    }
+    const csvContent = file.buffer.toString('utf-8');
+    return this.assetsService.importFromCsv(req.user.tenantId, csvContent, siteId);
+  }
+
+  @Get('import/template')
+  @RequireRead()
+  @ApiOperation({ summary: 'Download a CSV template for asset import' })
+  getImportTemplate(@Request() req: AuthRequest) {
+    const csv = this.assetsService.getImportTemplate();
+    return { filename: 'asset-import-template.csv', content: csv };
+  }
+
   @Get()
   @RequireRead()
   @ApiOperation({ summary: 'Get all assets (filtered by user site access + resource permissions)' })

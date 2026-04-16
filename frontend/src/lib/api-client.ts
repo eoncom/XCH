@@ -152,6 +152,33 @@ class ApiClient {
 
     return response.json();
   }
+
+  async uploadWithFields<T = any>(
+    endpoint: string,
+    file: File,
+    fields?: Record<string, string | undefined>,
+  ): Promise<T> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (fields) {
+      for (const [k, v] of Object.entries(fields)) {
+        if (v !== undefined && v !== null && v !== '') formData.append(k, v);
+      }
+    }
+
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: response.statusText }));
+      throw new ApiError(response.status, error.message || 'Upload failed', error);
+    }
+
+    return response.json();
+  }
 }
 
 export const apiClient = new ApiClient(API_URL);

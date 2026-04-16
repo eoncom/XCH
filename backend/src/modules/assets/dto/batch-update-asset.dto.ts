@@ -1,5 +1,4 @@
-import { IsArray, IsString, IsOptional, IsEnum } from 'class-validator';
-import { AssetStatus } from '@prisma/client';
+import { IsArray, IsString, IsOptional } from 'class-validator';
 
 export class BatchUpdateAssetsDto {
   @IsArray()
@@ -7,8 +6,8 @@ export class BatchUpdateAssetsDto {
   ids: string[];
 
   @IsOptional()
-  @IsEnum(AssetStatus)
-  status?: AssetStatus;
+  @IsString()
+  status?: string;
 
   @IsOptional()
   @IsString()

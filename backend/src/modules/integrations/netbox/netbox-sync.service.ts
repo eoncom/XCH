@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaClient, SiteStatus, AssetType, AssetStatus, RackType, RackStatus } from '@prisma/client';
+import { PrismaClient, SiteStatus, RackType, RackStatus } from '@prisma/client';
 import { NetboxService, NetboxSite, NetboxDevice, NetboxRack } from './netbox.service';
 
 export interface SyncResult {
@@ -41,8 +41,8 @@ export class NetboxSyncService {
     return mapping[status] || 'ACTIVE';
   }
 
-  private mapNetboxDeviceStatus(status: string): AssetStatus {
-    const mapping: Record<string, AssetStatus> = {
+  private mapNetboxDeviceStatus(status: string): string {
+    const mapping: Record<string, string> = {
       offline: 'OUT_OF_SERVICE',
       active: 'IN_SERVICE',
       planned: 'STOCK',
@@ -65,7 +65,7 @@ export class NetboxSyncService {
     return mapping[status] || 'IN_SERVICE';
   }
 
-  private mapDeviceRoleToAssetType(role: string): AssetType {
+  private mapDeviceRoleToAssetType(role: string): string {
     const roleLower = role.toLowerCase();
     if (roleLower.includes('switch')) return 'SWITCH';
     if (roleLower.includes('firewall')) return 'FIREWALL';

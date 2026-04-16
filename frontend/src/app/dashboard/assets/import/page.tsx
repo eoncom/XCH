@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Papa from 'papaparse';
+import { assetsApi } from '@/lib/api/assets';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,6 +41,12 @@ interface ImportResult {
   total: number;
   imported: number;
   errors: ImportError[];
+}
+
+interface ServerPreview {
+  total: number;
+  validRows: Array<{ row: number; data: any }>;
+  invalidRows: Array<{ row: number; data: Record<string, string>; errors: Array<{ field: string; message: string }> }>;
 }
 
 type Step = 'upload' | 'preview' | 'result';
@@ -74,6 +81,8 @@ export default function ImportAssetsPage() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [serverPreview, setServerPreview] = useState<ServerPreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -215,7 +224,26 @@ export default function ImportAssetsPage() {
     setParseErrors([]);
     setResult(null);
     setApiError(null);
+    setServerPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleServerPreview = async () => {
+    if (!file) return;
+    setPreviewing(true);
+    setServerPreview(null);
+    setApiError(null);
+    try {
+      const res = await assetsApi.importPreview(
+        file,
+        siteId && siteId !== 'none' ? siteId : undefined,
+      );
+      setServerPreview(res);
+    } catch (e: any) {
+      setApiError(e.message || 'Erreur lors de la validation serveur');
+    } finally {
+      setPreviewing(false);
+    }
   };
 
   // -----------------------------------------------------------------------
@@ -492,10 +520,74 @@ export default function ImportAssetsPage() {
               </div>
             )}
 
+            {/* Server preview result */}
+            {serverPreview && (
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center gap-3 text-sm font-medium">
+                  <span className="text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {serverPreview.validRows.length} valide{serverPreview.validRows.length > 1 ? 's' : ''}
+                  </span>
+                  <span className="text-red-600 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {serverPreview.invalidRows.length} invalide{serverPreview.invalidRows.length > 1 ? 's' : ''}
+                  </span>
+                  <span className="text-muted-foreground">sur {serverPreview.total} ligne(s)</span>
+                </div>
+                {serverPreview.invalidRows.length > 0 && (
+                  <div className="max-h-[240px] overflow-y-auto border rounded">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-16">Ligne</TableHead>
+                          <TableHead className="w-40">Type/Serial</TableHead>
+                          <TableHead>Erreurs</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {serverPreview.invalidRows.map((r) => (
+                          <TableRow key={r.row} className="bg-red-50/30 dark:bg-red-950/10">
+                            <TableCell>{r.row}</TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {r.data.type || '—'} / {r.data.serialNumber || '—'}
+                            </TableCell>
+                            <TableCell>
+                              {r.errors.map((e, idx) => (
+                                <div key={idx} className="text-xs text-destructive">
+                                  <strong>{e.field}</strong>: {e.message}
+                                </div>
+                              ))}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex items-center gap-3 pt-2">
               <Button variant="outline" onClick={handleReset}>
                 Annuler
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleServerPreview}
+                disabled={previewing || !file}
+              >
+                {previewing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Validation...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    Valider côté serveur
+                  </>
+                )}
               </Button>
               <Button
                 onClick={handleImport}

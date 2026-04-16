@@ -51,6 +51,7 @@ import {
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import type { Rack, RackStatus, Asset } from '@/types';
+import type { OccupyingAssetInfo } from '@/components/racks/RackVisualization';
 
 // Dynamically import RackVisualization (client-side only for Konva)
 const RackVisualization = dynamic(
@@ -89,6 +90,8 @@ export default function RackDetailPage({
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showMountDialog, setShowMountDialog] = useState(false);
+  const [mountDialogMode, setMountDialogMode] = useState<'mount' | 'edit'>('mount');
+  const [editingAsset, setEditingAsset] = useState<OccupyingAssetInfo | null>(null);
   const { canUpdate, canDelete } = usePermissions();
   const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState<number | undefined>();
@@ -182,8 +185,21 @@ export default function RackDetailPage({
     setShowDeleteDialog(false);
   };
 
-  const handleUnitClick = (unitNumber: number) => {
+  const handleUnitClick = (unitNumber: number, occupyingAsset: OccupyingAssetInfo | null) => {
     setSelectedUnit(unitNumber);
+    if (occupyingAsset) {
+      // Slot occupé → mode édition avec pré-remplissage
+      setMountDialogMode('edit');
+      setEditingAsset(occupyingAsset);
+      setMountAssetId(occupyingAsset.id);
+      setMountHeightU(String(occupyingAsset.rackHeightU));
+    } else {
+      // Slot libre → mode montage
+      setMountDialogMode('mount');
+      setEditingAsset(null);
+      setMountAssetId('');
+      setMountHeightU('1');
+    }
     setShowMountDialog(true);
   };
 
@@ -582,53 +598,133 @@ export default function RackDetailPage({
         </CardContent>
       </Card>
 
-      {/* Mount Equipment Dialog */}
-      <Dialog open={showMountDialog} onOpenChange={setShowMountDialog}>
+      {/* Mount / Edit Equipment Dialog */}
+      <Dialog open={showMountDialog} onOpenChange={(open: boolean) => {
+        setShowMountDialog(open);
+        if (!open) {
+          setEditingAsset(null);
+          setMountDialogMode('mount');
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Monter un équipement</DialogTitle>
+            <DialogTitle>
+              {mountDialogMode === 'edit' ? 'Équipement monté' : 'Monter un équipement'}
+            </DialogTitle>
             <DialogDescription>
-              Position sélectionnée: U{selectedUnit}
+              {mountDialogMode === 'edit' && editingAsset ? (
+                <>
+                  <strong>{editingAsset.name || `${editingAsset.manufacturer || ''} ${editingAsset.model || ''}`.trim() || 'Équipement'}</strong>
+                  {editingAsset.serialNumber && <> — S/N: {editingAsset.serialNumber}</>}
+                  <br />Position: U{editingAsset.rackPositionU} ({editingAsset.rackHeightU}U)
+                </>
+              ) : (
+                <>Position sélectionnée: U{selectedUnit}</>
+              )}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Équipement</Label>
-              <Select value={mountAssetId} onValueChange={setMountAssetId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner un équipement" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableAssets?.map((asset) => (
-                    <SelectItem key={asset.id} value={asset.id}>
-                      {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}{asset.serialNumber ? ` - ${asset.serialNumber}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Hauteur (U)</Label>
-              <Input
-                type="number"
-                min="1"
-                max="42"
-                value={mountHeightU}
-                onChange={(e) => setMountHeightU(e.target.value)}
-              />
+          {mountDialogMode === 'mount' ? (
+            /* Mode montage : sélection d'un équipement libre */
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Équipement</Label>
+                <Select value={mountAssetId} onValueChange={setMountAssetId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionner un équipement" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableAssets?.map((asset) => (
+                      <SelectItem key={asset.id} value={asset.id}>
+                        {asset.name || `${asset.manufacturer || ''} ${asset.model || ''}`.trim() || 'Équipement'}{asset.serialNumber ? ` - ${asset.serialNumber}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Hauteur (U)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="42"
+                  value={mountHeightU}
+                  onChange={(e) => setMountHeightU(e.target.value)}
+                />
+              </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowMountDialog(false)}>
-              Annuler
-            </Button>
-            <Button
-              onClick={handleMount}
-              disabled={!mountAssetId || mountMutation.isPending}
-            >
-              {mountMutation.isPending ? 'Montage...' : 'Monter'}
-            </Button>
+          ) : (
+            /* Mode édition : voir l'équipement monté, actions */
+            <div className="space-y-4">
+              <div className="p-4 border rounded-lg bg-muted/30 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">
+                    {editingAsset?.name || `${editingAsset?.manufacturer || ''} ${editingAsset?.model || ''}`.trim() || 'Équipement'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                  <div>Position : U{editingAsset?.rackPositionU}</div>
+                  <div>Hauteur : {editingAsset?.rackHeightU}U</div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    if (editingAsset) {
+                      openMoveDialog(editingAsset as any);
+                      setShowMountDialog(false);
+                    }
+                  }}
+                >
+                  <MoveVertical className="mr-2 h-4 w-4" />
+                  Déplacer
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  asChild
+                >
+                  <Link href={`/dashboard/assets/${editingAsset?.id}`}>
+                    <Package className="mr-2 h-4 w-4" />
+                    Voir fiche
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className={mountDialogMode === 'edit' ? 'sm:justify-between' : ''}>
+            {mountDialogMode === 'edit' && editingAsset && (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  unmountMutation.mutate(editingAsset.id);
+                  setShowMountDialog(false);
+                  setEditingAsset(null);
+                }}
+                disabled={unmountMutation.isPending}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {unmountMutation.isPending ? 'Démontage...' : 'Démonter'}
+              </Button>
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowMountDialog(false)}>
+                {mountDialogMode === 'edit' ? 'Fermer' : 'Annuler'}
+              </Button>
+              {mountDialogMode === 'mount' && (
+                <Button
+                  onClick={handleMount}
+                  disabled={!mountAssetId || mountMutation.isPending}
+                >
+                  {mountMutation.isPending ? 'Montage...' : 'Monter'}
+                </Button>
+              )}
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

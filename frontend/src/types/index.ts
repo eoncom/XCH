@@ -165,27 +165,9 @@ export interface Site {
   delegation?: { id: string; name: string; code: string; groupLabel?: string; groupColor?: string };
 }
 
-// Asset types
-export type AssetType =
-  | 'PRINTER'
-  | 'IPAD'
-  | 'TABLET'
-  | 'SWITCH'
-  | 'FIREWALL'
-  | 'ROUTER'
-  | 'WIFI_AP'
-  | 'TEAMS_ROOM'
-  | 'WEBCAM'
-  | 'DISPLAY'
-  | 'CAMERA'
-  | 'SERVER'
-  | 'CABLE'
-  | 'PATCH_PANEL'
-  | 'PDU'
-  | 'BOX_5G'
-  | 'OTHER';
-
-export type AssetStatus = 'IN_SERVICE' | 'OUT_OF_SERVICE' | 'IN_TRANSIT' | 'STOCK' | 'RETIRED';
+// Asset types — now dynamic strings (managed via EnumLabel)
+export type AssetType = string;
+export type AssetStatus = string;
 
 export interface ExternalRef {
   id: string;
@@ -240,6 +222,11 @@ export interface Asset {
   site?: Site;
   rack?: Rack;
   externalRefs?: ExternalRef[];
+  // Pricing (v1.3)
+  assetModelId?: string | null;
+  acquisitionPrice?: number | null;
+  monthlyPrice?: number | null;
+  priceCurrency?: string;
 }
 
 // Rack types
@@ -293,6 +280,10 @@ export interface Task {
   ticketUrl?: string;
   ticketRef?: string;
   ticketStatus?: string;
+  // Cost fields (v1.3)
+  estimatedCost?: number | null;
+  actualCost?: number | null;
+  costCurrency?: string;
   metadata?: any;
   createdAt: string;
   updatedAt: string;
@@ -320,7 +311,8 @@ export interface TaskComment {
 }
 
 // FloorPlan types
-export type PinType = 'SWITCH' | 'FIREWALL' | 'WIFI_AP' | 'PRINTER' | 'RACK' | 'CAMERA' | 'PATCH_PANEL' | 'RJ45' | 'NRO' | 'ROUTER' | 'TEAMS_ROOM' | 'WEBCAM' | 'DISPLAY' | 'SERVER' | 'PDU' | 'BOX_5G' | 'OTHER';
+// PinType — now dynamic string (managed via EnumLabel)
+export type PinType = string;
 
 export interface Pin {
   id: string;
@@ -672,6 +664,11 @@ export interface CreateAssetDto {
   notes?: string;
   connectivity?: any;
   metadata?: any;
+  // Pricing (v1.3)
+  assetModelId?: string;
+  acquisitionPrice?: number;
+  monthlyPrice?: number;
+  priceCurrency?: string;
 }
 
 export interface UpdateAssetDto extends Partial<CreateAssetDto> {}
@@ -689,6 +686,10 @@ export interface CreateTaskDto {
   ticketUrl?: string;
   ticketRef?: string;
   ticketStatus?: string;
+  // Cost fields (v1.3)
+  estimatedCost?: number;
+  actualCost?: number;
+  costCurrency?: string;
   metadata?: any;
 }
 

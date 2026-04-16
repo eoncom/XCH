@@ -48,6 +48,7 @@ import type { Site, Asset, Rack, Task, FloorPlan, User as UserType } from '@/typ
 import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds } from '@/lib/warranty';
 import { useLiveMonitors } from '@/hooks/useLiveMonitors';
+import { ConnectivityLinksManager } from '@/components/connectivity/ConnectivityLinksManager';
 
 const healthStatusColors = {
   HEALTHY: 'success' as const,
@@ -1350,8 +1351,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const hasServerInfo = site.metadata?.serverInfo && (site.metadata.serverInfo.smbPath || site.metadata.serverInfo.sharepointUrl || site.metadata.serverInfo.gedUrl || site.metadata.serverInfo.accessRightsUrl);
   const hasContacts = site.contacts && site.contacts.length > 0;
   const hasConnectivity = site.connectivity && Array.isArray(site.connectivity.links) && site.connectivity.links.length > 0;
+  const hasStructuredConnectivity = Array.isArray((site as any).connectivityLinks) && (site as any).connectivityLinks.length > 0;
   const hasAccessNotes = site.accessNotes && (site.accessNotes.schedules || site.accessNotes.badges || site.accessNotes.procedures || site.accessNotes.safety);
-  const hasInfosPratiques = hasServerInfo || hasContacts || hasConnectivity || hasAccessNotes;
+  // Show tab whenever the user can edit (so they can add structured connectivity links) or existing content
+  const hasInfosPratiques = hasServerInfo || hasContacts || hasConnectivity || hasStructuredConnectivity || hasAccessNotes || canUpdate('sites', id);
 
   return (
     <div className="space-y-6">
@@ -1832,6 +1835,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             {/* Connectivité primary + backup côte à côte */}
             <SiteConnectivitySection connectivity={site.connectivity} siteId={id} assets={assets} />
 
+            {/* Connectivité structurée (liens avec prix, dépenses récurrentes) */}
+            <ConnectivityLinksManager
+              siteId={id}
+              initialLinks={(site as any).connectivityLinks || []}
+              canEdit={canUpdate('sites', id)}
+            />
+
             {/* Health Breakdown (live enriched) */}
             {liveHealthComponents.length > 0 && (
               <Card>
@@ -2017,7 +2027,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-2">
                         <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
-                        <Badge variant={assetStatusColors[asset.status] || 'secondary'}>
+                        <Badge variant={(assetStatusColors[asset.status] as any) || 'secondary'}>
                           {assetStatusLabels[asset.status] || asset.status}
                         </Badge>
                       </div>

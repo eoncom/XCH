@@ -1,8 +1,8 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-04-16 02:01:31 (Auto-update)
-**Version actuelle :** 1.2.0
-**Statut global :** ✅ MVP Production-Ready (100%) + Modele Delegation-First
+**Dernière mise à jour :** 2026-04-16 08:23:03 (Auto-update)
+**Version actuelle :** 1.3.0
+**Statut global :** ✅ MVP Production-Ready (100%) + v1.3 — Coûts avancés + Consommation + Prod features
 
 ---
 
@@ -254,6 +254,50 @@ POST-MVP     ████████████████████ 100% (
 ---
 
 ## 📅 HISTORIQUE DES VERSIONS
+
+### v1.3.0 (2026-04-16) - Vers le pilote production
+
+**Lots A à G** — Fix UX baies, types dynamiques, module coûts avancé, connectivité structurée, consommation électrique, fonctionnalités production.
+
+**Schema :**
+- Enums `AssetType`, `AssetStatus`, `PinType` → `String` (dynamique via `EnumLabel` étendu avec `isBuiltIn`, `isActive`)
+- Nouveaux modèles : `AssetModel`, `Budget`, `ConnectivityLink`, `UserNotification`
+- Nouveaux champs : `Task.{estimatedCost,actualCost}`, `Asset.{assetModelId,acquisitionPrice,monthlyPrice,dutyCyclePercent}`, `Site.autoGenerateElectricityExpense`
+- `Site.connectivity` JSON conservé en legacy (suppression v1.4)
+
+**Backend (6 nouveaux modules) :**
+- `asset-models` — catalogue avec prix, auto-création d'Expense
+- `budgets` — budgets scope délégation/site/type avec endpoint `/status`
+- `connectivity` — liens structurés + endpoint `generate-expense`
+- `consumption` — calcul Watts → kWh → coût par site/rack
+- `search` — recherche globale (Asset/Site/Rack/Task/Contact)
+- `audit` — viewer du journal d'audit
+
+**Projection (ExpensesService) :**
+- Éclatement MONTHLY/QUARTERLY/YEARLY en tranches mensuelles
+- Endpoint `/api/expenses/projection?from=&to=&groupBy=type|delegation|site`
+
+**Frontend (pages et composants) :**
+- `/dashboard/costs/budgets/{,new,[id]/edit}`
+- `/dashboard/consumption/{,[siteId]}`
+- `/dashboard/notifications`
+- `/dashboard/admin/audit`
+- `GlobalSearch` (Cmd+K / Ctrl+K) et `NotificationInbox` (cloche + badge unread, polling 60s) dans le header
+- `EntityAuditLog` — composant réutilisable pour les tabs "Activité"
+- `AssetModelSelect`, `EnumSelect`, `ConnectivityLinksManager`, `ElectricityConfigTab`
+
+**Notifications in-app :**
+- Endpoints `/api/notifications/inbox/{me,count-unread,:id/read,mark-all-read,:id}`
+- Crons quotidiens (8h / 8h05) — warranty ≤ 30j + tasks due ≤ 2j
+- Hook `TASK_ASSIGNED` sur création / réaffectation
+
+**Import CSV :**
+- `/api/assets/import/{preview,commit,template}` — preview dry-run avec lignes valides/invalides par erreur
+
+**Breaking changes :**
+- Enums Prisma supprimés → `String` avec validation par `EnumLabel` (migration avec seed idempotent)
+
+---
 
 ### v1.2.0 (2026-04-08) - Delegation-First + Repartition des couts (ADR-009)
 

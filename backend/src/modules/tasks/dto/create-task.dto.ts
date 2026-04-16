@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsDateString, IsArray, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, IsArray, IsObject, IsNumber } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { TaskStatus, TaskPriority } from '@prisma/client';
 
@@ -60,4 +60,19 @@ export class CreateTaskDto {
   @IsString()
   @IsOptional()
   ticketStatus?: string;
+
+  @ApiProperty({ required: false, description: 'Estimated cost' })
+  @IsNumber()
+  @IsOptional()
+  estimatedCost?: number;
+
+  @ApiProperty({ required: false, description: 'Actual cost' })
+  @IsNumber()
+  @IsOptional()
+  actualCost?: number;
+
+  @ApiProperty({ required: false, default: 'EUR' })
+  @IsString()
+  @IsOptional()
+  costCurrency?: string;
 }

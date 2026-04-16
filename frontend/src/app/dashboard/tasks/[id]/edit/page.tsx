@@ -52,6 +52,23 @@ const taskSchema = z.object({
   dueDate: z.string().optional(),
   ticketUrl: z.string().optional(),
   ticketRef: z.string().optional(),
+  estimatedCost: z.union([z.number(), z.nan(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === '' || val === undefined || val === null) return undefined;
+      if (typeof val === 'string') return parseFloat(val) || undefined;
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      return undefined;
+    }),
+  actualCost: z.union([z.number(), z.nan(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === '' || val === undefined || val === null) return undefined;
+      if (typeof val === 'string') return parseFloat(val) || undefined;
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      return undefined;
+    }),
+  costCurrency: z.string().optional(),
 });
 
 type TaskFormData = z.infer<typeof taskSchema>;
@@ -102,6 +119,9 @@ export default function EditTaskPage() {
           dueDate: task.dueDate ? task.dueDate.split('T')[0] : '',
           ticketUrl: task.ticketUrl || '',
           ticketRef: task.ticketRef || '',
+          estimatedCost: task.estimatedCost ?? undefined,
+          actualCost: task.actualCost ?? undefined,
+          costCurrency: task.costCurrency || 'EUR',
         }
       : undefined,
   });
@@ -257,6 +277,18 @@ export default function EditTaskPage() {
                 <Label htmlFor="ticketUrl">Lien ticket externe</Label>
                 <Input id="ticketUrl" type="url" {...register('ticketUrl')} placeholder="https://ticketing.example.com/ticket/123" />
                 <p className="text-xs text-muted-foreground">URL vers le ticket (GLPI, Jira, etc.)</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="estimatedCost">Coût estimé</Label>
+                <Input id="estimatedCost" type="number" step="0.01" min="0" {...register('estimatedCost', { valueAsNumber: true })} placeholder="0.00" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="actualCost">Coût réel</Label>
+                <Input id="actualCost" type="number" step="0.01" min="0" {...register('actualCost', { valueAsNumber: true })} placeholder="0.00" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="costCurrency">Devise</Label>
+                <Input id="costCurrency" {...register('costCurrency')} placeholder="EUR" />
               </div>
             </div>
           </CardContent>

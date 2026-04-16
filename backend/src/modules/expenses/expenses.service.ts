@@ -336,6 +336,141 @@ export class ExpensesService {
     return allocations;
   }
 
+  // ========== PROJECTION ==========
+
+  /**
+   * Project expenses over a date range, expanding recurring expenses into monthly tranches.
+   * Returns totals and per-month breakdown, optionally grouped by type/delegation/site.
+   */
+  async projection(
+    tenantId: string,
+    dateFrom: string,
+    dateTo: string,
+    groupBy?: 'type' | 'delegation' | 'site',
+  ) {
+    const from = new Date(dateFrom + '-01');
+    const to = new Date(dateTo + '-01');
+    to.setMonth(to.getMonth() + 1); // end of last month
+    to.setDate(0);
+
+    // Get all expenses that could overlap the projection window
+    const expenses = await this.prisma.expense.findMany({
+      where: {
+        tenantId,
+        OR: [
+          // ONE_TIME within range
+          { frequency: 'ONE_TIME', dateIncurred: { gte: from, lte: to } },
+          // Recurring: active during range
+          {
+            frequency: { not: 'ONE_TIME' },
+            dateStart: { lte: to },
+            OR: [
+              { dateEnd: null },
+              { dateEnd: { gte: from } },
+            ],
+          },
+        ],
+      },
+      include: {
+        bearer: { select: { id: true, name: true } },
+      },
+    });
+
+    // Build monthly buckets
+    const months: string[] = [];
+    const cursor = new Date(from);
+    while (cursor <= to) {
+      months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    const byMonth: Record<string, { total: number; byType: Record<string, number>; byDelegation: Record<string, number>; bySite: Record<string, number> }> = {};
+    for (const m of months) {
+      byMonth[m] = { total: 0, byType: {}, byDelegation: {}, bySite: {} };
+    }
+
+    let grandTotal = 0;
+    const totalByType: Record<string, number> = {};
+    const totalByDelegation: Record<string, number> = {};
+    const totalBySite: Record<string, number> = {};
+
+    for (const exp of expenses) {
+      const type = exp.type || 'OTHER';
+      const delegationId = (exp as any).delegationId || 'none';
+      const siteId = (exp as any).siteId || 'none';
+
+      if (exp.frequency === 'ONE_TIME') {
+        const d = new Date(exp.dateIncurred);
+        const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (byMonth[monthKey]) {
+          const amt = Number(exp.totalAmount);
+          byMonth[monthKey].total += amt;
+          byMonth[monthKey].byType[type] = (byMonth[monthKey].byType[type] || 0) + amt;
+          byMonth[monthKey].byDelegation[delegationId] = (byMonth[monthKey].byDelegation[delegationId] || 0) + amt;
+          byMonth[monthKey].bySite[siteId] = (byMonth[monthKey].bySite[siteId] || 0) + amt;
+          grandTotal += amt;
+          totalByType[type] = (totalByType[type] || 0) + amt;
+          totalByDelegation[delegationId] = (totalByDelegation[delegationId] || 0) + amt;
+          totalBySite[siteId] = (totalBySite[siteId] || 0) + amt;
+        }
+      } else {
+        // Recurring: expand into monthly tranches
+        const effectiveStart = exp.dateStart && exp.dateStart > from ? exp.dateStart : from;
+        const effectiveEnd = exp.dateEnd && exp.dateEnd < to ? exp.dateEnd : to;
+
+        for (const monthKey of months) {
+          const [y, m] = monthKey.split('-').map(Number);
+          const monthStart = new Date(y, m - 1, 1);
+          const monthEnd = new Date(y, m, 0);
+
+          if (monthStart > effectiveEnd || monthEnd < effectiveStart) continue;
+
+          let monthlyAmount = 0;
+          switch (exp.frequency) {
+            case 'MONTHLY':
+              monthlyAmount = Number(exp.totalAmount);
+              break;
+            case 'QUARTERLY':
+              monthlyAmount = Number(exp.totalAmount) / 3;
+              break;
+            case 'YEARLY':
+              monthlyAmount = Number(exp.totalAmount) / 12;
+              break;
+          }
+
+          byMonth[monthKey].total += monthlyAmount;
+          byMonth[monthKey].byType[type] = (byMonth[monthKey].byType[type] || 0) + monthlyAmount;
+          byMonth[monthKey].byDelegation[delegationId] = (byMonth[monthKey].byDelegation[delegationId] || 0) + monthlyAmount;
+          byMonth[monthKey].bySite[siteId] = (byMonth[monthKey].bySite[siteId] || 0) + monthlyAmount;
+          grandTotal += monthlyAmount;
+          totalByType[type] = (totalByType[type] || 0) + monthlyAmount;
+          totalByDelegation[delegationId] = (totalByDelegation[delegationId] || 0) + monthlyAmount;
+          totalBySite[siteId] = (totalBySite[siteId] || 0) + monthlyAmount;
+        }
+      }
+    }
+
+    // Round all amounts
+    const roundObj = (obj: Record<string, number>) =>
+      Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, Math.round(v * 100) / 100]));
+
+    return {
+      totals: {
+        total: Math.round(grandTotal * 100) / 100,
+        byType: roundObj(totalByType),
+        byDelegation: roundObj(totalByDelegation),
+        bySite: roundObj(totalBySite),
+      },
+      byMonth: months.map((m) => ({
+        month: m,
+        total: Math.round(byMonth[m].total * 100) / 100,
+        byType: roundObj(byMonth[m].byType),
+        byDelegation: roundObj(byMonth[m].byDelegation),
+        bySite: roundObj(byMonth[m].bySite),
+      })),
+    };
+  }
+
   // ========== VALIDATION HELPERS ==========
 
   private validateAllocations(allocations: AllocationDto[]) {

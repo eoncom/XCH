@@ -1,12 +1,11 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsObject, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsObject, IsDateString } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import { AssetType, AssetStatus } from '@prisma/client';
 
 export class CreateAssetDto {
-  @ApiProperty({ enum: AssetType })
-  @IsEnum(AssetType)
-  type: AssetType;
+  @ApiProperty({ description: 'Asset type (dynamic via EnumLabel)', example: 'SWITCH' })
+  @IsString()
+  type: string;
 
   @ApiProperty({ required: false })
   @IsString()
@@ -38,10 +37,10 @@ export class CreateAssetDto {
   @IsOptional()
   inventoryTag?: string;
 
-  @ApiProperty({ enum: AssetStatus, default: 'IN_SERVICE' })
-  @IsEnum(AssetStatus)
+  @ApiProperty({ description: 'Asset status (dynamic via EnumLabel)', default: 'IN_SERVICE' })
+  @IsString()
   @IsOptional()
-  status?: AssetStatus;
+  status?: string;
 
   @ApiProperty({ required: false })
   @IsString()
@@ -94,6 +93,11 @@ export class CreateAssetDto {
   @IsNumber()
   @IsOptional()
   powerConsumption?: number;
+
+  @ApiProperty({ required: false, description: 'Effective usage percentage (0-100)' })
+  @IsNumber()
+  @IsOptional()
+  dutyCyclePercent?: number;
 
   @ApiProperty({ required: false })
   @IsString()

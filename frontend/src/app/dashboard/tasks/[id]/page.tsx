@@ -51,6 +51,7 @@ import {
   Send,
   Pencil,
   Bot,
+  Receipt,
 } from 'lucide-react';
 import Link from 'next/link';
 import type { Task, TaskStatus, TaskPriority, TaskComment, ChecklistItem } from '@/types';
@@ -728,6 +729,25 @@ export default function TaskDetailPage({
                       >
                         Ouvrir le ticket
                       </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(task.estimatedCost || task.actualCost) && (
+                <div className="flex items-start gap-3">
+                  <Receipt className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Coûts</p>
+                    {task.estimatedCost != null && (
+                      <p className="text-sm text-muted-foreground">
+                        Estimé : {Number(task.estimatedCost).toLocaleString('fr-FR')} {task.costCurrency || 'EUR'}
+                      </p>
+                    )}
+                    {task.actualCost != null && (
+                      <p className="text-sm text-muted-foreground">
+                        Réel : {Number(task.actualCost).toLocaleString('fr-FR')} {task.costCurrency || 'EUR'}
+                      </p>
                     )}
                   </div>
                 </div>

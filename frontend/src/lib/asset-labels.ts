@@ -1,11 +1,10 @@
-import type { AssetType, AssetStatus } from '@/types';
-
 /**
- * Centralized asset labels — single source of truth.
- * Import from here instead of redefining in each page.
+ * Centralized asset labels — fallback defaults.
+ * The primary source is now EnumLabel (via useEnumLabels hook).
+ * These are kept as fallback for when enum labels haven't loaded yet.
  */
 
-export const assetTypeLabels: Record<AssetType, string> = {
+export const assetTypeLabels: Record<string, string> = {
   PRINTER: 'Imprimante',
   IPAD: 'iPad',
   TABLET: 'Tablette',
@@ -25,7 +24,7 @@ export const assetTypeLabels: Record<AssetType, string> = {
   OTHER: 'Autre',
 };
 
-export const assetStatusLabels: Record<AssetStatus, string> = {
+export const assetStatusLabels: Record<string, string> = {
   IN_SERVICE: 'En service',
   OUT_OF_SERVICE: 'Hors service',
   IN_TRANSIT: 'En transit',
@@ -33,10 +32,10 @@ export const assetStatusLabels: Record<AssetStatus, string> = {
   RETIRED: 'Retiré',
 };
 
-export const assetStatusColors = {
+export const assetStatusColors: Record<string, string> = {
   IN_SERVICE: 'success',
   OUT_OF_SERVICE: 'secondary',
   IN_TRANSIT: 'warning',
   STOCK: 'secondary',
   RETIRED: 'error',
-} as const satisfies Record<AssetStatus, string>;
+};

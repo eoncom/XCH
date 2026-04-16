@@ -186,7 +186,7 @@ export default function AssetDetailPage({
               </p>
             </div>
           </div>
-          <Badge variant={assetStatusColors[asset.status]}>
+          <Badge variant={(assetStatusColors[asset.status] as any) || 'secondary'}>
             {assetStatusLabels[asset.status]}
           </Badge>
           <WarrantyBadge warrantyEnd={asset.warrantyEnd} />

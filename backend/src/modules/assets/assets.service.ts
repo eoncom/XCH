@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
-import { PrismaClient, AssetType, AssetStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import * as Papa from 'papaparse';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
@@ -601,8 +601,16 @@ export class AssetsService {
     notes: 'notes',
   };
 
-  private static readonly ASSET_TYPES = new Set(Object.values(AssetType));
-  private static readonly ASSET_STATUSES = new Set(Object.values(AssetStatus));
+  // Known built-in asset types and statuses (for CSV import validation)
+  // These are also seeded into EnumLabel with isBuiltIn=true
+  private static readonly KNOWN_ASSET_TYPES = new Set([
+    'PRINTER', 'IPAD', 'TABLET', 'SWITCH', 'FIREWALL', 'ROUTER', 'WIFI_AP',
+    'TEAMS_ROOM', 'WEBCAM', 'DISPLAY', 'CAMERA', 'SERVER', 'CABLE',
+    'PATCH_PANEL', 'PDU', 'BOX_5G', 'OTHER',
+  ]);
+  private static readonly KNOWN_ASSET_STATUSES = new Set([
+    'IN_SERVICE', 'OUT_OF_SERVICE', 'IN_TRANSIT', 'STOCK', 'RETIRED',
+  ]);
 
   /**
    * Import assets from CSV content.
@@ -669,28 +677,24 @@ export class AssetsService {
         continue;
       }
       const typeUpper = mapped.type.toUpperCase();
-      if (!AssetsService.ASSET_TYPES.has(typeUpper as AssetType)) {
-        errors.push({
-          row: rowNum,
-          field: 'type',
-          message: `Invalid type "${mapped.type}". Valid values: ${[...AssetsService.ASSET_TYPES].join(', ')}`,
-        });
-        continue;
+      if (!AssetsService.KNOWN_ASSET_TYPES.has(typeUpper)) {
+        // Accept unknown types (could be custom via EnumLabel) but warn
+        this.logger.warn(`CSV import row ${rowNum}: type "${typeUpper}" is not a built-in type`);
       }
 
       // --- Validate status (optional, defaults to STOCK) ---
-      let status: AssetStatus = AssetStatus.STOCK;
+      let status = 'STOCK';
       if (mapped.status) {
         const statusUpper = mapped.status.toUpperCase();
-        if (!AssetsService.ASSET_STATUSES.has(statusUpper as AssetStatus)) {
+        if (!AssetsService.KNOWN_ASSET_STATUSES.has(statusUpper)) {
           errors.push({
             row: rowNum,
             field: 'status',
-            message: `Invalid status "${mapped.status}". Valid values: ${[...AssetsService.ASSET_STATUSES].join(', ')}`,
+            message: `Invalid status "${mapped.status}". Valid values: ${[...AssetsService.KNOWN_ASSET_STATUSES].join(', ')}`,
           });
           continue;
         }
-        status = statusUpper as AssetStatus;
+        status = statusUpper;
       }
 
       // --- Resolve siteId ---
@@ -759,7 +763,7 @@ export class AssetsService {
 
       validRows.push({
         tenantId,
-        type: typeUpper as AssetType,
+        type: typeUpper,
         status,
         name: mapped.name || null,
         serialNumber: mapped.serialNumber || null,
@@ -804,6 +808,215 @@ export class AssetsService {
       imported: importedCount,
       errors,
     };
+  }
+
+  /**
+   * Parse CSV and return both valid rows (ready to insert) and invalid rows (with errors).
+   * Does NOT write to database — for the import preview UI.
+   */
+  async previewImportFromCsv(
+    tenantId: string,
+    csvContent: string,
+    siteId?: string,
+  ): Promise<{
+    total: number;
+    validRows: Array<{ row: number; data: any }>;
+    invalidRows: Array<{ row: number; data: Record<string, string>; errors: Array<{ field: string; message: string }> }>;
+  }> {
+    const cleanCsv = csvContent.replace(/^\uFEFF/, '');
+    const parsed = Papa.parse(cleanCsv, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header: string) => header.trim(),
+    });
+
+    if (parsed.errors.length > 0 && parsed.data.length === 0) {
+      throw new BadRequestException(
+        `CSV parsing failed: ${parsed.errors.map((e) => e.message).join(', ')}`,
+      );
+    }
+
+    // Validate override site
+    if (siteId) {
+      const site = await this.prisma.site.findFirst({
+        where: { id: siteId, tenantId },
+      });
+      if (!site) {
+        throw new BadRequestException(
+          `Site ${siteId} not found or does not belong to this tenant`,
+        );
+      }
+    }
+
+    const validRows: Array<{ row: number; data: any }> = [];
+    const invalidRows: Array<{ row: number; data: Record<string, string>; errors: Array<{ field: string; message: string }> }> = [];
+    const siteCodeCache = new Map<string, string | null>();
+
+    for (let i = 0; i < parsed.data.length; i++) {
+      const rawRow = parsed.data[i] as Record<string, string>;
+      const rowNum = i + 2;
+      const rowErrors: Array<{ field: string; message: string }> = [];
+
+      const mapped: Record<string, string> = {};
+      for (const [rawHeader, value] of Object.entries(rawRow)) {
+        const key = rawHeader.toLowerCase().trim();
+        const canonical = AssetsService.HEADER_MAP[key];
+        if (canonical && value !== undefined && value !== null && String(value).trim() !== '') {
+          mapped[canonical] = String(value).trim();
+        }
+      }
+
+      if (!mapped.type) {
+        rowErrors.push({ field: 'type', message: 'Type is required' });
+      }
+      const typeUpper = mapped.type ? mapped.type.toUpperCase() : '';
+
+      let status = 'STOCK';
+      if (mapped.status) {
+        const statusUpper = mapped.status.toUpperCase();
+        if (!AssetsService.KNOWN_ASSET_STATUSES.has(statusUpper)) {
+          rowErrors.push({
+            field: 'status',
+            message: `Invalid status "${mapped.status}". Valid: ${[...AssetsService.KNOWN_ASSET_STATUSES].join(', ')}`,
+          });
+        } else {
+          status = statusUpper;
+        }
+      }
+
+      let resolvedSiteId: string | null = siteId || null;
+      if (!resolvedSiteId && mapped.siteId) {
+        const siteValue = mapped.siteId;
+        if (siteCodeCache.has(siteValue)) {
+          resolvedSiteId = siteCodeCache.get(siteValue) || null;
+          if (!resolvedSiteId) {
+            rowErrors.push({ field: 'siteId', message: `Site "${siteValue}" not found` });
+          }
+        } else {
+          let site = await this.prisma.site.findFirst({ where: { id: siteValue, tenantId } });
+          if (!site) {
+            site = await this.prisma.site.findFirst({ where: { code: siteValue, tenantId } });
+          }
+          if (site) {
+            siteCodeCache.set(siteValue, site.id);
+            resolvedSiteId = site.id;
+          } else {
+            siteCodeCache.set(siteValue, null);
+            rowErrors.push({ field: 'siteId', message: `Site "${siteValue}" not found` });
+          }
+        }
+      }
+
+      let purchaseDate: Date | undefined;
+      if (mapped.purchaseDate) {
+        const d = new Date(mapped.purchaseDate);
+        if (isNaN(d.getTime())) {
+          rowErrors.push({ field: 'purchaseDate', message: `Invalid date "${mapped.purchaseDate}"` });
+        } else {
+          purchaseDate = d;
+        }
+      }
+
+      let warrantyEnd: Date | undefined;
+      if (mapped.warrantyEnd) {
+        const d = new Date(mapped.warrantyEnd);
+        if (isNaN(d.getTime())) {
+          rowErrors.push({ field: 'warrantyEnd', message: `Invalid date "${mapped.warrantyEnd}"` });
+        } else {
+          warrantyEnd = d;
+        }
+      }
+
+      // Check duplicate serial (future: this might exist in DB)
+      if (mapped.serialNumber) {
+        const existing = await this.prisma.asset.findFirst({
+          where: { tenantId, serialNumber: mapped.serialNumber },
+          select: { id: true },
+        });
+        if (existing) {
+          rowErrors.push({
+            field: 'serialNumber',
+            message: `Duplicate serial "${mapped.serialNumber}" already exists`,
+          });
+        }
+      }
+
+      let networkInfo: any = undefined;
+      if (mapped.ipAddress || mapped.macAddress || mapped.firmwareVersion) {
+        networkInfo = {};
+        if (mapped.ipAddress) networkInfo.ip = mapped.ipAddress;
+        if (mapped.macAddress) networkInfo.mac = mapped.macAddress;
+        if (mapped.firmwareVersion) networkInfo.firmware = mapped.firmwareVersion;
+      }
+
+      if (rowErrors.length > 0) {
+        invalidRows.push({ row: rowNum, data: mapped, errors: rowErrors });
+      } else {
+        validRows.push({
+          row: rowNum,
+          data: {
+            tenantId,
+            type: typeUpper,
+            status,
+            name: mapped.name || null,
+            serialNumber: mapped.serialNumber || null,
+            manufacturer: mapped.manufacturer || null,
+            model: mapped.model || null,
+            siteId: resolvedSiteId,
+            locationText: mapped.location || null,
+            networkInfo: networkInfo || undefined,
+            purchaseDate: purchaseDate || undefined,
+            warrantyEnd: warrantyEnd || undefined,
+            notes: mapped.notes || null,
+          },
+        });
+      }
+    }
+
+    return {
+      total: parsed.data.length,
+      validRows,
+      invalidRows,
+    };
+  }
+
+  /**
+   * Generate a CSV template for asset import.
+   */
+  getImportTemplate(): string {
+    const headers = [
+      'type',
+      'status',
+      'name',
+      'serial_number',
+      'manufacturer',
+      'model',
+      'site',
+      'location',
+      'ip_address',
+      'mac_address',
+      'firmware_version',
+      'warranty_end',
+      'purchase_date',
+      'notes',
+    ];
+    const sample = [
+      'SWITCH',
+      'IN_SERVICE',
+      'Switch Cisco 9300 Etage 2',
+      'FOC1234ABCD',
+      'Cisco',
+      'C9300-48P',
+      'SITE-PARIS-01',
+      'Baie A - U10',
+      '10.0.1.20',
+      'AA:BB:CC:DD:EE:FF',
+      '17.3.5',
+      '2028-06-30',
+      '2024-06-30',
+      'Switch coeur de réseau',
+    ];
+    return [headers.join(','), sample.map((s) => `"${s.replace(/"/g, '""')}"`).join(',')].join('\r\n') + '\r\n';
   }
 
   async getStatsByType(tenantId: string, accessibleSiteIds?: string[] | null) {

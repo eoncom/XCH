@@ -5135,3 +5135,24 @@ fix: raise pagination pageSize limit from 100 to 500
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-16
+
+**Date:** 2026-04-16 08:23:03
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 48
+- Frontend files modified: 39
+
+**Commit message:**
+```
+feat: rewrite site Access tab for new model + add dual view on 3 pages
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

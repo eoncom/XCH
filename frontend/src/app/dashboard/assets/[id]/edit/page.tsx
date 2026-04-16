@@ -24,28 +24,12 @@ import { ArrowLeft, Info, Wifi, ExternalLink, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link';
 import { assetTypeLabels, assetStatusLabels } from '@/lib/asset-labels';
 import type { Asset, AssetType, AssetStatus, UpdateAssetDto } from '@/types';
+import { AssetModelSelect } from '@/components/forms/AssetModelSelect';
+import type { AssetModel } from '@/lib/api/asset-models';
 
 const assetSchema = z.object({
-  type: z.enum([
-    'PRINTER',
-    'IPAD',
-    'TABLET',
-    'SWITCH',
-    'FIREWALL',
-    'ROUTER',
-    'WIFI_AP',
-    'TEAMS_ROOM',
-    'WEBCAM',
-    'DISPLAY',
-    'CAMERA',
-    'SERVER',
-    'CABLE',
-    'PATCH_PANEL',
-    'PDU',
-    'BOX_5G',
-    'OTHER',
-  ]),
-  status: z.enum(['IN_SERVICE', 'OUT_OF_SERVICE', 'IN_TRANSIT', 'STOCK', 'RETIRED']),
+  type: z.string().min(1, 'Le type est obligatoire'),
+  status: z.string().min(1, 'Le statut est obligatoire'),
   siteId: z.string().min(1, 'Le site est obligatoire'),
   name: z.string().optional(),
   manufacturer: z.string().optional(),
@@ -82,7 +66,36 @@ const assetSchema = z.object({
       if (typeof val === 'number' && !isNaN(val)) return val;
       return undefined;
     }),
+  dutyCyclePercent: z.union([z.number(), z.nan(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === '' || val === undefined || val === null) return 100;
+      if (typeof val === 'string') {
+        const n = parseInt(val, 10);
+        return isNaN(n) ? 100 : Math.max(0, Math.min(100, n));
+      }
+      if (typeof val === 'number' && !isNaN(val)) return Math.max(0, Math.min(100, val));
+      return 100;
+    }),
   notes: z.string().optional(),
+  assetModelId: z.string().optional(),
+  acquisitionPrice: z.union([z.number(), z.nan(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === '' || val === undefined || val === null) return undefined;
+      if (typeof val === 'string') return parseFloat(val) || undefined;
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      return undefined;
+    }),
+  monthlyPrice: z.union([z.number(), z.nan(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === '' || val === undefined || val === null) return undefined;
+      if (typeof val === 'string') return parseFloat(val) || undefined;
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      return undefined;
+    }),
+  priceCurrency: z.string().optional(),
 });
 
 type AssetFormData = z.infer<typeof assetSchema>;
@@ -132,7 +145,12 @@ export default function EditAssetPage() {
           warrantyEnd: asset.warrantyEnd ? asset.warrantyEnd.split('T')[0] : '',
           weight: asset.weight ?? undefined,
           powerConsumption: asset.powerConsumption ?? undefined,
+          dutyCyclePercent: (asset as any).dutyCyclePercent ?? 100,
           notes: asset.notes || '',
+          assetModelId: asset.assetModelId || undefined,
+          acquisitionPrice: asset.acquisitionPrice || undefined,
+          monthlyPrice: asset.monthlyPrice || undefined,
+          priceCurrency: asset.priceCurrency || 'EUR',
         }
       : undefined,
   });
@@ -167,6 +185,10 @@ export default function EditAssetPage() {
     if (!cleaned.notes) delete cleaned.notes;
     if (cleaned.weight === undefined || cleaned.weight === null) delete cleaned.weight;
     if (cleaned.powerConsumption === undefined || cleaned.powerConsumption === null) delete cleaned.powerConsumption;
+    if (cleaned.acquisitionPrice === undefined || cleaned.acquisitionPrice === null) delete cleaned.acquisitionPrice;
+    if (cleaned.monthlyPrice === undefined || cleaned.monthlyPrice === null) delete cleaned.monthlyPrice;
+    if (!cleaned.priceCurrency) delete cleaned.priceCurrency;
+    if (!cleaned.assetModelId) delete cleaned.assetModelId;
     // siteId is required - keep it
 
     // Clean networkInfo: remove empty subfields, remove entire object if all empty
@@ -211,6 +233,37 @@ export default function EditAssetPage() {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {/* Model template */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Modèle d'équipement
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label>Sélectionner un modèle pour pré-remplir les champs</Label>
+              <AssetModelSelect
+                value={watch('assetModelId') || null}
+                onChange={(_id: string | null, model: AssetModel | null) => {
+                  setValue('assetModelId', _id || undefined);
+                  if (model) {
+                    if (model.type) setValue('type', model.type);
+                    if (model.manufacturer) setValue('manufacturer', model.manufacturer);
+                    if (model.name) setValue('model', model.name);
+                    if (model.powerConsumption) setValue('powerConsumption', model.powerConsumption);
+                    if (model.weight) setValue('weight', model.weight);
+                    if (model.acquisitionPrice) setValue('acquisitionPrice', model.acquisitionPrice);
+                    if (model.monthlyPrice) setValue('monthlyPrice', model.monthlyPrice);
+                    setValue('priceCurrency', model.currency || 'EUR');
+                  }
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Section 1: Classification (required) */}
         <Card>
           <CardHeader>
@@ -520,6 +573,20 @@ export default function EditAssetPage() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="dutyCyclePercent">Duty cycle (%)</Label>
+                <Input
+                  id="dutyCyclePercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  {...register('dutyCyclePercent', { valueAsNumber: true })}
+                  placeholder="100"
+                />
+                <p className="text-xs text-muted-foreground">% d'usage effectif pour estimation de consommation</p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="purchaseDate">Date d'achat</Label>
                 <Input id="purchaseDate" type="date" {...register('purchaseDate')} />
               </div>
@@ -527,6 +594,50 @@ export default function EditAssetPage() {
               <div className="space-y-2">
                 <Label htmlFor="warrantyEnd">Fin de garantie</Label>
                 <Input id="warrantyEnd" type="date" {...register('warrantyEnd')} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pricing */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Coût
+              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="acquisitionPrice">Prix d'achat</Label>
+                <Input
+                  id="acquisitionPrice"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  {...register('acquisitionPrice', { valueAsNumber: true })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="monthlyPrice">Prix mensuel</Label>
+                <Input
+                  id="monthlyPrice"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  {...register('monthlyPrice', { valueAsNumber: true })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="priceCurrency">Devise</Label>
+                <Input
+                  id="priceCurrency"
+                  {...register('priceCurrency')}
+                  placeholder="EUR"
+                />
               </div>
             </div>
           </CardContent>

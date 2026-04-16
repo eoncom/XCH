@@ -86,4 +86,22 @@ export const assetsApi = {
   // Movement history
   getMovements: (id: string) =>
     apiClient.get<AssetMovement[]>(`/api/assets/${id}/movements`),
+
+  // CSV import
+  importPreview: (file: File, siteId?: string) =>
+    apiClient.uploadWithFields<{
+      total: number;
+      validRows: Array<{ row: number; data: any }>;
+      invalidRows: Array<{ row: number; data: Record<string, string>; errors: Array<{ field: string; message: string }> }>;
+    }>('/api/assets/import/preview', file, { siteId }),
+
+  importCommit: (file: File, siteId?: string) =>
+    apiClient.uploadWithFields<{
+      total: number;
+      imported: number;
+      errors: Array<{ row: number; field: string; message: string }>;
+    }>('/api/assets/import/commit', file, { siteId }),
+
+  importTemplate: () =>
+    apiClient.get<{ filename: string; content: string }>('/api/assets/import/template'),
 };

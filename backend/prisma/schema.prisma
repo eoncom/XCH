@@ -57,6 +57,10 @@ model Tenant {
   notificationLogs    NotificationLog[]
   userDelegations     UserDelegation[]
   accessOverrides     AccessOverride[]
+  assetModels         AssetModel[]
+  budgets             Budget[]
+  connectivityLinks   ConnectivityLink[]
+  userNotifications   UserNotification[]
 
   @@index([status])
   @@map("tenants")
@@ -133,6 +137,7 @@ model User {
   accessOverrides AccessOverride[]
   assetMovements  AssetMovement[]
   userDelegations UserDelegation[]
+  userNotifications UserNotification[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -202,6 +207,7 @@ model Delegation {
   billingEntities     BillingEntity[]
   expenses            Expense[]
   notificationConfigs NotificationConfig[]
+  budgets             Budget[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -286,6 +292,9 @@ model Site {
   // Monitoring
   monitoringEnabled Boolean @default(true)
 
+  // Consumption (Lot E)
+  autoGenerateElectricityExpense Boolean @default(false)
+
   // Health
   healthStatus    HealthStatus @default(UNKNOWN)
   lastHealthCheck DateTime?
@@ -309,6 +318,8 @@ model Site {
   accessOverrides AccessOverride[]
   movementsFrom   AssetMovement[]  @relation("movementFromSite")
   movementsTo     AssetMovement[]  @relation("movementToSite")
+  budgets         Budget[]
+  connectivityLinks ConnectivityLink[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -322,32 +333,37 @@ model Site {
 // ASSETS (EQUIPEMENTS)
 // ============================================================================
 
-enum AssetType {
-  PRINTER
-  IPAD
-  TABLET
-  SWITCH
-  FIREWALL
-  ROUTER
-  WIFI_AP
-  TEAMS_ROOM
-  WEBCAM
-  DISPLAY
-  CAMERA
-  SERVER
-  CABLE
-  PATCH_PANEL
-  PDU
-  BOX_5G
-  OTHER
-}
+// AssetType and AssetStatus enums removed in v1.3 — now dynamic Strings via EnumLabel
 
-enum AssetStatus {
-  IN_SERVICE
-  OUT_OF_SERVICE
-  IN_TRANSIT
-  STOCK
-  RETIRED
+model AssetModel {
+  id               String   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name             String            // e.g. "HP LaserJet Pro M404n"
+  manufacturer     String?
+  type             String            // AssetType (dynamic String)
+
+  // Pricing
+  acquisitionPrice Decimal? @db.Decimal(10, 2) // one-time purchase price
+  monthlyPrice     Decimal? @db.Decimal(10, 2) // monthly rental/lease price
+  currency         String   @default("EUR")
+  pricingMode      String   @default("ONE_TIME") // ONE_TIME | MONTHLY
+
+  // Template specs
+  powerConsumption Float?   // Watts
+  weight           Float?   // kg
+  defaultUHeight   Int?     // default rack height
+
+  notes            String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  assets Asset[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, type, isActive])
+  @@map("asset_models")
 }
 
 model Asset {
@@ -358,13 +374,20 @@ model Asset {
   delegation   Delegation  @relation(fields: [delegationId], references: [id])
   siteId       String?
   site         Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  type         AssetType
+  type         String      // was AssetType enum — dynamic via EnumLabel
   name         String?
   model        String?
   manufacturer String?
   serialNumber String?
   inventoryTag String?
-  status       AssetStatus @default(IN_SERVICE)
+  status       String      @default("IN_SERVICE") // was AssetStatus enum — dynamic via EnumLabel
+
+  // Model & pricing
+  assetModelId     String?
+  assetModel       AssetModel? @relation(fields: [assetModelId], references: [id])
+  acquisitionPrice Decimal?    @db.Decimal(10, 2) // purchase price
+  monthlyPrice     Decimal?    @db.Decimal(10, 2) // monthly rental/lease
+  priceCurrency    String      @default("EUR")
 
   // Location
   locationText String?
@@ -388,6 +411,7 @@ model Asset {
   warrantyEnd      DateTime?
   weight           Float? // kg
   powerConsumption Float? // Watts
+  dutyCyclePercent Int     @default(100) // Effective usage % (0-100) for consumption estimation
   notes            String?   @db.Text
 
   createdAt DateTime @default(now())
@@ -545,25 +569,7 @@ model FloorPlan {
   @@map("floor_plans")
 }
 
-enum PinType {
-  SWITCH
-  FIREWALL
-  WIFI_AP
-  PRINTER
-  RACK
-  CAMERA
-  PATCH_PANEL
-  RJ45
-  NRO
-  ROUTER
-  TEAMS_ROOM
-  WEBCAM
-  DISPLAY
-  SERVER
-  PDU
-  BOX_5G
-  OTHER
-}
+// PinType enum removed in v1.3 — now dynamic String via EnumLabel
 
 model Pin {
   id          String    @id @default(cuid())
@@ -575,7 +581,7 @@ model Pin {
   y Float
 
   // Type & association
-  pinType PinType
+  pinType String // was PinType enum — dynamic via EnumLabel
   assetId String?
   asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: Cascade)
   rackId  String?
@@ -640,6 +646,11 @@ model Task {
   ticketRef    String?
   ticketUrl    String?
   ticketStatus String?
+
+  // Costs (prestations)
+  estimatedCost Decimal? @db.Decimal(10, 2)
+  actualCost    Decimal? @db.Decimal(10, 2)
+  costCurrency  String   @default("EUR")
 
   completedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -980,6 +991,8 @@ model EnumLabel {
   color     String? // Custom color hex
   sortOrder Int     @default(0)
   isHidden  Boolean @default(false)
+  isBuiltIn Boolean @default(false) // true = valeur système non-supprimable
+  isActive  Boolean @default(true)  // false = désactivée (pas proposée dans les selects)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -987,6 +1000,7 @@ model EnumLabel {
   @@unique([tenantId, enumType, enumValue])
   @@index([tenantId])
   @@index([tenantId, enumType])
+  @@index([tenantId, enumType, isActive])
   @@map("enum_labels")
 }
 
@@ -1092,6 +1106,9 @@ model Expense {
   // Allocations
   allocations CostAllocation[]
 
+  // Linked connectivity (optional reverse for ConnectivityLink.expenseId)
+  connectivityLinks ConnectivityLink[]
+
   @@index([tenantId])
   @@index([tenantId, type])
   @@index([bearerId])
@@ -1118,6 +1135,81 @@ model CostAllocation {
   @@index([expenseId])
   @@index([targetId])
   @@map("cost_allocations")
+}
+
+// ============================================================================
+// BUDGETS
+// ============================================================================
+
+enum BudgetPeriod {
+  MONTH
+  YEAR
+}
+
+model Budget {
+  id           String       @id @default(cuid())
+  tenantId     String
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  label        String
+  delegationId String?
+  delegation   Delegation?  @relation(fields: [delegationId], references: [id])
+  siteId       String?
+  site         Site?        @relation(fields: [siteId], references: [id])
+  expenseType  String?      // "EQUIPMENT" | "SERVICE" | ... (matches ExpenseType)
+  period       BudgetPeriod @default(YEAR)
+  startDate    DateTime
+  endDate      DateTime
+  amount       Decimal      @db.Decimal(12, 2)
+  currency     String       @default("EUR")
+  notes        String?      @db.Text
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([tenantId, startDate, endDate])
+  @@index([tenantId, delegationId])
+  @@map("budgets")
+}
+
+// ============================================================================
+// CONNECTIVITY LINKS (structured replacement of Site.connectivity JSON)
+// ============================================================================
+
+enum ConnectivityRole {
+  PRIMARY
+  BACKUP
+  OTHER
+}
+
+model ConnectivityLink {
+  id             String            @id @default(cuid())
+  tenantId       String
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  siteId         String
+  site           Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  role           ConnectivityRole  @default(PRIMARY)
+  provider       String            // ISP name ("Orange", "SFR", "Starlink")
+  type           String            // "FIBER" | "ADSL" | "4G" | "5G" | "STARLINK" | ...
+  bandwidthDown  Int?              // Mbps
+  bandwidthUp    Int?              // Mbps
+  publicIp       String?
+  monthlyPrice   Decimal?          @db.Decimal(10, 2)
+  currency       String            @default("EUR")
+  startDate      DateTime?
+  endDate        DateTime?
+  contractRef    String?
+  notes          String?           @db.Text
+
+  // Linked recurring expense (optional)
+  expenseId String?
+  expense   Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, siteId])
+  @@index([tenantId, role])
+  @@map("connectivity_links")
 }
 
 // ============================================================================
@@ -1179,4 +1271,25 @@ model NotificationLog {
   @@index([tenantId, createdAt])
   @@index([tenantId, eventType])
   @@map("notification_logs")
+}
+
+/// In-app notification inbox per user (R12b)
+model UserNotification {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type  String  @db.VarChar(60) // TASK_ASSIGNED | WARRANTY_EXPIRING | TASK_DUE_SOON | ...
+  title String
+  body  String? @db.Text
+  link  String? // relative URL inside the app
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([tenantId, createdAt])
+  @@map("user_notifications")
 }

@@ -7,6 +7,65 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.3.0] - 2026-04-16
+
+### Vers le pilote production
+
+#### Lot A — Fix UX baies
+- `handleUnitClick()` détecte les slots occupés et ouvre le dialog en mode édition/démontage
+- Bouton "Démonter" visible uniquement quand une baie est occupée
+
+#### Lot B — Types dynamiques (EnumLabel)
+- `AssetType`, `AssetStatus`, `PinType` passent d'`enum` Prisma à `String`
+- `EnumLabel` étendu (`isBuiltIn`, `isActive`) — source unique des valeurs autorisées
+- Validator `@IsDynamicEnum()` (class-validator) lit les valeurs actives par tenant
+- Seed migre les valeurs historiques avec `isBuiltIn=true`
+- `POST /api/admin/enum-labels` + `DELETE /:id` (409 si built-in ou utilisé)
+- Dialog de gestion de valeurs + `EnumSelect` réutilisable
+
+#### Lot C — Module coûts (modèles, budgets, projections, coûts tâches)
+- **`AssetModel`** : catalogue de modèles avec prix (`acquisitionPrice` / `monthlyPrice`), specs (watts, poids, U), pré-remplissage lors de la création d'asset
+- Création automatique d'`Expense` liée quand un asset a un prix (ONE_TIME ou MONTHLY)
+- **`Budget`** : période `MONTH` | `YEAR`, scope délégation/site/type, endpoint `/budgets/:id/status` (spent / remaining / progress / overBudget)
+- **Projection** : `GET /api/expenses/projection?from=&to=&groupBy=` — éclate les récurrences (MONTHLY/QUARTERLY/YEARLY) en tranches mensuelles
+- **Coûts tâches** : champs `estimatedCost` / `actualCost` / `costCurrency` + conversion d'une tâche terminée en `Expense SERVICE`
+- `/dashboard/costs/budgets` (liste + new/edit)
+
+#### Lot D — Connectivité structurée
+- Modèle **`ConnectivityLink`** remplace `Site.connectivity` JSON (legacy conservé)
+- Rôle `PRIMARY | BACKUP | OTHER`, provider/type/bandwidth/IP/contract/prix mensuel
+- Endpoint `POST /api/connectivity/:id/generate-expense` — crée une Expense MONTHLY liée et `expenseId` FK
+- Section "Connectivité" dans `/dashboard/sites/[id]` remplace l'éditeur JSON
+
+#### Lot E — Consommation électrique
+- Nouveau module `/api/consumption/{summary,site/:id,rack/:id}`
+- Calcul : `totalWatts = Σ(power × dutyCyclePercent / 100)`, `kWh/mois = totalWatts × 24 × 30 / 1000`, `coût = kWh × tenant.config.electricity.costPerKwh`
+- Nouveau champ `dutyCyclePercent` sur Asset (slider 0-100 dans formulaire)
+- Nouveau champ `autoGenerateElectricityExpense` sur Site
+- Pages `/dashboard/consumption` (vue globale) + `/dashboard/consumption/[siteId]` (détail site)
+- Tab "Électricité" dans `/dashboard/settings` (coût kWh, devise)
+
+#### Lot F — Production-ready features
+- **F1 — Recherche globale** : `GET /api/search?q=&limit=`, modal `Cmd+K` / `Ctrl+K` avec groupement par type (Assets, Sites, Baies, Tâches, Contacts), navigation clavier
+- **F2 — Notifications in-app** : modèle `UserNotification` + inbox `/api/notifications/inbox/*`, cloche dans le header avec badge unread, polling 60s, page `/dashboard/notifications`, crons quotidiens (warranty ≤ 30j, tasks due ≤ 2j), hook sur `TASK_ASSIGNED`
+- **F3 — Import CSV** : endpoints `/import/preview` (dry-run) + `/import/commit` + `/import/template`, page `/dashboard/assets/import` avec preview serveur (valid/invalid rows avec erreurs par ligne)
+- **F4 — Viewer audit log** : `GET /api/audit` + `/api/audit/entity/:type/:id`, page `/dashboard/admin/audit` (filtres entity/action/user/from/to), composant `EntityAuditLog` réutilisable
+
+### Breaking changes
+- Enums `AssetType`, `AssetStatus`, `PinType` supprimés du schéma Prisma → `String` avec validation par `EnumLabel`
+- `Site.connectivity` JSON marqué legacy (sera supprimé en v1.4) → utiliser `ConnectivityLink`
+
+### Modules backend ajoutés
+- `asset-models`, `budgets`, `connectivity`, `consumption`, `search`, `audit`
+
+### Pages frontend ajoutées
+- `/dashboard/costs/budgets/{,new,[id]/edit}`
+- `/dashboard/consumption/{,[siteId]}`
+- `/dashboard/notifications`
+- `/dashboard/admin/audit`
+
+---
+
 ## [1.1.1] - 2026-04-06
 
 ### Notifications et gestion utilisateurs
