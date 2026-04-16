@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,7 +36,7 @@ import { Badge } from '@/components/ui/badge';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
 import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { ScopeBadge } from '@/components/ui/scope-selector';
-import { Plus, Search, Eye, Pencil, Trash2, Users, Settings } from 'lucide-react';
+import { Plus, Search, Eye, Pencil, Trash2, Users, Settings, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ExportMenu } from '@/components/ui/export-menu';
@@ -68,6 +68,8 @@ export default function ContactsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [scopeFilter, setScopeFilter] = useState<string>('ALL');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<string>('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const { canCreate, canUpdate, canDelete, isManagerOrAbove, isSuperAdmin } = usePermissions();
@@ -105,6 +107,7 @@ export default function ContactsPage() {
       pageSize,
     }),
     retry: false,
+    placeholderData: keepPreviousData,
   });
   const contacts = response?.data ?? [];
   const meta = response?.meta;
@@ -146,6 +149,42 @@ export default function ContactsPage() {
   const filteredTypes = contactTypes?.filter(
     (t) => categoryFilter === 'ALL' || t.category === categoryFilter
   );
+
+  const sortedContacts = useMemo(() => {
+    if (!sortField) return filteredContacts;
+    return [...filteredContacts].sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+      switch (sortField) {
+        case 'name': valA = a.name; valB = b.name; break;
+        case 'type': valA = a.type?.name || ''; valB = b.type?.name || ''; break;
+        case 'company': valA = a.company || ''; valB = b.company || ''; break;
+        case 'email': valA = a.email || ''; valB = b.email || ''; break;
+        case 'phone': valA = a.phone || a.mobile || ''; valB = b.phone || b.mobile || ''; break;
+        case 'status':
+          valA = a.isActive ? 0 : 1; valB = b.isActive ? 0 : 1;
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+      }
+      const cmp = String(valA).localeCompare(String(valB), 'fr', { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredContacts, sortField, sortDir]);
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/50" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="ml-1 h-3 w-3" />
+      : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
 
   const handleExport = (format: 'excel' | 'pdf' | 'csv' | 'json') => {
     if (!filteredContacts.length) return;
@@ -298,18 +337,30 @@ export default function ContactsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nom</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Entreprise</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Telephone</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('name')}>
+                    <span className="inline-flex items-center">Nom<SortIcon field="name" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('type')}>
+                    <span className="inline-flex items-center">Type<SortIcon field="type" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('company')}>
+                    <span className="inline-flex items-center">Entreprise<SortIcon field="company" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('email')}>
+                    <span className="inline-flex items-center">Email<SortIcon field="email" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('phone')}>
+                    <span className="inline-flex items-center">Telephone<SortIcon field="phone" /></span>
+                  </TableHead>
                   <TableHead>Portee</TableHead>
-                  <TableHead>Statut</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}>
+                    <span className="inline-flex items-center">Statut<SortIcon field="status" /></span>
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredContacts.map((contact) => (
+                {sortedContacts.map((contact) => (
                   <TableRow key={contact.id} data-testid="contact-row">
                     <TableCell className="font-medium">{contact.name}</TableCell>
                     <TableCell>

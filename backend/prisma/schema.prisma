@@ -370,8 +370,8 @@ model Asset {
   id           String      @id @default(cuid())
   tenantId     String
   tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  delegationId String
-  delegation   Delegation  @relation(fields: [delegationId], references: [id])
+  delegationId String?
+  delegation   Delegation? @relation(fields: [delegationId], references: [id])
   siteId       String?
   site         Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
   type         String      // was AssetType enum — dynamic via EnumLabel
@@ -413,6 +413,12 @@ model Asset {
   powerConsumption Float? // Watts
   dutyCyclePercent Int     @default(100) // Effective usage % (0-100) for consumption estimation
   notes            String?   @db.Text
+
+  // WiFi AP coverage (for floor-plan rendering)
+  wifiCoverageRadius Float?  // meters — used to draw coverage circle on floor plans
+  wifiFrequency      String? // "2.4GHz" | "5GHz" | "6GHz" | "DUAL" | "TRI"
+  wifiAntennaType    String? // "OMNI" | "DIRECTIONAL" | "SECTOR"
+  wifiTxPowerDbm     Int?    // transmit power in dBm
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

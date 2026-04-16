@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ import {
 import { tasksApi } from '@/lib/api/tasks';
 import { sitesApi } from '@/lib/api/sites';
 import { usersApi } from '@/lib/api/users';
-import { Plus, Calendar, User, AlertCircle, Clock, AlertTriangle, Search, X, ClipboardList, LayoutGrid, List, Columns } from 'lucide-react';
+import { Plus, Calendar, User, AlertCircle, Clock, AlertTriangle, Search, X, ClipboardList, LayoutGrid, List, Columns, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -205,6 +205,8 @@ export default function TasksPage() {
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [assignedFilter, setAssignedFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'grid'>('kanban');
+  const [sortField, setSortField] = useState<string>('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
@@ -220,6 +222,7 @@ export default function TasksPage() {
       assignedTo: assignedFilter !== 'all' ? assignedFilter : undefined,
       search: search || undefined,
     }),
+    placeholderData: keepPreviousData,
   });
   const tasks = response?.data ?? [];
   const meta = response?.meta;
@@ -252,6 +255,51 @@ export default function TasksPage() {
     if (assignedFilter !== 'all' && task.assignedTo !== assignedFilter) return false;
     return true;
   }) || [];
+
+  const sortedTasks = useMemo(() => {
+    if (!sortField) return filteredTasks;
+    return [...filteredTasks].sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+      switch (sortField) {
+        case 'title': valA = a.title; valB = b.title; break;
+        case 'priority':
+          const prioOrder: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+          valA = prioOrder[a.priority] ?? 99;
+          valB = prioOrder[b.priority] ?? 99;
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        case 'status':
+          const statusOrder: Record<string, number> = { BLOCKED: 0, TODO: 1, IN_PROGRESS: 2, DONE: 3, CANCELLED: 4 };
+          valA = statusOrder[a.status] ?? 99;
+          valB = statusOrder[b.status] ?? 99;
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        case 'assignedUser': valA = a.assignedUser?.name || ''; valB = b.assignedUser?.name || ''; break;
+        case 'site': valA = a.site?.name || ''; valB = b.site?.name || ''; break;
+        case 'dueDate':
+          valA = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+          valB = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+      }
+      const cmp = String(valA).localeCompare(String(valB), 'fr', { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredTasks, sortField, sortDir]);
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/50" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="ml-1 h-3 w-3" />
+      : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
 
   const hasFilters = search || statusFilter !== 'all' || priorityFilter !== 'all' || siteFilter !== 'all' || assignedFilter !== 'all';
   const clearFilters = () => {
@@ -312,7 +360,18 @@ export default function TasksPage() {
           <h1 className="text-3xl font-bold">Tâches</h1>
           <p className="text-muted-foreground">Gérez vos tâches et interventions ({filteredTasks.length}{hasFilters ? ` / ${tasks?.length || 0}` : ''})</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 border rounded-lg p-1">
+            <Button variant={viewMode === 'kanban' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('kanban')} title="Kanban">
+              <Columns className="h-4 w-4" />
+            </Button>
+            <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')} title="Grille">
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')} title="Liste">
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
           <ExportMenu
             onExport={handleExport}
             disabled={!filteredTasks.length}
@@ -416,21 +475,6 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* View mode toggle */}
-      <div className="flex items-center justify-end">
-        <div className="flex items-center gap-1 border rounded-lg p-1">
-          <Button variant={viewMode === 'kanban' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('kanban')} title="Kanban">
-            <Columns className="h-4 w-4" />
-          </Button>
-          <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')} title="Grille">
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')} title="Liste">
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
       {/* Kanban / List / Grid */}
       {viewMode === 'kanban' && (
         <div data-testid="kanban-board" className="flex gap-6 overflow-x-auto pb-4">
@@ -452,17 +496,29 @@ export default function TasksPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Titre</TableHead>
-                  <TableHead>Priorité</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className="hidden md:table-cell">Assigné à</TableHead>
-                  <TableHead className="hidden md:table-cell">Site</TableHead>
-                  <TableHead className="hidden lg:table-cell">Date limite</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('title')}>
+                    <span className="inline-flex items-center">Titre<SortIcon field="title" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('priority')}>
+                    <span className="inline-flex items-center">Priorité<SortIcon field="priority" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}>
+                    <span className="inline-flex items-center">Statut<SortIcon field="status" /></span>
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('assignedUser')}>
+                    <span className="inline-flex items-center">Assigné à<SortIcon field="assignedUser" /></span>
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('site')}>
+                    <span className="inline-flex items-center">Site<SortIcon field="site" /></span>
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort('dueDate')}>
+                    <span className="inline-flex items-center">Date limite<SortIcon field="dueDate" /></span>
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTasks.map((task) => {
+                {sortedTasks.map((task) => {
                   const overdue = isTaskOverdue(task);
                   return (
                     <TableRow key={task.id} className={overdue ? 'bg-red-50/50 dark:bg-red-950/20' : ''}>

@@ -667,9 +667,9 @@ export async function exportSiteZip(
   onProgress?.({ step: 'Chargement des donn\u00e9es associ\u00e9es...', percent: 15 });
   const [allAssets, racks, allTasks, floorPlans, documents] = await Promise.all([
     assetsApi.getAll().catch(() => [] as Asset[]),
-    racksApi.getAll({ siteId }).then(r => r.data).catch(() => [] as Rack[]),
+    racksApi.getAll({ siteId }).catch(() => [] as Rack[]),
     tasksApi.getAll().catch(() => [] as Task[]),
-    floorPlansApi.getAll({ siteId }).then(r => r.data).catch(() => [] as FloorPlan[]),
+    floorPlansApi.getAll({ siteId }).catch(() => [] as FloorPlan[]),
     sitesApi.listAllDocuments(siteId).catch(() => []),
   ]);
 

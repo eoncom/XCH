@@ -15,7 +15,7 @@ export class ApiError extends Error {
 
 class ApiClient {
   private baseURL: string;
-  private isRefreshing: boolean = false;
+  private refreshPromise: Promise<boolean> | null = null;
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
@@ -30,31 +30,34 @@ class ApiClient {
     return localStorage.getItem('xch-active-delegation');
   }
 
+  /**
+   * Refresh access token. When multiple concurrent requests hit 401 at the same
+   * time, they all await the same in-flight refresh promise rather than one of
+   * them short-circuiting to /login.
+   */
   private async refreshToken(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
-    if (this.isRefreshing) return false; // Prevent concurrent refresh
 
-    this.isRefreshing = true;
+    // Concurrent callers share the same refresh attempt
+    if (this.refreshPromise) return this.refreshPromise;
 
-    try {
-      // ✅ Call refresh endpoint (uses refreshToken cookie automatically)
-      const response = await fetch(`${this.baseURL}/api/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include', // ✅ CRITICAL - sends refreshToken cookie
-      });
-
-      this.isRefreshing = false;
-
-      if (response.ok) {
-        // Backend has set new accessToken cookie
-        return true;
+    this.refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${this.baseURL}/api/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+        return response.ok;
+      } catch (error) {
+        console.error('Token refresh failed', error);
+        return false;
+      } finally {
+        // Clear after a tick so simultaneous awaiters still see the same promise
+        setTimeout(() => { this.refreshPromise = null; }, 0);
       }
-    } catch (error) {
-      console.error('Token refresh failed', error);
-      this.isRefreshing = false;
-    }
+    })();
 
-    return false;
+    return this.refreshPromise;
   }
 
   async fetch<T = any>(

@@ -12,6 +12,7 @@ export interface AuditEntry {
   userAgent?: string | null;
   timestamp: string;
   user?: { id: string; name: string; email: string } | null;
+  entityLabel?: string | null;
 }
 
 export interface AuditQueryParams {

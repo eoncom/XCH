@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { assetsApi } from '@/lib/api/assets';
 import { GroupedSiteSelector } from '@/components/ui/grouped-site-selector';
+import { organizationApi } from '@/lib/api/organization';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
 import { ArrowLeft, Info, Wifi, ExternalLink, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
@@ -30,7 +31,9 @@ import type { AssetModel } from '@/lib/api/asset-models';
 const assetSchema = z.object({
   type: z.string().min(1, 'Le type est obligatoire'),
   status: z.string().min(1, 'Le statut est obligatoire'),
-  siteId: z.string().min(1, 'Le site est obligatoire'),
+  locationScope: z.enum(['SITE', 'DELEGATION', 'UNASSIGNED']).default('SITE'),
+  siteId: z.string().optional(),
+  delegationId: z.string().optional(),
   name: z.string().optional(),
   manufacturer: z.string().optional(),
   model: z.string().optional(),
@@ -96,6 +99,25 @@ const assetSchema = z.object({
       return undefined;
     }),
   priceCurrency: z.string().optional(),
+  // WiFi AP coverage
+  wifiCoverageRadius: z.union([z.number(), z.nan(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === '' || val === undefined || val === null) return undefined;
+      if (typeof val === 'string') return parseFloat(val) || undefined;
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      return undefined;
+    }),
+  wifiFrequency: z.string().optional(),
+  wifiAntennaType: z.string().optional(),
+  wifiTxPowerDbm: z.union([z.number(), z.nan(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === '' || val === undefined || val === null) return undefined;
+      if (typeof val === 'string') return parseInt(val, 10) || undefined;
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      return undefined;
+    }),
 });
 
 type AssetFormData = z.infer<typeof assetSchema>;
@@ -107,6 +129,12 @@ export default function EditAssetPage() {
   const assetId = params.id as string;
 
   const { getLabelsForType } = useEnumLabels();
+
+  const { data: delegations = [] } = useQuery({
+    queryKey: ['delegations-list'],
+    queryFn: () => organizationApi.getDelegations(false),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const { data: asset, isLoading } = useQuery<Asset>({
     queryKey: ['asset', assetId],
@@ -126,7 +154,13 @@ export default function EditAssetPage() {
       ? {
           type: asset.type,
           status: asset.status,
+          locationScope: asset.siteId
+            ? 'SITE'
+            : (asset as any).delegationId
+              ? 'DELEGATION'
+              : 'UNASSIGNED',
           siteId: asset.siteId || '',
+          delegationId: (asset as any).delegationId || '',
           name: asset.name || '',
           manufacturer: asset.manufacturer || '',
           model: asset.model || '',
@@ -151,6 +185,10 @@ export default function EditAssetPage() {
           acquisitionPrice: asset.acquisitionPrice || undefined,
           monthlyPrice: asset.monthlyPrice || undefined,
           priceCurrency: asset.priceCurrency || 'EUR',
+          wifiCoverageRadius: (asset as any).wifiCoverageRadius ?? undefined,
+          wifiFrequency: (asset as any).wifiFrequency || '',
+          wifiAntennaType: (asset as any).wifiAntennaType || '',
+          wifiTxPowerDbm: (asset as any).wifiTxPowerDbm ?? undefined,
         }
       : undefined,
   });
@@ -189,7 +227,20 @@ export default function EditAssetPage() {
     if (cleaned.monthlyPrice === undefined || cleaned.monthlyPrice === null) delete cleaned.monthlyPrice;
     if (!cleaned.priceCurrency) delete cleaned.priceCurrency;
     if (!cleaned.assetModelId) delete cleaned.assetModelId;
-    // siteId is required - keep it
+
+    // Apply location scope semantics
+    const scope = cleaned.locationScope || 'SITE';
+    if (scope === 'SITE') {
+      cleaned.delegationId = null;
+      if (!cleaned.siteId) cleaned.siteId = null;
+    } else if (scope === 'DELEGATION') {
+      cleaned.siteId = null;
+      if (!cleaned.delegationId) cleaned.delegationId = null;
+    } else {
+      cleaned.siteId = null;
+      cleaned.delegationId = null;
+    }
+    delete cleaned.locationScope;
 
     // Clean networkInfo: remove empty subfields, remove entire object if all empty
     if (cleaned.networkInfo) {
@@ -216,6 +267,8 @@ export default function EditAssetPage() {
   const type = watch('type');
   const status = watch('status');
   const siteId = watch('siteId');
+  const locationScope = watch('locationScope');
+  const delegationId = watch('delegationId');
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
@@ -386,19 +439,76 @@ export default function EditAssetPage() {
           <CardHeader>
             <CardTitle>Localisation</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="siteId">Site d'affectation <span className="text-destructive">*</span></Label>
-                <GroupedSiteSelector
-                  value={siteId}
-                  onValueChange={(value) => setValue('siteId', value)}
-                  placeholder="Sélectionner un site..."
-                />
-                {errors.siteId && (
-                  <p className="text-sm text-destructive">{errors.siteId.message}</p>
-                )}
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Type d'affectation</Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {[
+                  { v: 'SITE', label: 'Site spécifique', desc: 'Rattaché à un site unique' },
+                  { v: 'DELEGATION', label: 'Délégation (multi-site)', desc: 'S\'applique à tous les sites' },
+                  { v: 'UNASSIGNED', label: 'Non affecté', desc: 'Stocké / hors service' },
+                ].map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setValue('locationScope', opt.v as any)}
+                    className={`text-left border rounded-md px-3 py-2 transition ${
+                      locationScope === opt.v
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                        : 'hover:bg-accent'
+                    }`}
+                  >
+                    <div className="text-sm font-medium">{opt.label}</div>
+                    <div className="text-xs text-muted-foreground">{opt.desc}</div>
+                  </button>
+                ))}
               </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {locationScope === 'SITE' && (
+                <div className="space-y-2">
+                  <Label htmlFor="siteId">Site d'affectation</Label>
+                  <GroupedSiteSelector
+                    value={siteId || ''}
+                    onValueChange={(value) => setValue('siteId', value)}
+                    placeholder="Sélectionner un site..."
+                  />
+                  {errors.siteId && (
+                    <p className="text-sm text-destructive">{errors.siteId.message}</p>
+                  )}
+                </div>
+              )}
+
+              {locationScope === 'DELEGATION' && (
+                <div className="space-y-2">
+                  <Label htmlFor="delegationId">Délégation</Label>
+                  <Select
+                    value={delegationId || ''}
+                    onValueChange={(v) => setValue('delegationId', v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionner une délégation..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {delegations.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.code} — {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    L'équipement s'appliquera à l'ensemble des sites de cette délégation.
+                  </p>
+                </div>
+              )}
+
+              {locationScope === 'UNASSIGNED' && (
+                <div className="text-sm text-muted-foreground border rounded-md p-3 bg-muted/30">
+                  L'équipement ne sera rattaché à aucun site ni délégation (stock / hors service).
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="locationText">Emplacement (texte libre)</Label>
@@ -598,6 +708,76 @@ export default function EditAssetPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* WiFi AP coverage (conditional) */}
+        {(type === 'WIFI_AP' || type === 'ACCESS_POINT') && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Couverture WiFi
+                <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Ces informations sont utilisées pour afficher la zone de couverture sur les plans de sol.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="wifiCoverageRadius">Rayon de couverture (m)</Label>
+                  <Input
+                    id="wifiCoverageRadius"
+                    type="number"
+                    step="0.5"
+                    {...register('wifiCoverageRadius', { valueAsNumber: true })}
+                    placeholder="Ex: 15"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="wifiFrequency">Bande de fréquence</Label>
+                  <select
+                    id="wifiFrequency"
+                    {...register('wifiFrequency')}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">—</option>
+                    <option value="2.4GHz">2.4 GHz</option>
+                    <option value="5GHz">5 GHz</option>
+                    <option value="6GHz">6 GHz</option>
+                    <option value="DUAL">Dual-band (2.4 + 5)</option>
+                    <option value="TRI">Tri-band (2.4 + 5 + 6)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="wifiAntennaType">Type d'antenne</Label>
+                  <select
+                    id="wifiAntennaType"
+                    {...register('wifiAntennaType')}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">—</option>
+                    <option value="OMNI">Omnidirectionnelle</option>
+                    <option value="DIRECTIONAL">Directionnelle</option>
+                    <option value="SECTOR">Sectorielle</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="wifiTxPowerDbm">Puissance d'émission (dBm)</Label>
+                  <Input
+                    id="wifiTxPowerDbm"
+                    type="number"
+                    step="1"
+                    {...register('wifiTxPowerDbm', { valueAsNumber: true })}
+                    placeholder="Ex: 20"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Pricing */}
         <Card>

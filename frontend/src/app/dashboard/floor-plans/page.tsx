@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,7 @@ import { floorPlansApi } from '@/lib/api/floor-plans';
 import { sitesApi } from '@/lib/api/sites';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Plus, Search, FileImage, MapPin, Layers, LayoutGrid, List } from 'lucide-react';
+import { Plus, Search, FileImage, MapPin, Layers, LayoutGrid, List, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
@@ -61,6 +61,8 @@ export default function FloorPlansPage() {
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortField, setSortField] = useState<string>('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
@@ -76,6 +78,7 @@ export default function FloorPlansPage() {
       page,
       pageSize,
     }),
+    placeholderData: keepPreviousData,
   });
   const floorPlans = response?.data ?? [];
   const meta = response?.meta;
@@ -99,6 +102,44 @@ export default function FloorPlansPage() {
     );
   });
 
+  const sortedFloorPlans = useMemo(() => {
+    if (!sortField) return filteredFloorPlans;
+    return [...filteredFloorPlans].sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+      switch (sortField) {
+        case 'title': valA = a.title || ''; valB = b.title || ''; break;
+        case 'site': valA = a.site?.name || ''; valB = b.site?.name || ''; break;
+        case 'building': valA = `${a.building || ''} ${a.floor || ''}`; valB = `${b.building || ''} ${b.floor || ''}`; break;
+        case 'version':
+          valA = a.version; valB = b.version;
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        case 'pins':
+          valA = a.pins?.length || 0; valB = b.pins?.length || 0;
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        case 'type': valA = a.fileType || a.mimeType || ''; valB = b.fileType || b.mimeType || ''; break;
+      }
+      const cmp = String(valA).localeCompare(String(valB), 'fr', { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredFloorPlans, sortField, sortDir]);
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/50" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="ml-1 h-3 w-3" />
+      : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
+
   if (isLoading) {
     return <div className="text-center">Chargement des plans...</div>;
   }
@@ -112,14 +153,24 @@ export default function FloorPlansPage() {
             Gérez vos plans avec annotations et repères
           </p>
         </div>
-        {canCreate('floor-plans') && (
-          <Button asChild data-testid="create-floor-plan-btn">
-            <Link href="/dashboard/floor-plans/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Nouveau plan
-            </Link>
-          </Button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 border rounded-lg p-1">
+            <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')}>
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')}>
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
+          {canCreate('floor-plans') && (
+            <Button asChild data-testid="create-floor-plan-btn">
+              <Link href="/dashboard/floor-plans/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Nouveau plan
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -149,18 +200,7 @@ export default function FloorPlansPage() {
         </Select>
       </div>
 
-      {/* View mode toggle */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{filteredFloorPlans.length} plan(s)</p>
-        <div className="flex items-center gap-1 border rounded-lg p-1">
-          <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')}>
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')}>
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <p className="text-sm text-muted-foreground">{filteredFloorPlans.length} plan(s)</p>
 
       {/* Floor Plans List/Grid */}
       {viewMode === 'list' ? (
@@ -169,17 +209,29 @@ export default function FloorPlansPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Titre</TableHead>
-                  <TableHead className="hidden md:table-cell">Site</TableHead>
-                  <TableHead className="hidden md:table-cell">Bâtiment / Étage</TableHead>
-                  <TableHead>Version</TableHead>
-                  <TableHead>Pins</TableHead>
-                  <TableHead className="hidden lg:table-cell">Type</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('title')}>
+                    <span className="inline-flex items-center">Titre<SortIcon field="title" /></span>
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('site')}>
+                    <span className="inline-flex items-center">Site<SortIcon field="site" /></span>
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('building')}>
+                    <span className="inline-flex items-center">Bâtiment / Étage<SortIcon field="building" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('version')}>
+                    <span className="inline-flex items-center">Version<SortIcon field="version" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('pins')}>
+                    <span className="inline-flex items-center">Pins<SortIcon field="pins" /></span>
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort('type')}>
+                    <span className="inline-flex items-center">Type<SortIcon field="type" /></span>
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredFloorPlans.map((plan) => {
+                {sortedFloorPlans.map((plan) => {
                   const groupKey = plan.planGroupId || plan.id;
                   const totalVersions = versionCounts.get(groupKey) || 1;
                   const buildingFloor = [

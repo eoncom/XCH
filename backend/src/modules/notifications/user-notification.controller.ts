@@ -11,11 +11,13 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { UserNotificationService } from './user-notification.service';
 
 @ApiTags('User Notifications')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@SkipDelegation()
 @Controller('notifications/inbox')
 export class UserNotificationController {
   constructor(private service: UserNotificationService) {}

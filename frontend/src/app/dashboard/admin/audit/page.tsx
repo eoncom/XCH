@@ -180,15 +180,31 @@ export default function AuditLogPage() {
                         <td className="px-3 py-2">
                           <div className="font-medium">{e.entityType}</div>
                           {e.entityId && (
-                            <div className="text-xs text-muted-foreground font-mono">
-                              {entityLink ? (
-                                <Link href={entityLink} className="hover:underline">
-                                  {e.entityId.slice(0, 8)}...
-                                </Link>
-                              ) : (
-                                <>{e.entityId.slice(0, 8)}...</>
-                              )}
-                            </div>
+                            <>
+                              {e.entityLabel ? (
+                                <div className="text-xs">
+                                  {entityLink ? (
+                                    <Link href={entityLink} className="hover:underline">
+                                      {e.entityLabel}
+                                    </Link>
+                                  ) : (
+                                    <span>{e.entityLabel}</span>
+                                  )}
+                                </div>
+                              ) : null}
+                              <div
+                                className="text-[10px] text-muted-foreground font-mono"
+                                title={e.entityId}
+                              >
+                                {entityLink && !e.entityLabel ? (
+                                  <Link href={entityLink} className="hover:underline">
+                                    {e.entityId.slice(0, 8)}...
+                                  </Link>
+                                ) : (
+                                  <>{e.entityId.slice(0, 8)}...</>
+                                )}
+                              </div>
+                            </>
                           )}
                         </td>
                         <td className="px-3 py-2">

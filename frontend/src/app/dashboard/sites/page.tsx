@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -86,6 +86,7 @@ export default function SitesPage() {
       page: effectivePage,
       pageSize: effectivePageSize,
     }),
+    placeholderData: keepPreviousData,
   });
   const sites = response?.data ?? [];
   const meta = response?.meta;
@@ -191,7 +192,17 @@ export default function SitesPage() {
           <h1 className="text-3xl font-bold">Sites</h1>
           <p className="text-muted-foreground">Gérez vos sites de déploiement</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          {activeTab === 'list' && (
+            <div className="flex items-center gap-1 border rounded-lg p-1">
+              <Button variant={siteViewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setSiteViewMode('grid')}>
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button variant={siteViewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setSiteViewMode('list')}>
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
           <ExportMenu
             onExport={handleExport}
             disabled={!filteredSites?.length}
@@ -263,17 +274,7 @@ export default function SitesPage() {
 
         {/* List View */}
         <TabsContent value="list" className="mt-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">{filteredSites?.length || 0} site(s)</p>
-            <div className="flex items-center gap-1 border rounded-lg p-1">
-              <Button variant={siteViewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setSiteViewMode('grid')}>
-                <LayoutGrid className="h-4 w-4" />
-              </Button>
-              <Button variant={siteViewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setSiteViewMode('list')}>
-                <List className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground">{filteredSites?.length || 0} site(s)</p>
 
           {siteViewMode === 'list' ? (
             <Card>

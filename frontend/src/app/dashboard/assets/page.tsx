@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -81,6 +81,9 @@ export default function AssetsPage() {
         page,
         pageSize,
       }),
+    // Keep previous rows visible while refetching (e.g. while typing in the search box).
+    // Prevents the whole page (and thus the search input) from unmounting on each keystroke.
+    placeholderData: keepPreviousData,
   });
   const assets = response?.data ?? [];
   const meta = response?.meta;

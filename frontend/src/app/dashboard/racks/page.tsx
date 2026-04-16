@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { SiteFilterSelect } from '@/components/ui/grouped-site-selector';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Plus, Search, Server, MapPin, LayoutGrid, List } from 'lucide-react';
+import { Plus, Search, Server, MapPin, LayoutGrid, List, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
@@ -39,6 +39,8 @@ export default function RacksPage() {
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortField, setSortField] = useState<string>('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
@@ -54,6 +56,7 @@ export default function RacksPage() {
       page,
       pageSize,
     }),
+    placeholderData: keepPreviousData,
   });
   const racks = response?.data ?? [];
   const meta = response?.meta;
@@ -67,6 +70,44 @@ export default function RacksPage() {
     const matchesStatus = statusFilter === 'all' || rack.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const sortedRacks = useMemo(() => {
+    if (!sortField) return filteredRacks;
+    return [...filteredRacks].sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+      switch (sortField) {
+        case 'name': valA = a.name; valB = b.name; break;
+        case 'location': valA = a.location || ''; valB = b.location || ''; break;
+        case 'site': valA = a.site?.name || ''; valB = b.site?.name || ''; break;
+        case 'heightU':
+          valA = a.heightU; valB = b.heightU;
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        case 'assetCount':
+          valA = a.assets?.length || 0; valB = b.assets?.length || 0;
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        case 'status': valA = a.status; valB = b.status; break;
+      }
+      const cmp = String(valA).localeCompare(String(valB), 'fr', { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredRacks, sortField, sortDir]);
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/50" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="ml-1 h-3 w-3" />
+      : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
 
   const handleExport = (format: 'excel' | 'pdf' | 'csv') => {
     if (!filteredRacks) return;
@@ -189,7 +230,15 @@ export default function RacksPage() {
           <h1 className="text-3xl font-bold">Baies</h1>
           <p className="text-muted-foreground">Gérez vos baies et équipements montés</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 border rounded-lg p-1">
+            <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')}>
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')}>
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
           <ExportMenu
             onExport={handleExport}
             disabled={!filteredRacks.length}
@@ -233,18 +282,7 @@ export default function RacksPage() {
         </Select>
       </div>
 
-      {/* View mode toggle */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{filteredRacks.length} baie(s)</p>
-        <div className="flex items-center gap-1 border rounded-lg p-1">
-          <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')}>
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')}>
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <p className="text-sm text-muted-foreground">{filteredRacks.length} baie(s)</p>
 
       {/* Racks List/Grid */}
       {viewMode === 'list' ? (
@@ -253,16 +291,26 @@ export default function RacksPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nom</TableHead>
-                  <TableHead className="hidden md:table-cell">Emplacement</TableHead>
-                  <TableHead className="hidden md:table-cell">Site</TableHead>
-                  <TableHead>Taille</TableHead>
-                  <TableHead>Équipements</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('name')}>
+                    <span className="inline-flex items-center">Nom<SortIcon field="name" /></span>
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('location')}>
+                    <span className="inline-flex items-center">Emplacement<SortIcon field="location" /></span>
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('site')}>
+                    <span className="inline-flex items-center">Site<SortIcon field="site" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('heightU')}>
+                    <span className="inline-flex items-center">Taille<SortIcon field="heightU" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('assetCount')}>
+                    <span className="inline-flex items-center">Équipements<SortIcon field="assetCount" /></span>
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRacks.map((rack) => (
+                {sortedRacks.map((rack) => (
                   <TableRow key={rack.id}>
                     <TableCell className="font-medium">
                       <Link href={`/dashboard/racks/${rack.id}`} className="hover:underline">

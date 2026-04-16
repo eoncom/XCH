@@ -55,10 +55,8 @@ export default function WifiHeatmapLayer({
     ctx.globalCompositeOperation = 'screen';
 
     for (const ap of accessPoints) {
-      // Get Wi-Fi profile for this AP
-      const profiles = ap.asset?.wifiProfile
-        ? { [ap.asset.wifiProfile.frequency]: ap.asset.wifiProfile }
-        : findWifiProfile(ap.asset?.manufacturer, ap.asset?.model);
+      // Build profile: asset-level override > wifiProfile > manufacturer/model preset
+      const profiles = buildProfilesWithOverride(ap);
 
       // Get bands to render
       const bandsToRender: ('2.4' | '5' | '6')[] =
@@ -75,9 +73,12 @@ export default function WifiHeatmapLayer({
         const cy = ap.y * imageHeight;
 
         // Calculate coverage radius in pixels
-        // estimatedRange is in meters, effectiveScale is meters per normalized unit
-        // So radius in pixels = (estimatedRange / effectiveScale) * imageWidth
-        const radiusPixels = (profile.estimatedRange / effectiveScale) * imageWidth;
+        // If asset has explicit wifiCoverageRadius (meters), use it directly
+        // Otherwise use profile.estimatedRange
+        const rangeMeters = ap.asset?.wifiCoverageRadius && ap.asset.wifiCoverageRadius > 0
+          ? ap.asset.wifiCoverageRadius
+          : profile.estimatedRange;
+        const radiusPixels = (rangeMeters / effectiveScale) * imageWidth;
 
         if (radiusPixels < 5) continue; // Too small to render
 
@@ -115,6 +116,52 @@ export default function WifiHeatmapLayer({
       perfectDrawEnabled={false}
     />
   );
+}
+
+/**
+ * Build WifiProfile object from asset fields or fall back to manufacturer/model preset.
+ * Order of precedence:
+ *   1. Asset-level WiFi overrides (wifiFrequency + wifiTxPowerDbm + wifiCoverageRadius)
+ *   2. ap.asset.wifiProfile (legacy metadata)
+ *   3. findWifiProfile(manufacturer, model) preset
+ */
+function buildProfilesWithOverride(ap: HeatmapAccessPoint): {
+  '2.4'?: WifiProfile;
+  '5'?: WifiProfile;
+  '6'?: WifiProfile;
+} {
+  const asset = ap.asset;
+  if (!asset) return {};
+
+  // If asset has explicit frequency + at least txPower or coverageRadius, synthesize profiles
+  const hasOverride = !!(asset.wifiFrequency && (asset.wifiTxPowerDbm || asset.wifiCoverageRadius));
+  if (hasOverride) {
+    const txPower = asset.wifiTxPowerDbm ?? 20;
+    const antennaGain = asset.wifiAntennaType === 'DIRECTIONAL' ? 8 : asset.wifiAntennaType === 'SECTOR' ? 6 : 3;
+    const estimatedRange = asset.wifiCoverageRadius ?? 25;
+    const freq = asset.wifiFrequency || '2.4GHz';
+
+    const makeProf = (frequency: '2.4' | '5' | '6'): WifiProfile => ({
+      frequency,
+      txPower,
+      antennaGain,
+      estimatedRange,
+    } as any);
+
+    const out: { '2.4'?: WifiProfile; '5'?: WifiProfile; '6'?: WifiProfile } = {};
+    if (freq === '2.4GHz') out['2.4'] = makeProf('2.4');
+    else if (freq === '5GHz') out['5'] = makeProf('5');
+    else if (freq === '6GHz') out['6'] = makeProf('6');
+    else if (freq === 'DUAL') { out['2.4'] = makeProf('2.4'); out['5'] = makeProf('5'); }
+    else if (freq === 'TRI') { out['2.4'] = makeProf('2.4'); out['5'] = makeProf('5'); out['6'] = makeProf('6'); }
+    return out;
+  }
+
+  // Fall back to wifiProfile metadata or preset
+  if (asset.wifiProfile) {
+    return { [asset.wifiProfile.frequency]: asset.wifiProfile } as any;
+  }
+  return findWifiProfile(asset.manufacturer, asset.model);
 }
 
 /**
@@ -215,9 +262,7 @@ export function renderHeatmapToCanvas(
   ctx.globalCompositeOperation = 'screen';
 
   for (const ap of accessPoints) {
-    const profiles = ap.asset?.wifiProfile
-      ? { [ap.asset.wifiProfile.frequency]: ap.asset.wifiProfile }
-      : findWifiProfile(ap.asset?.manufacturer, ap.asset?.model);
+    const profiles = buildProfilesWithOverride(ap);
 
     const bandsToRender: ('2.4' | '5' | '6')[] =
       config.frequency === 'all'
@@ -230,7 +275,10 @@ export function renderHeatmapToCanvas(
 
       const cx = ap.x * canvasWidth;
       const cy = ap.y * canvasHeight;
-      const radiusPixels = (profile.estimatedRange / effectiveScale) * canvasWidth;
+      const rangeMeters = ap.asset?.wifiCoverageRadius && ap.asset.wifiCoverageRadius > 0
+        ? ap.asset.wifiCoverageRadius
+        : profile.estimatedRange;
+      const radiusPixels = (rangeMeters / effectiveScale) * canvasWidth;
 
       if (radiusPixels < 5) continue;
       drawCoverageCircle(ctx, cx, cy, radiusPixels, profile, config);

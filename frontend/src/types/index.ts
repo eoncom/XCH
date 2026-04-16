@@ -227,6 +227,13 @@ export interface Asset {
   acquisitionPrice?: number | null;
   monthlyPrice?: number | null;
   priceCurrency?: string;
+  // Consumption estimation
+  dutyCyclePercent?: number;
+  // WiFi AP coverage (v1.3)
+  wifiCoverageRadius?: number | null;
+  wifiFrequency?: string | null;
+  wifiAntennaType?: string | null;
+  wifiTxPowerDbm?: number | null;
 }
 
 // Rack types
@@ -400,6 +407,11 @@ export interface HeatmapAccessPoint {
     status: string;
     wifiProfile?: WifiProfile;
     networkInfo?: any;
+    // Asset-level WiFi overrides (v1.3)
+    wifiCoverageRadius?: number | null;
+    wifiFrequency?: string | null;
+    wifiAntennaType?: string | null;
+    wifiTxPowerDbm?: number | null;
   } | null;
 }
 

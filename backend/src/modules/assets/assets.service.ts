@@ -51,21 +51,34 @@ export class AssetsService {
       }
     }
 
-    // Derive delegationId from the site if siteId is provided
-    let delegationId = (createAssetDto as any).delegationId;
+    // Resolve delegationId. Priority:
+    //   1. explicit delegationId in payload
+    //   2. derived from siteId
+    //   3. null (asset is unassigned — stored/removed)
+    let delegationId: string | null = (createAssetDto as any).delegationId ?? null;
     if (!delegationId && createAssetDto.siteId) {
       const site = await this.prisma.site.findUnique({
         where: { id: createAssetDto.siteId },
         select: { delegationId: true },
       });
-      delegationId = site?.delegationId;
+      delegationId = site?.delegationId ?? null;
+    }
+    // If both siteId and delegationId are present, ensure the site belongs to the delegation
+    if (delegationId && createAssetDto.siteId) {
+      const site = await this.prisma.site.findUnique({
+        where: { id: createAssetDto.siteId },
+        select: { delegationId: true },
+      });
+      if (site && site.delegationId !== delegationId) {
+        throw new ConflictException('Site does not belong to the specified delegation');
+      }
     }
 
     const asset = await this.prisma.asset.create({
       data: {
         ...createAssetDto,
         tenantId,
-        delegationId,
+        delegationId: delegationId ?? undefined,
       },
       include: {
         site: {
@@ -144,6 +157,15 @@ export class AssetsService {
       // Override with specific siteId filter (already validated by site access if array)
       if (accessibleSiteIds && !accessibleSiteIds.includes(filter.siteId)) return buildPaginatedResponse([], 0, page, pageSize);
       where.siteId = filter.siteId;
+    }
+
+    if ((filter as any)?.delegationId) {
+      where.delegationId = (filter as any).delegationId;
+    }
+
+    if ((filter as any)?.unassigned === 'true') {
+      where.siteId = null;
+      where.delegationId = null;
     }
 
     if (filter?.rackId) {
@@ -269,9 +291,44 @@ export class AssetsService {
       }
     }
 
+    // Resolve delegationId on update — keep site/delegation in sync
+    const updateData: any = { ...updateAssetDto };
+    const hasSiteChange = Object.prototype.hasOwnProperty.call(updateAssetDto, 'siteId');
+    const hasDelegationChange = Object.prototype.hasOwnProperty.call(updateAssetDto, 'delegationId');
+    if (hasSiteChange || hasDelegationChange) {
+      let nextDelegationId: string | null | undefined;
+      if (hasDelegationChange) {
+        nextDelegationId = (updateAssetDto as any).delegationId || null;
+      } else if (hasSiteChange) {
+        if (updateAssetDto.siteId) {
+          const site = await this.prisma.site.findUnique({
+            where: { id: updateAssetDto.siteId },
+            select: { delegationId: true },
+          });
+          nextDelegationId = site?.delegationId ?? null;
+        } else {
+          // siteId cleared and delegation not explicitly set → keep current delegation
+          nextDelegationId = undefined;
+        }
+      }
+      if (nextDelegationId !== undefined) {
+        updateData.delegationId = nextDelegationId;
+      }
+      // Consistency check
+      if (updateData.siteId && updateData.delegationId) {
+        const site = await this.prisma.site.findUnique({
+          where: { id: updateData.siteId },
+          select: { delegationId: true },
+        });
+        if (site && site.delegationId !== updateData.delegationId) {
+          throw new ConflictException('Site does not belong to the specified delegation');
+        }
+      }
+    }
+
     const asset = await this.prisma.asset.update({
       where: { id },
-      data: updateAssetDto,
+      data: updateData,
       include: {
         site: true,
         rack: true,

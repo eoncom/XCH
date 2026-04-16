@@ -422,6 +422,11 @@ export default function FloorPlanDetailPage({
           status: pin.asset.status,
           wifiProfile: (pin.asset as any).metadata?.wifiProfile || undefined,
           networkInfo: pin.asset.networkInfo,
+          // Asset-level WiFi overrides (v1.3)
+          wifiCoverageRadius: (pin.asset as any).wifiCoverageRadius ?? null,
+          wifiFrequency: (pin.asset as any).wifiFrequency ?? null,
+          wifiAntennaType: (pin.asset as any).wifiAntennaType ?? null,
+          wifiTxPowerDbm: (pin.asset as any).wifiTxPowerDbm ?? null,
         } : null,
       }));
   }, [floorPlan?.pins]);

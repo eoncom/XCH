@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsObject, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsObject, IsDateString, IsIn } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -16,6 +16,15 @@ export class CreateAssetDto {
   @IsString()
   @IsOptional()
   siteId?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Attach to a delegation (multi-site). If provided without siteId, the asset applies to all sites of the delegation.',
+  })
+  @IsString()
+  @IsOptional()
+  delegationId?: string;
 
   @ApiProperty({ required: false })
   @IsString()
@@ -99,8 +108,55 @@ export class CreateAssetDto {
   @IsOptional()
   dutyCyclePercent?: number;
 
+  @ApiProperty({ required: false, description: 'Link to an AssetModel for pricing/specs defaults' })
+  @IsString()
+  @IsOptional()
+  assetModelId?: string;
+
+  @ApiProperty({ required: false, description: 'One-time purchase price' })
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
+  @IsNumber()
+  @IsOptional()
+  acquisitionPrice?: number;
+
+  @ApiProperty({ required: false, description: 'Monthly lease/rental price' })
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
+  @IsNumber()
+  @IsOptional()
+  monthlyPrice?: number;
+
+  @ApiProperty({ required: false, default: 'EUR' })
+  @IsString()
+  @IsOptional()
+  priceCurrency?: string;
+
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
   notes?: string;
+
+  // WiFi AP coverage (for floor-plan rendering)
+  @ApiProperty({ required: false, description: 'WiFi coverage radius in meters' })
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
+  @IsNumber()
+  @IsOptional()
+  wifiCoverageRadius?: number;
+
+  @ApiProperty({ required: false, description: 'WiFi frequency band', enum: ['2.4GHz', '5GHz', '6GHz', 'DUAL', 'TRI'] })
+  @IsString()
+  @IsIn(['2.4GHz', '5GHz', '6GHz', 'DUAL', 'TRI'])
+  @IsOptional()
+  wifiFrequency?: string;
+
+  @ApiProperty({ required: false, description: 'Antenna type', enum: ['OMNI', 'DIRECTIONAL', 'SECTOR'] })
+  @IsString()
+  @IsIn(['OMNI', 'DIRECTIONAL', 'SECTOR'])
+  @IsOptional()
+  wifiAntennaType?: string;
+
+  @ApiProperty({ required: false, description: 'Transmit power in dBm' })
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
+  @IsNumber()
+  @IsOptional()
+  wifiTxPowerDbm?: number;
 }

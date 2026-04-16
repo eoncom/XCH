@@ -7,7 +7,7 @@ import { Bell, CheckCheck, X, Loader2 } from 'lucide-react';
 import { notificationsInboxApi, type UserNotification } from '@/lib/api/notifications-inbox';
 import { cn } from '@/lib/utils';
 
-const POLL_INTERVAL_MS = 60_000;
+const POLL_INTERVAL_MS = 120_000; // 2 min — reduces background re-renders
 
 function timeAgo(iso: string): string {
   const now = Date.now();

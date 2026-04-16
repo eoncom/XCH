@@ -394,6 +394,32 @@ export class TasksService {
         newStatus: updateTaskDto.status,
         actor: actor || undefined,
       }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
+
+      // In-app inbox notification — notify both the assignee and (if different) the creator.
+      // Critical statuses (BLOCKED, CANCELLED) get a stronger title.
+      const isCritical = updateTaskDto.status === 'BLOCKED' || updateTaskDto.status === 'CANCELLED';
+      const title = isCritical
+        ? `⚠ Tâche "${task.title}" : ${updateTaskDto.status}`
+        : `Tâche "${task.title}" : ${before.status} → ${updateTaskDto.status}`;
+      const body = actor ? `Modifié par ${actor.name}` : undefined;
+      const link = `/dashboard/tasks/${task.id}`;
+      const recipientIds = new Set<string>();
+      if ((task as any).assignedTo) recipientIds.add((task as any).assignedTo);
+      if ((task as any).createdBy && (task as any).createdBy !== (task as any).assignedTo) {
+        recipientIds.add((task as any).createdBy);
+      }
+      for (const rid of recipientIds) {
+        this.userNotificationService
+          .create({
+            tenantId,
+            userId: rid,
+            type: 'TASK_STATUS_CHANGED',
+            title,
+            body,
+            link,
+          })
+          .catch((e) => this.logger.warn(`Inbox notification failed: ${e.message}`));
+      }
     }
 
     // Task reassigned

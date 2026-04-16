@@ -23,6 +23,16 @@ export class FilterAssetDto extends PaginationDto {
   @IsOptional()
   siteId?: string;
 
+  @ApiProperty({ required: false, description: 'Filter assets by delegation (covers all sites of the delegation)' })
+  @IsString()
+  @IsOptional()
+  delegationId?: string;
+
+  @ApiProperty({ required: false, description: 'When set to "true", only return unassigned assets (no site, no delegation)' })
+  @IsString()
+  @IsOptional()
+  unassigned?: string;
+
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()

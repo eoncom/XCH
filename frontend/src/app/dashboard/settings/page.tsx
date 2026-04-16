@@ -1452,6 +1452,8 @@ function ElectricityConfigTab() {
 
 function AssetModelsTabContent() {
   const queryClient = useQueryClient();
+  const { getLabelsForType } = useEnumLabels();
+  const assetTypeOptions = getLabelsForType('AssetType');
   const [models, setModels] = useState<AssetModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -1568,7 +1570,21 @@ function AssetModelsTabContent() {
               </div>
               <div>
                 <Label>Type *</Label>
-                <Input value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})} placeholder="PRINTER" />
+                <Select
+                  value={formData.type || ''}
+                  onValueChange={(v) => setFormData({ ...formData, type: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionner un type..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assetTypeOptions.map((opt) => (
+                      <SelectItem key={opt.enumValue} value={opt.enumValue}>
+                        {opt.label || opt.enumValue}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
