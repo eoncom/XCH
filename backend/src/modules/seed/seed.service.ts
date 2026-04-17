@@ -303,6 +303,14 @@ export class SeedService {
   private async createUsers(tenantId: string) {
     const usersData = [
       {
+        id: `demo-user-admin-${tenantId}`,
+        email: 'admin@demo.fr',
+        name: 'Alexandre Admin',
+        _right: DelegationRight.MANAGE,
+        phone: '+33 6 00 00 00 01',
+        isSuperAdmin: true,
+      },
+      {
         id: `demo-user-manager-${tenantId}`,
         email: 'manager@demo.fr',
         name: 'Sophie Martin',
