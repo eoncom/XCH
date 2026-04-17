@@ -5,7 +5,8 @@ import { PermissionService } from '../../common/services/permission.service';
 import { CreateDelegationDto } from './dto/create-delegation.dto';
 import { UpdateDelegationDto } from './dto/update-delegation.dto';
 import { AuthRequest } from '../../types/request.interface';
-import { RequireRead, RequireWrite } from '../../common/decorators/require-right.decorator';
+import { RequireRead, RequireWrite, RequireManage } from '../../common/decorators/require-right.decorator';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 
 @ApiTags('organization')
 @Controller()
@@ -21,8 +22,9 @@ export class OrganizationController {
   // ============================================================================
 
   @Post('delegations')
-  @RequireWrite()
-  @ApiOperation({ summary: 'Create a delegation' })
+  @SkipDelegation()
+  @RequireManage()
+  @ApiOperation({ summary: 'Create a delegation (super admin only — tenant-wide organization structure)' })
   createDelegation(@Body() dto: CreateDelegationDto, @Request() req: AuthRequest) {
     return this.organizationService.createDelegation(req.user.tenantId, dto, req.user.userId);
   }
@@ -53,8 +55,9 @@ export class OrganizationController {
   }
 
   @Delete('delegations/:id')
-  @RequireWrite()
-  @ApiOperation({ summary: 'Delete a delegation (must have no sites)' })
+  @SkipDelegation()
+  @RequireManage()
+  @ApiOperation({ summary: 'Delete a delegation (super admin only — must have no sites)' })
   removeDelegation(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.organizationService.removeDelegation(id, req.user.tenantId, req.user.userId);
   }

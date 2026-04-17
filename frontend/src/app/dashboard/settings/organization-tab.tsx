@@ -29,9 +29,11 @@ import {
 import { Plus, Pencil, Trash2, Building2, MapPin, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { organizationApi, type Delegation, type CreateDelegationDto } from '@/lib/api/organization';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export function OrganizationTab() {
   const queryClient = useQueryClient();
+  const { isSuperAdmin } = usePermissions();
 
   // Delegation dialog state
   const [delegationDialog, setDelegationDialog] = useState<{ open: boolean; editing?: Delegation }>({ open: false });
@@ -121,10 +123,12 @@ export function OrganizationTab() {
                 Delegations et rattachement des sites. La structure organise, elle ne controle pas les acces.
               </CardDescription>
             </div>
-            <Button onClick={() => openDelegationDialog()}>
-              <Plus className="mr-2 h-4 w-4" />
-              Delegation
-            </Button>
+            {isSuperAdmin && (
+              <Button onClick={() => openDelegationDialog()}>
+                <Plus className="mr-2 h-4 w-4" />
+                Délégation
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -174,12 +178,16 @@ export function OrganizationTab() {
                             {delegation.sites?.length || delegation._count?.sites || 0} site{(delegation.sites?.length || delegation._count?.sites || 0) > 1 ? 's' : ''}
                           </span>
                           {!delegation.isActive && <Badge variant="secondary" className="text-xs">Inactif</Badge>}
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openDelegationDialog(delegation)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteConfirm({ open: true, id: delegation.id, name: delegation.name })}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          {isSuperAdmin && (
+                            <>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openDelegationDialog(delegation)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteConfirm({ open: true, id: delegation.id, name: delegation.name })}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                         {/* Sites preview */}
                         {delegation.sites && delegation.sites.length > 0 && (

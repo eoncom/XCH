@@ -33,7 +33,7 @@ const securityHeaders = [
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com",
+      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com https://raw.githubusercontent.com",
       // APIs called from the browser; same-origin + NetBox/Uptime Kuma typically proxied
       "connect-src 'self' blob:",
       "frame-ancestors 'none'",
