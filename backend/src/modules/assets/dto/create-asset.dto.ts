@@ -143,12 +143,14 @@ export class CreateAssetDto {
   wifiCoverageRadius?: number;
 
   @ApiProperty({ required: false, description: 'WiFi frequency band', enum: ['2.4GHz', '5GHz', '6GHz', 'DUAL', 'TRI'] })
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   @IsString()
   @IsIn(['2.4GHz', '5GHz', '6GHz', 'DUAL', 'TRI'])
   @IsOptional()
   wifiFrequency?: string;
 
   @ApiProperty({ required: false, description: 'Antenna type', enum: ['OMNI', 'DIRECTIONAL', 'SECTOR'] })
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   @IsString()
   @IsIn(['OMNI', 'DIRECTIONAL', 'SECTOR'])
   @IsOptional()
