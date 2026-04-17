@@ -22,6 +22,9 @@ const securityHeaders = [
   },
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
   { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
+  // credentialless: allow loading cross-origin resources without credentials
+  // (keeps leaflet tile CDN usable without strict CORP on their side)
+  { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
   {
     key: 'Content-Security-Policy',
     value: [
