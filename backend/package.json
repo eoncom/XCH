@@ -62,7 +62,6 @@
     "passport-openidconnect": "^0.1.1",
     "pg": "^8.11.3",
     "prisma": "^5.8.0",
-    "puppeteer": "^21.6.1",
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1",
