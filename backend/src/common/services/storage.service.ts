@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createWriteStream } from 'fs';
+import { randomBytes } from 'crypto';
 import { Readable } from 'stream';
 import * as Minio from 'minio';
 
@@ -292,7 +293,8 @@ export class StorageService {
    */
   generateFilename(originalName: string, prefix?: string): string {
     const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 8);
+    // crypto.randomBytes avoids predictable collisions
+    const random = randomBytes(4).toString('hex');
     const ext = path.extname(originalName);
     const basename = path.basename(originalName, ext).replace(/[^a-z0-9]/gi, '-');
 

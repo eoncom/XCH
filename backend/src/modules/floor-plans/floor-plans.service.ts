@@ -137,6 +137,13 @@ export class FloorPlansService {
    * Convert a PDF page to PNG buffer using pdftoppm
    */
   private convertPdfPageToPng(pdfBuffer: Buffer, page: number = 1): Buffer {
+    // Defense in depth: enforce integer range to prevent command injection even
+    // if an untyped caller passes a crafted string (Semgrep detect-child-process).
+    const safePage = Number(page);
+    if (!Number.isInteger(safePage) || safePage < 1 || safePage > 10000) {
+      throw new BadRequestException(`Invalid page number: ${page}`);
+    }
+
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xch-pdf-'));
     const pdfPath = path.join(tmpDir, 'input.pdf');
     const outputPrefix = path.join(tmpDir, 'output');
@@ -146,7 +153,7 @@ export class FloorPlansService {
 
       // Convert specific page to PNG at 200 DPI (good quality for floor plans)
       execSync(
-        `pdftoppm -png -r 200 -f ${page} -l ${page} -singlefile "${pdfPath}" "${outputPrefix}"`,
+        `pdftoppm -png -r 200 -f ${safePage} -l ${safePage} -singlefile "${pdfPath}" "${outputPrefix}"`,
         { timeout: 30000 },
       );
 

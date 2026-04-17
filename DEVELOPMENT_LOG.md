@@ -5198,3 +5198,24 @@ fix(assets): accept empty string for wifiFrequency/wifiAntennaType
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-17
+
+**Date:** 2026-04-17 22:15:50
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 0
+
+**Commit message:**
+```
+Revert "chore(deps): upgrade NestJS 10 → 11 (SAST: eliminate multer/express/path-to-regexp highs)"
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
