@@ -2,6 +2,7 @@ import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import * as net from 'net';
 import { SetupDto } from './dto/setup.dto';
 import { SeedService } from '../seed/seed.service';
 
@@ -30,19 +31,56 @@ export class SetupService {
   async getStatus(): Promise<SetupStatus> {
     const services: ServiceHealth[] = [];
 
-    // Check PostgreSQL
+    // PostgreSQL
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       services.push({ name: 'PostgreSQL', status: 'ok' });
-    } catch (e) {
+    } catch {
       services.push({ name: 'PostgreSQL', status: 'error', message: 'Cannot connect to database' });
     }
 
-    // Check if any tenant exists
+    // Redis (TCP ping)
+    const redisHost = process.env.REDIS_HOST || 'redis';
+    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+    services.push(await this.probeTcp('Redis', redisHost, redisPort));
+
+    // MinIO (HTTP health endpoint)
+    const minioEndpoint = process.env.MINIO_ENDPOINT || 'minio';
+    const minioPort = parseInt(process.env.MINIO_PORT || '9000', 10);
+    services.push(await this.probeMinio('MinIO', minioEndpoint, minioPort));
+
+    // Setup needed?
     const tenantCount = await this.prisma.tenant.count();
     const needsSetup = tenantCount === 0;
 
     return { needsSetup, services };
+  }
+
+  private probeTcp(name: string, host: string, port: number, timeoutMs = 1500): Promise<ServiceHealth> {
+    return new Promise((resolve) => {
+      const socket = new net.Socket();
+      const done = (ok: boolean, msg?: string) => {
+        socket.destroy();
+        resolve(ok ? { name, status: 'ok' } : { name, status: 'error', message: msg });
+      };
+      socket.setTimeout(timeoutMs);
+      socket.once('connect', () => done(true));
+      socket.once('timeout', () => done(false, `Timeout connecting to ${host}:${port}`));
+      socket.once('error', (err: any) => done(false, err?.code || err?.message || 'connection error'));
+      socket.connect(port, host);
+    });
+  }
+
+  private async probeMinio(name: string, host: string, port: number): Promise<ServiceHealth> {
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 1500);
+      const res = await fetch(`http://${host}:${port}/minio/health/live`, { signal: controller.signal });
+      clearTimeout(t);
+      return res.ok ? { name, status: 'ok' } : { name, status: 'error', message: `HTTP ${res.status}` };
+    } catch (err: any) {
+      return { name, status: 'error', message: err?.name === 'AbortError' ? 'Timeout' : (err?.message || 'fetch failed') };
+    }
   }
 
   /**

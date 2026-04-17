@@ -116,6 +116,8 @@ export default function SetupPage() {
         newErrors.adminPassword = 'Le mot de passe est requis';
       } else if (formData.adminPassword.length < 8) {
         newErrors.adminPassword = 'Minimum 8 caractères';
+      } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(formData.adminPassword)) {
+        newErrors.adminPassword = 'Doit contenir au moins une majuscule, une minuscule et un chiffre';
       }
     }
 

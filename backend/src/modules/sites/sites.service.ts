@@ -366,6 +366,20 @@ export class SitesService {
   async remove(id: string, tenantId: string, userId?: string) {
     const site = await this.findOne(id, tenantId);
 
+    // Dependency protection: refuse deletion if the site contains active data
+    const [assets, racks, tasks, plans] = await Promise.all([
+      this.prisma.asset.count({ where: { siteId: id, tenantId } }),
+      this.prisma.rack.count({ where: { siteId: id, tenantId } }),
+      this.prisma.task.count({ where: { siteId: id, tenantId } }),
+      this.prisma.floorPlan.count({ where: { siteId: id } }),
+    ]);
+    const total = assets + racks + tasks + plans;
+    if (total > 0) {
+      throw new ConflictException(
+        `Impossible de supprimer le site : ${assets} équipement(s), ${racks} baie(s), ${tasks} tâche(s), ${plans} plan(s) rattaché(s). Déplacez-les ou supprimez-les d'abord.`,
+      );
+    }
+
     // ---- Best-effort MinIO cleanup before DB deletion ----
     try {
       await this.cleanupSiteFiles(id, tenantId);

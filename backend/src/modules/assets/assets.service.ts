@@ -29,7 +29,38 @@ export class AssetsService {
     private notificationEmitter: NotificationEmitter,
   ) {}
 
+  /**
+   * Validate a dynamic enum value for this tenant.
+   * Accepts built-in values OR tenant-specific active EnumLabel entries (isActive=true, isHidden=false).
+   * Throws BadRequestException if the value is not valid.
+   */
+  private async validateDynamicEnum(
+    tenantId: string,
+    enumType: 'AssetType' | 'AssetStatus',
+    value: string | undefined,
+  ): Promise<void> {
+    if (value === undefined) return;
+    const builtIns =
+      enumType === 'AssetType' ? AssetsService.KNOWN_ASSET_TYPES : AssetsService.KNOWN_ASSET_STATUSES;
+    if (builtIns.has(value)) return;
+    // Check tenant custom values
+    const custom = await this.prisma.enumLabel.findUnique({
+      where: {
+        tenantId_enumType_enumValue: { tenantId, enumType, enumValue: value },
+      },
+      select: { isActive: true, isHidden: true },
+    });
+    if (custom && custom.isActive && !custom.isHidden) return;
+    throw new BadRequestException(
+      `Invalid ${enumType} "${value}". Use an allowed value (see /api/admin/enum-labels?enumType=${enumType}).`,
+    );
+  }
+
   async create(tenantId: string, createAssetDto: CreateAssetDto, userId?: string) {
+    // Validate dynamic enums (type required, status optional with default)
+    await this.validateDynamicEnum(tenantId, 'AssetType', createAssetDto.type);
+    await this.validateDynamicEnum(tenantId, 'AssetStatus', createAssetDto.status);
+
     // Validate serial number for critical types
     if (this.SERIAL_REQUIRED_TYPES.includes(createAssetDto.type) && !createAssetDto.serialNumber) {
       throw new BadRequestException(
@@ -281,6 +312,10 @@ export class AssetsService {
   async update(id: string, tenantId: string, updateAssetDto: UpdateAssetDto, userId?: string) {
     // Get current state BEFORE update for movement tracking
     const currentAsset = await this.findOne(id, tenantId);
+
+    // Validate dynamic enums if changed
+    await this.validateDynamicEnum(tenantId, 'AssetType', updateAssetDto.type);
+    await this.validateDynamicEnum(tenantId, 'AssetStatus', updateAssetDto.status);
 
     // Validate serial number if type is being changed to critical type
     if (updateAssetDto.type && this.SERIAL_REQUIRED_TYPES.includes(updateAssetDto.type)) {

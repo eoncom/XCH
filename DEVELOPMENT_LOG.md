@@ -5177,3 +5177,24 @@ feat(v1.3.0): asset models, budgets, connectivity, consumption, search, inbox, a
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-17
+
+**Date:** 2026-04-17 21:22:13
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 7
+- Frontend files modified: 1
+
+**Commit message:**
+```
+fix(assets): accept empty string for wifiFrequency/wifiAntennaType
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

@@ -348,10 +348,17 @@ export class ExpensesService {
     dateTo: string,
     groupBy?: 'type' | 'delegation' | 'site',
   ) {
-    const from = new Date(dateFrom + '-01');
-    const to = new Date(dateTo + '-01');
-    to.setMonth(to.getMonth() + 1); // end of last month
-    to.setDate(0);
+    // Accept both "YYYY-MM" and "YYYY-MM-DD" (normalize to first-of-month)
+    const toMonthStart = (s: string) => {
+      if (!s) throw new BadRequestException('from and to are required');
+      const m = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(s);
+      if (!m) throw new BadRequestException(`Invalid date "${s}". Use YYYY-MM or YYYY-MM-DD.`);
+      return new Date(`${m[1]}-${m[2]}-01T00:00:00Z`);
+    };
+    const from = toMonthStart(dateFrom);
+    const to = toMonthStart(dateTo);
+    to.setUTCMonth(to.getUTCMonth() + 1); // end of last month
+    to.setUTCDate(0);
 
     // Get all expenses that could overlap the projection window
     const expenses = await this.prisma.expense.findMany({

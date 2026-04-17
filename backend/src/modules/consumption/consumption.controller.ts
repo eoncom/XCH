@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Query, Param, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ConsumptionService } from './consumption.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -21,7 +21,7 @@ export class ConsumptionController {
 
   @Get()
   @RequireRead()
-  @ApiOperation({ summary: 'Compute consumption for a site or rack' })
+  @ApiOperation({ summary: 'Compute consumption for a site or rack (via query params)' })
   compute(
     @Query('siteId') siteId: string | undefined,
     @Query('rackId') rackId: string | undefined,
@@ -34,5 +34,19 @@ export class ConsumptionController {
       return this.service.computeRack(req.user.tenantId, rackId);
     }
     return this.service.summary(req.user.tenantId);
+  }
+
+  @Get('site/:id')
+  @RequireRead()
+  @ApiOperation({ summary: 'Consumption for a specific site' })
+  computeSite(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.service.computeSite(req.user.tenantId, id);
+  }
+
+  @Get('rack/:id')
+  @RequireRead()
+  @ApiOperation({ summary: 'Consumption for a specific rack' })
+  computeRack(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.service.computeRack(req.user.tenantId, id);
   }
 }

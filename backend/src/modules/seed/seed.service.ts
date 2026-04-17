@@ -262,6 +262,16 @@ export class SeedService {
       },
     ];
 
+    // Demo coordinates (code → [lat, lon])
+    const coords: Record<string, [number, number]> = {
+      'DEF-01': [48.8919, 2.2372],     // La Défense
+      'SAC-01': [48.7108, 2.1665],     // Saclay
+      'VEL-01': [48.7819, 2.1991],     // Vélizy
+      'STC-01': [48.8427, 2.2028],     // Saint-Cloud
+      'MAS-01': [48.7264, 2.2808],     // Massy
+      'BOU-01': [48.8333, 2.2415],     // Boulogne
+    };
+
     const sites = [];
     for (const s of sitesData) {
       const site = await this.prisma.site.upsert({
@@ -273,6 +283,13 @@ export class SeedService {
           delegationId: delegations.default,
         },
       });
+      const c = coords[s.code];
+      if (c) {
+        await this.prisma.$executeRawUnsafe(
+          `UPDATE "sites" SET coordinates = ST_SetSRID(ST_MakePoint($1, $2), 4326) WHERE id = $3`,
+          c[1], c[0], site.id,
+        );
+      }
       sites.push(site);
     }
 

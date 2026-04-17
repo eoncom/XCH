@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsNotEmpty, MinLength, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsEmail, IsNotEmpty, MinLength, IsOptional, IsBoolean, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SetupDto {
@@ -43,9 +43,12 @@ export class SetupDto {
   @IsEmail()
   adminEmail: string;
 
-  @ApiProperty({ example: 'SecureP@ss123!' })
+  @ApiProperty({ example: 'SecureP@ss123!', description: 'Min 8 chars, at least one lowercase, one uppercase and one digit' })
   @IsString()
   @MinLength(8)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/, {
+    message: 'Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre',
+  })
   adminPassword: string;
 
   @ApiPropertyOptional({ example: '+33 6 12 34 56 78' })
