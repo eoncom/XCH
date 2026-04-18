@@ -75,11 +75,16 @@ export function DelegationProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setDelegations(data);
 
-          if (data.length === 1 && !activeDelegationId) {
+          // Auto-select the first delegation if none is stored, regardless of count.
+          // Without this the api-client reads localStorage (null) and never sends
+          // X-Delegation-Id → all delegation-scoped requests return 403 even
+          // though currentDelegation (useMemo fallback) shows the right value.
+          if (!activeDelegationId && data.length > 0) {
             setActiveDelegationId(data[0].delegationId);
             localStorage.setItem(STORAGE_KEY, data[0].delegationId);
           }
 
+          // Stored delegation no longer granted → fall back to the first available
           if (activeDelegationId && !data.some(d => d.delegationId === activeDelegationId)) {
             if (data.length > 0) {
               setActiveDelegationId(data[0].delegationId);
