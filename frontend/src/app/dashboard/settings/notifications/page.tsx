@@ -46,6 +46,11 @@ export default function NotificationsSettingsPage() {
   const [scopeMode, setScopeMode] = useState<string>('GLOBAL');
   const [delegationId, setDelegationId] = useState<string | null>(null);
 
+  // Defer the Journal tab data fetch until the user actually opens it.
+  // Before v1.4.x, logs were fetched on every mount which added ~1s latency
+  // to the page even for users that never consulted the history.
+  const [activeTab, setActiveTab] = useState<string>('channels');
+
   // Local edited state
   const [editedChannels, setEditedChannels] = useState<Record<string, ChannelConfig>>({});
   const [editedEvents, setEditedEvents] = useState<Record<string, EventConfig>>({});
@@ -54,31 +59,36 @@ export default function NotificationsSettingsPage() {
   // Email recipients input
   const [newRecipient, setNewRecipient] = useState('');
 
-  // Fetch metadata
+  // Fetch metadata (stable — 5 min cache is plenty, the event catalog rarely changes)
   const { data: meta } = useQuery({
     queryKey: ['notification-meta'],
     queryFn: notificationsApi.getMeta,
+    staleTime: 5 * 60_000,
   });
 
-  // Fetch delegations for scope selection
+  // Fetch delegations for scope selection (stable — 1 min cache)
   const { data: delegations } = useQuery({
     queryKey: ['delegations'],
     queryFn: () => organizationApi.getDelegations(),
     enabled: isAdmin,
+    staleTime: 60_000,
   });
 
-  // Fetch config for selected scope
+  // Fetch config for the currently selected scope
   const { data: config, isLoading: configLoading } = useQuery({
     queryKey: ['notification-config', delegationId],
     queryFn: () => notificationsApi.getConfig(delegationId),
     enabled: scopeMode === 'GLOBAL' || !!delegationId,
+    staleTime: 30_000,
   });
 
-  // Fetch logs
+  // Fetch logs — LAZY: only when the Journal tab is actually open. Removes the
+  // ~1s on-mount penalty for users that never look at logs.
   const { data: logsResponse } = useQuery({
     queryKey: ['notification-logs'],
     queryFn: () => notificationsApi.getLogs({ page: 1, pageSize: 20 }),
-    enabled: isAdmin,
+    enabled: isAdmin && activeTab === 'logs',
+    staleTime: 30_000,
   });
   const logs = logsResponse?.data || [];
 
@@ -221,9 +231,13 @@ export default function NotificationsSettingsPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Bell className="h-6 w-6" /> Notifications
+              <Bell className="h-6 w-6" /> Configuration des notifications
             </h1>
-            <p className="text-sm text-muted-foreground">Configuration des alertes Email et MS Teams</p>
+            <p className="text-sm text-muted-foreground">
+              Qui reçoit quoi, sur quels canaux (Email / MS Teams) et pour quels événements.
+              Pour consulter vos <Link href="/dashboard/notifications" className="underline hover:no-underline">notifications personnelles (boîte de réception)</Link>,
+              ouvrez la cloche en haut à droite.
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -284,7 +298,7 @@ export default function NotificationsSettingsPage() {
       {configLoading ? (
         <Card><CardContent className="p-10 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></CardContent></Card>
       ) : (
-        <Tabs defaultValue="channels">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="channels"><Settings className="h-4 w-4 mr-2" /> Canaux</TabsTrigger>
             <TabsTrigger value="events"><Bell className="h-4 w-4 mr-2" /> Événements</TabsTrigger>

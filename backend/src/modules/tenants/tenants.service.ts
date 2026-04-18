@@ -9,6 +9,12 @@ import {
 import { AuditLogService } from '../../common/services/audit-log.service';
 
 /** Default module configuration — all modules enabled */
+/**
+ * Application modules exposed to the sidebar & Settings > Modules tab.
+ * Keys MUST match the `moduleKey` values referenced by the sidebar (see
+ * frontend/src/app/dashboard/layout.tsx::navigation). Keeping these in sync
+ * is what lets super admins toggle modules on/off tenant-wide.
+ */
 const DEFAULT_MODULES: Record<string, boolean> = {
   sites: true,
   assets: true,
@@ -20,24 +26,30 @@ const DEFAULT_MODULES: Record<string, boolean> = {
   integrations_netbox: true,
   monitoring: true,
   alerts: true,
+  costs: true,
+  consumption: true,
   qr_codes: true,
   site_access_control: true,
+  notifications: true,
 };
 
 /** Human-readable descriptions for each module */
 const MODULE_DESCRIPTIONS: Record<string, { label: string; description: string }> = {
   sites: { label: 'Sites', description: 'Gestion des sites (adresses, contacts, connectivité)' },
-  assets: { label: 'Équipements', description: 'Inventaire des équipements IT (serveurs, switches, etc.)' },
-  racks: { label: 'Baies', description: 'Gestion des baies avec montage des équipements' },
-  tasks: { label: 'Tâches', description: 'Suivi des tâches et interventions' },
-  floor_plans: { label: 'Plans d\'étage', description: 'Plans interactifs avec repères cliquables' },
-  contacts: { label: 'Contacts', description: 'Annuaire des contacts par site' },
-  documents: { label: 'Documents', description: 'Gestion des documents et pièces jointes' },
-  integrations_netbox: { label: 'NetBox', description: 'Synchronisation avec NetBox (DCIM)' },
-  monitoring: { label: 'Monitoring', description: 'Intégration monitoring (Uptime Kuma / Gatus) + tableau de bord santé des sites' },
-  alerts: { label: 'Alertes', description: 'Notifications et alertes basées sur le monitoring' },
+  assets: { label: 'Équipements', description: 'Inventaire des équipements IT (serveurs, switches, points d\'accès, imprimantes, etc.)' },
+  racks: { label: 'Baies', description: 'Gestion des baies et montage des équipements' },
+  tasks: { label: 'Tâches', description: 'Suivi des tâches, interventions et échéances (Kanban + liste)' },
+  floor_plans: { label: "Plans d'étage", description: 'Plans interactifs avec repères (pins) cliquables et heatmap WiFi' },
+  contacts: { label: 'Contacts', description: 'Annuaire des contacts internes et des fournisseurs' },
+  documents: { label: 'Documents', description: 'Pièces jointes et documents liés aux sites / assets / tâches' },
+  integrations_netbox: { label: 'NetBox', description: 'Synchronisation lecture seule avec NetBox (DCIM / IPAM)' },
+  monitoring: { label: 'Monitoring', description: 'Intégration Uptime Kuma / Gatus + tableau de bord santé des sites' },
+  alerts: { label: 'Alertes', description: 'Agrégation des alertes (tâches, santé sites, monitoring, garanties, équipements HS)' },
+  costs: { label: 'Coûts', description: 'Gestion des dépenses, centres de coûts, budgets et projections mensuelles' },
+  consumption: { label: 'Consommation', description: 'Estimation de la consommation électrique et du coût mensuel par site' },
   qr_codes: { label: 'QR Codes', description: 'Génération et scan de QR codes pour les équipements' },
-  site_access_control: { label: 'Droits d\'accès site', description: 'Contrôle d\'accès granulaire par site et par utilisateur' },
+  site_access_control: { label: "Droits d'accès sites", description: "Surcharges d'accès (AccessOverride) ALLOW/DENY par site et par ressource" },
+  notifications: { label: 'Notifications', description: 'Alertes email / MS Teams sur événements (tâches assignées, santé sites, garanties, etc.)' },
 };
 
 @Injectable()

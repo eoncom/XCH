@@ -273,6 +273,12 @@ export default function NewAssetPage() {
                     if (model.acquisitionPrice) setValue('acquisitionPrice', model.acquisitionPrice);
                     if (model.monthlyPrice) setValue('monthlyPrice', model.monthlyPrice);
                     setValue('priceCurrency', model.currency || 'EUR');
+                    // v1.4.x — WiFi AP defaults from the catalog model
+                    const m = model as any;
+                    if (m.wifiCoverageRadius != null) setValue('wifiCoverageRadius', m.wifiCoverageRadius);
+                    if (m.wifiFrequency) setValue('wifiFrequency', m.wifiFrequency);
+                    if (m.wifiAntennaType) setValue('wifiAntennaType', m.wifiAntennaType);
+                    if (m.wifiTxPowerDbm != null) setValue('wifiTxPowerDbm', m.wifiTxPowerDbm);
                   }
                 }}
               />

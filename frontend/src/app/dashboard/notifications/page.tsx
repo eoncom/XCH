@@ -58,9 +58,13 @@ export default function NotificationsPage() {
         <div className="flex items-center gap-3">
           <Bell className="h-7 w-7 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Notifications</h1>
+            <h1 className="text-2xl font-bold">Boîte de réception</h1>
             <p className="text-sm text-muted-foreground">
               {unreadCount > 0 ? `${unreadCount} non lue(s)` : 'Tout est lu'}
+              {' · '}
+              <Link href="/dashboard/settings/notifications" className="underline hover:no-underline">
+                Configurer les règles (qui reçoit quoi)
+              </Link>
             </p>
           </div>
         </div>

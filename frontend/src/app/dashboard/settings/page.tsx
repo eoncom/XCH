@@ -1472,6 +1472,8 @@ function AssetModelsTabContent() {
     name: '', type: '', manufacturer: '', pricingMode: 'ONE_TIME',
     acquisitionPrice: undefined, monthlyPrice: undefined, currency: 'EUR',
     powerConsumption: undefined, weight: undefined, defaultUHeight: undefined, notes: '',
+    wifiCoverageRadius: undefined, wifiFrequency: undefined,
+    wifiAntennaType: undefined, wifiTxPowerDbm: undefined,
   });
   const [saving, setSaving] = useState(false);
 
@@ -1489,7 +1491,9 @@ function AssetModelsTabContent() {
   const resetForm = () => {
     setFormData({ name: '', type: '', manufacturer: '', pricingMode: 'ONE_TIME',
       acquisitionPrice: undefined, monthlyPrice: undefined, currency: 'EUR',
-      powerConsumption: undefined, weight: undefined, defaultUHeight: undefined, notes: '' });
+      powerConsumption: undefined, weight: undefined, defaultUHeight: undefined, notes: '',
+      wifiCoverageRadius: undefined, wifiFrequency: undefined,
+      wifiAntennaType: undefined, wifiTxPowerDbm: undefined });
     setShowAddForm(false);
     setEditingId(null);
   };
@@ -1521,6 +1525,10 @@ function AssetModelsTabContent() {
       monthlyPrice: model.monthlyPrice ?? undefined, currency: model.currency,
       powerConsumption: model.powerConsumption ?? undefined, weight: model.weight ?? undefined,
       defaultUHeight: model.defaultUHeight ?? undefined, notes: model.notes || '',
+      wifiCoverageRadius: (model as any).wifiCoverageRadius ?? undefined,
+      wifiFrequency: (model as any).wifiFrequency ?? undefined,
+      wifiAntennaType: (model as any).wifiAntennaType ?? undefined,
+      wifiTxPowerDbm: (model as any).wifiTxPowerDbm ?? undefined,
     });
     setShowAddForm(true);
   };
@@ -1641,6 +1649,60 @@ function AssetModelsTabContent() {
                 <Input value={formData.notes || ''} onChange={(e) => setFormData({...formData, notes: e.target.value})} />
               </div>
             </div>
+
+            {/* v1.4.x — Couverture WiFi (affichée uniquement pour le type WIFI_AP).
+                 Les valeurs pré-remplissent l'asset lors de sa création et sont
+                 utilisées par la heatmap Wi-Fi sur les plans d'étage. */}
+            {formData.type === 'WIFI_AP' && (
+              <div className="border-t pt-4">
+                <p className="text-sm font-medium mb-1">Couverture WiFi (valeurs par défaut)</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Pré-remplit l&apos;équipement créé à partir de ce modèle et pilote l&apos;affichage
+                  de la zone de couverture sur les plans de sol.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <Label>Rayon de couverture (m)</Label>
+                    <Input type="number" min="0" step="0.5"
+                      value={formData.wifiCoverageRadius ?? ''}
+                      onChange={(e) => setFormData({ ...formData, wifiCoverageRadius: e.target.value ? parseFloat(e.target.value) : undefined })}
+                      placeholder="15" />
+                  </div>
+                  <div>
+                    <Label>Fréquence</Label>
+                    <Select value={formData.wifiFrequency || ''} onValueChange={(v) => setFormData({ ...formData, wifiFrequency: v || undefined })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2.4GHz">2.4 GHz</SelectItem>
+                        <SelectItem value="5GHz">5 GHz</SelectItem>
+                        <SelectItem value="6GHz">6 GHz (WiFi 6E)</SelectItem>
+                        <SelectItem value="DUAL">Dual-band (2.4 + 5)</SelectItem>
+                        <SelectItem value="TRI">Tri-band (2.4 + 5 + 6)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Type d&apos;antenne</Label>
+                    <Select value={formData.wifiAntennaType || ''} onValueChange={(v) => setFormData({ ...formData, wifiAntennaType: v || undefined })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="OMNI">Omnidirectionnelle</SelectItem>
+                        <SelectItem value="DIRECTIONAL">Directionnelle</SelectItem>
+                        <SelectItem value="SECTOR">Sectorielle</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Puissance (dBm)</Label>
+                    <Input type="number" min="0" max="30"
+                      value={formData.wifiTxPowerDbm ?? ''}
+                      onChange={(e) => setFormData({ ...formData, wifiTxPowerDbm: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                      placeholder="20" />
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <Button onClick={handleSave} disabled={saving} size="sm">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Check className="h-4 w-4 mr-1" />}

@@ -362,6 +362,14 @@ model AssetModel {
   weight           Float?   // kg
   defaultUHeight   Int?     // default rack height
 
+  // WiFi AP template defaults (v1.4.x) — pre-filled on assets created from the model.
+  // Only meaningful for AssetModel.type === 'WIFI_AP', but kept optional to avoid
+  // schema branching. Ignored by the frontend for non-WiFi types.
+  wifiCoverageRadius Float?   // meters — default coverage radius drawn on floor plans
+  wifiFrequency      String?  // "2.4GHz" | "5GHz" | "6GHz" | "DUAL" | "TRI"
+  wifiAntennaType    String?  // "OMNI" | "DIRECTIONAL" | "SECTOR"
+  wifiTxPowerDbm     Int?     // transmit power in dBm
+
   notes            String?
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())

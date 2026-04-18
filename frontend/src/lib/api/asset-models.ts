@@ -19,6 +19,11 @@ export interface AssetModel {
   powerConsumption: number | null;
   weight: number | null;
   defaultUHeight: number | null;
+  // WiFi AP template defaults (v1.4.x)
+  wifiCoverageRadius?: number | null;
+  wifiFrequency?: string | null;
+  wifiAntennaType?: string | null;
+  wifiTxPowerDbm?: number | null;
   notes: string | null;
   isActive: boolean;
   createdAt: string;
@@ -37,6 +42,10 @@ export interface CreateAssetModelData {
   powerConsumption?: number;
   weight?: number;
   defaultUHeight?: number;
+  wifiCoverageRadius?: number;
+  wifiFrequency?: string;
+  wifiAntennaType?: string;
+  wifiTxPowerDbm?: number;
   notes?: string;
 }
 

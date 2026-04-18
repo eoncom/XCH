@@ -82,15 +82,19 @@ const ScaleCalibration = dynamic(
   { ssr: false }
 );
 
+// v1.4.x — Labels harmonisés avec `assetTypeLabels` (lib/asset-labels.ts) pour
+// les types partagés. Un Switch reste un « Switch », un AP WiFi reste
+// « Point d'accès WiFi » partout. Les EnumLabel en DB peuvent toujours surcharger
+// via getLabel('PinType', ...) plus bas.
 const pinTypeLabels: Record<PinType, string> = {
   SWITCH: 'Switch',
-  FIREWALL: 'Firewall',
-  WIFI_AP: 'AP WiFi',
+  FIREWALL: 'Pare-feu',
+  WIFI_AP: "Point d'accès WiFi",
   PRINTER: 'Imprimante',
   RACK: 'Baie',
   CAMERA: 'Caméra',
   PATCH_PANEL: 'Panneau de brassage',
-  RJ45: 'Prise RJ-45',
+  RJ45: 'Prise RJ45',
   NRO: 'Arrivée Fibre NRO',
   ROUTER: 'Routeur',
   TEAMS_ROOM: 'Teams Room',
