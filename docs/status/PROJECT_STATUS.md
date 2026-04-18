@@ -1,8 +1,29 @@
 # XCH - Statut du Projet
 
 **Dernière mise à jour :** 2026-04-18 17:44:34 (Auto-update)
-**Version actuelle :** 1.3.0
-**Statut global :** ✅ MVP Production-Ready (100%) + v1.3 — Coûts avancés + Consommation + Prod features
+**Version actuelle :** 1.4.0
+**Statut global :** ✅ MVP Production-Ready (100%) + v1.4 — Audit phase 4 correctifs + feature Apparence + seed démo enrichi
+
+## 🆕 v1.4.0 (2026-04-18) — Post audit + Apparence
+
+- **Audit phase 4 couvert** (cf. `reports/phase4-audit-correctifs.md`) : 3 critiques,
+  7 majeurs et la plupart des mineurs corrigés.
+- **RBAC scope backend** : `GET /users` en `@RequireManage` avec scope union des
+  délégations MANAGE du caller ; `GET /audit` super-admin only ; `GET /delegations`
+  filtré par UserDelegation du caller.
+- **Gardes frontend** : nouveau `AccessGate` sur `/dashboard/users`, `/admin/audit`,
+  `/sites/[id]/edit` ; `SiteEditIconLink` masque les ✏ aux non-WRITE.
+- **Sidebar** : `Paramètres` est désormais dans la section « Personnel », visible
+  à tous les utilisateurs authentifiés.
+- **Labels FR** : `rightLabel()` (Administrateur/Éditeur/Lecteur), badges sites
+  (Sain/Attention/Inconnu), statuts sites (Actif/En préparation), typo Portée.
+- **Feature Apparence (ADR-010)** : tenant defaults + user override avec verrou
+  admin, nouveaux endpoints + AppearanceProvider + cards settings.
+- **Seed démo reconstruit** : 3 délégations (IDF Ouest, Lyon Métropole,
+  Marseille), 8 sites, 6 users démo (dont `multi@demo.fr` multi-délégation),
+  AccessOverride ALLOW+DENY, Budget + Expense + CostAllocation, ConnectivityLink,
+  UserNotification, AuditLog seedés. `technicien@demo.fr` reçoit une apparence
+  custom dark+compact.
 
 ---
 
