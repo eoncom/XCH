@@ -7,6 +7,89 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.4.0] - 2026-04-18
+
+### Post-audit Phase 4 + feature Apparence
+
+#### Lot A/B/D — RBAC scope corrections (backend)
+- `GET /users` et `GET /users/:id` passent de `@RequireRead()` à `@RequireManage()` ;
+  le scope de `findAll`/`findOne` est désormais l'**union** des délégations où le caller
+  a MANAGE (plus la seule délégation active). Fix : un Manager sur 3 délégations voit
+  bien tous les membres de ces 3 délégations ; un Viewer ne voit plus la liste.
+- `GET /audit` devient super-admin-only (`@SkipDelegation() + @RequireManage() + isSuperAdmin`
+  explicite). Un Manager ne voit plus les événements hors scope ; un Viewer reçoit 403
+  propre au lieu d'une liste vide trompeuse.
+- `GET /delegations` filtre désormais par `UserDelegation.userId = caller` pour les
+  non-super-admin, ce qui masque les délégations système (« By SuperAdmin ») dans les
+  filtres des Managers.
+
+#### Lot E/F — Gardes, labels, sidebar (frontend)
+- Nouveau composant `AccessGate` (fail-closed page-level) utilisé sur `/dashboard/users`,
+  `/dashboard/sites/[id]/edit`, `/dashboard/admin/audit`.
+- Boutons Edit/Delete de la page utilisateurs masqués aux non-MANAGE ; icônes ✏
+  sur le détail site masquées via le composant inline `SiteEditIconLink`.
+- `/dashboard/settings` ajouté à la section « Personnel » de la sidebar → désormais
+  visible à tous les utilisateurs authentifiés (Profil/Sécurité/Apparence sont universels).
+- Helper `lib/labels.ts` : `rightLabel()`, `healthLabel()`, `siteStatusLabel()`,
+  `overrideScopeLabel()`. Badges FR homogènes.
+- Champ « Rôle » de l'onglet Profil affiche le droit le plus élevé parmi les
+  délégations de l'utilisateur (plus la délégation active), traduit via `rightLabel()`.
+- Typo « Portee » → « Portée » corrigée dans Coûts × Dépenses, Coûts × Entités, Contacts,
+  Contacts (nouveau).
+
+#### Lot H — Apparence tenant + utilisateur (ADR-010)
+- Schéma Prisma : `User.appearancePreference Json?`, `User.appearanceSource String
+  default "inherit"`, `Tenant.config.appearance` (Json) pour les défauts.
+- Endpoints :
+  - `GET /tenants/appearance` (auth) / `PATCH /tenants/appearance` (super admin +
+    audit log tenant).
+  - `GET /users/me/appearance`, `PATCH /users/me/appearance` (403 FR si
+    `allowUserOverride=false`), `GET /users/me/effective-appearance`.
+- Provider `AppearanceProvider` appliqué au `DashboardLayout` — charge l'apparence
+  effective au login, applique `data-density` et `--primary-rgb` en CSS vars, bridge
+  `next-themes`.
+- Onglet Apparence enrichi (cards « Mes préférences » + « Apparence tenant »
+  pour le super admin) avec source « Hérité / Personnalisé / Verrouillé ».
+
+#### Lot C — Seed enrichi + reset
+- Seed démo passe de **1 délégation** à **3** (IDF Ouest + Lyon Métropole + Marseille)
+  avec 8 sites au total (6 IDF + 1 Lyon + 1 Marseille).
+- Nouvel utilisateur multi-délégation (`multi@demo.fr` — Julien Morel) : MANAGE
+  sur IDF + Lyon, READ sur Marseille — exerce le switcher.
+- `AccessOverride` démo : 1 ALLOW (viewer temporairement WRITE sur La Défense),
+  1 DENY (technicien blacklisté sur Boulogne).
+- `Budget` + `BillingEntity` + `Expense` + `CostAllocation` démo (Coûts exerçables
+  end-to-end).
+- `ConnectivityLink` rows créés en miroir du JSON Site.connectivity.
+- `UserNotification` : 3 non-lues seedées (Manager + Technicien).
+- `AuditLog` : entrées CREATE initiales seedées.
+- `technicien@demo.fr` : `appearancePreference: { theme:'dark', density:'compact' }`
+  + `appearanceSource:'custom'` (exerce l'héritage dès le seed).
+- `resetData` wipe étendu aux nouvelles tables (ConnectivityLink, UserNotification,
+  Budget).
+
+#### Lot G — UX cohérence
+- Champ « Mot de passe actuel » avec `autoComplete="current-password"` + dummy
+  `username` caché pour neutraliser l'autofill navigateur.
+- Nouveau mot de passe en `autoComplete="new-password"`.
+- Message d'état vide Monitoring : lien vers `/dashboard/netbox` au lieu d'une
+  section « Intégrations » inexistante.
+- Dashboard TV : clarification « Alertes monitoring » (vs « Alertes » page qui
+  agrège tâches + santé sites).
+
+#### Documentation
+- ADR-010 (apparence) rédigé.
+- `docs/architecture/AUTH_MODEL.md` : `AccessGrant` → `AccessOverride` (correction
+  de référence), onglet Apparence remappé, historique v1.4 ajouté.
+- `reports/phase4-audit-correctifs.md` : rapport de clôture audit 18/04/2026.
+
+#### Breaking
+- Aucun pour le runtime produit ; nécessite `prisma db push --accept-data-loss`
+  pour ajouter les 2 colonnes `User.appearance*`.
+- Base de données dev reset + re-seed obligatoire (données de démo uniquement).
+
+---
+
 ## [1.3.0] - 2026-04-16
 
 ### Vers le pilote production

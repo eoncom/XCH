@@ -212,7 +212,7 @@ export default function NewContactPage() {
           </CardContent>
         </Card>
 
-        {/* Section 3: Portee organisationnelle */}
+        {/* Section 3: Portée organisationnelle */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

@@ -373,7 +373,10 @@ export default function MonitoringOverviewPage() {
           <CardContent className="py-12 text-center text-muted-foreground">
             <WifiOff className="h-8 w-8 mx-auto mb-2 opacity-50" />
             <p>Aucun moniteur configuré</p>
-            <p className="text-xs mt-1">Configurez Uptime Kuma dans Intégrations</p>
+            <p className="text-xs mt-1">
+              Configurez Uptime Kuma depuis{' '}
+              <a href="/dashboard/netbox" className="underline hover:no-underline">la page des intégrations</a>.
+            </p>
           </CardContent>
         </Card>
       ) : viewMode === 'all' ? (

@@ -180,7 +180,7 @@ export default function BillingEntitiesPage() {
                 <TableHead>Code</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Description</TableHead>
-                <TableHead>Portee</TableHead>
+                <TableHead>Portée</TableHead>
                 <TableHead>Statut</TableHead>
                 {(canUpdate('billing-entities') || canDelete('billing-entities')) && (
                   <TableHead className="text-right">Actions</TableHead>

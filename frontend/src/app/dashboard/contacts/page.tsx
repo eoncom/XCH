@@ -317,10 +317,10 @@ export default function ContactsPage() {
         </Select>
         <Select value={scopeFilter} onValueChange={setScopeFilter}>
           <SelectTrigger>
-            <SelectValue placeholder="Portee" />
+            <SelectValue placeholder="Portée" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ALL">Toutes les portees</SelectItem>
+            <SelectItem value="ALL">Toutes les portées</SelectItem>
             <SelectItem value="GLOBAL">Global (tenant)</SelectItem>
             {orgTree.map((del) => (
               <SelectItem key={del.id} value={`DELEGATION:${del.id}`}>
@@ -350,9 +350,9 @@ export default function ContactsPage() {
                     <span className="inline-flex items-center">Email<SortIcon field="email" /></span>
                   </TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('phone')}>
-                    <span className="inline-flex items-center">Telephone<SortIcon field="phone" /></span>
+                    <span className="inline-flex items-center">Téléphone<SortIcon field="phone" /></span>
                   </TableHead>
-                  <TableHead>Portee</TableHead>
+                  <TableHead>Portée</TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}>
                     <span className="inline-flex items-center">Statut<SortIcon field="status" /></span>
                   </TableHead>

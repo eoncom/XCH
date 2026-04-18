@@ -2,7 +2,7 @@
 
 > **Objet** : document de référence pour tout IA dev / agent travaillant sur XCH.
 > **Usage** : à relire en début de session si tu touches aux permissions, aux guards, ou aux users.
-> **Statut** : Casbin retiré, `User.role` déprécié. La vérité vient de `UserDelegation` + `AccessGrant` + `isSuperAdmin`.
+> **Statut** : Casbin retiré, `User.role` déprécié. La vérité vient de `UserDelegation` + `AccessOverride` + `isSuperAdmin`.
 
 ---
 
@@ -11,7 +11,7 @@
 1. Un utilisateur **n'a pas de rôle global**. Il a des `UserDelegation` qui lui donnent une permission (`READ` / `WRITE` / `MANAGE`) **sur une délégation spécifique**.
 2. `MANAGE` est le niveau admin **local** (limité à la/les délégation(s) où l'user a ce niveau).
 3. `isSuperAdmin` est un flag **global** (bypass total, voit et modifie tout le tenant).
-4. `AccessGrant` (ALLOW/DENY) permet d'élever ou restreindre l'accès **par site précis**.
+4. `AccessOverride` (ALLOW/DENY) permet d'élever ou restreindre l'accès **par site précis**.
 
 ---
 
@@ -62,16 +62,16 @@ Différence fondamentale avec `MANAGE` :
 
 ---
 
-## 3. `AccessGrant` — surcharges fines par site
+## 3. `AccessOverride` — surcharges fines par site
 
 Permet de dévier du rôle hérité de la délégation **pour un site précis**.
 
 ```prisma
-model AccessGrant {
+model AccessOverride {
   userId        String
   delegationId  String
   siteId        String?         // null = applique à toute la délégation
-  type          AccessGrantType // ALLOW | DENY
+  type          AccessOverrideType // ALLOW | DENY
   permission    Permission?     // READ | WRITE | MANAGE (si ALLOW)
 }
 ```
@@ -80,15 +80,15 @@ model AccessGrant {
 
 | Scénario | Configuration |
 |---|---|
-| User WRITE sur délégation Paris, mais **pas** accès au site "Chantier sensible" | `AccessGrant(userId, delegationId=Paris, siteId=Sensible, type=DENY)` |
-| User READ sur délégation Lyon, mais MANAGE sur le site "Datacenter-Lyon-1" | `AccessGrant(userId, delegationId=Lyon, siteId=DC1, type=ALLOW, permission=MANAGE)` |
-| User externe uniquement sur un site | Pas de `UserDelegation` + `AccessGrant(ALLOW, READ)` ciblé site |
+| User WRITE sur délégation Paris, mais **pas** accès au site "Chantier sensible" | `AccessOverride(userId, delegationId=Paris, siteId=Sensible, type=DENY)` |
+| User READ sur délégation Lyon, mais MANAGE sur le site "Datacenter-Lyon-1" | `AccessOverride(userId, delegationId=Lyon, siteId=DC1, type=ALLOW, permission=MANAGE)` |
+| User externe uniquement sur un site | Pas de `UserDelegation` + `AccessOverride(ALLOW, READ)` ciblé site |
 
 ### Résolution (dans l'ordre)
 
 1. `isSuperAdmin` → accès à tout, fin.
-2. `AccessGrant(DENY)` sur le site → refusé, fin.
-3. `AccessGrant(ALLOW, permission=X)` sur le site → permission X.
+2. `AccessOverride(DENY)` sur le site → refusé, fin.
+3. `AccessOverride(ALLOW, permission=X)` sur le site → permission X.
 4. `UserDelegation.permission` sur la délégation parente → permission par défaut.
 5. Rien → **403**.
 
@@ -114,7 +114,7 @@ Ordre de vérification :
 if (user.isSuperAdmin) → ALLOW
 if (@SkipDelegation)   → ALLOW (mais JWT requis)
 else:
-  résoudre permission effective (UserDelegation + AccessGrant sur la ressource)
+  résoudre permission effective (UserDelegation + AccessOverride sur la ressource)
   if permission >= requiredLevel → ALLOW
   else → 403
 ```
@@ -154,7 +154,7 @@ Lis ce document puis confirme chacun des points :
 - [ ] `User.role` (enum ADMIN/MANAGER/TECHNICIEN/VIEWER) est **déprécié** — ne jamais l'utiliser pour autoriser.
 - [ ] Casbin a été retiré — ne pas réintroduire.
 - [ ] Tout nouveau controller endpoint **doit** avoir `@RequireRead/@RequireWrite/@RequireManage` ou `@SkipDelegation`.
-- [ ] `AccessGrant(DENY)` prime sur `UserDelegation` — utile pour black-lister un site.
+- [ ] `AccessOverride(DENY)` prime sur `UserDelegation` — utile pour black-lister un site.
 - [ ] Seul un `SuperAdmin` peut en créer un autre.
 - [ ] Les endpoints user-scoped (`/me`, `/my-*`) utilisent `@SkipDelegation()` + filtrent par `req.user.userId`.
 - [ ] Côté frontend, on s'appuie sur `usePermissions()`, jamais sur `user.role`.
@@ -169,7 +169,7 @@ Matrice de visibilité des onglets de `/dashboard/settings` par rôle effectif :
 |---|---|---|---|
 | Profil | Tous (authentifié) | `/users/me/*` | 👤 personnel |
 | Sécurité | Tous | `/auth/2fa/*`, `/users/me/change-password` | 👤 personnel |
-| Apparence | Tous | n/a (client) | 👤 personnel |
+| Apparence | Tous (deux sections) | `GET /users/me/effective-appearance`, `PATCH /users/me/appearance` (personnel) + `PATCH /tenants/appearance` (super admin) | 👤 personnel + 🌐 tenant (super admin) |
 | **Ma délégation** | `MANAGE` sur la délégation active (non super admin) | `PATCH /delegations/:id`, `POST /users`, `/user-delegations` | 🏢 délégation |
 | Notifications | `MANAGE` sur délégation OU super admin | `/notification-configs/*` | 🏢 délégation |
 | **Structure** | 🛡 SuperAdmin uniquement | `POST /delegations`, `DELETE /delegations/:id` | 🌐 tenant |
@@ -202,20 +202,21 @@ Les onglets **globaux** sont masqués aux utilisateurs `MANAGE` pour ne laisser 
 | Tester avec l'user `admin@demo.fr` (SuperAdmin) qui passe tout | Tester aussi avec `manager@demo.fr` et `technicien@demo.fr` (tous `demo123`) |
 | Chercher `user.role === 'ADMIN'` en backend | Utiliser `user.isSuperAdmin` ou `PermissionService.effectivePermission()` |
 | Nouveau module sans `@RequireRead` sur le GET list | Toujours commencer par écrire les décorateurs avant le contrôleur |
-| `AccessGrant` sans `delegationId` | Le champ est requis, même pour une grant site-only |
+| `AccessOverride` sans `delegationId` | Le champ est requis, même pour une grant site-only |
 
 ---
 
 ## 9. Historique (pour contexte)
 
 - **v1.0 → v1.1** : Casbin + `User.role` enum — trop rigide, deux sources de vérité.
-- **v1.2** : delegation-first, introduction de `UserDelegation` + `AccessGrant`, `User.role` marqué deprecated.
+- **v1.2** : delegation-first, introduction de `UserDelegation` + `AccessOverride`, `User.role` marqué deprecated.
 - **v1.3** : Casbin définitivement retiré (module `casbin/` supprimé, `casbinRule` table vide), `PermissionGuard` fail-closed, décorateurs obligatoires.
+- **v1.4** : corrections post-audit phase 4 — `GET /users` scope = union des `MANAGE` du caller (plus la délégation active uniquement) + `@RequireManage()` (plus `@RequireRead()`) ; `GET /audit` = super admin only (`@SkipDelegation + @RequireManage + isSuperAdmin`) ; `GET /delegations` filtré par `UserDelegation` du caller (plus de fuite des délégations système pour les MANAGE). Nouveau flux Apparence (ADR-010) — deux niveaux tenant/utilisateur avec verrou admin.
 
 ---
 
 **Fichiers à lire si tu dois toucher l'auth** :
-1. `backend/prisma/schema.prisma` — sections `User`, `UserDelegation`, `AccessGrant`, `Delegation`, `Permission` enum
+1. `backend/prisma/schema.prisma` — sections `User`, `UserDelegation`, `AccessOverride`, `Delegation`, `Permission` enum
 2. `backend/src/modules/auth/permission.guard.ts`
 3. `backend/src/common/services/permission.service.ts`
 4. `backend/src/common/decorators/require-right.decorator.ts`

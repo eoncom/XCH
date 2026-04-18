@@ -14,7 +14,9 @@ export class SeedService {
   async loadDemo(tenantId: string) {
     this.logger.log(`Loading demo data for tenant ${tenantId}`);
 
-    // NOTE: Do NOT overwrite tenant name/config here — the user sets those in the setup wizard.
+    // NOTE: Do NOT overwrite tenant name, but DO initialise tenant.config.appearance
+    // so the AppearanceProvider has sane defaults out of the box.
+    await this.ensureTenantAppearanceDefaults(tenantId);
 
     const delegations = await this.createOrganization(tenantId);
     const sites = await this.createSites(tenantId, delegations);
@@ -25,6 +27,14 @@ export class SeedService {
     const tasks = await this.createTasks(tenantId, sites, users, assets);
     const contactTypes = await this.createContactTypes(tenantId);
     const contacts = await this.createContacts(tenantId, contactTypes);
+
+    // v1.4 post-audit enrichments (ADR-010 + phase 4 demo coverage)
+    await this.createAccessOverrides(tenantId, users, sites);
+    await this.createDemoBudgetsAndExpenses(tenantId, delegations, sites, users);
+    await this.createConnectivityLinksForDemo(tenantId, sites);
+    await this.createDemoUserNotifications(tenantId, users, tasks, sites);
+    await this.seedDemoAuditLogEntries(tenantId, users, sites, assets);
+    await this.applyTechnicianCustomAppearance(tenantId);
 
     this.logger.log(`Demo data loaded successfully`);
 
@@ -67,9 +77,13 @@ export class SeedService {
       await this.prisma.task.deleteMany({ where: { tenantId } });
       await this.prisma.asset.deleteMany({ where: { tenantId } });
       await this.prisma.rack.deleteMany({ where: { tenantId } });
+      // v1.3+/v1.4 tables — wipe before deleting parents
+      await this.prisma.userNotification.deleteMany({ where: { tenantId } });
+      await this.prisma.connectivityLink.deleteMany({ where: { tenantId } });
       // Cost allocation tables
       await this.prisma.costAllocation.deleteMany({ where: { expense: { tenantId } } });
       await this.prisma.expense.deleteMany({ where: { tenantId } });
+      await this.prisma.budget.deleteMany({ where: { tenantId } });
       await this.prisma.billingEntity.deleteMany({ where: { tenantId } });
       // Access model tables
       await this.prisma.accessOverride.deleteMany({ where: { tenantId } });
@@ -105,9 +119,9 @@ export class SeedService {
   // ============================================================================
 
   private async createOrganization(tenantId: string) {
-    const delegation = await this.prisma.delegation.upsert({
+    const idfOuest = await this.prisma.delegation.upsert({
       where: { tenantId_code: { tenantId, code: 'IDF-OUEST' } },
-      update: {},
+      update: { name: 'IDF Ouest' }, // keep idempotent + purge '(éditée)' residues
       create: {
         tenantId,
         name: 'IDF Ouest',
@@ -117,16 +131,40 @@ export class SeedService {
       },
     });
 
-    this.logger.log('Organization created: 1 delegation');
-    return { default: delegation.id };
+    const lyon = await this.prisma.delegation.upsert({
+      where: { tenantId_code: { tenantId, code: 'LYON-METROPOLE' } },
+      update: { name: 'Lyon Métropole' },
+      create: {
+        tenantId,
+        name: 'Lyon Métropole',
+        code: 'LYON-METROPOLE',
+        groupLabel: 'Auvergne-Rhône-Alpes',
+        groupColor: '#ff6b6b',
+      },
+    });
+
+    const marseille = await this.prisma.delegation.upsert({
+      where: { tenantId_code: { tenantId, code: 'MARSEILLE' } },
+      update: { name: 'Marseille' },
+      create: {
+        tenantId,
+        name: 'Marseille',
+        code: 'MARSEILLE',
+        groupLabel: 'PACA',
+        groupColor: '#fbbf24',
+      },
+    });
+
+    this.logger.log('Organization created: 3 delegations (IDF Ouest, Lyon Métropole, Marseille)');
+    return { default: idfOuest.id, idfOuest: idfOuest.id, lyon: lyon.id, marseille: marseille.id };
   }
 
   // ============================================================================
   // SITES - 6 sites réalistes (3 grands, 2 moyens, 1 petit)
   // ============================================================================
 
-  private async createSites(tenantId: string, delegations: { default: string }) {
-    const sitesData = [
+  private async createSites(tenantId: string, delegations: { default: string; idfOuest?: string; lyon?: string; marseille?: string }) {
+    const sitesData: any[] = [
       // === GRANDS CHANTIERS (3-4 baies, équipement complet) ===
       {
         id: `demo-site-defense-${tenantId}`,
@@ -260,6 +298,50 @@ export class SeedService {
         },
         notes: 'Petit showroom temporaire - installation prévue semaine prochaine. Pas de salle serveur, équipement sous bureau.',
       },
+      // === DELEGATIONS LYON + MARSEILLE (1 site chacune — exerce multi-délégation) ===
+      {
+        id: `demo-site-lyon-${tenantId}`,
+        code: 'LYO-01',
+        name: 'Lyon - Part-Dieu',
+        _delegation: 'lyon',
+        status: SiteStatus.ACTIVE,
+        healthStatus: HealthStatus.HEALTHY,
+        address: '112 Rue Garibaldi',
+        city: 'Lyon',
+        postalCode: '69003',
+        country: 'France',
+        contacts: [
+          { name: 'Romain Lacombe', phone: '+33 4 72 00 00 00', email: 'r.lacombe@lyon-partdieu.fr', role: 'Responsable site', isPrimary: true },
+        ],
+        connectivity: {
+          links: [
+            { id: 'lnk-lyo-primary', role: 'primary', type: 'Fibre optique', provider: 'SFR Business', ref: 'FTTH-LYO-001', bandwidth: '1 Gbps / 300 Mbps' },
+          ],
+        },
+        notes: 'Tour Part-Dieu - 3ᵉ étage. Exploité par la délégation Lyon Métropole.',
+      },
+      {
+        id: `demo-site-marseille-${tenantId}`,
+        code: 'MRS-01',
+        name: 'Marseille - Euromed',
+        _delegation: 'marseille',
+        status: SiteStatus.ACTIVE,
+        healthStatus: HealthStatus.HEALTHY,
+        address: '9 Boulevard du Littoral',
+        city: 'Marseille',
+        postalCode: '13002',
+        country: 'France',
+        contacts: [
+          { name: 'Stéphanie Borel', phone: '+33 4 91 00 00 00', email: 's.borel@euromed.fr', role: 'Responsable site', isPrimary: true },
+        ],
+        connectivity: {
+          links: [
+            { id: 'lnk-mrs-primary', role: 'primary', type: 'Fibre optique', provider: 'Orange Business', ref: 'FTTO-MRS-001', bandwidth: '500 Mbps / 200 Mbps' },
+            { id: 'lnk-mrs-backup', role: 'backup', type: '4G', provider: 'Bouygues Telecom', ref: '4G-MRS-001', bandwidth: '100 Mbps' },
+          ],
+        },
+        notes: 'Quartier Euroméditerranée - bureaux et showroom. Exploité par la délégation Marseille.',
+      },
     ];
 
     // Demo coordinates (code → [lat, lon])
@@ -270,17 +352,26 @@ export class SeedService {
       'STC-01': [48.8427, 2.2028],     // Saint-Cloud
       'MAS-01': [48.7264, 2.2808],     // Massy
       'BOU-01': [48.8333, 2.2415],     // Boulogne
+      'LYO-01': [45.7605, 4.8560],     // Lyon Part-Dieu
+      'MRS-01': [43.3062, 5.3618],     // Marseille Euroméditerranée
     };
 
     const sites = [];
     for (const s of sitesData) {
+      const { _delegation, ...siteFields } = s;
+      const delegationId =
+        (_delegation === 'lyon' && delegations.lyon) ||
+        (_delegation === 'marseille' && delegations.marseille) ||
+        (_delegation === 'idfOuest' && delegations.idfOuest) ||
+        delegations.default;
+
       const site = await this.prisma.site.upsert({
-        where: { id: s.id },
-        update: {},
+        where: { id: siteFields.id },
+        update: { delegationId }, // ensure existing sites get re-homed on seed replay
         create: {
-          ...s,
+          ...siteFields,
           tenantId,
-          delegationId: delegations.default,
+          delegationId,
         },
       });
       const c = coords[s.code];
@@ -338,6 +429,15 @@ export class SeedService {
         _right: DelegationRight.READ,
         phone: '+33 6 11 22 33 44',
       },
+      // Multi-delegation demo user — MANAGE on Lyon + READ on Marseille.
+      // Exercises the switcher, the "Ma délégation" tab and cross-right UX.
+      {
+        id: `demo-user-multideleg-${tenantId}`,
+        email: 'multi@demo.fr',
+        name: 'Julien Morel',
+        _right: DelegationRight.MANAGE, // primary — see createUserDelegations for the full map
+        phone: '+33 6 24 68 13 57',
+      },
     ];
 
     // All demo users get password "demo123"
@@ -366,31 +466,70 @@ export class SeedService {
   // USER DELEGATIONS
   // ============================================================================
 
-  private async createUserDelegations(tenantId: string, users: any[], delegations: { default: string }) {
-    const delegationId = delegations.default;
+  private async createUserDelegations(
+    tenantId: string,
+    users: any[],
+    delegations: { default: string; idfOuest?: string; lyon?: string; marseille?: string },
+  ) {
+    const idfOuest = delegations.idfOuest || delegations.default;
+    const lyon = delegations.lyon;
+    const marseille = delegations.marseille;
+
     // Find the admin user (setup-created, isSuperAdmin) to use as grantedBy
     const admin = await this.prisma.user.findFirst({
       where: { tenantId, isSuperAdmin: true },
     });
     const grantedById = admin?.id || users[0]?.id;
 
+    const byEmail = (email: string) => users.find((u) => u.email === email);
+    const managerUser = byEmail('manager@demo.fr');
+    const multiUser = byEmail('multi@demo.fr');
+
+    type Assignment = { userId: string; delegationId: string; right: DelegationRight };
+    const assignments: Assignment[] = [];
+
+    // All default demo users land on IDF Ouest with their primary right
     for (const user of users) {
+      assignments.push({
+        userId: user.id,
+        delegationId: idfOuest,
+        right: (user as any)._right || DelegationRight.READ,
+      });
+    }
+
+    // Manager (Sophie Martin) → MANAGE on Lyon + Marseille too (audit baseline)
+    if (managerUser) {
+      if (lyon) assignments.push({ userId: managerUser.id, delegationId: lyon, right: DelegationRight.MANAGE });
+      if (marseille) assignments.push({ userId: managerUser.id, delegationId: marseille, right: DelegationRight.MANAGE });
+    }
+
+    // Multi-delegation demo user (Julien Morel) → MANAGE on Lyon, READ on Marseille,
+    // keep his IDF Ouest assignment (MANAGE) to exercise a 3-way multi-delegation setup.
+    if (multiUser) {
+      if (lyon) {
+        // Overrides the default IDF assignment → keep IDF at MANAGE, add Lyon MANAGE, Marseille READ
+        assignments.push({ userId: multiUser.id, delegationId: lyon, right: DelegationRight.MANAGE });
+      }
+      if (marseille) {
+        assignments.push({ userId: multiUser.id, delegationId: marseille, right: DelegationRight.READ });
+      }
+    }
+
+    for (const a of assignments) {
       await this.prisma.userDelegation.upsert({
-        where: {
-          userId_delegationId: { userId: user.id, delegationId },
-        },
-        update: {},
+        where: { userId_delegationId: { userId: a.userId, delegationId: a.delegationId } },
+        update: { right: a.right },
         create: {
           tenantId,
-          userId: user.id,
-          delegationId,
-          right: (user as any)._right || DelegationRight.READ,
+          userId: a.userId,
+          delegationId: a.delegationId,
+          right: a.right,
           grantedBy: grantedById,
         },
       });
     }
 
-    this.logger.log(`UserDelegations created: ${users.length} users assigned to delegation`);
+    this.logger.log(`UserDelegations created: ${assignments.length} assignments across ${[idfOuest, lyon, marseille].filter(Boolean).length} delegations`);
   }
 
   // ============================================================================
@@ -781,5 +920,371 @@ export class SeedService {
     }
 
     return contacts;
+  }
+
+  // ============================================================================
+  // v1.4 EXTENSIONS (post audit phase 4)
+  // ============================================================================
+
+  /**
+   * Write tenant-level appearance defaults (ADR-010) unless already present.
+   * Uses the tenant's primaryColor as the default primary.
+   */
+  private async ensureTenantAppearanceDefaults(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) return;
+    const config = (tenant.config as Record<string, any>) || {};
+    if (config.appearance) return; // don't stomp operator-tuned values
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        config: {
+          ...config,
+          appearance: {
+            theme: 'system',
+            primaryColor: tenant.primaryColor || '#0070f3',
+            density: 'comfortable',
+            allowUserOverride: true,
+          },
+        },
+      },
+    });
+    this.logger.log('Tenant appearance defaults initialised');
+  }
+
+  /**
+   * Seed AccessOverride examples — one ALLOW (temporary elevation) and one DENY
+   * (site blacklist) so the audit flow is exercised end-to-end.
+   */
+  private async createAccessOverrides(tenantId: string, users: any[], sites: any[]) {
+    const viewer = users.find((u) => u.email === 'viewer@demo.fr');
+    const tech = users.find((u) => u.email === 'technicien@demo.fr');
+    const defense = sites.find((s) => s.code === 'DEF-01');
+    const boulogne = sites.find((s) => s.code === 'BOU-01');
+    if (!viewer || !tech || !defense || !boulogne) return;
+
+    const admin = await this.prisma.user.findFirst({ where: { tenantId, isSuperAdmin: true } });
+
+    await this.prisma.accessOverride.upsert({
+      where: {
+        tenantId_userId_siteId_resource: {
+          tenantId,
+          userId: viewer.id,
+          siteId: defense.id,
+          resource: '*',
+        },
+      },
+      update: {},
+      create: {
+        tenantId,
+        userId: viewer.id,
+        siteId: defense.id,
+        resource: '*',
+        effect: 'ALLOW',
+        permission: 'WRITE',
+        label: 'Intervention ponctuelle La Défense',
+        grantedBy: admin?.id,
+      },
+    });
+
+    await this.prisma.accessOverride.upsert({
+      where: {
+        tenantId_userId_siteId_resource: {
+          tenantId,
+          userId: tech.id,
+          siteId: boulogne.id,
+          resource: '*',
+        },
+      },
+      update: {},
+      create: {
+        tenantId,
+        userId: tech.id,
+        siteId: boulogne.id,
+        resource: '*',
+        effect: 'DENY',
+        permission: null,
+        label: 'Chantier sensible — accès interdit',
+        grantedBy: admin?.id,
+      },
+    });
+
+    this.logger.log('AccessOverrides created: 1 ALLOW + 1 DENY');
+  }
+
+  /**
+   * Seed a few BillingEntity + Budget + Expense + CostAllocation rows to exercise
+   * the Coûts module end-to-end.
+   */
+  private async createDemoBudgetsAndExpenses(
+    tenantId: string,
+    delegations: { default: string; idfOuest?: string; lyon?: string; marseille?: string },
+    sites: any[],
+    users: any[],
+  ) {
+    const admin = users.find((u) => u.isSuperAdmin) || users[0];
+    const defense = sites.find((s) => s.code === 'DEF-01');
+    const idfOuest = delegations.idfOuest || delegations.default;
+
+    // Billing entities (bearer + a couple of allocation targets)
+    const bearer = await this.prisma.billingEntity.upsert({
+      where: { tenantId_code: { tenantId, code: 'DSI-IT' } },
+      update: {},
+      create: {
+        tenantId,
+        name: 'DSI - Budget IT',
+        code: 'DSI-IT',
+        type: 'DIRECTION',
+        description: 'Budget IT central supportant les dépenses transverses',
+        delegationId: null,
+      },
+    });
+    const bu1 = await this.prisma.billingEntity.upsert({
+      where: { tenantId_code: { tenantId, code: 'BU-IDF' } },
+      update: {},
+      create: {
+        tenantId,
+        name: 'BU Île-de-France',
+        code: 'BU-IDF',
+        type: 'BU',
+        delegationId: idfOuest,
+      },
+    });
+    const bu2 = await this.prisma.billingEntity.upsert({
+      where: { tenantId_code: { tenantId, code: 'BU-LYON' } },
+      update: {},
+      create: {
+        tenantId,
+        name: 'BU Lyon',
+        code: 'BU-LYON',
+        type: 'BU',
+        delegationId: delegations.lyon || null,
+      },
+    });
+
+    // Annual budget for IDF Ouest
+    const budgetLabel = `Budget IT ${new Date().getFullYear()} — IDF Ouest`;
+    const existingBudget = await this.prisma.budget.findFirst({
+      where: { tenantId, label: budgetLabel },
+    });
+    if (!existingBudget) {
+      await this.prisma.budget.create({
+        data: {
+          tenantId,
+          label: budgetLabel,
+          delegationId: idfOuest,
+          expenseType: null,
+          period: 'YEAR',
+          startDate: new Date(new Date().getFullYear(), 0, 1),
+          endDate: new Date(new Date().getFullYear(), 11, 31),
+          amount: 120000 as any,
+          currency: 'EUR',
+          notes: 'Budget annuel IT couvrant équipement, services et abonnements',
+        },
+      });
+    }
+
+    // A recurring expense with a split allocation (60% BU IDF, 40% BU Lyon)
+    const expenseLabel = 'Abonnement fibre Orange Business — La Défense';
+    const existingExpense = await this.prisma.expense.findFirst({
+      where: { tenantId, label: expenseLabel },
+    });
+    if (!existingExpense && defense) {
+      const expense = await this.prisma.expense.create({
+        data: {
+          tenantId,
+          label: expenseLabel,
+          description: 'Liaison fibre dédiée 1 Gbps Orange Business (facturation mensuelle)',
+          type: 'SERVICE',
+          totalAmount: 890,
+          currency: 'EUR',
+          frequency: 'MONTHLY',
+          dateIncurred: new Date(),
+          bearerId: bearer.id,
+          delegationId: idfOuest,
+          siteId: defense.id,
+          invoiceRef: 'OBS-2026-04-001',
+          createdBy: admin.id,
+        },
+      });
+
+      await this.prisma.costAllocation.createMany({
+        data: [
+          { expenseId: expense.id, targetId: bu1.id, percentage: 60, amount: 534 },
+          { expenseId: expense.id, targetId: bu2.id, percentage: 40, amount: 356 },
+        ],
+      });
+    }
+
+    this.logger.log('Demo budgets & expenses seeded');
+  }
+
+  /**
+   * Mirror a subset of Site.connectivity JSON into the ConnectivityLink table so
+   * the v1.3 structured view + Coûts cross-link is exercised.
+   */
+  private async createConnectivityLinksForDemo(tenantId: string, sites: any[]) {
+    const data: Array<{
+      siteCode: string;
+      role: 'PRIMARY' | 'BACKUP';
+      provider: string;
+      type: string;
+      bandwidthDown?: number;
+      bandwidthUp?: number;
+      monthlyPrice?: number;
+    }> = [
+      { siteCode: 'DEF-01', role: 'PRIMARY', provider: 'Orange Business', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 1000, monthlyPrice: 890 },
+      { siteCode: 'DEF-01', role: 'BACKUP', provider: 'Bouygues Telecom', type: '4G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 59 },
+      { siteCode: 'SAC-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 620 },
+      { siteCode: 'LYO-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 780 },
+      { siteCode: 'MRS-01', role: 'PRIMARY', provider: 'Orange Business', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 640 },
+    ];
+
+    for (const d of data) {
+      const site = sites.find((s) => s.code === d.siteCode);
+      if (!site) continue;
+
+      const existing = await this.prisma.connectivityLink.findFirst({
+        where: { tenantId, siteId: site.id, role: d.role, provider: d.provider },
+      });
+      if (existing) continue;
+
+      await this.prisma.connectivityLink.create({
+        data: {
+          tenantId,
+          siteId: site.id,
+          role: d.role,
+          provider: d.provider,
+          type: d.type,
+          bandwidthDown: d.bandwidthDown,
+          bandwidthUp: d.bandwidthUp,
+          monthlyPrice: d.monthlyPrice as any,
+          currency: 'EUR',
+        },
+      });
+    }
+
+    this.logger.log('ConnectivityLinks seeded');
+  }
+
+  /**
+   * A handful of unread in-app notifications so the bell is non-empty on first login.
+   */
+  private async createDemoUserNotifications(
+    tenantId: string,
+    users: any[],
+    tasks: any[],
+    sites: any[],
+  ) {
+    const manager = users.find((u) => u.email === 'manager@demo.fr');
+    const tech = users.find((u) => u.email === 'technicien@demo.fr');
+    const defense = sites.find((s) => s.code === 'DEF-01');
+    const firstTask = tasks[0];
+
+    const notifs: Array<any> = [];
+    if (manager) {
+      notifs.push({
+        tenantId,
+        userId: manager.id,
+        type: 'TASK_ASSIGNED',
+        title: 'Nouvelle tâche assignée',
+        body: firstTask ? `Tâche « ${firstTask.title} » vous a été assignée` : 'Une nouvelle tâche vous attend',
+      });
+      notifs.push({
+        tenantId,
+        userId: manager.id,
+        type: 'SITE_HEALTH_CHANGED',
+        title: 'Santé de site dégradée',
+        body: defense ? `Le site ${defense.name} est passé en WARNING` : 'Un site a changé d’état',
+      });
+    }
+    if (tech) {
+      notifs.push({
+        tenantId,
+        userId: tech.id,
+        type: 'WARRANTY_EXPIRING',
+        title: 'Garantie bientôt expirée',
+        body: 'Un équipement a sa garantie qui expire sous 30 jours',
+      });
+    }
+
+    for (const n of notifs) {
+      // No unique key → idempotency by (userId, type, title)
+      const existing = await this.prisma.userNotification.findFirst({
+        where: { userId: n.userId, type: n.type, title: n.title },
+      });
+      if (!existing) {
+        await this.prisma.userNotification.create({ data: n });
+      }
+    }
+
+    this.logger.log(`UserNotifications seeded: ${notifs.length}`);
+  }
+
+  /**
+   * A handful of AuditLog entries so the super-admin viewer has content on day one.
+   * Keep it simple: just record the fact that the seed ran.
+   */
+  private async seedDemoAuditLogEntries(
+    tenantId: string,
+    users: any[],
+    sites: any[],
+    assets: any[],
+  ) {
+    const admin = users.find((u) => u.isSuperAdmin) || users[0];
+    const firstSite = sites[0];
+    const firstAsset = assets[0];
+
+    const entries = [
+      {
+        tenantId,
+        userId: admin.id,
+        action: 'CREATE',
+        entityType: 'site',
+        entityId: firstSite?.id || null,
+        changes: { after: { code: firstSite?.code, name: firstSite?.name } },
+      },
+      firstAsset
+        ? {
+            tenantId,
+            userId: admin.id,
+            action: 'CREATE',
+            entityType: 'asset',
+            entityId: firstAsset.id,
+            changes: { after: { name: firstAsset.name, type: firstAsset.type } },
+          }
+        : null,
+    ].filter(Boolean) as any[];
+
+    // Idempotency: only seed if the table is empty for this tenant
+    const existing = await this.prisma.auditLog.count({ where: { tenantId } });
+    if (existing > 0) return;
+
+    for (const e of entries) {
+      await this.prisma.auditLog.create({ data: e });
+    }
+
+    this.logger.log(`AuditLog entries seeded: ${entries.length}`);
+  }
+
+  /**
+   * Apply a custom appearance on technicien@demo.fr so the tenant/user override flow
+   * is observable as soon as the demo is loaded.
+   */
+  private async applyTechnicianCustomAppearance(tenantId: string) {
+    const tech = await this.prisma.user.findFirst({
+      where: { tenantId, email: 'technicien@demo.fr' },
+    });
+    if (!tech) return;
+
+    await this.prisma.user.update({
+      where: { id: tech.id },
+      data: {
+        appearancePreference: { theme: 'dark', density: 'compact' } as any,
+        appearanceSource: 'custom',
+      },
+    });
+    this.logger.log('Technicien demo user: custom appearance applied (dark + compact)');
   }
 }

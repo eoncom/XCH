@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
 import { usePermissions } from '@/hooks/usePermissions';
+import { rightLabel } from '@/lib/labels';
+import { useAppearance } from '@/components/AppearanceProvider';
+import {
+  appearanceApi,
+  type UpdateTenantAppearanceInput,
+  type UpdateUserAppearanceInput,
+} from '@/lib/api/appearance';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1715,6 +1722,18 @@ export default function SettingsPage() {
   const { user } = useAuthStore();
   const { isAdmin, isManagerOrAbove, isSuperAdmin, canManage, role: permRole } = usePermissions();
   const { delegations: userDelegations } = useDelegation();
+
+  // Profile "Rôle" field: show the highest right the user holds across ALL his
+  // delegations (not the active one), i18n-translated. SuperAdmin wins.
+  const profileRightLabel = (() => {
+    if (isSuperAdmin) return 'Super Admin';
+    const rank: Record<string, number> = { MANAGE: 3, WRITE: 2, READ: 1 };
+    const best = userDelegations.reduce<string | null>((acc, d) => {
+      if (!acc) return d.right;
+      return (rank[d.right] ?? 0) > (rank[acc] ?? 0) ? d.right : acc;
+    }, null);
+    return rightLabel(best || permRole);
+  })();
   // Tab visible if user has MANAGE on ANY delegation (not just the active one)
   const hasAnyManage = userDelegations.some((d) => d.right === 'MANAGE');
   const { theme, setTheme } = useTheme();
@@ -2231,7 +2250,7 @@ export default function SettingsPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="role">Rôle</Label>
-                  <Input id="role" defaultValue={isSuperAdmin ? 'Super Admin' : (permRole || 'N/A')} disabled />
+                  <Input id="role" value={profileRightLabel} disabled readOnly />
                 </div>
               </div>
 
@@ -2252,19 +2271,23 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="currentPassword">Mot de passe actuel</Label>
-                <Input id="currentPassword" type="password" />
+                {/* autoComplete="current-password" but defaultValue empty & a hidden
+                    dummy field prevents Chrome from auto-filling the value while
+                    still offering the password manager action on submit. */}
+                <input type="text" name="prevent-autofill" autoComplete="username" className="hidden" readOnly />
+                <Input id="currentPassword" type="password" autoComplete="current-password" />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="newPassword">Nouveau mot de passe</Label>
-                <Input id="newPassword" type="password" />
+                <Input id="newPassword" type="password" autoComplete="new-password" />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">
                   Confirmer le mot de passe
                 </Label>
-                <Input id="confirmPassword" type="password" />
+                <Input id="confirmPassword" type="password" autoComplete="new-password" />
               </div>
 
               <div className="flex justify-end">
@@ -2440,6 +2463,10 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* v1.4 — Source + tenant override controls (ADR-010) */}
+          <AppearancePreferencesCard />
+          {isSuperAdmin && <TenantAppearanceCard />}
         </TabsContent>
 
         {/* Organization Structure Tab — super admin only */}
@@ -3148,5 +3175,213 @@ export default function SettingsPage() {
         )}
       </Tabs>
     </div>
+  );
+}
+
+// ============================================================================
+// APPEARANCE CARDS (v1.4 — ADR-010)
+// ============================================================================
+
+function AppearancePreferencesCard() {
+  const { appearance, reload } = useAppearance();
+  const [saving, setSaving] = useState(false);
+
+  if (!appearance) return null;
+
+  const isLocked = !appearance.allowUserOverride;
+  const source = appearance.source;
+
+  const resetToInherit = async () => {
+    setSaving(true);
+    try {
+      await appearanceApi.updateMine({ source: 'inherit' });
+      await reload();
+      toast.success('Préférence réinitialisée — vous suivez maintenant la valeur tenant');
+    } catch (e: any) {
+      toast.error(e?.message || 'Échec de la réinitialisation');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const persistCustom = async (patch: UpdateUserAppearanceInput) => {
+    setSaving(true);
+    try {
+      await appearanceApi.updateMine({ source: 'custom', ...patch });
+      await reload();
+      toast.success('Préférence mise à jour');
+    } catch (e: any) {
+      toast.error(e?.message || 'Échec de la mise à jour');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          Mes préférences
+          {isLocked ? (
+            <Badge variant="outline" className="border-destructive/50 text-destructive">
+              Verrouillé par l&apos;administrateur
+            </Badge>
+          ) : source === 'custom' ? (
+            <Badge variant="default">Personnalisé</Badge>
+          ) : (
+            <Badge variant="secondary">Hérité du tenant</Badge>
+          )}
+        </CardTitle>
+        <CardDescription>
+          {isLocked
+            ? "L'administrateur a verrouillé l'apparence globale. Vous ne pouvez pas personnaliser cette section."
+            : source === 'custom'
+              ? 'Vos choix personnels écrasent les valeurs par défaut définies par l\'administrateur.'
+              : 'Vos choix suivent les valeurs par défaut définies par l\'administrateur.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Thème effectif</Label>
+            <div className="text-sm text-muted-foreground">
+              {appearance.theme === 'dark'
+                ? 'Sombre'
+                : appearance.theme === 'light'
+                  ? 'Clair'
+                  : 'Système'}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Densité</Label>
+            <Select
+              value={appearance.density}
+              disabled={isLocked || saving}
+              onValueChange={(v) =>
+                persistCustom({ density: v as 'compact' | 'comfortable' })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="comfortable">Confortable</SelectItem>
+                <SelectItem value="compact">Compacte</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {!isLocked && source === 'custom' && (
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={resetToInherit} disabled={saving}>
+              Réinitialiser à la valeur tenant
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TenantAppearanceCard() {
+  const { appearance, reload } = useAppearance();
+  const [saving, setSaving] = useState(false);
+
+  if (!appearance) return null;
+  const tenant = appearance.tenant;
+
+  const save = async (patch: UpdateTenantAppearanceInput) => {
+    setSaving(true);
+    try {
+      await appearanceApi.updateTenant(patch);
+      await reload();
+      toast.success('Apparence tenant mise à jour');
+    } catch (e: any) {
+      toast.error(e?.message || 'Échec de la mise à jour');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Apparence tenant (défaut)</CardTitle>
+        <CardDescription>
+          Définissez les valeurs par défaut appliquées à tous les utilisateurs qui héritent.
+          Désactivez l&apos;option d&apos;override si vous voulez imposer un thème unique.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label>Thème par défaut</Label>
+            <Select
+              value={tenant.theme}
+              disabled={saving}
+              onValueChange={(v) => save({ theme: v as 'light' | 'dark' | 'system' })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system">Système (auto)</SelectItem>
+                <SelectItem value="light">Clair</SelectItem>
+                <SelectItem value="dark">Sombre</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Densité par défaut</Label>
+            <Select
+              value={tenant.density}
+              disabled={saving}
+              onValueChange={(v) => save({ density: v as 'compact' | 'comfortable' })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="comfortable">Confortable</SelectItem>
+                <SelectItem value="compact">Compacte</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tenant-primary-color">Couleur primaire</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="tenant-primary-color"
+                type="color"
+                value={tenant.primaryColor}
+                disabled={saving}
+                onChange={(e) => save({ primaryColor: e.target.value })}
+                className="w-16 h-10 cursor-pointer p-1"
+              />
+              <span className="text-sm text-muted-foreground font-mono">
+                {tenant.primaryColor}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t pt-4">
+          <div>
+            <p className="font-medium">Autoriser les préférences personnelles</p>
+            <p className="text-sm text-muted-foreground">
+              Si désactivé, tous les utilisateurs suivent obligatoirement les valeurs tenant.
+            </p>
+          </div>
+          <Button
+            variant={tenant.allowUserOverride ? 'default' : 'outline'}
+            disabled={saving}
+            onClick={() => save({ allowUserOverride: !tenant.allowUserOverride })}
+          >
+            {tenant.allowUserOverride ? 'Activé' : 'Désactivé'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

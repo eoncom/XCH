@@ -5282,3 +5282,24 @@ fix(ui): remove mention of header picker in 'Ma délégation' tab
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-18
+
+**Date:** 2026-04-18 17:33:34
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 17
+
+**Commit message:**
+```
+feat(apparence,rbac): tenant/user appearance + scope fixes
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

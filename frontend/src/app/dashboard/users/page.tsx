@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Users, UserPlus, Mail, Phone, Shield, Send, Loader2, Search, X, Trash2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { AccessGate } from '@/components/AccessGate';
+import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { User } from '@/types';
 
@@ -34,6 +36,20 @@ const rightLabels: Record<string, string> = {
 };
 
 export default function UsersPage() {
+  return (
+    <AccessGate
+      required="manage"
+      title="Accès refusé"
+      description="La gestion des utilisateurs est réservée aux administrateurs de délégation et aux super administrateurs."
+    >
+      <UsersPageInner />
+    </AccessGate>
+  );
+}
+
+function UsersPageInner() {
+  const { canManage, isSuperAdmin } = usePermissions();
+  const canAct = canManage || isSuperAdmin;
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -149,7 +165,7 @@ export default function UsersPage() {
           <p className="text-muted-foreground">Gestion des utilisateurs de la plateforme</p>
         </div>
         <div className="flex items-center gap-2">
-          <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+          {canAct && <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" data-testid="invite-user-btn">
                 <Send className="h-4 w-4 mr-2" />
@@ -218,13 +234,13 @@ export default function UsersPage() {
                 </DialogFooter>
               </form>
             </DialogContent>
-          </Dialog>
-          <Button asChild data-testid="create-user-btn">
+          </Dialog>}
+          {canAct && <Button asChild data-testid="create-user-btn">
             <Link href="/dashboard/users/new">
               <UserPlus className="h-4 w-4 mr-2" />
               Ajouter un utilisateur
             </Link>
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -379,21 +395,23 @@ export default function UsersPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" asChild data-testid="edit-user-btn">
-                    <Link href={`/dashboard/users/${user.id}/edit`}>
-                      Modifier
-                    </Link>
-                  </Button>
-                  {!(user as any).isSuperAdmin && <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => setDeleteTarget(user)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>}
-                </div>
+                {canAct && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" asChild data-testid="edit-user-btn">
+                      <Link href={`/dashboard/users/${user.id}/edit`}>
+                        Modifier
+                      </Link>
+                    </Button>
+                    {!(user as any).isSuperAdmin && <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setDeleteTarget(user)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>}
+                  </div>
+                )}
               </div>
             ))}
           </div>

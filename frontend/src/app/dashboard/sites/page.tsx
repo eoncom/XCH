@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { siteStatusLabel } from '@/lib/labels';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { sitesApi } from '@/lib/api/sites';
 import { organizationApi } from '@/lib/api/organization';
@@ -316,7 +317,7 @@ export default function SitesPage() {
                         </TableCell>
                         <TableCell>
                           <Badge variant={siteStatusColors[site.status] || 'secondary'}>
-                            {site.status}
+                            {siteStatusLabel(site.status)}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -355,7 +356,7 @@ export default function SitesPage() {
                             healthStatusCss[site.healthStatus]
                           }`}
                         >
-                          {site.healthStatus}
+                          {healthStatusLabelsMap[site.healthStatus] || site.healthStatus}
                         </span>
                       </div>
                     </CardHeader>
@@ -376,7 +377,7 @@ export default function SitesPage() {
                         )}
                         <div className="flex items-center justify-between">
                           <span className="text-muted-foreground">Statut:</span>
-                          <span className="font-medium">{site.status}</span>
+                          <span className="font-medium">{siteStatusLabel(site.status)}</span>
                         </div>
                       </div>
                     </CardContent>

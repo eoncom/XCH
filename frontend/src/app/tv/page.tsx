@@ -415,8 +415,12 @@ export default function TVDashboardPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Alertes actives ({recentAlerts.length})
+                Alertes monitoring ({recentAlerts.length})
               </CardTitle>
+              <p className="text-xs text-muted-foreground pt-0.5">
+                Basé sur les composants monitorés (Uptime Kuma / Gatus).
+                Voir /dashboard/alerts pour l&apos;ensemble des alertes (tâches + santé sites).
+              </p>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-y-auto max-h-[calc(50vh-200px)]">

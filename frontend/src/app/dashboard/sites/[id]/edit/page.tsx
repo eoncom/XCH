@@ -46,6 +46,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { sitesApi } from '@/lib/api/sites';
+import { AccessGate } from '@/components/AccessGate';
 import { assetsApi } from '@/lib/api/assets';
 import { tasksApi } from '@/lib/api/tasks';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
@@ -104,9 +105,15 @@ export default function EditSitePageWrapper({
   params: Promise<{ id: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="text-center py-12">Chargement...</div>}>
-      <EditSitePage params={params} />
-    </Suspense>
+    <AccessGate
+      required="write"
+      title="Accès refusé"
+      description="La modification de site requiert un droit WRITE ou MANAGE sur la délégation propriétaire. Seuls les éditeurs, administrateurs et super administrateurs peuvent accéder à ce formulaire."
+    >
+      <Suspense fallback={<div className="text-center py-12">Chargement...</div>}>
+        <EditSitePage params={params} />
+      </Suspense>
+    </AccessGate>
   );
 }
 

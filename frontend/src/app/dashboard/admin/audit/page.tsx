@@ -7,6 +7,7 @@ import { Activity, Loader2, Filter, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { auditApi, type AuditEntry, type AuditQueryParams } from '@/lib/api/audit';
+import { AccessGate } from '@/components/AccessGate';
 
 const ENTITY_LINKS: Record<string, (id: string) => string> = {
   Asset: (id) => `/dashboard/assets/${id}`,
@@ -24,6 +25,18 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 export default function AuditLogPage() {
+  return (
+    <AccessGate
+      required="super-admin"
+      title="Accès refusé"
+      description="Le journal d’audit global est réservé aux super administrateurs. Consultez l’historique par entité depuis la fiche de la ressource concernée."
+    >
+      <AuditLogPageInner />
+    </AccessGate>
+  );
+}
+
+function AuditLogPageInner() {
   const [items, setItems] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);

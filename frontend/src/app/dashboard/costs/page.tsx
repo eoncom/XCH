@@ -240,7 +240,7 @@ export default function CostsPage() {
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">Montant</TableHead>
                 <TableHead>Porteur</TableHead>
-                <TableHead>Portee</TableHead>
+                <TableHead>Portée</TableHead>
                 <TableHead>Cibles</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-right">Actions</TableHead>

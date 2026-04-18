@@ -85,6 +85,21 @@ interface AggregatedDoc {
   sourceName: string;
 }
 
+/**
+ * Inline edit link that hides itself when the caller cannot update sites.
+ * This mirrors the backend guard (@RequireWrite on PATCH /sites/:id) so viewers
+ * never see a link they would get 403 on.
+ */
+function SiteEditIconLink({ href }: { href: string }) {
+  const { canUpdate } = usePermissions();
+  if (!canUpdate('sites')) return null;
+  return (
+    <Button variant="ghost" size="sm" asChild>
+      <Link href={href}><Edit className="h-3.5 w-3.5" /></Link>
+    </Button>
+  );
+}
+
 function AggregatedDocuments({ siteId }: { siteId: string }) {
   const { data: docs = [], isLoading } = useQuery<AggregatedDoc[]>({
     queryKey: ['site-documents', siteId],
@@ -837,9 +852,7 @@ function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: strin
                     <Users className="h-5 w-5" />
                     Contacts internes du site
                   </CardTitle>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
-                  </Button>
+                  <SiteEditIconLink href={editLink} />
                 </div>
               </CardHeader>
               <CardContent>
@@ -861,9 +874,7 @@ function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: strin
                     <Globe className="h-5 w-5" />
                     Contacts externes / IT Partenaires
                   </CardTitle>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
-                  </Button>
+                  <SiteEditIconLink href={editLink} />
                 </div>
               </CardHeader>
               <CardContent>
@@ -885,9 +896,7 @@ function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: strin
                     <User className="h-5 w-5" />
                     Contacts ({filteredContacts.length})
                   </CardTitle>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href={editLink}><Edit className="h-3.5 w-3.5" /></Link>
-                  </Button>
+                  <SiteEditIconLink href={editLink} />
                 </div>
               </CardHeader>
               <CardContent>
@@ -935,9 +944,7 @@ function SiteConnectivitySection({ connectivity, siteId, assets }: { connectivit
             <Wifi className="h-5 w-5" />
             Connectivité
           </CardTitle>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={`/dashboard/sites/${siteId}/edit?step=2`}><Edit className="h-3.5 w-3.5" /></Link>
-          </Button>
+          <SiteEditIconLink href={`/dashboard/sites/${siteId}/edit?step=2`} />
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -1047,9 +1054,7 @@ function SiteResourcesSection({ serverInfo, siteId }: { serverInfo: any; siteId:
             <HardDrive className="h-5 w-5" />
             Ressources &amp; Partages
           </CardTitle>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={`/dashboard/sites/${siteId}/edit?step=3`}><Edit className="h-3.5 w-3.5" /></Link>
-          </Button>
+          <SiteEditIconLink href={`/dashboard/sites/${siteId}/edit?step=3`} />
         </div>
       </CardHeader>
       <CardContent>
@@ -1139,9 +1144,9 @@ function SiteAccessInfoSection({ accessNotes, securityReminders, siteId }: { acc
           </TooltipProvider>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <Button variant="ghost" size="sm" asChild onClick={(e) => e.stopPropagation()}>
-            <Link href={`/dashboard/sites/${siteId}/edit?step=3`}><Edit className="h-3.5 w-3.5" /></Link>
-          </Button>
+          <span onClick={(e) => e.stopPropagation()}>
+            <SiteEditIconLink href={`/dashboard/sites/${siteId}/edit?step=3`} />
+          </span>
           <svg
             className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
             fill="none" viewBox="0 0 24 24" stroke="currentColor"
@@ -1741,9 +1746,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Informations générales</CardTitle>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/dashboard/sites/${id}/edit?step=1`}><Edit className="h-3.5 w-3.5" /></Link>
-                </Button>
+                <SiteEditIconLink href={`/dashboard/sites/${id}/edit?step=1`} />
               </div>
             </CardHeader>
             <CardContent>
