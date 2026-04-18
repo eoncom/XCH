@@ -31,13 +31,20 @@ export class OrganizationController {
 
   @Get('delegations')
   @RequireRead()
-  @ApiOperation({ summary: 'List all delegations' })
+  @ApiOperation({
+    summary:
+      "List delegations — scoped to the caller's UserDelegations. Super admin sees all (including system delegations).",
+  })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
   findAllDelegations(
     @Query('includeInactive') includeInactive: string,
     @Request() req: AuthRequest,
   ) {
-    return this.organizationService.findAllDelegations(req.user.tenantId, includeInactive === 'true');
+    return this.organizationService.findAllDelegations(
+      req.user.tenantId,
+      includeInactive === 'true',
+      req.user.isSuperAdmin ? null : req.user.userId,
+    );
   }
 
   @Get('delegations/:id')

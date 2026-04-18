@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { UpdateModulesDto } from './dto/update-modules.dto';
+import { UpdateTenantAppearanceDto } from './dto/appearance.dto';
 import { AuthRequest } from '../../types/request.interface';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { RequireRead, RequireWrite, RequireManage } from '../../common/decorators/require-right.decorator';
@@ -114,5 +115,28 @@ export class TenantsController {
     @Request() req: AuthRequest,
   ) {
     return this.tenantsService.updateElectricityConfig(req.user.tenantId, body);
+  }
+
+  // ============================================================================
+  // APPEARANCE (v1.4 — ADR-010)
+  // Tenant-level defaults: readable by any authenticated user (so the AppearanceProvider
+  //   can resolve effective appearance), but only writable by super admins.
+  // ============================================================================
+
+  @Get('appearance')
+  @RequireRead()
+  @ApiOperation({ summary: 'Get tenant-level appearance defaults (authenticated users)' })
+  getAppearance(@Request() req: AuthRequest) {
+    return this.tenantsService.getAppearanceConfig(req.user.tenantId);
+  }
+
+  @Patch('appearance')
+  @RequireManage()
+  @ApiOperation({ summary: 'Update tenant-level appearance defaults (super admin only)' })
+  updateAppearance(
+    @Body() dto: UpdateTenantAppearanceDto,
+    @Request() req: AuthRequest,
+  ) {
+    return this.tenantsService.updateAppearanceConfig(req.user.tenantId, req.user.userId, dto);
   }
 }

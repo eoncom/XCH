@@ -5261,3 +5261,24 @@ fix(rbac+csp): delegation CRUD super-admin-only + allow leaflet marker CDN
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-18
+
+**Date:** 2026-04-18 17:17:02
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 11
+- Frontend files modified: 0
+
+**Commit message:**
+```
+fix(ui): remove mention of header picker in 'Ma délégation' tab
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

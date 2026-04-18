@@ -53,12 +53,25 @@ export class OrganizationService {
     return delegation;
   }
 
-  async findAllDelegations(tenantId: string, includeInactive = false) {
+  async findAllDelegations(
+    tenantId: string,
+    includeInactive = false,
+    callerUserIdForScope?: string | null,
+  ) {
+    const where: any = {
+      tenantId,
+      ...(includeInactive ? {} : { isActive: true }),
+    };
+
+    // Non-super-admin: restrict to delegations where the caller has a UserDelegation.
+    // This hides system delegations (e.g. "By SuperAdmin") and any delegation the user
+    // has no right on. Super admin (callerUserIdForScope=null) sees everything.
+    if (callerUserIdForScope) {
+      where.userDelegations = { some: { userId: callerUserIdForScope } };
+    }
+
     return this.prisma.delegation.findMany({
-      where: {
-        tenantId,
-        ...(includeInactive ? {} : { isActive: true }),
-      },
+      where,
       include: {
         _count: { select: { sites: true, userDelegations: true } },
       },

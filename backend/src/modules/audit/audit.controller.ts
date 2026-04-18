@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Query, Request, UseGuards } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireManage, RequireRead } from '../../common/decorators/require-right.decorator';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('audit')
@@ -12,9 +13,15 @@ import { AuthRequest } from '../../types/request.interface';
 export class AuditController {
   constructor(private readonly service: AuditService) {}
 
+  // Global tenant-wide audit log is a SUPER-ADMIN ONLY view.
+  // - `@SkipDelegation + @RequireManage` is the documented pattern for tenant-wide
+  //   super-admin endpoints (see AUTH_MODEL.md §7).
+  // - MANAGE users should consult the per-entity audit stream (see `entity/:type/:id`)
+  //   for the resources they have visibility on.
   @Get()
+  @SkipDelegation()
   @RequireManage()
-  @ApiOperation({ summary: 'Query audit log entries (admin only)' })
+  @ApiOperation({ summary: 'Query tenant-wide audit log (super admin only)' })
   async query(
     @Query('entity') entity: string | undefined,
     @Query('entityId') entityId: string | undefined,
@@ -26,6 +33,9 @@ export class AuditController {
     @Query('pageSize') pageSize: string | undefined,
     @Request() req: AuthRequest,
   ) {
+    if (!req.user.isSuperAdmin) {
+      throw new ForbiddenException('Réservé aux super administrateurs');
+    }
     return this.service.query(req.user.tenantId, {
       entity,
       entityId,

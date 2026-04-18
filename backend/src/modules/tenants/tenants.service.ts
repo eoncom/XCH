@@ -1,6 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import {
+  DEFAULT_TENANT_APPEARANCE,
+  ResolvedAppearance,
+  UpdateTenantAppearanceDto,
+} from './dto/appearance.dto';
+import { AuditLogService } from '../../common/services/audit-log.service';
 
 /** Default module configuration — all modules enabled */
 const DEFAULT_MODULES: Record<string, boolean> = {
@@ -36,7 +42,10 @@ const MODULE_DESCRIPTIONS: Record<string, { label: string; description: string }
 
 @Injectable()
 export class TenantsService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(
+    private prisma: PrismaClient,
+    private auditLogService: AuditLogService,
+  ) {}
 
   async findOne(id: string) {
     const tenant = await this.prisma.tenant.findUnique({
@@ -291,5 +300,66 @@ export class TenantsService {
     });
 
     return this.getElectricityConfig(tenantId);
+  }
+
+  // ============================================================================
+  // APPEARANCE (v1.4 — ADR-010)
+  // ============================================================================
+
+  /**
+   * Get the tenant-level appearance defaults.
+   * When `Tenant.primaryColor` is set but `config.appearance.primaryColor` is not,
+   * we fall back to the tenant branding color for backward compatibility.
+   */
+  async getAppearanceConfig(tenantId: string): Promise<ResolvedAppearance> {
+    const tenant = await this.findOne(tenantId);
+    const config = tenant.config as Record<string, any> | null;
+    const appearance = (config?.appearance || {}) as Partial<ResolvedAppearance>;
+
+    return {
+      theme: appearance.theme ?? DEFAULT_TENANT_APPEARANCE.theme,
+      primaryColor:
+        appearance.primaryColor ?? tenant.primaryColor ?? DEFAULT_TENANT_APPEARANCE.primaryColor,
+      density: appearance.density ?? DEFAULT_TENANT_APPEARANCE.density,
+      allowUserOverride:
+        appearance.allowUserOverride ?? DEFAULT_TENANT_APPEARANCE.allowUserOverride,
+    };
+  }
+
+  /**
+   * Update the tenant-level appearance defaults (super admin only — enforced at controller).
+   * Logs a tenant-scoped audit entry because this impacts all users who inherit the config.
+   */
+  async updateAppearanceConfig(
+    tenantId: string,
+    userId: string | undefined,
+    dto: UpdateTenantAppearanceDto,
+  ): Promise<ResolvedAppearance> {
+    const tenant = await this.findOne(tenantId);
+    const config = (tenant.config as Record<string, any>) || {};
+    const before = await this.getAppearanceConfig(tenantId);
+
+    const updated: ResolvedAppearance = {
+      theme: dto.theme ?? before.theme,
+      primaryColor: dto.primaryColor ?? before.primaryColor,
+      density: dto.density ?? before.density,
+      allowUserOverride: dto.allowUserOverride ?? before.allowUserOverride,
+    };
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { config: { ...config, appearance: updated } },
+    });
+
+    await this.auditLogService.log({
+      tenantId,
+      userId,
+      action: 'UPDATE',
+      entityType: 'tenant',
+      entityId: tenantId,
+      changes: { before: { appearance: before }, after: { appearance: updated } },
+    });
+
+    return updated;
   }
 }

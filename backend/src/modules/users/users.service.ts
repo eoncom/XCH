@@ -7,10 +7,19 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { FilterUserDto } from './dto/filter-user.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
+import { TenantsService } from '../tenants/tenants.service';
+import {
+  EffectiveAppearance,
+  ResolvedAppearance,
+  UpdateUserAppearanceDto,
+} from '../tenants/dto/appearance.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(
+    private prisma: PrismaClient,
+    private tenantsService: TenantsService,
+  ) {}
 
   async create(createUserDto: CreateUserDto) {
     const existing = await this.prisma.user.findFirst({
@@ -52,17 +61,39 @@ export class UsersService {
   }
 
   /**
-   * Get all users.
-   * - Super admin (activeDelegationId=null): sees ALL users
-   * - Admin local (activeDelegationId set): sees only users in that delegation
+   * Resolve the delegations the caller can "see" users in.
+   * Returns the list of delegationIds where the caller has MANAGE.
+   * Returns null for super admin (unrestricted tenant-wide view).
    */
-  async findAll(tenantId: string, filters: FilterUserDto = {}, activeDelegationId?: string | null) {
+  private async resolveManageScope(
+    tenantId: string,
+    callerUserId: string | null | undefined,
+  ): Promise<string[] | null> {
+    if (!callerUserId) return null; // super admin — no restriction
+    const rows = await this.prisma.userDelegation.findMany({
+      where: { tenantId, userId: callerUserId, right: DelegationRight.MANAGE },
+      select: { delegationId: true },
+    });
+    return rows.map((r) => r.delegationId);
+  }
+
+  /**
+   * Get all users.
+   * - Super admin (callerUserIdForScope=null): sees ALL users of the tenant.
+   * - MANAGE local (callerUserIdForScope set): sees every user who belongs to ANY
+   *   delegation where the caller has MANAGE (union — not just the active one).
+   * - If the caller has no MANAGE delegation, returns an empty list (guard should 403 first).
+   */
+  async findAll(tenantId: string, filters: FilterUserDto = {}, callerUserIdForScope?: string | null) {
     const where: any = { tenantId };
 
-    // Non-super-admin: filter to users in the active delegation only
-    if (activeDelegationId) {
+    const manageDelegationIds = await this.resolveManageScope(tenantId, callerUserIdForScope);
+    if (manageDelegationIds !== null) {
+      if (manageDelegationIds.length === 0) {
+        return buildPaginatedResponse([], 0, filters.page ?? 1, filters.pageSize ?? 25);
+      }
       where.userDelegations = {
-        some: { delegationId: activeDelegationId },
+        some: { delegationId: { in: manageDelegationIds } },
       };
     }
 
@@ -123,10 +154,11 @@ export class UsersService {
 
   /**
    * Get a single user.
-   * - activeDelegationId=null → super admin, no scope check
-   * - activeDelegationId set → check target user is in that delegation
+   * - callerUserIdForScope=null → super admin, no scope check
+   * - callerUserIdForScope set → target user must share at least one delegation where
+   *   the caller has MANAGE (union view, not just the currently active delegation).
    */
-  async findOne(id: string, tenantId: string, activeDelegationId?: string | null) {
+  async findOne(id: string, tenantId: string, callerUserIdForScope?: string | null) {
     const user = await this.prisma.user.findFirst({
       where: {
         id,
@@ -141,13 +173,18 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    // Non-super-admin: verify target user is in their active delegation
-    if (activeDelegationId) {
-      const targetInDelegation = await this.prisma.userDelegation.findUnique({
-        where: { userId_delegationId: { userId: id, delegationId: activeDelegationId } },
+    // Non-super-admin: verify target user is in one of the caller's MANAGE delegations
+    if (callerUserIdForScope) {
+      const manageDelegationIds = await this.resolveManageScope(tenantId, callerUserIdForScope);
+      if (!manageDelegationIds || manageDelegationIds.length === 0) {
+        throw new ForbiddenException('Vous ne gérez aucune délégation');
+      }
+      const targetInScope = await this.prisma.userDelegation.findFirst({
+        where: { userId: id, delegationId: { in: manageDelegationIds } },
+        select: { id: true },
       });
-      if (!targetInDelegation) {
-        throw new ForbiddenException('Cet utilisateur ne fait pas partie de votre délégation');
+      if (!targetInScope) {
+        throw new ForbiddenException("Cet utilisateur ne fait partie d'aucune délégation que vous gérez");
       }
     }
 
@@ -439,6 +476,118 @@ export class UsersService {
         });
       }
     }
+  }
+
+  // ============================================================================
+  // APPEARANCE (v1.4 — ADR-010)
+  // ============================================================================
+
+  /**
+   * Raw user override (null if the user is inheriting).
+   */
+  async getMyAppearance(
+    userId: string,
+    tenantId: string,
+  ): Promise<{ source: 'inherit' | 'custom'; preference: Partial<ResolvedAppearance> | null }> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { appearancePreference: true, appearanceSource: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const source = (user.appearanceSource as 'inherit' | 'custom') || 'inherit';
+    const preference =
+      (user.appearancePreference as Partial<ResolvedAppearance> | null) || null;
+    return { source, preference };
+  }
+
+  /**
+   * Update the user-level appearance.
+   * - If tenant has `allowUserOverride=false`, any attempt to PATCH with source='custom'
+   *   or with any field set throws 403.
+   * - source='inherit' wipes any prior override.
+   */
+  async updateMyAppearance(
+    userId: string,
+    tenantId: string,
+    dto: UpdateUserAppearanceDto,
+  ): Promise<EffectiveAppearance> {
+    const tenantAppearance = await this.tenantsService.getAppearanceConfig(tenantId);
+    const requestedSource = dto.source ?? 'custom';
+
+    const wantsCustom =
+      requestedSource === 'custom' ||
+      dto.theme !== undefined ||
+      dto.primaryColor !== undefined ||
+      dto.density !== undefined;
+
+    if (wantsCustom && !tenantAppearance.allowUserOverride) {
+      throw new ForbiddenException(
+        "L'administrateur a verrouillé l'apparence globale. Les préférences personnelles ne sont pas autorisées.",
+      );
+    }
+
+    let appearancePreference: Partial<ResolvedAppearance> | null = null;
+    let appearanceSource: 'inherit' | 'custom' = 'inherit';
+
+    if (requestedSource === 'inherit') {
+      appearancePreference = null;
+      appearanceSource = 'inherit';
+    } else {
+      // Merge with current preference to support partial patches
+      const current = await this.getMyAppearance(userId, tenantId);
+      const merged: Partial<ResolvedAppearance> = {
+        ...(current.preference || {}),
+        ...(dto.theme !== undefined ? { theme: dto.theme } : {}),
+        ...(dto.primaryColor !== undefined ? { primaryColor: dto.primaryColor } : {}),
+        ...(dto.density !== undefined ? { density: dto.density } : {}),
+      };
+      appearancePreference = merged;
+      appearanceSource = 'custom';
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        appearancePreference: appearancePreference ?? undefined,
+        appearanceSource,
+      },
+    });
+
+    // If switching back to inherit, null the column explicitly
+    if (appearanceSource === 'inherit') {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { appearancePreference: null as any },
+      });
+    }
+
+    return this.getEffectiveAppearance(userId, tenantId);
+  }
+
+  /**
+   * Resolve the effective appearance for a user:
+   *   tenant defaults, then user override (if source='custom' AND tenant allows override).
+   */
+  async getEffectiveAppearance(
+    userId: string,
+    tenantId: string,
+  ): Promise<EffectiveAppearance> {
+    const tenantAppearance = await this.tenantsService.getAppearanceConfig(tenantId);
+    const { source, preference } = await this.getMyAppearance(userId, tenantId);
+
+    const canUseOverride = tenantAppearance.allowUserOverride && source === 'custom';
+    const pref = canUseOverride && preference ? preference : null;
+
+    return {
+      theme: pref?.theme ?? tenantAppearance.theme,
+      primaryColor: pref?.primaryColor ?? tenantAppearance.primaryColor,
+      density: pref?.density ?? tenantAppearance.density,
+      allowUserOverride: tenantAppearance.allowUserOverride,
+      source: canUseOverride ? 'custom' : 'inherit',
+      tenant: tenantAppearance,
+      user: canUseOverride ? preference : null,
+    };
   }
 
   async changePassword(userId: string, tenantId: string, changePasswordDto: ChangePasswordDto) {

@@ -128,6 +128,14 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // Appearance (v1.4 — ADR-010)
+  // When appearanceSource = 'inherit' (default) → user follows Tenant.config.appearance.
+  // When appearanceSource = 'custom' → appearancePreference overrides tenant defaults
+  // field by field, ONLY if Tenant.config.appearance.allowUserOverride === true.
+  // Backend resolution happens in UsersService.getEffectiveAppearance().
+  appearancePreference Json?   @db.JsonB // { theme?, primaryColor?, density? }
+  appearanceSource     String  @default("inherit") // "inherit" | "custom"
+
   // Relations
   assignedTasks   Task[]           @relation("AssignedTo")
   createdTasks    Task[]           @relation("CreatedBy")
