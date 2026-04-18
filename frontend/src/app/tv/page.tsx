@@ -418,8 +418,9 @@ export default function TVDashboardPage() {
                 Alertes monitoring ({recentAlerts.length})
               </CardTitle>
               <p className="text-xs text-muted-foreground pt-0.5">
-                Basé sur les composants monitorés (Uptime Kuma / Gatus).
-                Voir /dashboard/alerts pour l&apos;ensemble des alertes (tâches + santé sites).
+                Vue NOC : composants monitorés down/degraded uniquement.
+                Le compteur du dashboard principal (et la page <Link href="/dashboard/alerts" className="underline">Alertes</Link>) agrège
+                en plus les tâches, santé sites, équipements HS et garanties.
               </p>
             </CardHeader>
             <CardContent className="p-0">

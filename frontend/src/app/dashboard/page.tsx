@@ -15,6 +15,7 @@ import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { Task, Asset, Site } from '@/types';
+import { computeAlerts } from '@/lib/alerts';
 import { getWarrantyStatus, getWarrantyDaysLeft, useWarrantyThresholds, type WarrantyStatus } from '@/lib/warranty';
 
 // Dynamically import map component (client-side only)
@@ -205,6 +206,10 @@ export default function DashboardPage() {
       .filter(s => s.total > 0)
       .sort((a, b) => b.total - a.total);
 
+    // v1.4: totalAlerts uses the shared computeAlerts() so the Dashboard widget
+    // count matches /alerts and /tv exactly (with the same dedup rules).
+    const summary = computeAlerts({ sites, assets, tasks, monitors, warrantyThresholds });
+
     return {
       blockedTasks,
       urgentTasks,
@@ -217,7 +222,7 @@ export default function DashboardPage() {
       criticalHealthSites,
       warningHealthSites,
       downMonitors,
-      totalAlerts: blockedTasks.length + urgentTasks.length + overdueTasks.length + outOfServiceAssets.length + warrantyTotal + criticalHealthSites.length + downMonitors.length,
+      totalAlerts: summary.total,
       sitesWithAlerts,
     };
   }, [tasks, assets, sites, monitors, warrantyThresholds]);

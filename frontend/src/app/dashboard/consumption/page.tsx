@@ -40,6 +40,14 @@ export default function ConsumptionPage() {
         <p className="text-muted-foreground mt-1">
           Estimation de la consommation et du coût mensuel (24h/24, 30j) par site — {totals.costPerKwh.toFixed(3)} {totals.currency}/kWh
         </p>
+        <div className="mt-3 text-xs text-muted-foreground bg-muted/50 border rounded-md px-3 py-2 max-w-3xl">
+          <strong className="text-foreground">Pourquoi le total « Assets » diffère de la page Équipements&nbsp;?</strong>
+          {' '}Ici chaque ligne compte <em>tous les équipements associés au site</em> qui ont une
+          consommation électrique déclarée (watts via <code>AssetModel</code> ou réglage manuel),
+          y compris ceux montés dans les baies. La page <Link href="/dashboard/assets" className="underline">Équipements</Link>
+          {' '}liste uniquement les équipements « racine » (sans compter les items internes des baies
+          ni les assets désactivés). Les deux chiffres sont donc volontairement différents.
+        </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-4">

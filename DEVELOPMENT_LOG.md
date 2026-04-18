@@ -5324,3 +5324,24 @@ docs(status): bump to v1.4.0
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-18
+
+**Date:** 2026-04-18 19:00:55
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 6
+
+**Commit message:**
+```
+feat(auth): FR throttle error + env-tunable auth limits
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

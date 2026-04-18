@@ -23,7 +23,9 @@ export class SetupDto {
   @IsOptional()
   language?: string;
 
-  @ApiPropertyOptional({ example: 'https://example.com/logo.png' })
+  // Optional logo URL. Leave empty — the organisation name is shown in the sidebar
+  // when no logo is uploaded, which is cleaner than a broken placeholder image.
+  @ApiPropertyOptional({ example: 'https://cdn.example.com/my-company-logo.svg' })
   @IsString()
   @IsOptional()
   logoUrl?: string;

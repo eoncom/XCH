@@ -2597,7 +2597,7 @@ export default function SettingsPage() {
                         id="logoUrl"
                         value={logoUrl}
                         onChange={(e) => setLogoUrl(e.target.value)}
-                        placeholder="https://example.com/logo.png"
+                        placeholder="URL d'une image hébergée (PNG / SVG) — laissez vide pour n'afficher que le nom"
                         disabled={!isAdmin}
                         className="flex-1"
                       />
