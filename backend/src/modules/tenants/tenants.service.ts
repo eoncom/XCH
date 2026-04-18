@@ -348,7 +348,7 @@ export class TenantsService {
 
     await this.prisma.tenant.update({
       where: { id: tenantId },
-      data: { config: { ...config, appearance: updated } },
+      data: { config: { ...config, appearance: updated } as any },
     });
 
     await this.auditLogService.log({
