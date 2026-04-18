@@ -70,9 +70,19 @@ export class ContactsService {
       ];
     }
 
-    // Delegation-based filtering
+    // Delegation-based filtering.
+    //
+    // v1.4.x defensive parsing: class-transformer with enableImplicitConversion
+    // can mangle boolean strings — `Boolean("false")` returns `true`, so a
+    // single `query.includeGlobal !== false` check can be fooled. We re-coerce
+    // here to make the semantics explicit: the only way to OPT OUT of global
+    // contacts is to pass the literal string "false" or `false`.
+    const optedOutOfGlobal =
+      query.includeGlobal === false ||
+      (query.includeGlobal as any) === 'false' ||
+      (query.includeGlobal as any) === '0';
     if (query.delegationId) {
-      if (query.includeGlobal !== false) {
+      if (!optedOutOfGlobal) {
         // Show delegation's contacts + global contacts
         const delegationCondition = [
           { delegationId: query.delegationId },
