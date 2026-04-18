@@ -57,24 +57,21 @@ export class QueryContactDto extends PaginationDto {
   /**
    * Include global contacts (delegationId=null) in results when filtering by delegation.
    *
-   * v1.4.x fix — ValidationPipe has `enableImplicitConversion:true` in main.ts,
-   * so a URL query string "true" is ALREADY converted to boolean `true` before
-   * class-transformer runs. The old `@Transform(({value}) => value === 'true')`
-   * then received a boolean and produced `true === 'true'` → `false`, which made
-   * `includeGlobal=true` silently behave like `includeGlobal=false` and hid all
-   * global providers from the vendor combobox. This transform now handles both
-   * booleans and strings so either shape works.
+   * v1.4.x — kept as a raw string because `ValidationPipe` with
+   * `enableImplicitConversion:true` converts any non-empty string to `true`
+   * when the target type is `boolean` (`Boolean("false")` → `true`). By
+   * declaring the field as `string`, we short-circuit the implicit conversion
+   * and let `contacts.service.ts` do the actual semantic parsing (accepts
+   * "false" / "0" to opt out, anything else treated as include-global).
+   *
+   * Default when omitted: global contacts ARE included (matches the product
+   * rule that global contacts appear everywhere).
    */
-  @ApiPropertyOptional({ description: 'Include global contacts (delegationId=null) in results' })
-  @IsOptional()
-  @Transform(({ value }) => {
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'string') {
-      const v = value.toLowerCase();
-      return v === 'true' || v === '1' || v === 'yes';
-    }
-    return undefined;
+  @ApiPropertyOptional({
+    description: 'Include global contacts (delegationId=null) in results. Pass "false" to opt out.',
+    enum: ['true', 'false'],
   })
-  @IsBoolean()
-  includeGlobal?: boolean;
+  @IsOptional()
+  @IsString()
+  includeGlobal?: string;
 }
