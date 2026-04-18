@@ -7,6 +7,17 @@ import { PrismaClient } from '@prisma/client';
 import { Response, Request as ExpressRequest } from 'express';
 import * as bcrypt from 'bcrypt';
 import { Throttle } from '@nestjs/throttler';
+
+/**
+ * Env-tunable throttle limits so ops can loosen them during test phases
+ * without redeploying DDL. All have prod-safe defaults.
+ *   THROTTLE_AUTH_LIMIT        (default 5)   — login/2FA/invite
+ *   THROTTLE_AUTH_LOGOUT_LIMIT (default 10)  — logout (higher to allow quick bounces)
+ *   THROTTLE_AUTH_FORGOT_LIMIT (default 3)   — forgot-password (low to deter abuse)
+ */
+const authLimit = parseInt(process.env.THROTTLE_AUTH_LIMIT || '5', 10);
+const authLogoutLimit = parseInt(process.env.THROTTLE_AUTH_LOGOUT_LIMIT || '10', 10);
+const authForgotLimit = parseInt(process.env.THROTTLE_AUTH_FORGOT_LIMIT || '3', 10);
 import { AuthService } from './auth.service';
 import { TotpService } from './totp.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -76,7 +87,7 @@ export class AuthController {
 
   @Post('login')
   @Public()
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Throttle({ default: { ttl: 60000, limit: authLimit } })
   @UseGuards(LocalAuthGuard)
   @ApiOperation({ summary: 'Login with email/password' })
   @ApiResponse({ status: 200, description: 'Returns user data and sets HTTP-only cookies, or requires 2FA' })
@@ -191,7 +202,7 @@ export class AuthController {
   @Post('register')
   @RequireManage()
   @ApiBearerAuth()
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Throttle({ default: { ttl: 60000, limit: authLimit } })
   @ApiOperation({ summary: 'Register new user (ADMIN only)' })
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
@@ -304,7 +315,7 @@ export class AuthController {
 
   @Post('2fa/verify')
   @Public()
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Throttle({ default: { ttl: 60000, limit: authLimit } })
   @ApiOperation({ summary: 'Verify TOTP code during login (uses temp token)' })
   async verify2FA(
     @Body() body: { code: string; tempToken: string },
@@ -344,7 +355,7 @@ export class AuthController {
 
   @Post('2fa/backup-verify')
   @Public()
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Throttle({ default: { ttl: 60000, limit: authLimit } })
   @ApiOperation({ summary: 'Verify backup code during login (uses temp token)' })
   async verifyBackupCode(
     @Body() body: { code: string; tempToken: string },
@@ -465,7 +476,7 @@ export class AuthController {
 
   @Post('accept-invite')
   @Public()
-  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @Throttle({ default: { ttl: 60000, limit: authLogoutLimit } })
   @ApiOperation({ summary: 'Accept invitation and set password (public)' })
   @ApiResponse({ status: 200, description: 'Account activated' })
   async acceptInvite(@Body() body: AcceptInviteDto) {
@@ -474,7 +485,7 @@ export class AuthController {
 
   @Post('forgot-password')
   @Public()
-  @Throttle({ default: { ttl: 60000, limit: 3 } })
+  @Throttle({ default: { ttl: 60000, limit: authForgotLimit } })
   @ApiOperation({ summary: 'Request password reset email (public)' })
   @ApiResponse({ status: 200, description: 'Reset email sent if account exists' })
   async forgotPassword(@Body() body: ForgotPasswordDto) {
@@ -483,7 +494,7 @@ export class AuthController {
 
   @Post('reset-password')
   @Public()
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Throttle({ default: { ttl: 60000, limit: authLimit } })
   @ApiOperation({ summary: 'Reset password using token (public)' })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
   async resetPassword(@Body() body: ResetPasswordDto) {

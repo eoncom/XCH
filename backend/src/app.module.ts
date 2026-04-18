@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD, Reflector } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { XchThrottlerGuard } from './common/guards/xch-throttler.guard';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { DelegationGuard } from './common/guards/delegation.guard';
 import { PermissionGuard } from './common/guards/permission.guard';
@@ -101,7 +102,7 @@ import { AuditModule } from './modules/audit/audit.module';
   providers: [
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: XchThrottlerGuard,
     },
     {
       provide: APP_GUARD,

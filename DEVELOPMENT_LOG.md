@@ -5303,3 +5303,24 @@ feat(apparence,rbac): tenant/user appearance + scope fixes
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-18
+
+**Date:** 2026-04-18 18:36:52
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 0
+
+**Commit message:**
+```
+docs(status): bump to v1.4.0
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
