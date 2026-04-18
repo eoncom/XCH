@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import fortinetCatalog from './templates/fortinet.json';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const fortinetCatalog: any = require('./templates/fortinet.json');
 
 /**
  * VendorTemplateService — import vendor catalogs (Fortinet, Cisco, …) into
