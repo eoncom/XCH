@@ -178,14 +178,16 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — flex-col so the nav is scrollable while header + user card
+          stay pinned. Fix audit post-v1.4: logout button could disappear when
+          the nav overflowed on short screens. */}
       <div
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 transform bg-card border-r shadow-lg transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-64 flex flex-col transform bg-card border-r shadow-lg transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        <div className="flex h-16 items-center justify-between border-b px-4">
+        <div className="flex h-16 flex-shrink-0 items-center justify-between border-b px-4">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {logoUrl && (
               <img src={logoUrl} alt={orgName} className="h-7 w-7 object-contain rounded flex-shrink-0" />
@@ -307,9 +309,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <div className="border-t p-4">
+        <div className="border-t p-4 flex-shrink-0">
           <div className="mb-3 px-3">
-            <p className="text-sm font-medium text-foreground">{user.name}</p>
+            <p className="text-sm font-medium text-foreground truncate" title={user.name}>{user.name}</p>
             <p className="text-xs text-muted-foreground">{isSuperAdmin ? 'Super Admin' : rightLabel(localRole)}</p>
           </div>
           <Button

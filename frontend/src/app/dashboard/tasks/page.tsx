@@ -18,6 +18,7 @@ import { tasksApi } from '@/lib/api/tasks';
 import { sitesApi } from '@/lib/api/sites';
 import { usersApi } from '@/lib/api/users';
 import { Plus, Calendar, User, AlertCircle, Clock, AlertTriangle, Search, X, ClipboardList, LayoutGrid, List, Columns, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -204,6 +205,8 @@ export default function TasksPage() {
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [assignedFilter, setAssignedFilter] = useState<string>('all');
+  // v1.4 — click-to-filter from the alert banners. 'overdue' | 'dueSoon' | null
+  const [specialFilter, setSpecialFilter] = useState<'overdue' | 'dueSoon' | null>(null);
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'grid'>('kanban');
   const [sortField, setSortField] = useState<string>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -253,6 +256,8 @@ export default function TasksPage() {
     if (priorityFilter !== 'all' && task.priority !== priorityFilter) return false;
     if (siteFilter !== 'all' && task.siteId !== siteFilter) return false;
     if (assignedFilter !== 'all' && task.assignedTo !== assignedFilter) return false;
+    if (specialFilter === 'overdue' && !isTaskOverdue(task)) return false;
+    if (specialFilter === 'dueSoon' && !isTaskDueSoon(task)) return false;
     return true;
   }) || [];
 
@@ -301,13 +306,14 @@ export default function TasksPage() {
       : <ArrowDown className="ml-1 h-3 w-3" />;
   };
 
-  const hasFilters = search || statusFilter !== 'all' || priorityFilter !== 'all' || siteFilter !== 'all' || assignedFilter !== 'all';
+  const hasFilters = search || statusFilter !== 'all' || priorityFilter !== 'all' || siteFilter !== 'all' || assignedFilter !== 'all' || specialFilter !== null;
   const clearFilters = () => {
     setSearch('');
     setStatusFilter('all');
     setPriorityFilter('all');
     setSiteFilter('all');
     setAssignedFilter('all');
+    setSpecialFilter(null);
   };
 
   const updateStatusMutation = useMutation({
@@ -451,26 +457,57 @@ export default function TasksPage() {
         )}
       </div>
 
-      {/* Alert banners */}
+      {/* Alert banners — clickable to filter the Kanban / list view.
+          v1.4: toggling the same banner clears the filter (second click = réinit). */}
       {(overdueTasks.length > 0 || blockedTasks.length > 0 || dueSoonTasks.length > 0) && (
         <div className="flex flex-wrap gap-3">
           {overdueTasks.length > 0 && (
-            <div className="flex items-center gap-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg px-4 py-2 text-sm font-medium">
+            <button
+              type="button"
+              onClick={() => setSpecialFilter(specialFilter === 'overdue' ? null : 'overdue')}
+              title="Cliquer pour filtrer sur les tâches en retard"
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all cursor-pointer',
+                'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50',
+                specialFilter === 'overdue' && 'ring-2 ring-red-500 ring-offset-2 ring-offset-background',
+              )}
+            >
               <Clock className="h-4 w-4" />
               {overdueTasks.length} tâche{overdueTasks.length > 1 ? 's' : ''} en retard
-            </div>
+              {specialFilter === 'overdue' && <span className="ml-1 text-xs opacity-75">(filtré)</span>}
+            </button>
           )}
           {blockedTasks.length > 0 && (
-            <div className="flex items-center gap-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg px-4 py-2 text-sm font-medium">
+            <button
+              type="button"
+              onClick={() => setStatusFilter(statusFilter === 'BLOCKED' ? 'all' : 'BLOCKED')}
+              title="Cliquer pour filtrer sur les tâches bloquées"
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all cursor-pointer',
+                'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50',
+                statusFilter === 'BLOCKED' && 'ring-2 ring-red-500 ring-offset-2 ring-offset-background',
+              )}
+            >
               <AlertCircle className="h-4 w-4" />
               {blockedTasks.length} tâche{blockedTasks.length > 1 ? 's' : ''} bloquée{blockedTasks.length > 1 ? 's' : ''}
-            </div>
+              {statusFilter === 'BLOCKED' && <span className="ml-1 text-xs opacity-75">(filtré)</span>}
+            </button>
           )}
           {dueSoonTasks.length > 0 && (
-            <div className="flex items-center gap-2 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg px-4 py-2 text-sm font-medium">
+            <button
+              type="button"
+              onClick={() => setSpecialFilter(specialFilter === 'dueSoon' ? null : 'dueSoon')}
+              title="Cliquer pour filtrer sur les tâches dont l'échéance approche"
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all cursor-pointer',
+                'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50',
+                specialFilter === 'dueSoon' && 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background',
+              )}
+            >
               <AlertTriangle className="h-4 w-4" />
               {dueSoonTasks.length} tâche{dueSoonTasks.length > 1 ? 's' : ''} — échéance dans moins de 48h
-            </div>
+              {specialFilter === 'dueSoon' && <span className="ml-1 text-xs opacity-75">(filtré)</span>}
+            </button>
           )}
         </div>
       )}
