@@ -45,6 +45,7 @@ import { assetModelsApi, type AssetModel, type CreateAssetModelData } from '@/li
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { OrganizationTab } from './organization-tab';
 import { MyDelegationTab } from './my-delegation-tab';
+import { useDelegation } from '@/contexts/DelegationContext';
 
 interface SecurityReminder {
   id: string;
@@ -1713,6 +1714,9 @@ function AssetModelsTabContent() {
 export default function SettingsPage() {
   const { user } = useAuthStore();
   const { isAdmin, isManagerOrAbove, isSuperAdmin, canManage, role: permRole } = usePermissions();
+  const { delegations: userDelegations } = useDelegation();
+  // Tab visible if user has MANAGE on ANY delegation (not just the active one)
+  const hasAnyManage = userDelegations.some((d) => d.right === 'MANAGE');
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
@@ -2134,7 +2138,7 @@ export default function SettingsPage() {
               Structure
             </TabsTrigger>
           )}
-          {canManage && !isSuperAdmin && (
+          {hasAnyManage && !isSuperAdmin && (
             <TabsTrigger value="my-delegation">
               <Building2 className="mr-2 h-4 w-4" />
               Ma délégation

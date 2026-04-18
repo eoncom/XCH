@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, MapPin, Users, Bell, Save } from 'lucide-react';
+import { Loader2, MapPin, Users, Bell, Save, Lock } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 import { organizationApi, type Delegation } from '@/lib/api/organization';
@@ -21,11 +21,17 @@ import { useDelegation } from '@/contexts/DelegationContext';
  *   - view sites and members count
  *   - shortcuts to users (scoped) and notification config
  *
+ * If the user has MANAGE on multiple delegations, a switcher at the top
+ * lists them and delegates to the header DelegationPicker to keep the
+ * whole app (Sites, Users, Notifications) in sync with the tab.
+ *
  * Super admins don't see this tab — they have the full "Structure" tab instead.
  */
 export function MyDelegationTab() {
-  const { currentDelegation } = useDelegation();
+  const { currentDelegation, delegations, switchDelegation } = useDelegation();
   const activeDelegationId = currentDelegation?.delegationId ?? null;
+  const activeRight = currentDelegation?.right ?? null;
+  const manageableDelegations = delegations.filter((d) => d.right === 'MANAGE');
   const queryClient = useQueryClient();
 
   const { data: delegation, isLoading } = useQuery<Delegation | null>({
@@ -100,17 +106,80 @@ export function MyDelegationTab() {
 
   const sitesCount = delegation.sites?.length ?? 0;
   const membersCount = (delegation as any)._count?.userDelegations ?? 0;
+  const canEdit = activeRight === 'MANAGE';
 
   return (
     <div className="space-y-6">
+      {/* Switcher when the user manages >1 delegation */}
+      {manageableDelegations.length > 1 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Mes délégations ({manageableDelegations.length})</CardTitle>
+            <CardDescription>
+              Vous êtes administrateur local sur plusieurs délégations. Cliquez pour basculer
+              — le choix se synchronise avec le sélecteur global du header.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {manageableDelegations.map((d) => {
+                const isActive = d.delegationId === activeDelegationId;
+                return (
+                  <Button
+                    key={d.delegationId}
+                    variant={isActive ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => switchDelegation(d.delegationId)}
+                    className="gap-2"
+                  >
+                    {d.delegation.groupColor && (
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: d.delegation.groupColor }}
+                      />
+                    )}
+                    {d.delegation.name}
+                    <span className="text-[10px] font-mono opacity-70">{d.delegation.code}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Banner when the user has READ/WRITE (not MANAGE) on the active delegation
+          — they landed here via tab visibility on another delegation then switched */}
+      {!canEdit && (
+        <Card className="border-amber-500/40 bg-amber-50 dark:bg-amber-950/30">
+          <CardContent className="flex items-start gap-3 py-4">
+            <Lock className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium text-amber-900 dark:text-amber-100">
+                Lecture seule sur cette délégation
+              </p>
+              <p className="text-amber-800 dark:text-amber-200 mt-1">
+                Vous avez le droit <strong>{activeRight || 'N/A'}</strong> ici, pas MANAGE.
+                Sélectionnez une autre délégation ci-dessus (ou via le header) pour la configurer.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Ma délégation</CardTitle>
+              <CardTitle>
+                {canEdit ? 'Configurer' : 'Consulter'} : {delegation.name}
+              </CardTitle>
               <CardDescription>
-                Configurez votre délégation. Les réglages tenant (SSO, types, sauvegardes,
-                modules) restent réservés au super-admin.
+                {canEdit ? (
+                  <>Renommage, notes, groupe visuel. Les réglages tenant (SSO, types, sauvegardes, modules) restent réservés au super-admin.</>
+                ) : (
+                  <>Détails de la délégation en lecture seule.</>
+                )}
               </CardDescription>
             </div>
             <Badge variant="secondary" className="font-mono">{delegation.code}</Badge>
@@ -120,7 +189,7 @@ export function MyDelegationTab() {
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Nom *</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="code">Code</Label>
@@ -139,6 +208,7 @@ export function MyDelegationTab() {
                 value={groupLabel}
                 onChange={(e) => setGroupLabel(e.target.value)}
                 placeholder="ex: Île-de-France"
+                disabled={!canEdit}
               />
             </div>
             <div className="space-y-2">
@@ -149,9 +219,10 @@ export function MyDelegationTab() {
                   id="groupColor"
                   value={groupColor}
                   onChange={(e) => setGroupColor(e.target.value)}
-                  className="w-10 h-10 rounded border-0 cursor-pointer"
+                  className="w-10 h-10 rounded border-0 cursor-pointer disabled:opacity-50"
+                  disabled={!canEdit}
                 />
-                <Input value={groupColor} onChange={(e) => setGroupColor(e.target.value)} />
+                <Input value={groupColor} onChange={(e) => setGroupColor(e.target.value)} disabled={!canEdit} />
               </div>
             </div>
           </div>
@@ -164,22 +235,25 @@ export function MyDelegationTab() {
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Description, informations internes, procédures…"
               rows={3}
+              disabled={!canEdit}
             />
           </div>
 
-          <div className="flex justify-end">
-            <Button
-              onClick={() => update.mutate({ name, notes, groupLabel, groupColor })}
-              disabled={update.isPending || !name.trim()}
-            >
-              {update.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="mr-2 h-4 w-4" />
-              )}
-              Enregistrer
-            </Button>
-          </div>
+          {canEdit && (
+            <div className="flex justify-end">
+              <Button
+                onClick={() => update.mutate({ name, notes, groupLabel, groupColor })}
+                disabled={update.isPending || !name.trim()}
+              >
+                {update.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                Enregistrer
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
