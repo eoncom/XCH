@@ -77,10 +77,11 @@ export class ContactsService {
     // single `query.includeGlobal !== false` check can be fooled. We re-coerce
     // here to make the semantics explicit: the only way to OPT OUT of global
     // contacts is to pass the literal string "false" or `false`.
+    const rawInclude = (query.includeGlobal as any);
     const optedOutOfGlobal =
-      query.includeGlobal === false ||
-      (query.includeGlobal as any) === 'false' ||
-      (query.includeGlobal as any) === '0';
+      rawInclude === false ||
+      rawInclude === 'false' ||
+      rawInclude === '0';
     if (query.delegationId) {
       if (!optedOutOfGlobal) {
         // Show delegation's contacts + global contacts
