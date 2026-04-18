@@ -76,6 +76,21 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   section « Intégrations » inexistante.
 - Dashboard TV : clarification « Alertes monitoring » (vs « Alertes » page qui
   agrège tâches + santé sites).
+- **Alertes unifiées (Lot 4 final)** — nouveau `frontend/src/lib/alerts.ts`
+  `computeAlerts()` utilisé par Dashboard widget, page `/alerts` et TV dashboard.
+  Règles de dedup consolidées (BLOCKED > URGENT > OVERDUE). Comptes
+  désormais identiques entre les trois vues.
+- **Consommation explainer** : encart UX sur `/dashboard/consumption` expliquant
+  pourquoi les totaux « Assets » diffèrent de la page `/dashboard/assets`.
+- **Logo placeholder** : Input tenant et exemple Swagger setup nettoyés
+  (plus de `https://example.com/logo.png` visible).
+
+#### Throttle (post Lot 4)
+- Nouveau `XchThrottlerGuard` : le 429 retourne un message FR
+  « Trop de tentatives. Merci de patienter une minute avant de réessayer. ».
+- Limites auth pilotables par env vars (`THROTTLE_AUTH_LIMIT`,
+  `THROTTLE_AUTH_LOGOUT_LIMIT`, `THROTTLE_AUTH_FORGOT_LIMIT`) avec defaults
+  prod-safe (5/10/3). Sur le serveur dev : 60/120/30 pour la phase QA.
 
 #### Documentation
 - ADR-010 (apparence) rédigé.

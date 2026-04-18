@@ -50,10 +50,17 @@ UserNotification, AuditLog, multi-delegation user).
 
 | ID | Raison | Ticket suivi |
 |----|--------|--------------|
-| **m2** — Dashboard widget (2) ≠ /alerts (3) | Les deux comptent des sous-ensembles différents (widget = tâches urgentes, page = tâches + santé sites). L'harmonisation nécessite une refonte de la query d'agrégation hors scope Phase 4. | Créer un ticket « Unified alert aggregator service » post v1.4. |
-| **m11** — Consommation totaux ≠ Équipements | Les deux pages comptent intentionnellement des choses différentes (assets en baie vs total assets). Explicitation UX reportée. | Ticket UX « Ajouter tooltip explicatif Consommation vs Équipements ». |
-| **m12** — Placeholders de formulaire trop réalistes | Cosmétique, couvert par les conventions Tailwind existantes (`placeholder:text-muted-foreground`). Pas de régression constatée. | — |
-| 2FA réel | Le rapport n'en parle pas — listé hors scope de la mission. | Déjà sur la roadmap post-MVP. |
+| 2FA réel | Hors scope de la mission (rapport d'audit n'en parlait pas). | Roadmap post-MVP. |
+
+**Findings initialement déférés, résolus dans le commit `30cac1f` (Lot 4 final)** :
+- **m2/m3** — Alertes dashboard vs /alerts vs TV : désormais unifiées via
+  `frontend/src/lib/alerts.ts::computeAlerts()`. Règles de dedup cohérentes
+  (BLOCKED > URGENT > OVERDUE). Le TV garde volontairement son périmètre NOC
+  (monitoring uniquement) avec note explicative vers `/dashboard/alerts`.
+- **m11** — Consommation vs Équipements : encart explicatif UX ajouté sur
+  `/dashboard/consumption` (différence baies/racine, asset watts déclarés).
+- **m12** — Placeholder tenant logo « https://example.com/logo.png » : placeholder
+  Input remplacé par une instruction FR, exemple Swagger du DTO setup épuré.
 
 ---
 
