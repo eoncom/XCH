@@ -44,6 +44,7 @@ import { backupApi, type BackupMetadata } from '@/lib/api/backup';
 import { assetModelsApi, type AssetModel, type CreateAssetModelData } from '@/lib/api/asset-models';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { OrganizationTab } from './organization-tab';
+import { MyDelegationTab } from './my-delegation-tab';
 
 interface SecurityReminder {
   id: string;
@@ -1711,7 +1712,7 @@ function AssetModelsTabContent() {
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
-  const { isAdmin, isManagerOrAbove, isSuperAdmin, role: permRole } = usePermissions();
+  const { isAdmin, isManagerOrAbove, isSuperAdmin, canManage, role: permRole } = usePermissions();
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
@@ -2127,49 +2128,55 @@ export default function SettingsPage() {
             <Palette className="mr-2 h-4 w-4" />
             Apparence
           </TabsTrigger>
-          {isAdmin && (
+          {isSuperAdmin && (
             <TabsTrigger value="org-structure">
               <Network className="mr-2 h-4 w-4" />
               Structure
             </TabsTrigger>
           )}
-          {isAdmin && (
+          {canManage && !isSuperAdmin && (
+            <TabsTrigger value="my-delegation">
+              <Building2 className="mr-2 h-4 w-4" />
+              Ma délégation
+            </TabsTrigger>
+          )}
+          {isSuperAdmin && (
             <TabsTrigger value="tenant">
               <Building2 className="mr-2 h-4 w-4" />
               Tenant
             </TabsTrigger>
           )}
-          {isAdmin && (
+          {isSuperAdmin && (
             <TabsTrigger value="sso">
               <Key className="mr-2 h-4 w-4" />
               SSO
             </TabsTrigger>
           )}
-          {isAdmin && (
+          {isSuperAdmin && (
             <TabsTrigger value="modules">
               <Blocks className="mr-2 h-4 w-4" />
               Modules
             </TabsTrigger>
           )}
-          {isAdmin && (
+          {isSuperAdmin && (
             <TabsTrigger value="types">
               <Tags className="mr-2 h-4 w-4" />
               Types
             </TabsTrigger>
           )}
-          {isAdmin && (
+          {isSuperAdmin && (
             <TabsTrigger value="models">
               <Database className="mr-2 h-4 w-4" />
               Modèles
             </TabsTrigger>
           )}
-          {isAdmin && (
+          {isSuperAdmin && (
             <TabsTrigger value="electricity">
               <Zap className="mr-2 h-4 w-4" />
               Électricité
             </TabsTrigger>
           )}
-          {isAdmin && (
+          {isSuperAdmin && (
             <TabsTrigger value="backup">
               <HardDrive className="mr-2 h-4 w-4" />
               Sauvegardes
@@ -2431,9 +2438,14 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Organization Structure Tab */}
+        {/* Organization Structure Tab — super admin only */}
         <TabsContent value="org-structure" className="space-y-6">
           <OrganizationTab />
+        </TabsContent>
+
+        {/* My Delegation Tab — local MANAGE users */}
+        <TabsContent value="my-delegation" className="space-y-6">
+          <MyDelegationTab />
         </TabsContent>
 
         {/* Tenant Tab */}

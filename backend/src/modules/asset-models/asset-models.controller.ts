@@ -4,11 +4,19 @@ import { AssetModelsService } from './asset-models.service';
 import { CreateAssetModelDto, UpdateAssetModelDto, FilterAssetModelDto } from './dto/create-asset-model.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead, RequireManage } from '../../common/decorators/require-right.decorator';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { AuthRequest } from '../../types/request.interface';
 
+/**
+ * Asset models are a tenant-wide catalog.
+ * Reads are open to any authenticated user (needed to pre-fill asset forms).
+ * Writes (create/update/delete) are super-admin only (@SkipDelegation + @RequireWrite/Manage
+ * resolves to isSuperAdmin — see PermissionGuard).
+ */
 @ApiTags('asset-models')
 @Controller('asset-models')
 @UseGuards(JwtAuthGuard)
+@SkipDelegation()
 @ApiBearerAuth()
 export class AssetModelsController {
   constructor(private readonly service: AssetModelsService) {}
