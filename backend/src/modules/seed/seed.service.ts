@@ -446,15 +446,37 @@ export class SeedService {
     const users = [];
     for (const u of usersData) {
       const { _right, ...userData } = u;
-      const user = await this.prisma.user.upsert({
-        where: { id: u.id },
-        update: {},
-        create: {
-          ...userData,
-          tenantId,
-          passwordHash: demoPasswordHash,
-        },
+
+      // Match on (tenantId, email) — Prisma's actual unique constraint — so that
+      // when the setup wizard has already created an admin user with the same
+      // email we gracefully reuse it instead of hitting a P2002.
+      const existing = await this.prisma.user.findFirst({
+        where: { tenantId, email: userData.email },
       });
+
+      let user;
+      if (existing) {
+        user = await this.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            name: userData.name,
+            phone: userData.phone,
+            // Only set passwordHash if the user has none yet (preserves operator passwords)
+            ...(existing.passwordHash ? {} : { passwordHash: demoPasswordHash }),
+            // Keep isSuperAdmin if already true (e.g. wizard-created admin)
+            ...(userData.isSuperAdmin ? { isSuperAdmin: true } : {}),
+          },
+        });
+      } else {
+        user = await this.prisma.user.create({
+          data: {
+            ...userData,
+            tenantId,
+            passwordHash: demoPasswordHash,
+          },
+        });
+      }
+
       (user as any)._right = _right;
       users.push(user);
     }
