@@ -1562,14 +1562,41 @@ function AssetModelsTabContent() {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" />Modèles d'équipement</CardTitle>
             <CardDescription>Catalogue de modèles avec prix pré-définis. Lors de la création d'un asset, sélectionner un modèle pré-remplit les champs.</CardDescription>
           </div>
-          <Button onClick={() => { resetForm(); setShowAddForm(true); }} size="sm">
-            <Plus className="h-4 w-4 mr-1" />{editingId ? 'Modifier' : 'Ajouter un modèle'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                if (!confirm('Importer le catalogue Fortinet ?\n\n~60 modèles (FortiAP, FortiSwitch, FortiGate) vont être ajoutés. Les modèles existants seront mis à jour (vos notes personnalisées préservées).')) return;
+                const t = toast.loading('Import du catalogue Fortinet en cours...');
+                try {
+                  const res = await assetModelsApi.importFortinet();
+                  toast.success(
+                    `Catalogue Fortinet importé : ${res.created} créés, ${res.updated} mis à jour${res.skipped > 0 ? `, ${res.skipped} ignorés` : ''}.`,
+                    { id: t, duration: 8000 },
+                  );
+                  if (res.errors.length) {
+                    toast.error(`${res.errors.length} erreur(s) — voir la console`, { duration: 6000 });
+                    console.table(res.errors);
+                  }
+                  loadModels();
+                } catch (e: any) {
+                  toast.error(e?.message || "Échec de l'import", { id: t });
+                }
+              }}
+              title="Importer le catalogue Fortinet fourni (FortiAP, FortiSwitch, FortiGate)"
+            >
+              <Database className="h-4 w-4 mr-1" /> Importer Fortinet
+            </Button>
+            <Button onClick={() => { resetForm(); setShowAddForm(true); }} size="sm">
+              <Plus className="h-4 w-4 mr-1" />{editingId ? 'Modifier' : 'Ajouter un modèle'}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>

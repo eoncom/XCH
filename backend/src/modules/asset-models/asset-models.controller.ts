@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AssetModelsService } from './asset-models.service';
+import { VendorTemplatesService } from './vendor-templates.service';
 import { CreateAssetModelDto, UpdateAssetModelDto, FilterAssetModelDto } from './dto/create-asset-model.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead, RequireManage } from '../../common/decorators/require-right.decorator';
@@ -19,7 +20,23 @@ import { AuthRequest } from '../../types/request.interface';
 @SkipDelegation()
 @ApiBearerAuth()
 export class AssetModelsController {
-  constructor(private readonly service: AssetModelsService) {}
+  constructor(
+    private readonly service: AssetModelsService,
+    private readonly vendorTemplates: VendorTemplatesService,
+  ) {}
+
+  /**
+   * v1.4.x — Bulk-import the bundled Fortinet vendor catalog into AssetModel.
+   * Super-admin only (SkipDelegation + RequireManage pattern). Idempotent:
+   * re-running upserts by (tenantId, name), preserving operator-customised
+   * notes when they've been edited manually.
+   */
+  @Post('import/fortinet')
+  @RequireManage()
+  @ApiOperation({ summary: 'Import the bundled Fortinet catalog (super admin only)' })
+  importFortinet(@Request() req: AuthRequest) {
+    return this.vendorTemplates.importFortinet(req.user.tenantId);
+  }
 
   @Post()
   @RequireWrite()

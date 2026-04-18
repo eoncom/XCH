@@ -1,0 +1,2490 @@
+{
+  "metadata": {
+    "description": "Catalogue equipements Fortinet pour template XCH (gestion IT chantiers temporaires)",
+    "version": "1.0.0",
+    "generated": "2026-04-18",
+    "sources": [
+      "https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/pdf/fortiap-series.pdf",
+      "https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/pdf/fortiswitch-secure-access-series.pdf",
+      "https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/FortiSwitch_Data_Center_Series.pdf",
+      "https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/pdf/fortigate-fortiwifi-60f-series.pdf",
+      "https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/pdf/fortigate-fortiwifi-70g-series.pdf",
+      "https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/pdf/fortigate-fortiwifi-90g-series.pdf",
+      "https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/pdf/fortigate-120g-series.pdf",
+      "https://www.fortinet.com/resources/data-sheets/fortigate-200g-series"
+    ],
+    "field_mapping_xch": {
+      "wifiCoverageRadius": "fortiap[].wifi.coverage_radius_m.indoor_standard (estimation, non officielle)",
+      "wifiFrequency": "fortiap[].wifi.frequency_bands_ghz",
+      "wifiAntennaType": "fortiap[].wifi.antenna.type",
+      "wifiTxPowerDbm": "fortiap[].wifi.tx_power_dbm_max",
+      "poids": "*.physical.weight_kg",
+      "consommation_watts": "*.power.consumption_max_w"
+    },
+    "notes": {
+      "wifi_coverage_radius": "JAMAIS une spec officielle Fortinet. Valeurs indicatives indoor standard. Sur chantier (beton/metal) diviser par 1.5 a 2.",
+      "poe_compatibility_warning": "FAP-431G consomme 31.7W donc necessite 802.3bt. Les FS-148F-POE/FPOE sont 802.3af/at UNIQUEMENT. Pour 431G utiliser FS-110G-FPOE, FS-124G-FPOE, FS-T1024F-FPOE ou injecteur GPI-145.",
+      "fortisase_support": "FortiSASE Secure Edge uniquement supporte sur G-series >= 120G."
+    }
+  },
+  "fortiap": [
+    {
+      "model": "FAP-231F",
+      "family": "FortiAP 200F",
+      "wifi": {
+        "generation": "Wi-Fi 6",
+        "standard": "802.11ax",
+        "frequency_bands_ghz": [
+          2.4,
+          5
+        ],
+        "mimo": "2x2 MU-MIMO",
+        "radios": "3 + 1 BLE",
+        "max_data_rate_gbps": 1.775,
+        "antenna": {
+          "type": "Interne PIFA",
+          "count": 3,
+          "gain_dbi": {
+            "2.4ghz": 4.5,
+            "5ghz": 5.5,
+            "ble": 4.0
+          }
+        },
+        "tx_power_dbm_max": {
+          "2.4ghz": 23,
+          "5ghz": 22
+        },
+        "coverage_radius_m": {
+          "indoor_standard": 25,
+          "chantier_estime": 15
+        }
+      },
+      "deployment": "Indoor",
+      "physical": {
+        "weight_kg": 0.543,
+        "dimensions_mm": "153.2 x 153.2 x 53"
+      },
+      "power": {
+        "consumption_max_w": 17,
+        "poe_standard": "802.3at",
+        "poe_required": "802.3at ou superieur"
+      },
+      "interfaces": {
+        "ethernet": "2x 10/100/1000 RJ45",
+        "usb": "1x Type A 2.0",
+        "console": "RJ45"
+      },
+      "source": "Datasheet Fortinet LAN Services"
+    },
+    {
+      "model": "FAP-231G",
+      "family": "FortiAP 200G",
+      "wifi": {
+        "generation": "Wi-Fi 6E",
+        "standard": "802.11ax",
+        "frequency_bands_ghz": [
+          2.4,
+          5,
+          6
+        ],
+        "mimo": "2x2 MU-MIMO",
+        "radios": "3 + 1 BLE",
+        "max_data_rate_gbps": 4.176,
+        "antenna": {
+          "type": "Interne Omni",
+          "gain_dbi": {
+            "2.4ghz": 4.5,
+            "5ghz": 5.5,
+            "6ghz": 5.0
+          }
+        },
+        "tx_power_dbm_max": {
+          "2.4ghz": 23,
+          "5ghz": 23,
+          "6ghz": 22
+        },
+        "coverage_radius_m": {
+          "indoor_standard": 25,
+          "chantier_estime": 15
+        }
+      },
+      "deployment": "Indoor",
+      "physical": {
+        "weight_kg": 0.8,
+        "dimensions_mm": "182.4 x 182.4 x 54"
+      },
+      "power": {
+        "consumption_max_w": 18,
+        "poe_standard": "802.3at",
+        "poe_required": "802.3at"
+      },
+      "interfaces": {
+        "ethernet": "1x 10/100/1000 + 1x 100/1000/2500 Base-T",
+        "usb": "1x Type A",
+        "console": "RJ45"
+      },
+      "source": "Datasheet FortiAP Series"
+    },
+    {
+      "model": "FAP-231K",
+      "family": "FortiAP 200K",
+      "wifi": {
+        "generation": "Wi-Fi 7",
+        "standard": "802.11be",
+        "frequency_bands_ghz": [
+          2.4,
+          5,
+          6
+        ],
+        "mimo": "2x2 MU-MIMO",
+        "radios": "3 Wi-Fi + 1 BLE",
+        "max_data_rate_gbps": 9.335,
+        "antenna": {
+          "type": "Interne PIFA",
+          "gain_dbi": {
+            "2.4ghz": 4.2,
+            "5ghz": 5.0,
+            "6ghz": 5.1,
+            "ble": 3.4
+          }
+        },
+        "tx_power_dbm_max": {
+          "2.4ghz": 26,
+          "5ghz": 23,
+          "6ghz": 22
+        },
+        "coverage_radius_m": {
+          "indoor_standard": 25,
+          "chantier_estime": 15
+        }
+      },
+      "deployment": "Indoor",
+      "physical": {
+        "weight_kg": 1.01,
+        "dimensions_mm": "175 x 175 x 56"
+      },
+      "power": {
+        "consumption_max_w": 15.2,
+        "poe_standard": "802.3at",
+        "poe_required": "802.3at"
+      },
+      "interfaces": {
+        "ethernet": "1x 100M/1G/2.5G/5G Multigig",
+        "console": "RJ45"
+      },
+      "source": "Datasheet FortiAP Series"
+    },
+    {
+      "model": "FAP-431F",
+      "family": "FortiAP 400F",
+      "wifi": {
+        "generation": "Wi-Fi 6",
+        "standard": "802.11ax",
+        "frequency_bands_ghz": [
+          2.4,
+          5
+        ],
+        "mimo": "4x4 MU-MIMO",
+        "radios": "3 + 1 BLE",
+        "max_data_rate_gbps": 3.549,
+        "antenna": {
+          "type": "Interne PIFA",
+          "count": 5,
+          "gain_dbi": {
+            "2.4ghz": 4.0,
+            "5ghz": 5.0
+          }
+        },
+        "tx_power_dbm_max": {
+          "2.4ghz": 24,
+          "5ghz": 23
+        },
+        "coverage_radius_m": {
+          "indoor_standard": 35,
+          "chantier_estime": 20
+        }
+      },
+      "deployment": "Indoor",
+      "physical": {
+        "weight_kg": 0.98,
+        "dimensions_mm": "210 x 210 x 56.5"
+      },
+      "power": {
+        "consumption_max_w": 24.5,
+        "poe_standard": "802.3at",
+        "poe_required": "802.3at (mode full) ou 2x 802.3af"
+      },
+      "interfaces": {
+        "ethernet": "1x 100/1000/2500 + 1x 10/100/1000 RJ45",
+        "usb": "1x Type A",
+        "console": "RJ45"
+      },
+      "source": "Datasheet Fortinet LAN Services"
+    },
+    {
+      "model": "FAP-431G",
+      "family": "FortiAP 400G",
+      "wifi": {
+        "generation": "Wi-Fi 6E",
+        "standard": "802.11ax",
+        "frequency_bands_ghz": [
+          2.4,
+          5,
+          6
+        ],
+        "mimo": "4x4 MU-MIMO",
+        "radios": "3 + 1 BLE",
+        "max_data_rate_gbps": 8.354,
+        "antenna": {
+          "type": "Interne Omni",
+          "count": 8,
+          "gain_dbi": {
+            "2.4ghz": 4.0,
+            "5ghz": "5.6-6.0",
+            "6ghz": 5.7,
+            "ble": 5.1
+          }
+        },
+        "tx_power_dbm_max": {
+          "2.4ghz": 27,
+          "5ghz": 26,
+          "6ghz": 24
+        },
+        "coverage_radius_m": {
+          "indoor_standard": 35,
+          "chantier_estime": 20
+        }
+      },
+      "deployment": "Indoor",
+      "physical": {
+        "weight_kg": 1.4,
+        "dimensions_mm": "225 x 225 x 54"
+      },
+      "power": {
+        "consumption_max_w": 31.7,
+        "poe_standard": "802.3bt",
+        "poe_required": "802.3bt ou 2x 802.3at (dual PoE current sharing)",
+        "compatibility_warning": "Incompatible avec switches 802.3at uniquement (comme FS-148F-POE/FPOE) - utiliser FS-110G-FPOE, FS-124G-FPOE ou injecteur GPI-145"
+      },
+      "interfaces": {
+        "ethernet": "2x 100/1000/2500/5000 Base-T RJ45",
+        "usb": "1x Type 3.0",
+        "console": "RJ45"
+      },
+      "source": "Datasheet FortiAP Series"
+    },
+    {
+      "model": "FAP-431K",
+      "family": "FortiAP 400K",
+      "wifi": {
+        "generation": "Wi-Fi 7",
+        "standard": "802.11be",
+        "frequency_bands_ghz": [
+          2.4,
+          5,
+          6
+        ],
+        "mimo": "4x4 MU-MIMO",
+        "radios": "3 + 1 BLE (estime)",
+        "max_data_rate_gbps": null,
+        "antenna": {
+          "type": "Interne (Wi-Fi 7 4x4)",
+          "gain_dbi": null
+        },
+        "tx_power_dbm_max": null,
+        "coverage_radius_m": {
+          "indoor_standard": 40,
+          "chantier_estime": 22
+        }
+      },
+      "deployment": "Indoor",
+      "physical": {
+        "weight_kg": null,
+        "dimensions_mm": null
+      },
+      "power": {
+        "consumption_max_w": null,
+        "poe_standard": "802.3bt",
+        "poe_required": "802.3bt (estime)"
+      },
+      "interfaces": {
+        "ethernet": "Multigig (estime)"
+      },
+      "source": "Modele annonce - datasheet detaille a confirmer",
+      "status": "incomplete"
+    }
+  ],
+  "fortiswitch": [
+    {
+      "model": "FS-108F",
+      "family": "100F",
+      "category": "Entry",
+      "ports": {
+        "access": {
+          "count": 8,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 2,
+          "type": "GE SFP"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 20,
+        "packets_per_second_mpps": 30
+      },
+      "physical": {
+        "weight_kg": 0.62,
+        "dimensions_mm": "30 x 120 x 180",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 6.2,
+        "consumption_max_w": 6.2,
+        "redundant_psu": false,
+        "silent": true
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-108F-POE",
+      "family": "100F",
+      "category": "Entry",
+      "ports": {
+        "access": {
+          "count": 8,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 2,
+          "type": "GE SFP"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at",
+        "ports": 8,
+        "budget_w": 65
+      },
+      "performance": {
+        "switching_capacity_gbps": 20,
+        "packets_per_second_mpps": 30
+      },
+      "physical": {
+        "weight_kg": 1.7,
+        "dimensions_mm": "44 x 209 x 250",
+        "form_factor": "Desktop/1RU"
+      },
+      "power": {
+        "consumption_avg_w": 74.4,
+        "consumption_max_w": 74.4,
+        "redundant_psu": false,
+        "silent": true
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-108F-FPOE",
+      "family": "100F",
+      "category": "Entry",
+      "ports": {
+        "access": {
+          "count": 8,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 2,
+          "type": "GE SFP"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at Full",
+        "ports": 8,
+        "budget_w": 130
+      },
+      "performance": {
+        "switching_capacity_gbps": 20,
+        "packets_per_second_mpps": 30
+      },
+      "physical": {
+        "weight_kg": 1.84,
+        "dimensions_mm": "44 x 209 x 250",
+        "form_factor": "Desktop/1RU"
+      },
+      "power": {
+        "consumption_avg_w": 139.2,
+        "consumption_max_w": 139.2,
+        "redundant_psu": false,
+        "silent": true
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-110G-FPOE",
+      "family": "100G",
+      "category": "Entry Multi-Gig",
+      "ports": {
+        "access": {
+          "count": 10,
+          "type": "2x 5G + 8x 2.5G RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE/1GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3bt (2p) + 802.3af/at (8p)",
+        "ports": 10,
+        "budget_w": 200
+      },
+      "performance": {
+        "switching_capacity_gbps": 140,
+        "packets_per_second_mpps": 208
+      },
+      "physical": {
+        "weight_kg": 1.84,
+        "dimensions_mm": "44 x 270 x 228",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 250,
+        "consumption_max_w": 250,
+        "redundant_psu": false,
+        "silent": true
+      },
+      "source": "Datasheet FortiSwitch Secure Access",
+      "note": "Supporte 802.3bt sur 2 ports - compatible FAP-431G"
+    },
+    {
+      "model": "FS-124F",
+      "family": "100F",
+      "category": "Entry",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 128,
+        "packets_per_second_mpps": 190
+      },
+      "physical": {
+        "weight_kg": 2.03,
+        "dimensions_mm": "44 x 230 x 330",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 24.8,
+        "consumption_max_w": 26.3,
+        "redundant_psu": false,
+        "silent": true
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-124F-POE",
+      "family": "100F",
+      "category": "Entry",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at",
+        "ports": 12,
+        "budget_w": 185
+      },
+      "performance": {
+        "switching_capacity_gbps": 128,
+        "packets_per_second_mpps": 190
+      },
+      "physical": {
+        "weight_kg": 3.56,
+        "dimensions_mm": "44 x 260 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 235.9,
+        "consumption_max_w": 237.4,
+        "redundant_psu": false,
+        "silent": false,
+        "noise_dba": 46.3
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-124F-FPOE",
+      "family": "100F",
+      "category": "Entry",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at Full",
+        "ports": 24,
+        "budget_w": 370
+      },
+      "performance": {
+        "switching_capacity_gbps": 128,
+        "packets_per_second_mpps": 190
+      },
+      "physical": {
+        "weight_kg": 3.82,
+        "dimensions_mm": "44 x 260 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 449.8,
+        "consumption_max_w": 451.3,
+        "redundant_psu": false,
+        "silent": false,
+        "noise_dba": 45.8
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-124G",
+      "family": "100G",
+      "category": "Entry Multi-Gig",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "2.5G/1G RJ45"
+        },
+        "uplink": {
+          "count": 6,
+          "type": "10GE/1GE SFP+"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 240,
+        "packets_per_second_mpps": 355
+      },
+      "physical": {
+        "weight_kg": 3.97,
+        "dimensions_mm": "44 x 310 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 43.5,
+        "consumption_max_w": 43.5,
+        "redundant_psu": false,
+        "silent": true
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-124G-FPOE",
+      "family": "100G",
+      "category": "Entry Multi-Gig PoE",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "2.5G/1G RJ45"
+        },
+        "uplink": {
+          "count": 6,
+          "type": "10GE/1GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3bt (8p 90W) + 802.3af/at (16p)",
+        "ports": 24,
+        "budget_w": 780
+      },
+      "performance": {
+        "switching_capacity_gbps": 240,
+        "packets_per_second_mpps": 355
+      },
+      "physical": {
+        "weight_kg": 4.86,
+        "dimensions_mm": "44 x 310 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 880,
+        "consumption_max_w": 880,
+        "redundant_psu": false,
+        "silent": false,
+        "noise_dba": 48.2
+      },
+      "source": "Datasheet FortiSwitch Secure Access",
+      "note": "8 ports 802.3bt - compatible FAP-431G"
+    },
+    {
+      "model": "FS-148F",
+      "family": "100F",
+      "category": "Entry",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 176,
+        "packets_per_second_mpps": 260
+      },
+      "physical": {
+        "weight_kg": 3.46,
+        "dimensions_mm": "44 x 260 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 55.8,
+        "consumption_max_w": 57.0,
+        "redundant_psu": false,
+        "silent": false,
+        "noise_dba": 42.8
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-148F-POE",
+      "family": "100F",
+      "category": "Entry",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at",
+        "ports": 24,
+        "budget_w": 370
+      },
+      "performance": {
+        "switching_capacity_gbps": 176,
+        "packets_per_second_mpps": 260
+      },
+      "physical": {
+        "weight_kg": 4.68,
+        "dimensions_mm": "44 x 310 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 474.8,
+        "consumption_max_w": 476.3,
+        "redundant_psu": false,
+        "silent": false,
+        "noise_dba": 46.9
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-148F-FPOE",
+      "family": "100F",
+      "category": "Entry",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at Full",
+        "ports": 48,
+        "budget_w": 740
+      },
+      "performance": {
+        "switching_capacity_gbps": 176,
+        "packets_per_second_mpps": 260
+      },
+      "physical": {
+        "weight_kg": 4.68,
+        "dimensions_mm": "44 x 310 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 893.5,
+        "consumption_max_w": 895.7,
+        "redundant_psu": false,
+        "silent": false,
+        "noise_dba": 46.5
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-224D-FPOE",
+      "family": "200D",
+      "category": "Mid-Range",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "GE SFP"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at Full",
+        "ports": 24,
+        "budget_w": 370
+      },
+      "performance": {
+        "switching_capacity_gbps": 56,
+        "packets_per_second_mpps": 83
+      },
+      "physical": {
+        "weight_kg": 4.83,
+        "dimensions_mm": "44 x 310 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 380,
+        "consumption_max_w": 397,
+        "redundant_psu": "Optionnelle FRPS-740",
+        "silent": false,
+        "noise_dba": 42.7
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-224E",
+      "family": "200E",
+      "category": "Mid-Range",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "GE SFP"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 56,
+        "packets_per_second_mpps": 83
+      },
+      "physical": {
+        "weight_kg": 2.17,
+        "dimensions_mm": "44 x 230 x 330",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 17.2,
+        "consumption_max_w": 17.3,
+        "redundant_psu": "Redondante AC",
+        "silent": true
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-224E-POE",
+      "family": "200E",
+      "category": "Mid-Range",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "GE SFP"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at",
+        "ports": 12,
+        "budget_w": 180
+      },
+      "performance": {
+        "switching_capacity_gbps": 56,
+        "packets_per_second_mpps": 83
+      },
+      "physical": {
+        "weight_kg": 2.44,
+        "dimensions_mm": "44 x 230 x 330",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 220.18,
+        "consumption_max_w": 223.57,
+        "redundant_psu": "Optionnelle FRPS-740",
+        "silent": false,
+        "noise_dba": 30.6
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-248D",
+      "family": "200D",
+      "category": "Mid-Range",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "GE SFP"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 104,
+        "packets_per_second_mpps": 155
+      },
+      "physical": {
+        "weight_kg": 3.54,
+        "dimensions_mm": "44 x 246 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 38.66,
+        "consumption_max_w": 39.19,
+        "redundant_psu": false,
+        "silent": false,
+        "noise_dba": 32.3
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-248E-POE",
+      "family": "200E",
+      "category": "Mid-Range",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "GE SFP"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at",
+        "ports": 24,
+        "budget_w": 370
+      },
+      "performance": {
+        "switching_capacity_gbps": 104,
+        "packets_per_second_mpps": 155
+      },
+      "physical": {
+        "weight_kg": 5.5,
+        "dimensions_mm": "44 x 410 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 457.46,
+        "consumption_max_w": 466.47,
+        "redundant_psu": "Optionnelle FRPS-740",
+        "silent": false,
+        "noise_dba": 34.2
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-248E-FPOE",
+      "family": "200E",
+      "category": "Mid-Range",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "GE SFP"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at Full",
+        "ports": 48,
+        "budget_w": 740
+      },
+      "performance": {
+        "switching_capacity_gbps": 104,
+        "packets_per_second_mpps": 155
+      },
+      "physical": {
+        "weight_kg": 6.1,
+        "dimensions_mm": "44 x 410 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 842,
+        "consumption_max_w": 855.02,
+        "redundant_psu": "Optionnelle FRPS-740",
+        "silent": false,
+        "noise_dba": 44.7
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-424E",
+      "family": "400E",
+      "category": "Premium",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 128,
+        "packets_per_second_mpps": 204
+      },
+      "physical": {
+        "weight_kg": 3.1,
+        "dimensions_mm": "44 x 260 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 22.3,
+        "consumption_max_w": 23.6,
+        "redundant_psu": "Redondante AC",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-424E-POE",
+      "family": "400E",
+      "category": "Premium",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at",
+        "ports": 24,
+        "budget_w": 250
+      },
+      "performance": {
+        "switching_capacity_gbps": 128,
+        "packets_per_second_mpps": 204
+      },
+      "physical": {
+        "weight_kg": 5.25,
+        "dimensions_mm": "44 x 410 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 281.3,
+        "consumption_max_w": 283.5,
+        "redundant_psu": "Redondante AC",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-424E-FPOE",
+      "family": "400E",
+      "category": "Premium",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at Full",
+        "ports": 24,
+        "budget_w": 421
+      },
+      "performance": {
+        "switching_capacity_gbps": 128,
+        "packets_per_second_mpps": 204
+      },
+      "physical": {
+        "weight_kg": 5.77,
+        "dimensions_mm": "44 x 410 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 431.2,
+        "consumption_max_w": 433.7,
+        "redundant_psu": "Redondante AC",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-M426E-FPOE",
+      "family": "400E",
+      "category": "Premium Multi-Gig",
+      "ports": {
+        "access": {
+          "count": 26,
+          "type": "16x GE + 8x 2.5G + 2x 5G RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3bt Type 3 (8p) + 802.3af/at (16p)",
+        "ports": 24,
+        "budget_w": 420
+      },
+      "performance": {
+        "switching_capacity_gbps": 172,
+        "packets_per_second_mpps": 255
+      },
+      "physical": {
+        "weight_kg": 5.9,
+        "dimensions_mm": "44 x 410 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 441,
+        "consumption_max_w": 442,
+        "redundant_psu": "Redondante AC",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access",
+      "note": "8 ports 802.3bt Type 3 - compatible FAP-431G sur ces ports"
+    },
+    {
+      "model": "FS-448E",
+      "family": "400E",
+      "category": "Premium",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 176,
+        "packets_per_second_mpps": 262
+      },
+      "physical": {
+        "weight_kg": 4.16,
+        "dimensions_mm": "44 x 310 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 46.5,
+        "consumption_max_w": 47.81,
+        "redundant_psu": "Redondante AC",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-448E-POE",
+      "family": "400E",
+      "category": "Premium",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at",
+        "ports": 48,
+        "budget_w": 421
+      },
+      "performance": {
+        "switching_capacity_gbps": 176,
+        "packets_per_second_mpps": 262
+      },
+      "physical": {
+        "weight_kg": 6.26,
+        "dimensions_mm": "44 x 410 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 440.12,
+        "consumption_max_w": 442.23,
+        "redundant_psu": "Redondante AC",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-448E-FPOE",
+      "family": "400E",
+      "category": "Premium",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 4,
+          "type": "10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at Full",
+        "ports": 48,
+        "budget_w": 772
+      },
+      "performance": {
+        "switching_capacity_gbps": 176,
+        "packets_per_second_mpps": 262
+      },
+      "physical": {
+        "weight_kg": 6.37,
+        "dimensions_mm": "44 x 410 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 921.4,
+        "consumption_max_w": 923.6,
+        "redundant_psu": "Redondante AC",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-524D",
+      "family": "500D",
+      "category": "Aggregation",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 6,
+          "type": "4x 10GE SFP+ + 2x 40GE QSFP+"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 288,
+        "packets_per_second_mpps": 428
+      },
+      "physical": {
+        "weight_kg": 6.2,
+        "dimensions_mm": "44 x 350 x 439",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 73,
+        "consumption_max_w": 75,
+        "redundant_psu": "Hot-swap FS-PSU-150 (150W)",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-524D-FPOE",
+      "family": "500D",
+      "category": "Aggregation",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 6,
+          "type": "4x 10GE SFP+ + 2x 40GE QSFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at Full",
+        "ports": 24,
+        "budget_w": 400
+      },
+      "performance": {
+        "switching_capacity_gbps": 288,
+        "packets_per_second_mpps": 428
+      },
+      "physical": {
+        "weight_kg": 7.14,
+        "dimensions_mm": "44 x 350 x 439",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 570,
+        "consumption_max_w": 579,
+        "redundant_psu": "Hot-swap FS-PSU-600 (600W pour PoE etendu)",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-548D",
+      "family": "500D",
+      "category": "Aggregation",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 6,
+          "type": "4x 10GE SFP+ + 2x 40GE QSFP+"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 336,
+        "packets_per_second_mpps": 512
+      },
+      "physical": {
+        "weight_kg": 6.4,
+        "dimensions_mm": "44 x 350 x 439",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 74,
+        "consumption_max_w": 77,
+        "redundant_psu": "Hot-swap FS-PSU-150 (150W)",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-548D-FPOE",
+      "family": "500D",
+      "category": "Aggregation",
+      "ports": {
+        "access": {
+          "count": 48,
+          "type": "GE RJ45"
+        },
+        "uplink": {
+          "count": 6,
+          "type": "4x 10GE SFP+ + 2x 40GE QSFP+"
+        }
+      },
+      "poe": {
+        "type": "802.3af/at Full",
+        "ports": 48,
+        "budget_w": 750
+      },
+      "performance": {
+        "switching_capacity_gbps": 336,
+        "packets_per_second_mpps": 512
+      },
+      "physical": {
+        "weight_kg": 7.14,
+        "dimensions_mm": "44 x 350 x 439",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 925,
+        "consumption_max_w": 961,
+        "redundant_psu": "Hot-swap FS-PSU-920 (920W)",
+        "silent": false
+      },
+      "source": "Datasheet FortiSwitch Secure Access"
+    },
+    {
+      "model": "FS-1024E",
+      "family": "1000E",
+      "category": "Campus Core / DC",
+      "ports": {
+        "access": {
+          "count": 0,
+          "type": null
+        },
+        "uplink": {
+          "count": 26,
+          "type": "24x 10GE SFP+/SFP + 2x 100GE QSFP28"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 880,
+        "packets_per_second_mpps": 1309
+      },
+      "physical": {
+        "weight_kg": 6.58,
+        "dimensions_mm": "44 x 410 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 176,
+        "consumption_max_w": 176,
+        "redundant_psu": "Dual hot-swap AC",
+        "silent": false,
+        "noise_dba": 56
+      },
+      "source": "Datasheet FortiSwitch Campus Core/DC"
+    },
+    {
+      "model": "FS-T1024E",
+      "family": "1000E",
+      "category": "Campus Core / DC",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "1G/2.5G/5G/10G Base-T RJ45"
+        },
+        "uplink": {
+          "count": 2,
+          "type": "100GE QSFP28"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 880,
+        "packets_per_second_mpps": 1309
+      },
+      "physical": {
+        "weight_kg": 6.54,
+        "dimensions_mm": "44 x 410 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 128,
+        "consumption_max_w": 128,
+        "redundant_psu": "Dual hot-swap AC",
+        "silent": false,
+        "noise_dba": 57.3
+      },
+      "source": "Datasheet FortiSwitch Campus Core/DC"
+    },
+    {
+      "model": "FS-T1024F-FPOE",
+      "family": "1000F",
+      "category": "Campus Core / DC PoE",
+      "ports": {
+        "access": {
+          "count": 24,
+          "type": "1G/2.5G/5G/10G Base-T RJ45"
+        },
+        "uplink": {
+          "count": 2,
+          "type": "100GE QSFP28"
+        }
+      },
+      "poe": {
+        "type": "802.3bt Type 4",
+        "ports": 24,
+        "budget_w": 1440
+      },
+      "performance": {
+        "switching_capacity_gbps": 880,
+        "packets_per_second_mpps": 1309
+      },
+      "physical": {
+        "weight_kg": 7.5,
+        "dimensions_mm": "44 x 410 x 440",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 1660,
+        "consumption_max_w": 1660,
+        "redundant_psu": "Dual hot-swap AC",
+        "silent": false,
+        "noise_dba": 64.5
+      },
+      "source": "Datasheet FortiSwitch Campus Core/DC",
+      "note": "802.3bt Type 4 sur tous les 24 ports - ideal pour deploiement massif FAP-431G/431K"
+    },
+    {
+      "model": "FS-1048E",
+      "family": "1000E",
+      "category": "Campus Core / DC",
+      "ports": {
+        "access": {
+          "count": 0,
+          "type": null
+        },
+        "uplink": {
+          "count": 54,
+          "type": "48x 10GE SFP+ + 6x 40GE QSFP+ (ou 4x 100GE)"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 1760,
+        "packets_per_second_mpps": 1518
+      },
+      "physical": {
+        "weight_kg": 8.6,
+        "dimensions_mm": "43 x 460 x 438.5",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 181.7,
+        "consumption_max_w": 181.7,
+        "redundant_psu": "Dual hot-swap AC",
+        "silent": false,
+        "noise_dba": 59
+      },
+      "source": "Datasheet FortiSwitch Campus Core/DC"
+    },
+    {
+      "model": "FS-1048G",
+      "family": "1000G",
+      "category": "Campus Core / DC MACsec",
+      "ports": {
+        "access": {
+          "count": 0,
+          "type": null
+        },
+        "uplink": {
+          "count": 54,
+          "type": "48x 10GE SFP+ + 6x 100GE QSFP28"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 2160,
+        "packets_per_second_mpps": 2000
+      },
+      "physical": {
+        "weight_kg": 9.1,
+        "dimensions_mm": "43 x 460 x 438.5",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 585.78,
+        "consumption_max_w": 585.78,
+        "redundant_psu": "Dual hot-swap AC",
+        "silent": false,
+        "noise_dba": 71
+      },
+      "source": "Datasheet FortiSwitch Campus Core/DC",
+      "note": "Support MACsec"
+    },
+    {
+      "model": "FS-2048F",
+      "family": "2000F",
+      "category": "Data Center 25G",
+      "ports": {
+        "access": {
+          "count": 0,
+          "type": null
+        },
+        "uplink": {
+          "count": 58,
+          "type": "48x 25GE SFP28 + 8x 100GE QSFP28 + 2x 10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 4000,
+        "packets_per_second_mpps": 4000
+      },
+      "physical": {
+        "weight_kg": 9.88,
+        "dimensions_mm": "43.5 x 460 x 438.5",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 175.7,
+        "consumption_max_w": 175.7,
+        "redundant_psu": "Dual hot-swap AC",
+        "silent": false,
+        "noise_dba": 69.4
+      },
+      "source": "Datasheet FortiSwitch Campus Core/DC"
+    },
+    {
+      "model": "FS-3032G",
+      "family": "3000G",
+      "category": "Data Center 100G",
+      "ports": {
+        "access": {
+          "count": 0,
+          "type": null
+        },
+        "uplink": {
+          "count": 34,
+          "type": "32x 100GE QSFP28 + 2x 10GE SFP+"
+        }
+      },
+      "poe": {
+        "type": null,
+        "ports": 0,
+        "budget_w": 0
+      },
+      "performance": {
+        "switching_capacity_gbps": 6440,
+        "packets_per_second_mpps": 4000
+      },
+      "physical": {
+        "weight_kg": 8.37,
+        "dimensions_mm": "43 x 460 x 438.5",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 548.94,
+        "consumption_max_w": 548.94,
+        "redundant_psu": "Dual hot-swap AC",
+        "silent": false,
+        "noise_dba": 73.1
+      },
+      "source": "Datasheet FortiSwitch Campus Core/DC"
+    }
+  ],
+  "fortigate": [
+    {
+      "model": "FG-60F",
+      "family": "60F",
+      "generation": "F (SP4)",
+      "ports": {
+        "summary": "10x GE RJ45",
+        "wan": 2,
+        "internal": 5,
+        "fortilink_default": 2,
+        "shared_media": null
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 1.4,
+        "ngfw_throughput_gbps": 1.0,
+        "threat_protection_gbps": 0.7,
+        "firewall_throughput_gbps": 10,
+        "concurrent_sessions_tcp": 700000,
+        "ipsec_vpn_throughput_gbps": 6.5,
+        "max_fortiaps": 64,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 1.01,
+        "dimensions_mm": "38.5 x 216 x 160",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 10.17,
+        "consumption_max_w": 12.43,
+        "noise": "Fanless 0 dBA"
+      },
+      "source": "Datasheet FortiGate 60F"
+    },
+    {
+      "model": "FG-61F",
+      "family": "60F",
+      "generation": "F (SP4)",
+      "ports": {
+        "summary": "10x GE RJ45",
+        "wan": 2,
+        "internal": 5,
+        "fortilink_default": 2,
+        "shared_media": null
+      },
+      "storage": "128 GB SSD",
+      "performance": {
+        "ips_throughput_gbps": 1.4,
+        "ngfw_throughput_gbps": 1.0,
+        "threat_protection_gbps": 0.7,
+        "firewall_throughput_gbps": 10,
+        "concurrent_sessions_tcp": 700000,
+        "ipsec_vpn_throughput_gbps": 6.5,
+        "max_fortiaps": 64,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 1.01,
+        "dimensions_mm": "38.5 x 216 x 160",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 17.2,
+        "consumption_max_w": 18.7,
+        "noise": "Fanless 0 dBA"
+      },
+      "source": "Datasheet FortiGate 60F"
+    },
+    {
+      "model": "FG-80F",
+      "family": "80F",
+      "generation": "F (SP4)",
+      "ports": {
+        "summary": "8x GE RJ45 + 2x shared media",
+        "wan": 2,
+        "internal": 6,
+        "fortilink_default": 2,
+        "shared_media": "2x RJ45/SFP"
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 1.4,
+        "ngfw_throughput_gbps": 1.0,
+        "threat_protection_gbps": 0.9,
+        "firewall_throughput_gbps": 10,
+        "concurrent_sessions_tcp": 1500000,
+        "ipsec_vpn_throughput_gbps": 6.5,
+        "max_fortiaps": 96,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 1.1,
+        "dimensions_mm": "40 x 216 x 178",
+        "form_factor": "Desktop/Wallmount"
+      },
+      "power": {
+        "consumption_avg_w": 12.69,
+        "consumption_max_w": 15.51,
+        "noise": "Fanless 0 dBA"
+      },
+      "source": "Datasheet FortiGate 80F"
+    },
+    {
+      "model": "FG-81F",
+      "family": "80F",
+      "generation": "F (SP4)",
+      "ports": {
+        "summary": "8x GE RJ45 + 2x shared media",
+        "wan": 2,
+        "internal": 6,
+        "fortilink_default": 2,
+        "shared_media": "2x RJ45/SFP"
+      },
+      "storage": "128 GB SSD",
+      "performance": {
+        "ips_throughput_gbps": 1.4,
+        "ngfw_throughput_gbps": 1.0,
+        "threat_protection_gbps": 0.9,
+        "firewall_throughput_gbps": 10,
+        "concurrent_sessions_tcp": 1500000,
+        "ipsec_vpn_throughput_gbps": 6.5,
+        "max_fortiaps": 96,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 1.1,
+        "dimensions_mm": "40 x 216 x 178",
+        "form_factor": "Desktop/Wallmount"
+      },
+      "power": {
+        "consumption_avg_w": 13.5,
+        "consumption_max_w": 16.5,
+        "noise": "Fanless 0 dBA"
+      },
+      "source": "Datasheet FortiGate 80F"
+    },
+    {
+      "model": "FG-80F-POE",
+      "family": "80F",
+      "generation": "F (SP4)",
+      "ports": {
+        "summary": "8x GE PoE + 2x shared media",
+        "wan": 2,
+        "internal": 6,
+        "fortilink_default": 2,
+        "shared_media": "2x RJ45/SFP"
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 1.4,
+        "ngfw_throughput_gbps": 1.0,
+        "threat_protection_gbps": 0.9,
+        "firewall_throughput_gbps": 10,
+        "concurrent_sessions_tcp": 1500000,
+        "ipsec_vpn_throughput_gbps": 6.5,
+        "max_fortiaps": 96,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 96,
+      "physical": {
+        "weight_kg": 1.4,
+        "dimensions_mm": "60 x 216 x 178",
+        "form_factor": "Desktop/Wallmount"
+      },
+      "power": {
+        "consumption_avg_w": 96,
+        "consumption_max_w": 118,
+        "noise": "31.56 dBA"
+      },
+      "source": "Datasheet FortiGate 80F"
+    },
+    {
+      "model": "FG-100F",
+      "family": "100F",
+      "generation": "F",
+      "ports": {
+        "summary": "12x GE RJ45 + 4 SFP + 2 SFP+",
+        "wan": 2,
+        "internal": null,
+        "fortilink_default": 2,
+        "shared_media": "4x RJ45/SFP"
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 2.6,
+        "ngfw_throughput_gbps": 1.6,
+        "threat_protection_gbps": 1.0,
+        "firewall_throughput_gbps": 20,
+        "concurrent_sessions_tcp": 1500000,
+        "ipsec_vpn_throughput_gbps": 11.5,
+        "max_fortiaps": 128,
+        "max_fortiswitches": 32
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 3.29,
+        "dimensions_mm": "44 x 432 x 254",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 35.1,
+        "consumption_max_w": 38.7
+      },
+      "source": "Datasheet FortiGate 100F"
+    },
+    {
+      "model": "FG-101F",
+      "family": "100F",
+      "generation": "F",
+      "ports": {
+        "summary": "12x GE RJ45 + 4 SFP + 2 SFP+",
+        "wan": 2,
+        "internal": null,
+        "fortilink_default": 2,
+        "shared_media": "4x RJ45/SFP"
+      },
+      "storage": "480 GB SSD",
+      "performance": {
+        "ips_throughput_gbps": 2.6,
+        "ngfw_throughput_gbps": 1.6,
+        "threat_protection_gbps": 1.0,
+        "firewall_throughput_gbps": 20,
+        "concurrent_sessions_tcp": 1500000,
+        "ipsec_vpn_throughput_gbps": 11.5,
+        "max_fortiaps": 128,
+        "max_fortiswitches": 32
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 3.43,
+        "dimensions_mm": "44 x 432 x 254",
+        "form_factor": "1RU Rack"
+      },
+      "power": {
+        "consumption_avg_w": 35.3,
+        "consumption_max_w": 39.1
+      },
+      "source": "Datasheet FortiGate 100F"
+    },
+    {
+      "model": "FG-200F",
+      "family": "200F",
+      "generation": "F (NP6Lite + CP9)",
+      "ports": {
+        "summary": "16x GE RJ45 + 8 SFP + 2 SFP+",
+        "wan": 0,
+        "internal": 16,
+        "fortilink_default": 2,
+        "shared_media": null
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 5.0,
+        "ngfw_throughput_gbps": 3.5,
+        "threat_protection_gbps": 3.0,
+        "firewall_throughput_gbps": 27,
+        "concurrent_sessions_tcp": 3000000,
+        "ipsec_vpn_throughput_gbps": 13,
+        "max_fortiaps": 256,
+        "max_fortiswitches": 64
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 4.5,
+        "dimensions_mm": "44 x 432 x 342",
+        "form_factor": "1RU Rack (Dual AC)"
+      },
+      "power": {
+        "consumption_avg_w": 101.92,
+        "consumption_max_w": 118.9
+      },
+      "source": "Datasheet FortiGate 200F"
+    },
+    {
+      "model": "FG-201F",
+      "family": "200F",
+      "generation": "F (NP6Lite + CP9)",
+      "ports": {
+        "summary": "16x GE RJ45 + 8 SFP + 2 SFP+",
+        "wan": 0,
+        "internal": 16,
+        "fortilink_default": 2,
+        "shared_media": null
+      },
+      "storage": "480 GB SSD",
+      "performance": {
+        "ips_throughput_gbps": 5.0,
+        "ngfw_throughput_gbps": 3.5,
+        "threat_protection_gbps": 3.0,
+        "firewall_throughput_gbps": 27,
+        "concurrent_sessions_tcp": 3000000,
+        "ipsec_vpn_throughput_gbps": 13,
+        "max_fortiaps": 256,
+        "max_fortiswitches": 64
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 4.6,
+        "dimensions_mm": "44 x 432 x 342",
+        "form_factor": "1RU Rack (Dual AC)"
+      },
+      "power": {
+        "consumption_avg_w": 104.52,
+        "consumption_max_w": 121.94
+      },
+      "source": "Datasheet FortiGate 200F"
+    },
+    {
+      "model": "FG-70G",
+      "family": "70G",
+      "generation": "G (SP5)",
+      "ports": {
+        "summary": "10x GE RJ45",
+        "wan": 2,
+        "internal": 6,
+        "fortilink_default": 2,
+        "shared_media": null
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 2.5,
+        "ngfw_throughput_gbps": 1.5,
+        "threat_protection_gbps": 1.3,
+        "firewall_throughput_gbps": 10,
+        "concurrent_sessions_tcp": 1400000,
+        "ipsec_vpn_throughput_gbps": 7.1,
+        "max_fortiaps": 96,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 0.91,
+        "dimensions_mm": "40.5 x 216 x 160",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 12.3,
+        "consumption_max_w": 12.8,
+        "noise": "Fanless"
+      },
+      "source": "Datasheet FortiGate 70G"
+    },
+    {
+      "model": "FG-71G",
+      "family": "70G",
+      "generation": "G (SP5)",
+      "ports": {
+        "summary": "10x GE RJ45",
+        "wan": 2,
+        "internal": 6,
+        "fortilink_default": 2,
+        "shared_media": null
+      },
+      "storage": "64 GB SSD",
+      "performance": {
+        "ips_throughput_gbps": 2.5,
+        "ngfw_throughput_gbps": 1.5,
+        "threat_protection_gbps": 1.3,
+        "firewall_throughput_gbps": 10,
+        "concurrent_sessions_tcp": 1400000,
+        "ipsec_vpn_throughput_gbps": 7.1,
+        "max_fortiaps": 96,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 0.93,
+        "dimensions_mm": "40.5 x 216 x 160",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 13.4,
+        "consumption_max_w": 14.1,
+        "noise": "Fanless"
+      },
+      "source": "Datasheet FortiGate 70G"
+    },
+    {
+      "model": "FG-70G-POE",
+      "family": "70G",
+      "generation": "G (SP5)",
+      "ports": {
+        "summary": "10x GE RJ45 (4 PoE)",
+        "wan": 2,
+        "internal": 2,
+        "internal_poe": 4,
+        "fortilink_default": 2,
+        "shared_media": null
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 2.5,
+        "ngfw_throughput_gbps": 1.5,
+        "threat_protection_gbps": 1.3,
+        "firewall_throughput_gbps": 10,
+        "concurrent_sessions_tcp": 1400000,
+        "ipsec_vpn_throughput_gbps": 7.1,
+        "max_fortiaps": 96,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 60,
+      "physical": {
+        "weight_kg": 0.97,
+        "dimensions_mm": "40.5 x 216 x 160",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 70.3,
+        "consumption_max_w": 72.5
+      },
+      "source": "Datasheet FortiGate 70G"
+    },
+    {
+      "model": "FG-71G-POE",
+      "family": "70G",
+      "generation": "G (SP5)",
+      "ports": {
+        "summary": "10x GE RJ45 (4 PoE)",
+        "wan": 2,
+        "internal": 2,
+        "internal_poe": 4,
+        "fortilink_default": 2,
+        "shared_media": null
+      },
+      "storage": "64 GB SSD",
+      "performance": {
+        "ips_throughput_gbps": 2.5,
+        "ngfw_throughput_gbps": 1.5,
+        "threat_protection_gbps": 1.3,
+        "firewall_throughput_gbps": 10,
+        "concurrent_sessions_tcp": 1400000,
+        "ipsec_vpn_throughput_gbps": 7.1,
+        "max_fortiaps": 96,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 60,
+      "physical": {
+        "weight_kg": 0.99,
+        "dimensions_mm": "40.5 x 216 x 160",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 76,
+        "consumption_max_w": 79
+      },
+      "source": "Datasheet FortiGate 70G"
+    },
+    {
+      "model": "FWF-70G",
+      "family": "70G",
+      "generation": "G (SP5)",
+      "wifi_integrated": {
+        "enabled": true,
+        "standard": "802.11a/b/g/n/ac/ax Wi-Fi 6",
+        "mimo": "2x2 MU-MIMO",
+        "frequency_bands_ghz": [
+          2.4,
+          5
+        ],
+        "antenna_gain_dbi": {
+          "2.4ghz": 4.5,
+          "5ghz": 5.5
+        },
+        "tx_power_dbm_max": {
+          "2.4ghz": 23,
+          "5ghz": 22
+        },
+        "max_data_rate_mbps": {
+          "2.4ghz": 574,
+          "5ghz": 1201
+        }
+      },
+      "ports": {
+        "summary": "10x GE RJ45 + Wi-Fi 6 dual radio",
+        "wan": 2,
+        "internal": 6,
+        "fortilink_default": 2,
+        "shared_media": null
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 2.5,
+        "ngfw_throughput_gbps": 1.5,
+        "threat_protection_gbps": 1.3,
+        "firewall_throughput_gbps": 10,
+        "concurrent_sessions_tcp": 1400000,
+        "ipsec_vpn_throughput_gbps": 7.1
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 1.01,
+        "dimensions_mm": "40.5 x 216 x 160",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 16.9,
+        "consumption_max_w": 17.6
+      },
+      "source": "Datasheet FortiGate 70G"
+    },
+    {
+      "model": "FG-90G",
+      "family": "90G",
+      "generation": "G (SP5)",
+      "ports": {
+        "summary": "8x GE RJ45 + 2x 10GE SFP+ shared",
+        "wan": 0,
+        "internal": 8,
+        "fortilink_default": 0,
+        "shared_media": "2x RJ45/10GE SFP+"
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 4.5,
+        "ngfw_throughput_gbps": 2.5,
+        "threat_protection_gbps": 2.2,
+        "firewall_throughput_gbps": 28,
+        "concurrent_sessions_tcp": 3000000,
+        "ipsec_vpn_throughput_gbps": 25,
+        "max_fortiaps": 128,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 1.12,
+        "dimensions_mm": "42 x 216 x 178",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 19.9,
+        "consumption_max_w": 20.53,
+        "noise": "21.73 dBA"
+      },
+      "source": "Datasheet FortiGate 90G"
+    },
+    {
+      "model": "FG-91G",
+      "family": "90G",
+      "generation": "G (SP5)",
+      "ports": {
+        "summary": "8x GE RJ45 + 2x 10GE SFP+ shared",
+        "wan": 0,
+        "internal": 8,
+        "fortilink_default": 0,
+        "shared_media": "2x RJ45/10GE SFP+"
+      },
+      "storage": "120 GB SSD",
+      "performance": {
+        "ips_throughput_gbps": 4.5,
+        "ngfw_throughput_gbps": 2.5,
+        "threat_protection_gbps": 2.2,
+        "firewall_throughput_gbps": 28,
+        "concurrent_sessions_tcp": 3000000,
+        "ipsec_vpn_throughput_gbps": 25,
+        "max_fortiaps": 128,
+        "max_fortiswitches": 24
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 1.12,
+        "dimensions_mm": "42 x 216 x 178",
+        "form_factor": "Desktop"
+      },
+      "power": {
+        "consumption_avg_w": 22.4,
+        "consumption_max_w": 23.5,
+        "noise": "21.73 dBA"
+      },
+      "source": "Datasheet FortiGate 90G"
+    },
+    {
+      "model": "FG-120G",
+      "family": "120G",
+      "generation": "G (SP5)",
+      "ports": {
+        "summary": "16x GE RJ45 + 8 SFP + 4x 10GE SFP+",
+        "wan": 0,
+        "internal": 16,
+        "fortilink_default": 4,
+        "shared_media": null
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 5.3,
+        "ngfw_throughput_gbps": 3.1,
+        "threat_protection_gbps": 2.8,
+        "firewall_throughput_gbps": 39,
+        "concurrent_sessions_tcp": 3000000,
+        "ipsec_vpn_throughput_gbps": 35,
+        "max_fortiaps": 128,
+        "max_fortiswitches": 48
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 5.52,
+        "dimensions_mm": "44 x 432 x 254",
+        "form_factor": "1RU Rack (Dual AC)"
+      },
+      "power": {
+        "consumption_avg_w": 38,
+        "consumption_max_w": 40,
+        "noise": "49 dBA"
+      },
+      "source": "Datasheet FortiGate 120G"
+    },
+    {
+      "model": "FG-121G",
+      "family": "120G",
+      "generation": "G (SP5)",
+      "ports": {
+        "summary": "16x GE RJ45 + 8 SFP + 4x 10GE SFP+",
+        "wan": 0,
+        "internal": 16,
+        "fortilink_default": 4,
+        "shared_media": null
+      },
+      "storage": "480 GB SSD",
+      "performance": {
+        "ips_throughput_gbps": 5.3,
+        "ngfw_throughput_gbps": 3.1,
+        "threat_protection_gbps": 2.8,
+        "firewall_throughput_gbps": 39,
+        "concurrent_sessions_tcp": 3000000,
+        "ipsec_vpn_throughput_gbps": 35,
+        "max_fortiaps": 128,
+        "max_fortiswitches": 48
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 5.52,
+        "dimensions_mm": "44 x 432 x 254",
+        "form_factor": "1RU Rack (Dual AC)"
+      },
+      "power": {
+        "consumption_avg_w": 43,
+        "consumption_max_w": 47,
+        "noise": "49 dBA"
+      },
+      "source": "Datasheet FortiGate 120G"
+    },
+    {
+      "model": "FG-200G",
+      "family": "200G",
+      "generation": "G (NP7Lite + CP10)",
+      "ports": {
+        "summary": "10x GE RJ45 + 8x 5GE RJ45 + 4 SFP + 8x 10GE SFP+",
+        "wan": 0,
+        "internal": 8,
+        "fortilink_default": 8,
+        "shared_media": null
+      },
+      "storage": null,
+      "performance": {
+        "ips_throughput_gbps": 9.0,
+        "ngfw_throughput_gbps": 7.0,
+        "threat_protection_gbps": 6.0,
+        "firewall_throughput_gbps": 39,
+        "concurrent_sessions_tcp": 11000000,
+        "ipsec_vpn_throughput_gbps": 36,
+        "max_fortiaps": 256,
+        "max_fortiswitches": 64
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 6.4,
+        "dimensions_mm": "44.45 x 432 x 380",
+        "form_factor": "1RU Rack (Dual AC)"
+      },
+      "power": {
+        "consumption_avg_w": 145,
+        "consumption_max_w": 175,
+        "noise": "48 dBA LPA"
+      },
+      "source": "Datasheet FortiGate 200G"
+    },
+    {
+      "model": "FG-201G",
+      "family": "200G",
+      "generation": "G (NP7Lite + CP10)",
+      "ports": {
+        "summary": "10x GE RJ45 + 8x 5GE RJ45 + 4 SFP + 8x 10GE SFP+",
+        "wan": 0,
+        "internal": 8,
+        "fortilink_default": 8,
+        "shared_media": null
+      },
+      "storage": "480 GB SSD",
+      "performance": {
+        "ips_throughput_gbps": 9.0,
+        "ngfw_throughput_gbps": 7.0,
+        "threat_protection_gbps": 6.0,
+        "firewall_throughput_gbps": 39,
+        "concurrent_sessions_tcp": 11000000,
+        "ipsec_vpn_throughput_gbps": 36,
+        "max_fortiaps": 256,
+        "max_fortiswitches": 64
+      },
+      "poe_budget_w": 0,
+      "physical": {
+        "weight_kg": 6.5,
+        "dimensions_mm": "44.45 x 432 x 380",
+        "form_factor": "1RU Rack (Dual AC)"
+      },
+      "power": {
+        "consumption_avg_w": 145,
+        "consumption_max_w": 176,
+        "noise": "48 dBA LPA"
+      },
+      "source": "Datasheet FortiGate 200G"
+    }
+  ],
+  "equivalences_f_to_g": [
+    {
+      "f_model": "FG-60F",
+      "g_model": "FG-70G",
+      "note": "~2x performance IPS, 2x sessions TCP"
+    },
+    {
+      "f_model": "FG-80F",
+      "g_model": "FG-90G",
+      "note": "Montee en gamme, 10GE SFP+, perf x2.5"
+    },
+    {
+      "f_model": "FG-100F",
+      "g_model": "FG-120G",
+      "note": "Dual AC PSU, 2x performance, FortiLink 4x 10GE"
+    },
+    {
+      "f_model": "FG-200F",
+      "g_model": "FG-200G",
+      "note": "NP7Lite + CP10, 3.5x sessions TCP, 8x 10GE SFP+"
+    }
+  ],
+  "compatibility_matrix_ap_to_switch": {
+    "description": "Compatibilite PoE entre FortiAP et FortiSwitch - critique pour deploiement",
+    "compatibilites": [
+      {
+        "ap_model": "FAP-231F",
+        "ap_poe_need": "802.3at (17W)",
+        "compatible_switches": [
+          "FS-108F-POE",
+          "FS-108F-FPOE",
+          "FS-124F-POE",
+          "FS-124F-FPOE",
+          "FS-148F-POE",
+          "FS-148F-FPOE",
+          "FS-224D-FPOE",
+          "FS-224E-POE",
+          "FS-248E-POE",
+          "FS-248E-FPOE",
+          "FS-424E-POE",
+          "FS-424E-FPOE",
+          "FS-448E-POE",
+          "FS-448E-FPOE",
+          "FS-524D-FPOE",
+          "FS-548D-FPOE"
+        ]
+      },
+      {
+        "ap_model": "FAP-231G",
+        "ap_poe_need": "802.3at (18W)",
+        "compatible_switches": [
+          "FS-108F-POE",
+          "FS-108F-FPOE",
+          "FS-124F-POE",
+          "FS-124F-FPOE",
+          "FS-148F-POE",
+          "FS-148F-FPOE",
+          "FS-224D-FPOE",
+          "FS-224E-POE",
+          "FS-248E-POE",
+          "FS-248E-FPOE",
+          "FS-424E-POE",
+          "FS-424E-FPOE",
+          "FS-448E-POE",
+          "FS-448E-FPOE",
+          "FS-524D-FPOE",
+          "FS-548D-FPOE"
+        ]
+      },
+      {
+        "ap_model": "FAP-231K",
+        "ap_poe_need": "802.3at (15.2W)",
+        "compatible_switches": [
+          "FS-108F-POE",
+          "FS-108F-FPOE",
+          "FS-124F-POE",
+          "FS-124F-FPOE",
+          "FS-148F-POE",
+          "FS-148F-FPOE",
+          "FS-224D-FPOE",
+          "FS-224E-POE",
+          "FS-248E-POE",
+          "FS-248E-FPOE",
+          "FS-424E-POE",
+          "FS-424E-FPOE",
+          "FS-448E-POE",
+          "FS-448E-FPOE",
+          "FS-524D-FPOE",
+          "FS-548D-FPOE"
+        ]
+      },
+      {
+        "ap_model": "FAP-431F",
+        "ap_poe_need": "802.3at (24.5W) - mode full, ou 802.3af en mode degrade 2x2",
+        "compatible_switches": [
+          "FS-148F-POE",
+          "FS-148F-FPOE",
+          "FS-124F-POE",
+          "FS-124F-FPOE",
+          "FS-224D-FPOE",
+          "FS-248E-POE",
+          "FS-248E-FPOE",
+          "FS-424E-POE",
+          "FS-424E-FPOE",
+          "FS-448E-POE",
+          "FS-448E-FPOE",
+          "FS-524D-FPOE",
+          "FS-548D-FPOE",
+          "FS-M426E-FPOE"
+        ]
+      },
+      {
+        "ap_model": "FAP-431G",
+        "ap_poe_need": "802.3bt (31.7W) obligatoire pour mode full",
+        "compatible_switches": [
+          "FS-110G-FPOE",
+          "FS-124G-FPOE",
+          "FS-M426E-FPOE (8 ports bt)",
+          "FS-T1024F-FPOE"
+        ],
+        "incompatible_switches": [
+          "FS-148F-POE",
+          "FS-148F-FPOE",
+          "FS-124F-POE",
+          "FS-124F-FPOE",
+          "FS-424E-POE",
+          "FS-424E-FPOE",
+          "FS-448E-POE",
+          "FS-448E-FPOE",
+          "FS-524D-FPOE",
+          "FS-548D-FPOE"
+        ],
+        "workaround": "Utiliser injecteur 802.3bt GPI-145 ou dual PoE current sharing sur 2x 802.3at"
+      }
+    ]
+  }
+}

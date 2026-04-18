@@ -49,6 +49,16 @@ export interface CreateAssetModelData {
   notes?: string;
 }
 
+export interface ImportVendorResult {
+  vendor: string;
+  version: string;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: Array<{ model: string; message: string }>;
+  sources: string[];
+}
+
 export interface AssetModelFilters {
   type?: string;
   manufacturer?: string;
@@ -86,4 +96,7 @@ export const assetModelsApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/api/asset-models/${id}`),
+
+  importFortinet: () =>
+    apiClient.post<ImportVendorResult>('/api/asset-models/import/fortinet', {}),
 };

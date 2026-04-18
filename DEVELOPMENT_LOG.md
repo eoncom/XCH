@@ -5366,3 +5366,24 @@ fix(ux): sidebar flex-col + task banners click-to-filter
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-18
+
+**Date:** 2026-04-18 23:22:46
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix(asset-models): persist new WiFi coverage fields in create/update
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
