@@ -29,6 +29,11 @@ export class AssetModelsService {
         powerConsumption: dto.powerConsumption ?? null,
         weight: dto.weight ?? null,
         defaultUHeight: dto.defaultUHeight ?? null,
+        // WiFi AP template defaults (v1.4.x)
+        wifiCoverageRadius: dto.wifiCoverageRadius ?? null,
+        wifiFrequency: dto.wifiFrequency ?? null,
+        wifiAntennaType: dto.wifiAntennaType ?? null,
+        wifiTxPowerDbm: dto.wifiTxPowerDbm ?? null,
         notes: dto.notes || null,
       },
     });
@@ -104,6 +109,10 @@ export class AssetModelsService {
         ...(dto.powerConsumption !== undefined && { powerConsumption: dto.powerConsumption }),
         ...(dto.weight !== undefined && { weight: dto.weight }),
         ...(dto.defaultUHeight !== undefined && { defaultUHeight: dto.defaultUHeight }),
+        ...(dto.wifiCoverageRadius !== undefined && { wifiCoverageRadius: dto.wifiCoverageRadius }),
+        ...(dto.wifiFrequency !== undefined && { wifiFrequency: dto.wifiFrequency }),
+        ...(dto.wifiAntennaType !== undefined && { wifiAntennaType: dto.wifiAntennaType }),
+        ...(dto.wifiTxPowerDbm !== undefined && { wifiTxPowerDbm: dto.wifiTxPowerDbm }),
         ...(dto.notes !== undefined && { notes: dto.notes }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
