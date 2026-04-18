@@ -59,6 +59,16 @@ export interface ImportVendorResult {
   sources: string[];
 }
 
+export interface VendorCatalogDescriptor {
+  key: string;
+  label: string;
+  manufacturer: string;
+  status: 'available' | 'planned';
+  description: string;
+  modelCount: number;
+  version?: string;
+}
+
 export interface AssetModelFilters {
   type?: string;
   manufacturer?: string;
@@ -97,6 +107,15 @@ export const assetModelsApi = {
   delete: (id: string) =>
     apiClient.delete(`/api/asset-models/${id}`),
 
+  /** List available vendor catalogs. */
+  listVendors: () =>
+    apiClient.get<VendorCatalogDescriptor[]>('/api/asset-models/import/vendors'),
+
+  /** Import a vendor catalog by key (e.g. "fortinet"). */
+  importVendor: (vendorKey: string) =>
+    apiClient.post<ImportVendorResult>(`/api/asset-models/import/${vendorKey}`, {}),
+
+  /** @deprecated use importVendor('fortinet') */
   importFortinet: () =>
     apiClient.post<ImportVendorResult>('/api/asset-models/import/fortinet', {}),
 };

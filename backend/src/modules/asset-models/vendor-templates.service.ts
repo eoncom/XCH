@@ -1,7 +1,85 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const fortinetCatalog: any = require('./templates/fortinet.json');
+
+export interface VendorCatalogDescriptor {
+  key: string; // stable identifier for the URL, lowercase ascii: "fortinet", "cisco", …
+  label: string; // human-readable, shown in the import menu
+  manufacturer: string; // value stored on AssetModel.manufacturer
+  status: 'available' | 'planned';
+  description: string;
+  modelCount: number; // 0 when status=planned
+  version?: string;
+}
+
+/**
+ * Central registry of bundled vendor catalogs. New vendors (Cisco, Aruba,
+ * Meraki, HP, Yealink, Starlink, …) are added by dropping their JSON in
+ * `./templates/` and registering here. The `planned` entries surface in
+ * the UI so operators see what's coming.
+ */
+const VENDOR_REGISTRY: Record<string, VendorCatalogDescriptor> = {
+  fortinet: {
+    key: 'fortinet',
+    label: 'Fortinet',
+    manufacturer: 'Fortinet',
+    status: 'available',
+    description: 'FortiAP (WiFi 6/6E/7) · FortiSwitch · FortiGate',
+    modelCount: (fortinetCatalog?.fortiap?.length || 0)
+      + (fortinetCatalog?.fortiswitch?.length || 0)
+      + (fortinetCatalog?.fortigate?.length || 0),
+    version: fortinetCatalog?.metadata?.version,
+  },
+  cisco: {
+    key: 'cisco',
+    label: 'Cisco',
+    manufacturer: 'Cisco',
+    status: 'planned',
+    description: 'Catalyst · Meraki MR/MS/MX · WebEx (prévu)',
+    modelCount: 0,
+  },
+  aruba: {
+    key: 'aruba',
+    label: 'HPE Aruba',
+    manufacturer: 'Aruba',
+    status: 'planned',
+    description: 'Instant On · CX Switches · Access Points (prévu)',
+    modelCount: 0,
+  },
+  hp: {
+    key: 'hp',
+    label: 'HP',
+    manufacturer: 'HP',
+    status: 'planned',
+    description: 'LaserJet · DesignJet · Workstations (prévu)',
+    modelCount: 0,
+  },
+  canon: {
+    key: 'canon',
+    label: 'Canon',
+    manufacturer: 'Canon',
+    status: 'planned',
+    description: 'imageRUNNER · imagePRESS (prévu)',
+    modelCount: 0,
+  },
+  yealink: {
+    key: 'yealink',
+    label: 'Yealink',
+    manufacturer: 'Yealink',
+    status: 'planned',
+    description: 'MeetingBoard · MeetingBar · T-series phones (prévu)',
+    modelCount: 0,
+  },
+  starlink: {
+    key: 'starlink',
+    label: 'Starlink',
+    manufacturer: 'Starlink',
+    status: 'planned',
+    description: 'Terminaux Mini / Standard / Flat High Performance (prévu)',
+    modelCount: 0,
+  },
+};
 
 /**
  * VendorTemplateService — import vendor catalogs (Fortinet, Cisco, …) into
@@ -19,6 +97,44 @@ export class VendorTemplatesService {
   private readonly logger = new Logger(VendorTemplatesService.name);
 
   constructor(private readonly prisma: PrismaClient) {}
+
+  /**
+   * List all known vendor catalogs. Used by the Settings UI to build the
+   * "Importer un catalogue fabricant" dropdown.
+   */
+  listVendors(): VendorCatalogDescriptor[] {
+    return Object.values(VENDOR_REGISTRY);
+  }
+
+  /**
+   * Generic entry point — resolves the vendor key to the appropriate
+   * import routine. Throws 400 when the vendor is unknown or not yet shipped.
+   */
+  async importVendor(vendorKey: string, tenantId: string) {
+    const v = VENDOR_REGISTRY[vendorKey.toLowerCase()];
+    if (!v) {
+      throw new BadRequestException(
+        `Catalogue fabricant "${vendorKey}" inconnu. Fabricants disponibles : ${this.availableVendorKeys().join(', ')}.`,
+      );
+    }
+    if (v.status === 'planned') {
+      throw new BadRequestException(
+        `Le catalogue ${v.label} est prévu mais pas encore disponible. Utilisez l'ajout manuel via "Ajouter un modèle".`,
+      );
+    }
+    switch (v.key) {
+      case 'fortinet':
+        return this.importFortinet(tenantId);
+      default:
+        throw new BadRequestException(`Pas d'import implémenté pour "${vendorKey}".`);
+    }
+  }
+
+  private availableVendorKeys(): string[] {
+    return Object.values(VENDOR_REGISTRY)
+      .filter((v) => v.status === 'available')
+      .map((v) => v.key);
+  }
 
   /**
    * Import the bundled Fortinet catalog (ap + switch + firewall).

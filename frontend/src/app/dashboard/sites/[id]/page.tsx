@@ -1489,10 +1489,16 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
             if (totalAlerts === 0) return null;
 
+            // v1.4.x — banners are now clickable in their entirety (keyboard-accessible
+            // via role/tabIndex) instead of carrying a small "Voir" button off to the side.
             return (
               <div className="space-y-2">
                 {blockedTasks.length > 0 && (
-                  <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('tasks')}
+                    className="w-full text-left flex items-center gap-3 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  >
                     <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium text-red-800 dark:text-red-200">
@@ -1502,13 +1508,15 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         {blockedTasks.slice(0, 2).map(t => t.title).join(', ')}{blockedTasks.length > 2 ? '…' : ''}
                       </span>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-red-700 hover:text-red-800 flex-shrink-0" onClick={() => setActiveTab('tasks')}>
-                        Voir
-                    </Button>
-                  </div>
+                    <ChevronRight className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  </button>
                 )}
                 {urgentTasks.length > 0 && (
-                  <div className="flex items-center gap-3 p-3 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('tasks')}
+                    className="w-full text-left flex items-center gap-3 p-3 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-950/50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                  >
                     <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium text-orange-800 dark:text-orange-200">
@@ -1518,13 +1526,15 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         {urgentTasks.slice(0, 2).map(t => t.title).join(', ')}{urgentTasks.length > 2 ? '…' : ''}
                       </span>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-orange-700 hover:text-orange-800 flex-shrink-0" onClick={() => setActiveTab('tasks')}>
-                        Voir
-                    </Button>
-                  </div>
+                    <ChevronRight className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                  </button>
                 )}
                 {overdueTasks.length > 0 && (
-                  <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('tasks')}
+                    className="w-full text-left flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                  >
                     <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
@@ -1534,13 +1544,15 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         {overdueTasks.slice(0, 2).map(t => t.title).join(', ')}{overdueTasks.length > 2 ? '…' : ''}
                       </span>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-amber-700 hover:text-amber-800 flex-shrink-0" onClick={() => setActiveTab('tasks')}>
-                        Voir
-                    </Button>
-                  </div>
+                    <ChevronRight className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                  </button>
                 )}
                 {brokenAssets.length > 0 && (
-                  <div className="flex items-center gap-3 p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('assets')}
+                    className="w-full text-left flex items-center gap-3 p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-950/50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                  >
                     <Package className="h-4 w-4 text-purple-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium text-purple-800 dark:text-purple-200">
@@ -1550,10 +1562,8 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                         {brokenAssets.slice(0, 2).map(a => `${a.manufacturer} ${a.model}`).join(', ')}{brokenAssets.length > 2 ? '…' : ''}
                       </span>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-purple-700 hover:text-purple-800 flex-shrink-0" onClick={() => setActiveTab('assets')}>
-                        Voir
-                    </Button>
-                  </div>
+                    <ChevronRight className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                  </button>
                 )}
               </div>
             );
@@ -1673,19 +1683,21 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                     </p>
                   )}
 
-                  {/* Warranty alerts */}
+                  {/* Warranty alerts — clickable banner */}
                   {warrantyAlerts.length > 0 && (
-                    <div className="flex items-center justify-between text-sm">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('assets')}
+                      className="w-full flex items-center justify-between text-sm px-2 py-1.5 -mx-2 rounded-md hover:bg-muted/60 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
                       <div className="flex items-center gap-2">
                         <ShieldAlert className="h-4 w-4 text-amber-500" />
                         <span className="text-muted-foreground">
                           {warrantyAlerts.length} équipement{warrantyAlerts.length > 1 ? 's' : ''} avec alerte garantie
                         </span>
                       </div>
-                      <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setActiveTab('assets')}>
-                        Voir
-                      </Button>
-                    </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </button>
                   )}
 
                   {/* Last check timestamp */}

@@ -5387,3 +5387,24 @@ fix(asset-models): persist new WiFi coverage fields in create/update
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-19
+
+**Date:** 2026-04-19 00:48:21
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 7
+
+**Commit message:**
+```
+fix(build): revert esModuleInterop + use require() for JSON template
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

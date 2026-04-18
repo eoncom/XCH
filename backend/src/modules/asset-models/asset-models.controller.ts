@@ -26,14 +26,31 @@ export class AssetModelsController {
   ) {}
 
   /**
-   * v1.4.x — Bulk-import the bundled Fortinet vendor catalog into AssetModel.
-   * Super-admin only (SkipDelegation + RequireManage pattern). Idempotent:
-   * re-running upserts by (tenantId, name), preserving operator-customised
-   * notes when they've been edited manually.
+   * v1.4.x — Vendor-agnostic catalog imports. The UI lists the registered
+   * vendors via `GET import/vendors` and triggers a specific one via
+   * `POST import/:vendor`. Idempotent (upsert by (tenantId, name)).
+   */
+  @Get('import/vendors')
+  @RequireRead()
+  @ApiOperation({ summary: 'List available vendor catalogs' })
+  listVendors() {
+    return this.vendorTemplates.listVendors();
+  }
+
+  @Post('import/:vendor')
+  @RequireManage()
+  @ApiOperation({ summary: 'Import a vendor catalog by key (e.g. "fortinet"). Super admin only.' })
+  importVendor(@Param('vendor') vendor: string, @Request() req: AuthRequest) {
+    return this.vendorTemplates.importVendor(vendor, req.user.tenantId);
+  }
+
+  /**
+   * @deprecated keep the legacy endpoint for one version to avoid breaking
+   * external tooling. New UIs call `POST import/:vendor`.
    */
   @Post('import/fortinet')
   @RequireManage()
-  @ApiOperation({ summary: 'Import the bundled Fortinet catalog (super admin only)' })
+  @ApiOperation({ summary: '[Legacy] Import the bundled Fortinet catalog. Prefer POST import/:vendor' })
   importFortinet(@Request() req: AuthRequest) {
     return this.vendorTemplates.importFortinet(req.user.tenantId);
   }

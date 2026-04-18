@@ -49,6 +49,7 @@ import { authApi } from '@/lib/api/auth';
 import { integrationsApi, type IntegrationConfigResponse } from '@/lib/api/integrations';
 import { backupApi, type BackupMetadata } from '@/lib/api/backup';
 import { assetModelsApi, type AssetModel, type CreateAssetModelData } from '@/lib/api/asset-models';
+import { VendorCatalogImportMenu } from '@/components/asset-models/vendor-catalog-import-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { OrganizationTab } from './organization-tab';
 import { MyDelegationTab } from './my-delegation-tab';
@@ -1468,6 +1469,10 @@ function AssetModelsTabContent() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  // v1.4.x — filters for the catalog table
+  const [filterType, setFilterType] = useState<string>('all');
+  const [filterManufacturer, setFilterManufacturer] = useState<string>('all');
+  const [filterSearch, setFilterSearch] = useState<string>('');
   const [formData, setFormData] = useState<CreateAssetModelData>({
     name: '', type: '', manufacturer: '', pricingMode: 'ONE_TIME',
     acquisitionPrice: undefined, monthlyPrice: undefined, currency: 'EUR',
@@ -1568,31 +1573,7 @@ function AssetModelsTabContent() {
             <CardDescription>Catalogue de modèles avec prix pré-définis. Lors de la création d'un asset, sélectionner un modèle pré-remplit les champs.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                if (!confirm('Importer le catalogue Fortinet ?\n\n~60 modèles (FortiAP, FortiSwitch, FortiGate) vont être ajoutés. Les modèles existants seront mis à jour (vos notes personnalisées préservées).')) return;
-                const t = toast.loading('Import du catalogue Fortinet en cours...');
-                try {
-                  const res = await assetModelsApi.importFortinet();
-                  toast.success(
-                    `Catalogue Fortinet importé : ${res.created} créés, ${res.updated} mis à jour${res.skipped > 0 ? `, ${res.skipped} ignorés` : ''}.`,
-                    { id: t, duration: 8000 },
-                  );
-                  if (res.errors.length) {
-                    toast.error(`${res.errors.length} erreur(s) — voir la console`, { duration: 6000 });
-                    console.table(res.errors);
-                  }
-                  loadModels();
-                } catch (e: any) {
-                  toast.error(e?.message || "Échec de l'import", { id: t });
-                }
-              }}
-              title="Importer le catalogue Fortinet fourni (FortiAP, FortiSwitch, FortiGate)"
-            >
-              <Database className="h-4 w-4 mr-1" /> Importer Fortinet
-            </Button>
+            <VendorCatalogImportMenu onImported={loadModels} />
             <Button onClick={() => { resetForm(); setShowAddForm(true); }} size="sm">
               <Plus className="h-4 w-4 mr-1" />{editingId ? 'Modifier' : 'Ajouter un modèle'}
             </Button>
@@ -1744,7 +1725,65 @@ function AssetModelsTabContent() {
 
         {models.length === 0 ? (
           <p className="text-center text-muted-foreground py-8">Aucun modèle d'équipement. Cliquez sur "Ajouter un modèle" pour commencer.</p>
-        ) : (
+        ) : (() => {
+          // Manufacturers & types derived from the current catalog for the filter dropdowns
+          const manufacturers = Array.from(new Set(models.map(m => m.manufacturer).filter(Boolean) as string[])).sort();
+          const types = Array.from(new Set(models.map(m => m.type))).sort();
+          const term = filterSearch.trim().toLowerCase();
+          const filtered = models.filter(m => {
+            if (filterType !== 'all' && m.type !== filterType) return false;
+            if (filterManufacturer !== 'all' && m.manufacturer !== filterManufacturer) return false;
+            if (term) {
+              const hay = `${m.name} ${m.manufacturer || ''} ${m.notes || ''}`.toLowerCase();
+              if (!hay.includes(term)) return false;
+            }
+            return true;
+          }).sort((a, b) => {
+            const man = (a.manufacturer || '').localeCompare(b.manufacturer || '');
+            if (man !== 0) return man;
+            const typeCmp = a.type.localeCompare(b.type);
+            if (typeCmp !== 0) return typeCmp;
+            return a.name.localeCompare(b.name);
+          });
+          return (
+          <>
+          <div className="mb-3 grid grid-cols-1 md:grid-cols-4 gap-2">
+            <Input
+              placeholder="Rechercher (nom, fabricant, notes)…"
+              value={filterSearch}
+              onChange={(e) => setFilterSearch(e.target.value)}
+            />
+            <Select value={filterManufacturer} onValueChange={setFilterManufacturer}>
+              <SelectTrigger><SelectValue placeholder="Fabricant" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les fabricants</SelectItem>
+                {manufacturers.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les types</SelectItem>
+                {types.map(t => {
+                  const opt = assetTypeOptions.find((o: any) => o.enumValue === t);
+                  return <SelectItem key={t} value={t}>{opt?.label || t}</SelectItem>;
+                })}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center text-sm text-muted-foreground">
+              {filtered.length} / {models.length} modèle{models.length > 1 ? 's' : ''}
+              {(filterType !== 'all' || filterManufacturer !== 'all' || term) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-7 text-xs"
+                  onClick={() => { setFilterType('all'); setFilterManufacturer('all'); setFilterSearch(''); }}
+                >
+                  <X className="h-3 w-3 mr-1" /> Effacer
+                </Button>
+              )}
+            </div>
+          </div>
           <div className="border rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
@@ -1760,7 +1799,10 @@ function AssetModelsTabContent() {
                 </tr>
               </thead>
               <tbody>
-                {models.map((model) => (
+                {filtered.length === 0 && (
+                  <tr><td colSpan={8} className="text-center text-muted-foreground py-6">Aucun modèle ne correspond aux filtres.</td></tr>
+                )}
+                {filtered.map((model) => (
                   <tr key={model.id} className="border-t hover:bg-muted/30">
                     <td className="p-3 font-medium">{model.name}</td>
                     <td className="p-3 text-muted-foreground">{model.manufacturer || '-'}</td>
@@ -1786,7 +1828,9 @@ function AssetModelsTabContent() {
               </tbody>
             </table>
           </div>
-        )}
+          </>
+          );
+        })()}
       </CardContent>
 
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>

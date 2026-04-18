@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
+import { parseDecimalInput } from '@/lib/decimal-input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -664,22 +665,24 @@ export default function EditAssetPage() {
                 <Label htmlFor="weight">Poids (kg)</Label>
                 <Input
                   id="weight"
-                  type="number"
-                  step="0.1"
-                  {...register('weight', { valueAsNumber: true })}
-                  placeholder="Ex: 3.5"
+                  type="text"
+                  inputMode="decimal"
+                  {...register('weight', { setValueAs: parseDecimalInput })}
+                  placeholder="Ex: 3,5 ou 3.5"
                 />
+                <p className="text-xs text-muted-foreground">Virgule ou point accepté. Jusqu&apos;à 3 décimales.</p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="powerConsumption">Consommation (Watts)</Label>
                 <Input
                   id="powerConsumption"
-                  type="number"
-                  step="1"
-                  {...register('powerConsumption', { valueAsNumber: true })}
-                  placeholder="Ex: 150"
+                  type="text"
+                  inputMode="decimal"
+                  {...register('powerConsumption', { setValueAs: parseDecimalInput })}
+                  placeholder="Ex: 24,5 ou 24.5"
                 />
+                <p className="text-xs text-muted-foreground">Virgule ou point accepté.</p>
               </div>
 
               <div className="space-y-2">
