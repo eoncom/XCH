@@ -117,7 +117,7 @@ export function MyDelegationTab() {
             <CardTitle className="text-base">Mes délégations ({manageableDelegations.length})</CardTitle>
             <CardDescription>
               Vous êtes administrateur local sur plusieurs délégations. Cliquez pour basculer
-              — le choix se synchronise avec le sélecteur global du header.
+              — le choix s'applique aussi aux autres pages (Sites, Équipements, Utilisateurs…).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -160,7 +160,7 @@ export function MyDelegationTab() {
               </p>
               <p className="text-amber-800 dark:text-amber-200 mt-1">
                 Vous avez le droit <strong>{activeRight || 'N/A'}</strong> ici, pas MANAGE.
-                Sélectionnez une autre délégation ci-dessus (ou via le header) pour la configurer.
+                Sélectionnez une délégation où vous êtes administrateur dans la liste ci-dessus.
               </p>
             </div>
           </CardContent>
