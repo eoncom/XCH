@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth-store';
 import { usePermissions } from '@/hooks/usePermissions';
 import { rightLabel } from '@/lib/labels';
@@ -1877,10 +1878,51 @@ function AssetModelsTabContent() {
   );
 }
 
+// Tabs that the URL ?tab= deep-link is allowed to land on. Anything else
+// falls back to the default 'profile' tab.
+const VALID_TAB_VALUES = new Set([
+  'profile', 'security', 'appearance', 'org-structure', 'my-delegation',
+  'tenant', 'sso', 'modules', 'types', 'models', 'electricity', 'backup',
+  'notifications',
+]);
+
 export default function SettingsPage() {
   const { user } = useAuthStore();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { isAdmin, isManagerOrAbove, isSuperAdmin, canManage, role: permRole } = usePermissions();
   const { delegations: userDelegations } = useDelegation();
+
+  // Controlled tab so the page can be deep-linked from elsewhere
+  // (e.g. bell icon in /dashboard/notifications → ?tab=notifications).
+  const initialTab = (() => {
+    const qp = searchParams?.get('tab');
+    return qp && VALID_TAB_VALUES.has(qp) ? qp : 'profile';
+  })();
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
+
+  // Reflect tab changes in the URL without triggering a navigation, so reload
+  // and back-button keep the right tab. Skip updating when value matches the
+  // existing query param to avoid a useless replace().
+  useEffect(() => {
+    const qp = searchParams?.get('tab');
+    if (qp === activeTab) return;
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    if (activeTab === 'profile') params.delete('tab');
+    else params.set('tab', activeTab);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // If the URL tab param changes externally (back/forward), follow it.
+  useEffect(() => {
+    const qp = searchParams?.get('tab');
+    const next = qp && VALID_TAB_VALUES.has(qp) ? qp : 'profile';
+    if (next !== activeTab) setActiveTab(next);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Profile "Rôle" field: show the highest right the user holds across ALL his
   // delegations (not the active one), i18n-translated. SuperAdmin wins.
@@ -2296,9 +2338,14 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="profile" className="w-full" onValueChange={(val) => {
-        if (val === 'backup') { loadBackups(); loadSitesForBackup(); }
-      }}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(val) => {
+          setActiveTab(val);
+          if (val === 'backup') { loadBackups(); loadSitesForBackup(); }
+        }}
+        className="w-full"
+      >
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="profile">
             <User className="mr-2 h-4 w-4" />

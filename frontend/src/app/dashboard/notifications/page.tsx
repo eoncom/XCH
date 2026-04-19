@@ -92,8 +92,10 @@ export default function NotificationsPage() {
           <TooltipProvider delayDuration={150}>
             <Tooltip>
               <TooltipTrigger asChild>
+                {/* Deep-link into the Settings page on the Notifications tab —
+                    Tabs are controlled by ?tab=notifications, no separate route. */}
                 <Button variant="outline" size="icon" asChild aria-label="Configurer les notifications">
-                  <Link href="/dashboard/settings/notifications">
+                  <Link href="/dashboard/settings?tab=notifications">
                     <Settings className="h-4 w-4" />
                   </Link>
                 </Button>
