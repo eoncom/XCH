@@ -5450,3 +5450,24 @@ fix(asset-models): route order — specific import/upload before import/:vendor
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-19
+
+**Date:** 2026-04-19 11:06:54
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix(v1.4.x): unified equipment counts + scrollable import dialog
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

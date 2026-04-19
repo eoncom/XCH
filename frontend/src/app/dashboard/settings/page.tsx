@@ -1770,8 +1770,8 @@ function AssetModelsTabContent() {
                 })}
               </SelectContent>
             </Select>
-            <div className="flex items-center text-sm text-muted-foreground">
-              {filtered.length} / {models.length} modèle{models.length > 1 ? 's' : ''}
+            <div className="flex items-center text-sm text-muted-foreground gap-1">
+              <span>{filtered.length} / {models.length} modèle{models.length > 1 ? 's' : ''}</span>
               {(filterType !== 'all' || filterManufacturer !== 'all' || term) && (
                 <Button
                   variant="ghost"
@@ -1782,6 +1782,21 @@ function AssetModelsTabContent() {
                   <X className="h-3 w-3 mr-1" /> Effacer
                 </Button>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const url = assetModelsApi.exportPackUrl({
+                    manufacturer: filterManufacturer !== 'all' ? filterManufacturer : undefined,
+                    type: filterType !== 'all' ? filterType : undefined,
+                  });
+                  window.open(url, '_blank');
+                }}
+                title="Télécharger le catalogue (filtré) au format JSON"
+              >
+                <Download className="h-3 w-3 mr-1" /> Exporter JSON
+              </Button>
             </div>
           </div>
           <div className="border rounded-lg overflow-hidden">

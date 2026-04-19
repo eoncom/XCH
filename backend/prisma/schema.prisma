@@ -61,6 +61,7 @@ model Tenant {
   budgets             Budget[]
   connectivityLinks   ConnectivityLink[]
   userNotifications   UserNotification[]
+  vendorCatalogs      VendorCatalog[]
 
   @@index([status])
   @@map("tenants")
@@ -343,6 +344,40 @@ model Site {
 
 // AssetType and AssetStatus enums removed in v1.3 — now dynamic Strings via EnumLabel
 
+/**
+ * VendorCatalog — an imported "pack" of AssetModel templates.
+ *
+ * v1.4.x — operators can upload JSON catalogs from the UI, list them, download
+ * them back (for backup / sharing) and delete them. Each imported AssetModel
+ * is linked to its origin catalog via `AssetModel.vendorCatalogId` so deleting
+ * a catalog can optionally cascade to its models. The raw JSON is kept in
+ * `content` (JSONB) so the exact uploaded payload is recoverable.
+ */
+model VendorCatalog {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  vendor      String   @db.VarChar(100)
+  version     String?  @db.VarChar(50)
+  sources     String[] @default([])
+  /** Raw uploaded payload — preserved for re-download / audit / debugging. */
+  content     Json     @db.JsonB
+  itemCount   Int      @default(0)
+
+  /** true when the pack is the built-in bundled seed (Fortinet ships with the app). */
+  builtIn     Boolean  @default(false)
+
+  importedAt  DateTime @default(now())
+  importedBy  String?
+
+  assetModels AssetModel[]
+
+  @@index([tenantId])
+  @@index([tenantId, vendor])
+  @@map("vendor_catalogs")
+}
+
 model AssetModel {
   id               String   @id @default(cuid())
   tenantId         String
@@ -350,6 +385,10 @@ model AssetModel {
   name             String            // e.g. "HP LaserJet Pro M404n"
   manufacturer     String?
   type             String            // AssetType (dynamic String)
+
+  // Origin pack — null for manually-created models
+  vendorCatalogId  String?
+  vendorCatalog    VendorCatalog? @relation(fields: [vendorCatalogId], references: [id], onDelete: SetNull)
 
   // Pricing
   acquisitionPrice Decimal? @db.Decimal(10, 2) // one-time purchase price

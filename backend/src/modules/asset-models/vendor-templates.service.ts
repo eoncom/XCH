@@ -190,9 +190,11 @@ export class VendorTemplatesService {
   async importCustomCatalog(
     tenantId: string,
     catalog: UploadedCatalog,
+    opts?: { builtIn?: boolean; importedBy?: string | null },
   ): Promise<{
     vendor: string;
     version: string;
+    catalogId: string;
     created: number;
     updated: number;
     skipped: number;
@@ -205,23 +207,94 @@ export class VendorTemplatesService {
       Array.isArray(catalog?.fortiswitch) ||
       Array.isArray(catalog?.fortigate);
 
-    if (hasFortinetShape) {
-      // Reuse the bundled Fortinet routine but with the uploaded payload.
-      // We monkey-assign temporarily — clean but isolated to this call.
-      return this.importFortinetLike(tenantId, catalog);
-    }
+    const sources =
+      (catalog as any)?.metadata?.sources ||
+      (Array.isArray((catalog as any)?.sources) ? (catalog as any).sources : []) ||
+      [];
 
-    if (!Array.isArray(catalog?.items) || catalog.items.length === 0) {
+    if (!hasFortinetShape && (!Array.isArray(catalog?.items) || catalog.items.length === 0)) {
       throw new BadRequestException(
         'Payload invalide : fournissez soit un catalogue Fortinet-native (fortiap/fortiswitch/fortigate), soit un catalogue générique avec `items: [...]`.',
       );
     }
 
+    // Derive vendor label upfront so the VendorCatalog row is created with the right metadata.
+    const vendorLabel = hasFortinetShape
+      ? 'Fortinet'
+      : catalog.vendor || inferVendor(catalog.items || []);
+    const version = (catalog as any)?.metadata?.version || catalog.version || 'unknown';
+
+    // Create (or replace) the VendorCatalog row — preserves the raw JSON for later download.
+    // If a row already exists with (tenant, vendor, version) we replace its content.
+    const existingCatalog = await this.prisma.vendorCatalog.findFirst({
+      where: { tenantId, vendor: vendorLabel, version: version === 'unknown' ? null : version },
+    });
+    const catalogRow = existingCatalog
+      ? await this.prisma.vendorCatalog.update({
+          where: { id: existingCatalog.id },
+          data: {
+            sources,
+            content: catalog as any,
+            importedBy: opts?.importedBy ?? null,
+            builtIn: opts?.builtIn ?? existingCatalog.builtIn,
+            importedAt: new Date(),
+          },
+        })
+      : await this.prisma.vendorCatalog.create({
+          data: {
+            tenantId,
+            vendor: vendorLabel,
+            version: version === 'unknown' ? null : version,
+            sources,
+            content: catalog as any,
+            builtIn: opts?.builtIn ?? false,
+            importedBy: opts?.importedBy ?? null,
+          },
+        });
+
+    let result: any;
+    if (hasFortinetShape) {
+      result = await this.importFortinetLike(tenantId, catalog, catalogRow.id);
+    } else {
+      result = await this.importGenericItems(
+        tenantId,
+        catalog.items || [],
+        vendorLabel,
+        sources,
+        catalogRow.id,
+      );
+    }
+
+    // Update the itemCount on the catalog row (created + updated = models linked now)
+    const itemCount = result.created + result.updated;
+    await this.prisma.vendorCatalog.update({
+      where: { id: catalogRow.id },
+      data: { itemCount },
+    });
+
+    return {
+      vendor: vendorLabel || 'Custom',
+      version,
+      catalogId: catalogRow.id,
+      created: result.created,
+      updated: result.updated,
+      skipped: result.skipped,
+      errors: result.errors,
+      sources,
+    };
+  }
+
+  private async importGenericItems(
+    tenantId: string,
+    items: AssetModelTemplateItem[],
+    vendorLabel: string,
+    sources: string[],
+    vendorCatalogId: string,
+  ) {
     const counters = { created: 0, updated: 0, skipped: 0 };
     const errors: Array<{ model: string; message: string }> = [];
-    const vendorLabel = catalog.vendor || inferVendor(catalog.items);
 
-    for (const item of catalog.items) {
+    for (const item of items) {
       try {
         if (!item?.name || typeof item.name !== 'string') {
           throw new Error('champ `name` manquant ou invalide');
@@ -235,16 +308,15 @@ export class VendorTemplatesService {
           type: item.type,
           powerConsumption: num(item.powerConsumption),
           weight: num(item.weight),
-          defaultUHeight: num(item.defaultUHeight) !== null
-            ? Math.round(num(item.defaultUHeight)!)
-            : null,
+          defaultUHeight:
+            num(item.defaultUHeight) !== null ? Math.round(num(item.defaultUHeight)!) : null,
           wifiCoverageRadius: num(item.wifiCoverageRadius),
           wifiFrequency: item.wifiFrequency || null,
           wifiAntennaType: item.wifiAntennaType || null,
-          wifiTxPowerDbm: num(item.wifiTxPowerDbm) !== null
-            ? Math.round(num(item.wifiTxPowerDbm)!)
-            : null,
-          notes: item.notes || genericNotes(vendorLabel, item, catalog.sources),
+          wifiTxPowerDbm:
+            num(item.wifiTxPowerDbm) !== null ? Math.round(num(item.wifiTxPowerDbm)!) : null,
+          notes: item.notes || genericNotes(vendorLabel, item, sources),
+          vendorCatalogId,
         });
         counters[touched]++;
       } catch (err: any) {
@@ -252,18 +324,10 @@ export class VendorTemplatesService {
         counters.skipped++;
       }
     }
-
     this.logger.log(
-      `Custom catalog import "${vendorLabel}" for tenant ${tenantId}: created=${counters.created} updated=${counters.updated} skipped=${counters.skipped} errors=${errors.length}`,
+      `Generic catalog import "${vendorLabel}" for tenant ${tenantId}: created=${counters.created} updated=${counters.updated} skipped=${counters.skipped}`,
     );
-
-    return {
-      vendor: vendorLabel || 'Custom',
-      version: catalog.version || 'unknown',
-      ...counters,
-      errors,
-      sources: catalog.sources || [],
-    };
+    return { ...counters, errors };
   }
 
   /**
@@ -274,14 +338,12 @@ export class VendorTemplatesService {
   private async importFortinetLike(
     tenantId: string,
     cat: any,
+    vendorCatalogId: string,
   ): Promise<{
-    vendor: string;
-    version: string;
     created: number;
     updated: number;
     skipped: number;
     errors: Array<{ model: string; message: string }>;
-    sources: string[];
   }> {
     const counters = { created: 0, updated: 0, skipped: 0 };
     const errors: Array<{ model: string; message: string }> = [];
@@ -302,6 +364,7 @@ export class VendorTemplatesService {
           wifiAntennaType: mapAntenna(ap?.wifi?.antenna?.type),
           wifiTxPowerDbm: pickMaxTxPower(ap?.wifi?.tx_power_dbm_max),
           notes: fortiapNotes(ap, sources),
+          vendorCatalogId,
         });
         counters[touched]++;
       } catch (err: any) {
@@ -320,6 +383,7 @@ export class VendorTemplatesService {
           weight: num(sw?.physical?.weight_kg),
           defaultUHeight: detectUHeight(sw?.physical?.form_factor),
           notes: fortiswitchNotes(sw, sources),
+          vendorCatalogId,
         });
         counters[touched]++;
       } catch (err: any) {
@@ -338,6 +402,7 @@ export class VendorTemplatesService {
           weight: num(fw?.physical?.weight_kg),
           defaultUHeight: detectUHeight(fw?.physical?.form_factor),
           notes: fortigateNotes(fw, sources),
+          vendorCatalogId,
         });
         counters[touched]++;
       } catch (err: any) {
@@ -346,105 +411,20 @@ export class VendorTemplatesService {
       }
     }
 
-    return {
-      vendor: 'Fortinet',
-      version: cat?.metadata?.version || cat?.version || 'unknown',
-      ...counters,
-      errors,
-      sources,
-    };
+    return { ...counters, errors };
   }
 
   /**
    * Import the bundled Fortinet catalog (ap + switch + firewall).
    * Returns a summary counting newly created models vs. those updated in place.
    */
-  async importFortinet(tenantId: string): Promise<{
-    vendor: string;
-    version: string;
-    created: number;
-    updated: number;
-    skipped: number;
-    errors: Array<{ model: string; message: string }>;
-    sources: string[];
-  }> {
-    const cat = fortinetCatalog as any;
-    const counters = { created: 0, updated: 0, skipped: 0 };
-    const errors: Array<{ model: string; message: string }> = [];
-
-    // --- FortiAP (WIFI_AP) ---
-    for (const ap of cat.fortiap || []) {
-      try {
-        const touched = await this.upsertAssetModel(tenantId, {
-          name: ap.model,
-          manufacturer: 'Fortinet',
-          type: 'WIFI_AP',
-          powerConsumption: num(ap?.power?.consumption_max_w),
-          weight: num(ap?.physical?.weight_kg),
-          wifiCoverageRadius:
-            num(ap?.wifi?.coverage_radius_m?.chantier_estime) ??
-            num(ap?.wifi?.coverage_radius_m?.indoor_standard),
-          wifiFrequency: mapFrequency(ap?.wifi?.frequency_bands_ghz),
-          wifiAntennaType: mapAntenna(ap?.wifi?.antenna?.type),
-          wifiTxPowerDbm: pickMaxTxPower(ap?.wifi?.tx_power_dbm_max),
-          notes: fortiapNotes(ap, cat?.metadata?.sources),
-        });
-        counters[touched]++;
-      } catch (err: any) {
-        errors.push({ model: ap.model, message: err?.message || String(err) });
-        counters.skipped++;
-      }
-    }
-
-    // --- FortiSwitch (SWITCH) ---
-    for (const sw of cat.fortiswitch || []) {
-      try {
-        const touched = await this.upsertAssetModel(tenantId, {
-          name: sw.model,
-          manufacturer: 'Fortinet',
-          type: 'SWITCH',
-          powerConsumption: num(sw?.power?.consumption_max_w) ?? num(sw?.power?.consumption_avg_w),
-          weight: num(sw?.physical?.weight_kg),
-          defaultUHeight: detectUHeight(sw?.physical?.form_factor),
-          notes: fortiswitchNotes(sw, cat?.metadata?.sources),
-        });
-        counters[touched]++;
-      } catch (err: any) {
-        errors.push({ model: sw.model, message: err?.message || String(err) });
-        counters.skipped++;
-      }
-    }
-
-    // --- FortiGate (FIREWALL — FWF-* with integrated Wi-Fi stays FIREWALL too) ---
-    for (const fw of cat.fortigate || []) {
-      try {
-        const touched = await this.upsertAssetModel(tenantId, {
-          name: fw.model,
-          manufacturer: 'Fortinet',
-          type: 'FIREWALL',
-          powerConsumption: num(fw?.power?.consumption_max_w) ?? num(fw?.power?.consumption_avg_w),
-          weight: num(fw?.physical?.weight_kg),
-          defaultUHeight: detectUHeight(fw?.physical?.form_factor),
-          notes: fortigateNotes(fw, cat?.metadata?.sources),
-        });
-        counters[touched]++;
-      } catch (err: any) {
-        errors.push({ model: fw.model, message: err?.message || String(err) });
-        counters.skipped++;
-      }
-    }
-
-    this.logger.log(
-      `Fortinet import for tenant ${tenantId}: created=${counters.created} updated=${counters.updated} skipped=${counters.skipped} errors=${errors.length}`,
-    );
-
-    return {
-      vendor: 'Fortinet',
-      version: cat?.metadata?.version || 'unknown',
-      ...counters,
-      errors,
-      sources: cat?.metadata?.sources || [],
-    };
+  async importFortinet(tenantId: string) {
+    // v1.4.x — the bundled Fortinet catalog is now treated like any other uploaded
+    // pack. It ends up as a VendorCatalog row flagged `builtIn=true` so operators
+    // can see, download, re-upload or delete it from the UI like any other pack.
+    return this.importCustomCatalog(tenantId, fortinetCatalog as UploadedCatalog, {
+      builtIn: true,
+    });
   }
 
   /**
@@ -465,6 +445,7 @@ export class VendorTemplatesService {
       wifiAntennaType?: string | null;
       wifiTxPowerDbm?: number | null;
       notes?: string | null;
+      vendorCatalogId?: string | null;
     },
   ): Promise<'created' | 'updated'> {
     const existing = await this.prisma.assetModel.findUnique({
@@ -486,7 +467,8 @@ export class VendorTemplatesService {
           wifiAntennaType: data.wifiAntennaType ?? null,
           wifiTxPowerDbm: data.wifiTxPowerDbm ?? null,
           notes: data.notes ?? null,
-        },
+          vendorCatalogId: data.vendorCatalogId ?? null,
+        } as any,
       });
       return 'created';
     }
@@ -495,7 +477,7 @@ export class VendorTemplatesService {
     // For imports we refresh everything so "re-import" is a clean refresh;
     // if the operator customised notes, we preserve them.
     const keepCustomNotes =
-      existing.notes && !existing.notes.startsWith('**Fortinet** ·');
+      existing.notes && !existing.notes.startsWith('**Fortinet** ·') && !existing.notes.startsWith('**');
     await this.prisma.assetModel.update({
       where: { id: existing.id },
       data: {
@@ -509,9 +491,130 @@ export class VendorTemplatesService {
         wifiAntennaType: data.wifiAntennaType ?? (existing as any).wifiAntennaType,
         wifiTxPowerDbm: data.wifiTxPowerDbm ?? (existing as any).wifiTxPowerDbm,
         notes: keepCustomNotes ? existing.notes : data.notes ?? existing.notes,
-      },
+        // Always re-link the imported model to its (new) origin catalog
+        ...(data.vendorCatalogId !== undefined
+          ? { vendorCatalogId: data.vendorCatalogId ?? null }
+          : {}),
+      } as any,
     });
     return 'updated';
+  }
+
+  // ============================================================================
+  // Pack management (v1.4.x) — upload / list / download / delete / export
+  // Catalogs are stored as VendorCatalog rows, content in JSONB. The AssetModel
+  // rows created by an import carry vendorCatalogId so deletions can cascade.
+  // ============================================================================
+
+  async listCatalogs(tenantId: string) {
+    return this.prisma.vendorCatalog.findMany({
+      where: { tenantId },
+      orderBy: [{ vendor: 'asc' }, { importedAt: 'desc' }],
+      select: {
+        id: true,
+        vendor: true,
+        version: true,
+        sources: true,
+        itemCount: true,
+        builtIn: true,
+        importedAt: true,
+        importedBy: true,
+      },
+    });
+  }
+
+  async getCatalogContent(tenantId: string, catalogId: string) {
+    const cat = await this.prisma.vendorCatalog.findFirst({
+      where: { id: catalogId, tenantId },
+    });
+    if (!cat) {
+      throw new BadRequestException('Catalogue non trouvé');
+    }
+    return cat;
+  }
+
+  async deleteCatalog(tenantId: string, catalogId: string, deleteModels: boolean) {
+    const cat = await this.prisma.vendorCatalog.findFirst({
+      where: { id: catalogId, tenantId },
+    });
+    if (!cat) throw new BadRequestException('Catalogue non trouvé');
+
+    // Optionally drop the models too
+    let deletedModelsCount = 0;
+    if (deleteModels) {
+      const toDelete = await this.prisma.assetModel.findMany({
+        where: { tenantId, vendorCatalogId: catalogId },
+        include: { _count: { select: { assets: true } } },
+      });
+      // Never delete a model that still has assets linked — would orphan them
+      const safe = toDelete.filter((m) => (m._count?.assets ?? 0) === 0);
+      const unsafeCount = toDelete.length - safe.length;
+      if (safe.length > 0) {
+        const r = await this.prisma.assetModel.deleteMany({
+          where: { id: { in: safe.map((m) => m.id) } },
+        });
+        deletedModelsCount = r.count;
+      }
+      if (unsafeCount > 0) {
+        this.logger.warn(
+          `Catalog ${catalogId} delete: ${unsafeCount} linked models kept (they still have assets).`,
+        );
+      }
+    }
+
+    await this.prisma.vendorCatalog.delete({ where: { id: catalogId } });
+    return {
+      deleted: true,
+      catalog: { id: cat.id, vendor: cat.vendor },
+      deletedModelsCount,
+    };
+  }
+
+  /**
+   * Export AssetModels matching a filter as a downloadable JSON pack. The shape
+   * matches the generic upload format so `export → upload` is a round-trip.
+   */
+  async exportPack(
+    tenantId: string,
+    filter: { manufacturer?: string; type?: string; vendorCatalogId?: string },
+  ) {
+    const where: any = { tenantId };
+    if (filter.manufacturer) where.manufacturer = filter.manufacturer;
+    if (filter.type) where.type = filter.type;
+    if (filter.vendorCatalogId) where.vendorCatalogId = filter.vendorCatalogId;
+
+    const models = await this.prisma.assetModel.findMany({
+      where,
+      orderBy: [{ manufacturer: 'asc' }, { type: 'asc' }, { name: 'asc' }],
+    });
+
+    const vendor =
+      filter.manufacturer ||
+      inferVendor(models.map((m) => ({ manufacturer: m.manufacturer } as any))) ||
+      'Catalogue personnalisé';
+
+    return {
+      vendor,
+      version: new Date().toISOString().slice(0, 10),
+      exportedAt: new Date().toISOString(),
+      items: models.map((m) => ({
+        name: m.name,
+        manufacturer: m.manufacturer,
+        type: m.type,
+        powerConsumption: m.powerConsumption,
+        weight: m.weight,
+        defaultUHeight: m.defaultUHeight,
+        acquisitionPrice: m.acquisitionPrice ? Number(m.acquisitionPrice) : null,
+        monthlyPrice: m.monthlyPrice ? Number(m.monthlyPrice) : null,
+        currency: m.currency,
+        pricingMode: m.pricingMode,
+        wifiCoverageRadius: (m as any).wifiCoverageRadius ?? null,
+        wifiFrequency: (m as any).wifiFrequency ?? null,
+        wifiAntennaType: (m as any).wifiAntennaType ?? null,
+        wifiTxPowerDbm: (m as any).wifiTxPowerDbm ?? null,
+        notes: m.notes,
+      })),
+    };
   }
 }
 

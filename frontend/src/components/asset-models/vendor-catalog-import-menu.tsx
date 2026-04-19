@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -12,10 +12,11 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Database, Download, Loader2, Upload, FileJson } from 'lucide-react';
+import { Database, Download, Loader2, Upload, FileJson, Trash2, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   assetModelsApi,
+  type StoredCatalog,
   type VendorCatalogDescriptor,
 } from '@/lib/api/asset-models';
 
@@ -30,6 +31,7 @@ interface Props {
  * automatically without a frontend redeploy.
  */
 export function VendorCatalogImportMenu({ onImported }: Props) {
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [running, setRunning] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -41,6 +43,46 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
     enabled: open,
     staleTime: 5 * 60_000,
   });
+
+  // v1.4.x — list of already-imported catalog "packs" for this tenant
+  const { data: storedCatalogs = [], refetch: refetchCatalogs } = useQuery<StoredCatalog[]>({
+    queryKey: ['asset-models-stored-catalogs'],
+    queryFn: () => assetModelsApi.listCatalogs(),
+    enabled: open,
+    staleTime: 30_000,
+  });
+
+  const refreshAll = () => {
+    refetchCatalogs();
+    queryClient.invalidateQueries({ queryKey: ['asset-models-stored-catalogs'] });
+    onImported();
+  };
+
+  const handleDownloadCatalog = (cat: StoredCatalog) => {
+    // Same-origin endpoint → browser downloads with cookie auth
+    window.open(assetModelsApi.downloadCatalogUrl(cat.id), '_blank');
+  };
+
+  const handleDeleteCatalog = async (cat: StoredCatalog) => {
+    const alsoModels = confirm(
+      `Supprimer le catalogue "${cat.vendor}" (${cat.itemCount} modèles) ?\n\n` +
+        `OK = supprimer aussi les ${cat.itemCount} modèles importés (seulement ceux qui n'ont aucun équipement lié).\n` +
+        `Annuler = garder les modèles, supprimer juste la référence au pack.`,
+    );
+    const t = toast.loading('Suppression du catalogue…');
+    try {
+      const res = await assetModelsApi.deleteCatalog(cat.id, alsoModels);
+      toast.success(
+        alsoModels
+          ? `Catalogue "${cat.vendor}" supprimé · ${res.deletedModelsCount} modèle(s) supprimé(s).`
+          : `Catalogue "${cat.vendor}" supprimé — modèles conservés.`,
+        { id: t, duration: 6000 },
+      );
+      refreshAll();
+    } catch (e: any) {
+      toast.error(e?.message || 'Échec de la suppression', { id: t });
+    }
+  };
 
   /**
    * Upload a JSON catalog chosen by the operator. Parses client-side for early
@@ -104,7 +146,7 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
         // eslint-disable-next-line no-console
         console.table(res.errors);
       }
-      onImported();
+      refreshAll();
       setOpen(false);
     } catch (e: any) {
       toast.error(e?.message || "Échec de l'import du fichier", { id: t });
@@ -134,7 +176,7 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
         // eslint-disable-next-line no-console
         console.table(res.errors);
       }
-      onImported();
+      refreshAll();
       setOpen(false);
     } catch (e: any) {
       toast.error(e?.message || "Échec de l'import", { id: t });
@@ -166,6 +208,67 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
         </DialogHeader>
 
         <div className="px-6 pb-6 flex-1 overflow-y-auto space-y-4">
+
+        {/* v1.4.x — Catalogues déjà importés dans le tenant */}
+        {storedCatalogs.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-medium">Catalogues importés ({storedCatalogs.length})</p>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Chaque import crée un pack que vous pouvez télécharger (pour sauvegarde / partage) ou supprimer.
+            </p>
+            <div className="space-y-1.5">
+              {storedCatalogs.map((cat) => (
+                <div
+                  key={cat.id}
+                  className="flex items-center gap-3 p-2.5 border rounded-md bg-muted/20"
+                >
+                  <Package className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">{cat.vendor}</span>
+                      {cat.version && (
+                        <span className="text-xs text-muted-foreground">v{cat.version}</span>
+                      )}
+                      {cat.builtIn && (
+                        <Badge variant="secondary" className="text-[10px] h-5">Intégré</Badge>
+                      )}
+                      <Badge variant="outline" className="text-[10px] h-5">
+                        {cat.itemCount} modèles
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Importé le {new Date(cat.importedAt).toLocaleDateString('fr-FR')} à{' '}
+                      {new Date(cat.importedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDownloadCatalog(cat)}
+                    title="Télécharger le pack JSON"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => handleDeleteCatalog(cat)}
+                    title="Supprimer le catalogue"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="border-t my-3" />
+            <p className="text-sm font-medium">Importer un nouveau catalogue</p>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin mr-2" /> Chargement…

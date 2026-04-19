@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, Res, ParseBoolPipe, DefaultValuePipe } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AssetModelsService } from './asset-models.service';
 import { VendorTemplatesService } from './vendor-templates.service';
@@ -70,6 +71,67 @@ export class AssetModelsController {
   @ApiOperation({ summary: 'Import a vendor catalog by key (e.g. "fortinet"). Super admin only.' })
   importVendor(@Param('vendor') vendor: string, @Request() req: AuthRequest) {
     return this.vendorTemplates.importVendor(vendor, req.user.tenantId);
+  }
+
+  // ============================================================================
+  // Vendor catalog packs (v1.4.x) — each imported JSON is stored as a
+  // VendorCatalog row so operators can list, download, re-upload and delete
+  // catalogs from the UI without touching the source code.
+  // ============================================================================
+
+  @Get('catalogs')
+  @RequireRead()
+  @ApiOperation({ summary: 'List vendor catalog packs for the current tenant' })
+  listCatalogs(@Request() req: AuthRequest) {
+    return this.vendorTemplates.listCatalogs(req.user.tenantId);
+  }
+
+  @Get('catalogs/:id/download')
+  @RequireRead()
+  @ApiOperation({ summary: 'Download the raw JSON payload of a stored catalog pack' })
+  async downloadCatalog(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+    @Res() res: Response,
+  ) {
+    const cat = await this.vendorTemplates.getCatalogContent(req.user.tenantId, id);
+    const filename = `catalog-${cat.vendor.toLowerCase().replace(/\s+/g, '-')}-${cat.version || 'latest'}.json`;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(JSON.stringify(cat.content, null, 2));
+  }
+
+  @Delete('catalogs/:id')
+  @RequireManage()
+  @ApiOperation({ summary: 'Delete a catalog pack. Pass ?withModels=true to also drop the linked AssetModels (only those with no assets attached)' })
+  deleteCatalog(
+    @Param('id') id: string,
+    @Query('withModels', new DefaultValuePipe(false), ParseBoolPipe) withModels: boolean,
+    @Request() req: AuthRequest,
+  ) {
+    return this.vendorTemplates.deleteCatalog(req.user.tenantId, id, withModels);
+  }
+
+  @Get('export')
+  @RequireRead()
+  @ApiOperation({ summary: 'Export matching AssetModels as a downloadable JSON pack (optional manufacturer/type/catalogId filter)' })
+  async exportPack(
+    @Query('manufacturer') manufacturer: string | undefined,
+    @Query('type') type: string | undefined,
+    @Query('catalogId') vendorCatalogId: string | undefined,
+    @Request() req: AuthRequest,
+    @Res() res: Response,
+  ) {
+    const pack = await this.vendorTemplates.exportPack(req.user.tenantId, {
+      manufacturer,
+      type,
+      vendorCatalogId,
+    });
+    const slug = (manufacturer || type || 'catalog').toLowerCase().replace(/\s+/g, '-');
+    const filename = `xch-${slug}-${new Date().toISOString().slice(0, 10)}.json`;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(JSON.stringify(pack, null, 2));
   }
 
   @Post()

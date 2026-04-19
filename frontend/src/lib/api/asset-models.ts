@@ -69,6 +69,18 @@ export interface VendorCatalogDescriptor {
   version?: string;
 }
 
+/** Stored catalog pack (v1.4.x) — one row per import. */
+export interface StoredCatalog {
+  id: string;
+  vendor: string;
+  version: string | null;
+  sources: string[];
+  itemCount: number;
+  builtIn: boolean;
+  importedAt: string;
+  importedBy: string | null;
+}
+
 export interface AssetModelFilters {
   type?: string;
   manufacturer?: string;
@@ -118,6 +130,29 @@ export const assetModelsApi = {
   /** Upload a raw catalog JSON (generic or Fortinet-native). */
   uploadCatalog: (catalog: Record<string, any>) =>
     apiClient.post<ImportVendorResult>('/api/asset-models/import/upload', catalog),
+
+  /** List stored catalog packs for the current tenant. */
+  listCatalogs: () =>
+    apiClient.get<StoredCatalog[]>('/api/asset-models/catalogs'),
+
+  /** Download the raw JSON of a stored catalog as a browser download. */
+  downloadCatalogUrl: (id: string) => `/api/asset-models/catalogs/${id}/download`,
+
+  /** Delete a catalog pack. `withModels=true` also drops linked AssetModels (those with no asset attached). */
+  deleteCatalog: (id: string, withModels = false) =>
+    apiClient.delete<{ deleted: true; catalog: { id: string; vendor: string }; deletedModelsCount: number }>(
+      `/api/asset-models/catalogs/${id}?withModels=${withModels ? 'true' : 'false'}`,
+    ),
+
+  /** URL of the export endpoint — opens in a new tab to trigger a browser download. */
+  exportPackUrl: (filter: { manufacturer?: string; type?: string; catalogId?: string }) => {
+    const qs = new URLSearchParams();
+    if (filter.manufacturer) qs.set('manufacturer', filter.manufacturer);
+    if (filter.type) qs.set('type', filter.type);
+    if (filter.catalogId) qs.set('catalogId', filter.catalogId);
+    const q = qs.toString();
+    return `/api/asset-models/export${q ? `?${q}` : ''}`;
+  },
 
   /** @deprecated use importVendor('fortinet') */
   importFortinet: () =>
