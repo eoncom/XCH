@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { MonitoringWebhookService } from '../services/monitoring-webhook.service';
+import { Public } from '../../../common/decorators/public.decorator';
+import { SkipDelegation } from '../../../common/decorators/skip-delegation.decorator';
 
 /**
  * Generic webhook endpoint for monitoring providers (Uptime Kuma, Gatus, etc.).
@@ -23,9 +25,12 @@ import { MonitoringWebhookService } from '../services/monitoring-webhook.service
  *
  * NOTE: This endpoint is NOT protected by JWT/RBAC guards —
  *       it's called by external monitoring systems.
- *       Security is handled via the webhook secret.
+ *       Security is handled via the webhook secret (validated inside the service).
+ *       @Public() bypasses JwtAuthGuard; @SkipDelegation() bypasses DelegationGuard/PermissionGuard.
  */
 @ApiTags('monitoring-webhook')
+@Public()
+@SkipDelegation()
 @Controller('integrations/monitoring')
 export class MonitoringWebhookController {
   private readonly logger = new Logger(MonitoringWebhookController.name);

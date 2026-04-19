@@ -17,8 +17,21 @@ import { NotificationConfigService } from './notification-config.service';
 import { NotificationService } from './notification.service';
 import { SaveNotificationConfigDto, TestChannelDto, NotificationLogQueryDto } from './dto/notification-config.dto';
 import { NOTIFICATION_EVENTS } from './notification-events';
-import { PrismaClient } from '@prisma/client';
+import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
+import { RequireRead, RequireManage } from '../../common/decorators/require-right.decorator';
 
+/**
+ * Notification config controller.
+ *
+ * Authorization (AUTH_MODEL v2) :
+ * - /meta is a static catalog of events/channels → any authenticated user.
+ * - /config, /config/resolved, PUT /config, DELETE /config/:delegationId,
+ *   POST /test, GET /logs : require MANAGE on the active delegation
+ *   (resolved by DelegationGuard via X-Delegation-Id). A `delegationId=null`
+ *   query (global/tenant-wide config) is super-admin only and enforced inside
+ *   the handler.
+ * - GET /configs (tenant-wide overview) is super-admin only.
+ */
 @ApiTags('Notifications')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -27,13 +40,14 @@ export class NotificationController {
   constructor(
     private configService: NotificationConfigService,
     private notificationService: NotificationService,
-    private prisma: PrismaClient,
   ) {}
 
   /**
    * Get available event types and channels (for UI rendering).
    */
   @Get('meta')
+  @SkipDelegation()
+  @RequireRead()
   @ApiOperation({ summary: 'Get notification event types and channels metadata' })
   getMeta() {
     return {
@@ -44,8 +58,10 @@ export class NotificationController {
 
   /**
    * Get notification config for a delegation (or global if delegationId=null).
+   * Global config is super-admin only.
    */
   @Get('config')
+  @RequireManage()
   @ApiOperation({ summary: 'Get notification config for a delegation or global' })
   async getConfig(
     @Query('delegationId') delegationId: string | undefined,
@@ -53,7 +69,7 @@ export class NotificationController {
   ) {
     const tenantId = req.user.tenantId;
     const delId = delegationId || null;
-    await this.checkDelegationAccess(req.user, delId);
+    this.requireSuperAdminForGlobal(req.user, delId);
     return this.configService.getConfig(tenantId, delId);
   }
 
@@ -61,10 +77,11 @@ export class NotificationController {
    * Get the resolved (effective) config for a delegation, with inheritance applied.
    */
   @Get('config/resolved')
+  @RequireManage()
   @ApiOperation({ summary: 'Get resolved config with inheritance for a delegation' })
   async getResolvedConfig(
-    @Query('delegationId') delegationId?: string,
-    @Request() req?: any,
+    @Query('delegationId') delegationId: string | undefined,
+    @Request() req: any,
   ) {
     const tenantId = req.user.tenantId;
     return this.configService.resolveConfig(tenantId, delegationId);
@@ -72,13 +89,15 @@ export class NotificationController {
 
   /**
    * Save notification config for a delegation (or global).
+   * Global config is super-admin only.
    */
   @Put('config')
+  @RequireManage()
   @ApiOperation({ summary: 'Save notification config' })
   async saveConfig(@Body() dto: SaveNotificationConfigDto, @Request() req: any) {
     const tenantId = req.user.tenantId;
     const delegationId = dto.delegationId ?? null;
-    await this.checkDelegationAccess(req.user, delegationId);
+    this.requireSuperAdminForGlobal(req.user, delegationId);
     return this.configService.saveConfig(tenantId, delegationId, {
       channels: dto.channels,
       events: dto.events,
@@ -89,23 +108,25 @@ export class NotificationController {
    * Delete notification config for a delegation (revert to inheritance).
    */
   @Delete('config/:delegationId')
+  @RequireManage()
   @ApiOperation({ summary: 'Delete config for a delegation (revert to inheritance)' })
   async deleteConfig(
     @Param('delegationId') delegationId: string,
     @Request() req: any,
   ) {
     const tenantId = req.user.tenantId;
-    await this.checkDelegationAccess(req.user, delegationId);
     return this.configService.deleteConfig(tenantId, delegationId);
   }
 
   /**
    * Get all notification configs for the tenant (admin overview).
+   * Super-admin only: SkipDelegation + RequireManage resolves to isSuperAdmin in PermissionGuard.
    */
   @Get('configs')
-  @ApiOperation({ summary: 'List all notification configs for the tenant' })
+  @SkipDelegation()
+  @RequireManage()
+  @ApiOperation({ summary: 'List all notification configs for the tenant (super admin only)' })
   async getAllConfigs(@Request() req: any) {
-    this.requireAdmin(req.user);
     return this.configService.getAllConfigs(req.user.tenantId);
   }
 
@@ -113,9 +134,9 @@ export class NotificationController {
    * Test a notification channel.
    */
   @Post('test')
+  @RequireManage()
   @ApiOperation({ summary: 'Test a notification channel' })
-  async testChannel(@Body() dto: TestChannelDto, @Request() req: any) {
-    this.requireAdminOrManager(req.user);
+  async testChannel(@Body() dto: TestChannelDto) {
     return this.notificationService.testChannel(dto.channel, dto.config as any);
   }
 
@@ -123,56 +144,19 @@ export class NotificationController {
    * Get notification logs.
    */
   @Get('logs')
+  @RequireManage()
   @ApiOperation({ summary: 'Get notification logs' })
   async getLogs(@Query() query: NotificationLogQueryDto, @Request() req: any) {
-    this.requireAdminOrManager(req.user);
     return this.configService.getLogs(req.user.tenantId, query);
   }
 
-  // ──────────────── Access control ────────────────
-
-  private requireAdmin(user: any) {
-    if (user.isSuperAdmin) return;
-    // Authorization: localRole from DelegationGuard (UserDelegation.role)
-    if (user.localRole !== 'ADMIN') {
-      throw new ForbiddenException('Admin access required');
-    }
-  }
-
-  private requireAdminOrManager(user: any) {
-    if (user.isSuperAdmin) return;
-    // Authorization: localRole from DelegationGuard (UserDelegation.role)
-    if (!['ADMIN', 'MANAGER'].includes(user.localRole)) {
-      throw new ForbiddenException('Admin or Manager access required');
-    }
-  }
-
   /**
-   * Check access to manage notification config for a delegation.
-   * - Super admin: can manage all (including global)
-   * - Admin/Manager: can manage their own delegations
-   * - Global config (delegationId=null): super admin only
+   * Global (tenant-wide) notification config is super-admin only.
+   * Delegation-scoped access is already validated by DelegationGuard + PermissionGuard.
    */
-  private async checkDelegationAccess(user: any, delegationId: string | null) {
-    if (user.isSuperAdmin) return;
-
-    // Authorization: localRole from DelegationGuard (UserDelegation.role)
-    if (!['ADMIN', 'MANAGER'].includes(user.localRole)) {
-      throw new ForbiddenException('Admin or Manager access required');
-    }
-
-    // Global config is super admin only
-    if (delegationId === null) {
+  private requireSuperAdminForGlobal(user: any, delegationId: string | null) {
+    if (delegationId === null && !user.isSuperAdmin) {
       throw new ForbiddenException('Only super admins can manage global notification config');
-    }
-
-    // Check user has a UserDelegation for this delegation
-    const userDelegation = await this.prisma.userDelegation.findUnique({
-      where: { userId_delegationId: { userId: user.id, delegationId } },
-    });
-
-    if (!userDelegation) {
-      throw new ForbiddenException('You do not have access to this delegation');
     }
   }
 }

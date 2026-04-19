@@ -2,7 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Req } fro
 import { UserDelegationsService } from './user-delegations.service';
 import { CreateUserDelegationDto, UpdateUserDelegationRightDto } from './dto/create-user-delegation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
+import { RequireManage, RequireRead } from '../../common/decorators/require-right.decorator';
 import { DelegationRight } from '@prisma/client';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 
@@ -16,7 +16,7 @@ export class UserDelegationsController {
    * Only ADMIN of the delegation (or super admin) can do this.
    */
   @Post()
-  @RequireWrite()
+  @RequireManage()
   async create(@Body() dto: CreateUserDelegationDto, @Req() req: any) {
     return this.service.addUserToDelegation(
       req.user.tenantId,
@@ -61,7 +61,7 @@ export class UserDelegationsController {
    * Cannot change own role. Cannot promote to ADMIN unless you are ADMIN/super admin.
    */
   @Patch(':userId/:delegationId')
-  @RequireWrite()
+  @RequireManage()
   async setRole(
     @Param('userId') userId: string,
     @Param('delegationId') delegationId: string,
@@ -82,7 +82,7 @@ export class UserDelegationsController {
    * Only ADMIN of the delegation (or super admin) can do this.
    */
   @Delete(':userId/:delegationId')
-  @RequireWrite()
+  @RequireManage()
   async remove(
     @Param('userId') userId: string,
     @Param('delegationId') delegationId: string,
