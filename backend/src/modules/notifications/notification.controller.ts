@@ -57,24 +57,8 @@ export class NotificationController {
   }
 
   /**
-   * Get notification config for a delegation (or global if delegationId=null).
-   * Global config is super-admin only.
-   */
-  @Get('config')
-  @RequireManage()
-  @ApiOperation({ summary: 'Get notification config for a delegation or global' })
-  async getConfig(
-    @Query('delegationId') delegationId: string | undefined,
-    @Request() req: any,
-  ) {
-    const tenantId = req.user.tenantId;
-    const delId = delegationId || null;
-    this.requireSuperAdminForGlobal(req.user, delId);
-    return this.configService.getConfig(tenantId, delId);
-  }
-
-  /**
    * Get the resolved (effective) config for a delegation, with inheritance applied.
+   * Declared BEFORE `config/:delegationId` so the literal `resolved` segment wins.
    */
   @Get('config/resolved')
   @RequireManage()
@@ -85,6 +69,40 @@ export class NotificationController {
   ) {
     const tenantId = req.user.tenantId;
     return this.configService.resolveConfig(tenantId, delegationId);
+  }
+
+  /**
+   * Get notification config for a delegation (path-based). The `global` sentinel
+   * in the path maps to a tenant-wide config (super-admin only); any other value
+   * is treated as a delegation id and requires MANAGE on that delegation.
+   */
+  @Get('config/:delegationId')
+  @RequireManage()
+  @ApiOperation({ summary: 'Get notification config for a delegation (use "global" for tenant-wide)' })
+  async getConfigByParam(
+    @Param('delegationId') delegationIdParam: string,
+    @Request() req: any,
+  ) {
+    const tenantId = req.user.tenantId;
+    const delId = delegationIdParam === 'global' ? null : delegationIdParam;
+    this.requireSuperAdminForGlobal(req.user, delId);
+    return this.configService.getConfig(tenantId, delId);
+  }
+
+  /**
+   * Query-based variant kept for backward compat (external API clients).
+   */
+  @Get('config')
+  @RequireManage()
+  @ApiOperation({ summary: 'Get notification config via ?delegationId=… (backward compat)' })
+  async getConfig(
+    @Query('delegationId') delegationId: string | undefined,
+    @Request() req: any,
+  ) {
+    const tenantId = req.user.tenantId;
+    const delId = delegationId || null;
+    this.requireSuperAdminForGlobal(req.user, delId);
+    return this.configService.getConfig(tenantId, delId);
   }
 
   /**
@@ -106,16 +124,19 @@ export class NotificationController {
 
   /**
    * Delete notification config for a delegation (revert to inheritance).
+   * `global` sentinel deletes the tenant-wide config (super-admin only).
    */
   @Delete('config/:delegationId')
   @RequireManage()
-  @ApiOperation({ summary: 'Delete config for a delegation (revert to inheritance)' })
+  @ApiOperation({ summary: 'Delete config for a delegation — or the tenant-wide config with "global"' })
   async deleteConfig(
-    @Param('delegationId') delegationId: string,
+    @Param('delegationId') delegationIdParam: string,
     @Request() req: any,
   ) {
     const tenantId = req.user.tenantId;
-    return this.configService.deleteConfig(tenantId, delegationId);
+    const delId = delegationIdParam === 'global' ? null : delegationIdParam;
+    this.requireSuperAdminForGlobal(req.user, delId);
+    return this.configService.deleteConfig(tenantId, delId);
   }
 
   /**
