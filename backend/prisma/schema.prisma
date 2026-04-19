@@ -1145,9 +1145,10 @@ model Expense {
   // Linked connectivity (optional reverse for ConnectivityLink.expenseId)
   connectivityLinks ConnectivityLink[]
 
-  // Linked task (ADR-011) — reverse for Task.expenseId. 1:1 in practice
-  // (the Task carries the FK and there's at most one task per expense).
-  task Task? @relation("taskExpense")
+  // Linked tasks (ADR-011) — reverse for Task.expenseId. Modeled as N:1 by
+  // Prisma (mirrors ConnectivityLink) but enforced 1:1 at the service layer
+  // (createFromTask refuses if task already has an expense linked).
+  tasks Task[] @relation("taskExpense")
 
   @@index([tenantId])
   @@index([tenantId, type])
