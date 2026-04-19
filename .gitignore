@@ -121,3 +121,15 @@ SECRET_*.md
 # scripts/setup-git-credentials.sh - Script with placeholders
 # backend/src/**/*token*.ts - Code files (DTOs, services)
 nul
+
+# ==========================================================================
+# MCP servers (v1.4.x — persistent memory + codebase knowledge graph)
+# ==========================================================================
+# Local persistent memory graph written by @modelcontextprotocol/server-memory.
+# Contains developer-specific session-to-session facts.
+.claude/memory.jsonl
+.claude/memory.jsonl.backup*
+
+# SQLite index + embeddings cache for @sdsrs/code-graph (AST + FTS5).
+# Regenerated on demand via `npx @sdsrs/code-graph rebuild-index --confirm`.
+.code-graph/

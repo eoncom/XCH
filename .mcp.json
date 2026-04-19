@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/mcp.json",
+  "mcpServers": {
+    "memory": {
+      "description": "Persistent knowledge graph across Claude sessions (entities, relations, observations). Stores long-lived project facts: auth rules (AUTH_MODEL v2), RBAC decisions, known bugs, deploy workflow, business constants.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "env": {
+        "MEMORY_FILE_PATH": "${workspaceFolder}/.claude/memory.jsonl"
+      }
+    },
+    "code-graph": {
+      "description": "AST + SQLite FTS5 knowledge graph of the XCH codebase — semantic search, call graph, impact analysis, HTTP route tracing. Auto-indexes the repo on first run into .code-graph/index.db.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@sdsrs/code-graph",
+        "serve"
+      ],
+      "env": {
+        "CODE_GRAPH_ROOT": "${workspaceFolder}"
+      }
+    }
+  }
+}
