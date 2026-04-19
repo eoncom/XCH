@@ -55,16 +55,9 @@ export class AssetModelsController {
     return this.vendorTemplates.importCustomCatalog(req.user.tenantId, dto);
   }
 
-  /**
-   * @deprecated keep the legacy endpoint for one version to avoid breaking
-   * external tooling. New UIs call `POST import/:vendor`.
-   */
-  @Post('import/fortinet')
-  @RequireManage()
-  @ApiOperation({ summary: '[Legacy] Import the bundled Fortinet catalog. Prefer POST import/:vendor' })
-  importFortinet(@Request() req: AuthRequest) {
-    return this.vendorTemplates.importFortinet(req.user.tenantId);
-  }
+  // The vendor-specific POST import/fortinet was removed in v1.4.x — the
+  // generic POST import/:vendor route covers every bundled pack and the
+  // POST import/upload route covers operator-uploaded ones.
 
   @Post('import/:vendor')
   @RequireManage()

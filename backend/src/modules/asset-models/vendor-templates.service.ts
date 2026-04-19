@@ -1,7 +1,21 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+
+/**
+ * Bundled catalog packs shipped with the application.
+ *
+ * The code path is vendor-neutral: adding a new bundled pack = drop its JSON in
+ * `./templates/<key>.json` + register an entry in `VENDOR_REGISTRY` below with
+ * `status: 'available'` and `bundled: true`. The import pipeline
+ * (`importBundled` → `importCustomCatalog`) is the same for every vendor.
+ *
+ * The `fortinet.json` file here is just seed data (catalogue fabricant), not
+ * vendor-specific business logic.
+ */
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const fortinetCatalog: any = require('./templates/fortinet.json');
+const BUNDLED_CATALOGS: Record<string, any> = {
+  fortinet: require('./templates/fortinet.json'),
+};
 
 export interface VendorCatalogDescriptor {
   key: string; // stable identifier for the URL, lowercase ascii: "fortinet", "cisco", …
@@ -65,10 +79,11 @@ const VENDOR_REGISTRY: Record<string, VendorCatalogDescriptor> = {
     manufacturer: 'Fortinet',
     status: 'available',
     description: 'FortiAP (WiFi 6/6E/7) · FortiSwitch · FortiGate',
-    modelCount: (fortinetCatalog?.fortiap?.length || 0)
-      + (fortinetCatalog?.fortiswitch?.length || 0)
-      + (fortinetCatalog?.fortigate?.length || 0),
-    version: fortinetCatalog?.metadata?.version,
+    modelCount:
+      (BUNDLED_CATALOGS.fortinet?.fortiap?.length || 0) +
+      (BUNDLED_CATALOGS.fortinet?.fortiswitch?.length || 0) +
+      (BUNDLED_CATALOGS.fortinet?.fortigate?.length || 0),
+    version: BUNDLED_CATALOGS.fortinet?.metadata?.version,
   },
   cisco: {
     key: 'cisco',
@@ -146,27 +161,32 @@ export class VendorTemplatesService {
   }
 
   /**
-   * Generic entry point — resolves the vendor key to the appropriate
-   * import routine. Throws 400 when the vendor is unknown or not yet shipped.
+   * Generic entry point — resolves the vendor key to its bundled JSON and
+   * feeds it through the same neutral import pipeline used for uploaded
+   * catalogs. Adding a new bundled vendor requires zero code changes in
+   * this method: just register the key in VENDOR_REGISTRY + drop the JSON
+   * under ./templates/<key>.json.
    */
   async importVendor(vendorKey: string, tenantId: string) {
-    const v = VENDOR_REGISTRY[vendorKey.toLowerCase()];
+    const key = vendorKey.toLowerCase();
+    const v = VENDOR_REGISTRY[key];
     if (!v) {
       throw new BadRequestException(
-        `Catalogue fabricant "${vendorKey}" inconnu. Fabricants disponibles : ${this.availableVendorKeys().join(', ')}.`,
+        `Catalogue fabricant "${vendorKey}" inconnu. Fabricants disponibles : ${this.availableVendorKeys().join(', ') || '(aucun)'}.`,
       );
     }
     if (v.status === 'planned') {
       throw new BadRequestException(
-        `Le catalogue ${v.label} est prévu mais pas encore disponible. Utilisez l'ajout manuel via "Ajouter un modèle".`,
+        `Le catalogue ${v.label} est prévu mais pas encore disponible. Uploadez son JSON ou créez les modèles manuellement via "Ajouter un modèle".`,
       );
     }
-    switch (v.key) {
-      case 'fortinet':
-        return this.importFortinet(tenantId);
-      default:
-        throw new BadRequestException(`Pas d'import implémenté pour "${vendorKey}".`);
+    const bundled = BUNDLED_CATALOGS[key];
+    if (!bundled) {
+      throw new BadRequestException(
+        `Le catalogue "${v.label}" est marqué comme disponible mais son JSON bundled est introuvable (${key}.json).`,
+      );
     }
+    return this.importCustomCatalog(tenantId, bundled as UploadedCatalog, { builtIn: true });
   }
 
   private availableVendorKeys(): string[] {
@@ -254,7 +274,7 @@ export class VendorTemplatesService {
 
     let result: any;
     if (hasFortinetShape) {
-      result = await this.importFortinetLike(tenantId, catalog, catalogRow.id);
+      result = await this.importFortinetShapedPayload(tenantId, catalog, catalogRow.id);
     } else {
       result = await this.importGenericItems(
         tenantId,
@@ -331,11 +351,17 @@ export class VendorTemplatesService {
   }
 
   /**
-   * Shared routine for Fortinet-shape payloads (bundled OR uploaded).
-   * Keeping it private so `importFortinet()` (the no-arg bundled variant) and
-   * `importCustomCatalog()` (the upload) both flow through one code path.
+   * Schema adapter for payloads that carry the Fortinet-native layout
+   * (`fortiap`/`fortiswitch`/`fortigate` top-level arrays with datasheet-shaped
+   * nested objects). This is NOT a vendor special case — the import pipeline
+   * stays generic. It's simply the second JSON SHAPE we know how to read
+   * (the first being the generic `items[]` shape).
+   *
+   * Adding support for another fabricant-specific shape in the future would
+   * mean adding a sibling `importCiscoShapedPayload`, `importArubaShapedPayload`,
+   * etc., called from `importCustomCatalog` after shape detection.
    */
-  private async importFortinetLike(
+  private async importFortinetShapedPayload(
     tenantId: string,
     cat: any,
     vendorCatalogId: string,
@@ -418,14 +444,13 @@ export class VendorTemplatesService {
    * Import the bundled Fortinet catalog (ap + switch + firewall).
    * Returns a summary counting newly created models vs. those updated in place.
    */
-  async importFortinet(tenantId: string) {
-    // v1.4.x — the bundled Fortinet catalog is now treated like any other uploaded
-    // pack. It ends up as a VendorCatalog row flagged `builtIn=true` so operators
-    // can see, download, re-upload or delete it from the UI like any other pack.
-    return this.importCustomCatalog(tenantId, fortinetCatalog as UploadedCatalog, {
-      builtIn: true,
-    });
-  }
+  // NOTE: a vendor-specific `importFortinet()` method used to live here.
+  // It was removed in v1.4.x because the import pipeline is now fully neutral:
+  //   - Bundled packs flow through `importVendor(vendorKey)` →
+  //     `importCustomCatalog(tenantId, BUNDLED_CATALOGS[vendorKey], { builtIn:true })`.
+  //   - Uploaded packs flow through `POST /asset-models/import/upload` →
+  //     `importCustomCatalog(tenantId, userJson)`.
+  // Both end up as VendorCatalog rows, no vendor name hard-coded in business logic.
 
   /**
    * Upsert a row by (tenantId, name). Returns 'created' or 'updated' so the

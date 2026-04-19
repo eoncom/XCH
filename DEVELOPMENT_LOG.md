@@ -5471,3 +5471,24 @@ fix(v1.4.x): unified equipment counts + scrollable import dialog
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-19
+
+**Date:** 2026-04-19 11:11:51
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 1
+
+**Commit message:**
+```
+feat(asset-models): vendor catalogs as first-class packs (import/list/download/delete/export)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

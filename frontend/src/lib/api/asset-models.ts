@@ -154,7 +154,4 @@ export const assetModelsApi = {
     return `/api/asset-models/export${q ? `?${q}` : ''}`;
   },
 
-  /** @deprecated use importVendor('fortinet') */
-  importFortinet: () =>
-    apiClient.post<ImportVendorResult>('/api/asset-models/import/fortinet', {}),
 };
