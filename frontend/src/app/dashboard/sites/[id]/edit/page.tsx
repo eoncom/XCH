@@ -73,8 +73,8 @@ const siteSchema = z.object({
   code: z.string().min(1, 'Le code est requis'),
   name: z.string().min(1, 'Le nom est requis'),
   status: z.enum(['PREPARATION', 'ACTIVE', 'CLOSED']),
-  address: z.string().min(1, "L'adresse est requise"),
-  city: z.string().min(1, 'La ville est requise'),
+  address: z.string().optional(),
+  city: z.string().optional(),
   postalCode: z.string().optional(),
   country: z.string().optional(),
   notes: z.string().optional(),
@@ -89,7 +89,13 @@ const siteSchema = z.object({
     return undefined;
   }),
   cutProcedure: z.string().max(2000, 'Max 2000 caractères').optional().or(z.literal('')),
-});
+}).refine(
+  (data) => (data.address && data.city) || (typeof data.latitude === 'number' && typeof data.longitude === 'number'),
+  {
+    message: "Renseignez une adresse (rue + ville) ou des coordonnées GPS (latitude + longitude)",
+    path: ['address'],
+  },
+);
 
 type SiteFormData = z.infer<typeof siteSchema>;
 

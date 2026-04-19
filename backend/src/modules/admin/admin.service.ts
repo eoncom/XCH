@@ -26,11 +26,12 @@ const DEFAULT_LABELS: Record<string, Record<string, { label: string; color: stri
     OTHER:        { label: 'Autre',                color: '#9ca3af' },
   },
   AssetStatus: {
-    IN_SERVICE:     { label: 'En service',   color: '#22c55e' },
-    OUT_OF_SERVICE: { label: 'Hors service', color: '#ef4444' },
-    IN_TRANSIT:     { label: 'En transit',   color: '#3b82f6' },
-    STOCK:          { label: 'En stock',     color: '#f59e0b' },
-    RETIRED:        { label: 'Retiré',       color: '#9ca3af' },
+    IN_SERVICE:        { label: 'En service',    color: '#22c55e' },
+    UNDER_MAINTENANCE: { label: 'En maintenance', color: '#f59e0b' },
+    OUT_OF_SERVICE:    { label: 'Hors service',  color: '#ef4444' },
+    IN_TRANSIT:        { label: 'En transit',    color: '#3b82f6' },
+    STOCK:             { label: 'En stock',      color: '#a16207' },
+    RETIRED:           { label: 'Retiré',        color: '#9ca3af' },
   },
   PinType: PIN_TYPE_DEFAULTS,
 };

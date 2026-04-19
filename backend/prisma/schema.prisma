@@ -243,9 +243,11 @@ model Site {
   name   String
   status SiteStatus @default(ACTIVE)
 
-  // Location
-  address    String
-  city       String
+  // Location — address/city nullable pour les chantiers mobiles / temporaires
+  // qui n'ont pas d'adresse postale (juste des coordonnées GPS). L'UI impose
+  // qu'au moins un des deux soit fourni (address OU latitude+longitude).
+  address    String?
+  city       String?
   postalCode String?
   country    String  @default("France")
 

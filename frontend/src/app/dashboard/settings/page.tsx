@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
 import { usePermissions } from '@/hooks/usePermissions';
 import { rightLabel } from '@/lib/labels';
+import { NotificationsConfigPanel } from './notifications/NotificationsConfigPanel';
 import { useAppearance } from '@/components/AppearanceProvider';
 import {
   appearanceApi,
@@ -2366,11 +2367,9 @@ export default function SettingsPage() {
             </TabsTrigger>
           )}
           {isManagerOrAbove && (
-            <TabsTrigger value="notifications" asChild>
-              <a href="/dashboard/settings/notifications" className="flex items-center">
-                <Bell className="mr-2 h-4 w-4" />
-                Notifications
-              </a>
+            <TabsTrigger value="notifications">
+              <Bell className="mr-2 h-4 w-4" />
+              Notifications
             </TabsTrigger>
           )}
         </TabsList>
@@ -2978,6 +2977,15 @@ export default function SettingsPage() {
         <TabsContent value="electricity" className="space-y-6">
           <ElectricityConfigTab />
         </TabsContent>
+
+        {/* Notifications Tab — phase 6 fix: was a link to /dashboard/settings/notifications
+            (asChild + <a>), which broke the in-tab continuity (separate route, page-level
+            "Retour" header). Now rendered inline via the shared NotificationsConfigPanel. */}
+        {isManagerOrAbove && (
+          <TabsContent value="notifications" className="space-y-6">
+            <NotificationsConfigPanel embedded />
+          </TabsContent>
+        )}
 
         {/* SSO Tab */}
         <TabsContent value="sso" className="space-y-6">

@@ -20,13 +20,19 @@ export class CreateSiteDto {
   @IsOptional()
   status?: SiteStatus;
 
-  @ApiProperty()
+  // Address / city are optional — a mobile/temporary construction site may
+  // only carry GPS coordinates. The frontend enforces that at least one of
+  // (address, lat+lng) is filled (business rule); the backend accepts both
+  // nullable at the schema level.
+  @ApiProperty({ required: false })
   @IsString()
-  address: string;
+  @IsOptional()
+  address?: string;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
   @IsString()
-  city: string;
+  @IsOptional()
+  city?: string;
 
   @ApiProperty({ required: false })
   @IsString()
