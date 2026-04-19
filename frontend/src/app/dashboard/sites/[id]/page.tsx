@@ -1245,12 +1245,22 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     queryFn: () => sitesApi.getById(id),
   });
 
-  // Load site assets (filter by siteId)
-  const {data: allAssets = []} = useQuery<Asset[]>({
-    queryKey: ['assets'],
-    queryFn: () => assetsApi.getAll(),
+  // Load assets linked to this site.
+  //
+  // v1.4.x bug fix — before, this called `assetsApi.getAll()` with no filter
+  // and relied on a client-side `siteId === id` filter. But the backend paginates
+  // (default pageSize=25) and `getAll()` takes `.data` (current page only), so a
+  // site with assets beyond page 1 of the global list showed 0. After an inline
+  // edit the asset briefly appeared (optimistic cache update) then vanished when
+  // the page-1 refetch came back without it.
+  //
+  // Now we fetch server-side with `siteId=<this site>` and a large pageSize so
+  // the tab sees every linked asset regardless of how big the tenant is.
+  const { data: siteAssetsResponse } = useQuery({
+    queryKey: ['assets', { siteId: id, pageSize: 500 }],
+    queryFn: () => assetsApi.getAllPaginated({ siteId: id, pageSize: 500 }),
   });
-  const assets = allAssets.filter(a => a.siteId === id);
+  const assets: Asset[] = siteAssetsResponse?.data ?? [];
 
   // Enrich health breakdown components with live monitor data
   const liveHealthComponents = useMemo(() => {
