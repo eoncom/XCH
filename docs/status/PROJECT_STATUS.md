@@ -29,17 +29,39 @@
 
 ## 📊 PROGRESSION GLOBALE
 
+_Métriques mesurées le 2026-04-19 (v1.4.x) — voir section « Métriques réelles » plus bas pour le détail._
+
 ```
-Backend      ████████████████████ 100% (15/15 modules)
-Frontend     ████████████████████ 100% (11/11 modules)
-Tests        ███░░░░░░░░░░░░░░░░░  15% (Manuels + E2E Playwright)
-Docs         ████████████████████ 100% (Installation + Guides + Architecture + Testing)
-CI/CD        ██████████░░░░░░░░░░  50% (GitHub Actions workflow fonctionnel)
-Deploy       ████████████████████ 100% (Prod OK + Seed data + CORS fix)
+Backend      ████████████████████ 100% (27 modules NestJS, 262 endpoints REST)
+Frontend     ████████████████████ 100% (18 sections dashboard, 53 pages, 45 composants)
+DB schema    ████████████████████ 100% (33 modèles Prisma + 18 enums)
+Docs         ████████████████████ 100% (10 ADRs, AUTH_MODEL v2, INSTALL dev + prod)
+Tests        ███░░░░░░░░░░░░░░░░░  15% (2/57 E2E Playwright, pas de tests unitaires backend)
+CI/CD        ██████████░░░░░░░░░░  50% (GitHub Actions workflow, pas de quality gates)
+Deploy       ████████████████████ 100% (Docker Compose prod, nginx, MinIO)
 
 MVP TOTAL    ████████████████████ 100% (PRODUCTION READY)
-POST-MVP     ████████████████████ 100% (Organisation + Accès flexible + Coûts)
+POST-MVP v1.4 ████████████████████ 100% (Delegation-first + Apparence + Catalogues packs + MCP mémoire)
 ```
+
+### 📐 Métriques réelles mesurées le 2026-04-19 (v1.4.x)
+
+Commandes reproductibles :
+```bash
+ls -1 backend/src/modules | wc -l                          # 27 modules
+grep -c "^model " backend/prisma/schema.prisma             # 33 modèles
+grep -c "^enum " backend/prisma/schema.prisma              # 18 enums
+grep -rEnh "@(Get|Post|Patch|Put|Delete)\(" backend/src/modules --include="*.controller.ts" | wc -l   # 262 endpoints
+find frontend/src/app/dashboard -maxdepth 1 -type d | tail -n +2 | wc -l   # 18 sections
+find frontend/src/app/dashboard -name 'page.tsx' | wc -l   # 53 pages
+find frontend/src/components -name '*.tsx' | wc -l         # 45 composants
+find backend/src -name '*.ts' | xargs cat | wc -l          # ~27 300 lignes
+find frontend/src -name '*.ts' -o -name '*.tsx' | xargs cat | wc -l   # ~48 600 lignes
+ls docs/decisions/ | grep -c adr                           # 10 ADRs
+git tag --sort=-v:refname | head -1                         # v1.4.0
+```
+
+> **Note** : les anciennes sections « Modules livrés : 10/10 » et « 15 modules / 11 modules » qui figuraient ici avant v1.4 étaient restées figées depuis v1.0 (décembre 2025). L'architecture a énormément évolué depuis (ADR-009 delegation-first, ADR-010 apparence, Coûts avancés, VendorCatalog, etc.). Les tableaux ci-dessous ont été refondus en v1.4.x pour refléter l'état réel et sont à re-mesurer à chaque bump de version.
 
 ---
 
@@ -48,110 +70,119 @@ POST-MVP     ████████████████████ 100% (
 ### Backend - 100% TERMINÉ ✅
 
 **Statut :** Production-Ready
-**Date fin :** 2025-12-31
-**Modules livrés :** 10/10
+**Dernière évolution majeure :** 2026-04-19 (v1.4.x)
+**Modules livrés :** 27/27
 
-| # | Module | Statut | Endpoints | Tests |
-|---|--------|--------|-----------|-------|
-| 1 | **Auth** | ✅ | ~10 | Manuel |
-| 2 | **RBAC (Casbin)** | ✅ | ~8 | Manuel |
-| 3 | **Users** | ✅ | ~10 | Manuel |
-| 4 | **Tenants** | ✅ | ~8 | Manuel |
-| 5 | **Sites** | ✅ | ~12 | Manuel |
-| 6 | **Assets** | ✅ | ~15 | Manuel |
-| 7 | **Racks** | ✅ | ~12 | Manuel |
-| 8 | **Tasks** | ✅ | ~10 | Manuel |
-| 9 | **FloorPlans** | ✅ | ~10 | Manuel |
-| 10 | **Integrations** | ✅ | ~8 | Manuel |
-| 11 | **Organization** | ✅ | ~8 | Manuel |
-| 12 | **UserDelegations** | ✅ | ~5 | Manuel |
-| 13 | **AccessGrants** | ✅ | ~5 | Manuel |
-| 14 | **BillingEntities** | ✅ | ~6 | Manuel |
-| 15 | **Expenses** | ✅ | ~10 | Manuel |
+Liste exacte des modules NestJS (`backend/src/modules/`) :
+
+| Catégorie | Modules |
+|---|---|
+| **Auth & authz** | `auth`, `users`, `user-delegations`, `access-overrides` |
+| **Organisation** | `organization` (délégations), `tenants`, `sites` |
+| **Opérationnel** | `assets`, `asset-models`, `racks`, `tasks`, `floor-plans`, `contacts`, `contact-types` |
+| **Coûts / consommation** | `billing-entities`, `expenses`, `budgets`, `consumption` |
+| **Intégrations** | `integrations` (NetBox / monitoring), `connectivity` |
+| **Notifications & supervision** | `notifications` (config + inbox), `audit`, `search` |
+| **Administration** | `admin` (enum labels), `backup`, `seed`, `setup` |
 
 **Infrastructure :**
-- ✅ PostgreSQL 15 + PostGIS (recherche géospatiale)
-- ✅ Redis 7 (cache + sessions)
-- ✅ MinIO (stockage S3-compatible)
-- ✅ Docker Compose (orchestration)
-- ✅ Prisma ORM (25+ modèles)
-- ✅ NestJS 10 (framework)
+- ✅ PostgreSQL 15 + PostGIS (recherche géospatiale, `geometry(Point,4326)`)
+- ✅ Redis 7 (cache + sessions + throttle)
+- ✅ MinIO S3-compatible (stockage plans, photos, QR codes, exports, backups)
+- ✅ Docker Compose (dev + prod)
+- ✅ Prisma 5.22 ORM
+- ✅ NestJS 10
 
-**Sécurité :**
-- ✅ JWT (access + refresh tokens)
+**Sécurité (modèle v2, delegation-first — ADR-009) :**
+- ✅ JWT HTTP-only cookies (access + refresh)
 - ✅ Passport.js (local + OIDC)
-- ✅ Casbin RBAC (83 policies, 4 rôles, 10 ressources)
-- ✅ Validation inputs (class-validator)
-- ✅ Multi-tenant isolation (tenantId)
+- ✅ **Casbin retiré** en v1.3 — source unique d'autorisation = `UserDelegation.right` (MANAGE / WRITE / READ) + `User.isSuperAdmin` + `AccessOverride` ALLOW/DENY par site
+- ✅ `PermissionGuard` + `DelegationGuard` enregistrés globalement (APP_GUARD)
+- ✅ Décorateurs fail-closed : `@RequireRead / @RequireWrite / @RequireManage` + `@SkipDelegation`
+- ✅ `XchThrottlerGuard` (429 FR), limites auth env-tunables (`THROTTLE_AUTH_LIMIT`)
+- ✅ Account lockout (5 échecs → 14 min)
+- ✅ Validation class-validator + helmet + CSP/COOP/CORP/X-Frame-Options (audit phase 2/3 propres)
 
-**Métriques :**
-- ~145+ endpoints REST
-- ~12000+ lignes de code TypeScript
-- 25+ modèles Prisma (dont Delegation, UserDelegation, AccessGrant, BillingEntity, Expense, CostAllocation)
-- 95 policies Casbin (ADMIN=46, MANAGER=20, TECHNICIEN=22, VIEWER=7)
-- 4 rôles (Admin, Manager, Technicien, Viewer) + isSuperAdmin
-- 14 ressources RBAC (delegations, user-delegations, billing-entities, expenses)
+**Métriques (mesurées 2026-04-19) :**
+- **262** endpoints REST décorés
+- **~27 300** lignes TypeScript (backend/src)
+- **33** modèles Prisma + **18** enums — inclut `Delegation`, `UserDelegation`, `AccessOverride`, `BillingEntity`, `Expense`, `CostAllocation`, `Budget`, `ConnectivityLink`, `AssetModel`, `VendorCatalog`, `UserNotification`, `EnumLabel`, `AuditLog`, `AuthProvider`, `NotificationConfig` + les entités métier core
+- **0** policy Casbin (retiré), **0** référence à `User.role` pour autoriser (déprécié depuis v1.2)
+- **3** niveaux de droits : MANAGE ⊃ WRITE ⊃ READ
+- Ressources concernées par RBAC : sites, assets, racks, tasks, floor-plans, contacts, expenses, budgets, user-delegations, access-overrides, audit, netbox, monitoring, consumption, costs, tenants, users, delegations, appearance
 
 **Documentation :**
-- ✅ Swagger API (http://localhost:3000/api)
-- ✅ Checkpoints backend (archivés dans docs/archive/backend/)
+- ✅ Swagger API (http://localhost:3000/api/docs, dev uniquement)
+- ✅ Checkpoints backend historiques (archivés dans docs/archive/backend/)
+- ✅ 10 ADRs (ADR-001 → ADR-010, cf. docs/decisions/)
 
 ---
 
 ### Frontend - 100% TERMINÉ ✅
 
 **Statut :** Production-Ready
-**Date fin :** 2026-01-11
-**Modules livrés :** 8/8
+**Dernière évolution majeure :** 2026-04-19 (v1.4.x)
+**Sections dashboard :** 18 top-level · **Pages App Router :** 53
 
-| # | Module | Pages | Features Clés |
-|---|--------|-------|---------------|
-| 1 | **Dashboard** | 1 | Stats API réelles, carte Leaflet interactive, navigation |
-| 2 | **Sites** | 3 | Liste, carte Leaflet, CRUD, opérateur depuis Contacts, import contacts |
-| 3 | **Assets** | 3 | CRUD, génération QR codes, scanner caméra PWA |
-| 4 | **Tasks** | 2 | Kanban drag & drop, checklist interactive |
-| 5 | **Racks** | 3 | Visualisation 2D Konva, mount/unmount équipements |
-| 6 | **FloorPlans** | 3 | Viewer Konva, pins avec formes distinctives, légende export PNG, association équipement |
-| 7 | **Contacts** | 4 | CRUD contacts, types personnalisables, catégories, import depuis intégrations |
-| 8 | **Intégrations** | 3 | Dashboard providers, NetBox config (4 tabs), mapping drag-drop, monitoring placeholder |
-| 9 | **Users** | 1 | Liste utilisateurs, statistiques par rôle, gestion portées + grants |
-| 10 | **Settings** | 3 | Profil utilisateur, config tenant, organisation (délégations + groupLabel/groupColor) |
-| 11 | **Coûts** | 4 | Liste dépenses, création/édition, centres de coût, rapports |
+Sections dashboard actuelles (`frontend/src/app/dashboard/<section>/`) :
 
-**Total pages :** 30+ pages fonctionnelles
+| # | Section | Rôle |
+|---|--------|------|
+| 1 | **Dashboard** (home) | Stats API, carte Leaflet, widget alertes unifié |
+| 2 | **Sites** | Liste, carte, CRUD multi-étapes, contacts, connectivité, AccessOverride par site |
+| 3 | **Assets** | CRUD, scanner QR caméra, import CSV, champ WiFi coverage, filtres warranty + monitor |
+| 4 | **Racks** | Vue 2D Konva, mount/unmount, consommation par baie |
+| 5 | **Tasks** | Kanban drag&drop + liste, checklist interactive, bannières cliquables |
+| 6 | **Floor-plans** | Viewer Konva, pins typés, heatmap WiFi, calibration échelle |
+| 7 | **Contacts** | CRUD, types personnalisables, catégories INTERNAL/PROVIDER/PARTNER, import |
+| 8 | **Integrations** | Dashboard providers, NetBox (4 tabs), mapping drag&drop |
+| 9 | **Monitoring** | Table des moniteurs Uptime Kuma / Gatus + mapping UI |
+| 10 | **NetBox** | Config dédiée + historique sync |
+| 11 | **Users** | Liste, filtres, invite, édition (MANAGE+) |
+| 12 | **Admin > Audit** | Journal d'audit (super-admin only) |
+| 13 | **Alerts** | Page dédiée avec 6 catégories (unifiée v1.4) |
+| 14 | **Costs** | Dépenses, entités, budgets, rapports, projection mensuelle |
+| 15 | **Consumption** | Conso électrique par site + par rack |
+| 16 | **Notifications** | Boîte de réception utilisateur |
+| 17 | **Settings** | 11 onglets : Profil, Sécurité, Apparence, Ma délégation, Notifications, Structure, Tenant, SSO, Modules, Types, Modèles d'équipement, Électricité, Sauvegardes |
+| 18 | **Profile, TV** | Profil court + Dashboard TV plein écran |
+
+**Total pages :** 53 `page.tsx` sous `frontend/src/app/` (dont 53 dashboard/), **45 composants** personnalisés.
+
+**Gardes frontend (v1.4) :**
+- `AccessGate` — guard page-level fail-closed (required: super-admin / manage / write / read)
+- Utilisé sur `/dashboard/users`, `/dashboard/admin/audit`, `/dashboard/sites/[id]/edit`
+- Backend reste authoritatif, le garde est UX uniquement
 
 **Stack technique :**
-- Next.js 15.1.3 (App Router)
-- React 19.0.0
-- TypeScript 5.7.2
-- Tailwind CSS 3.4.17
-- shadcn/ui (Radix UI)
-- Zustand 5.0.2 (state management)
-- TanStack Query 5.62.11 (data fetching)
-- Leaflet (cartes interactives)
-- Konva.js (canvas interactif)
+- Next.js 15 App Router + React 19 + TypeScript 5.7 strict
+- Tailwind 3.4 + shadcn/ui (Radix UI)
+- Zustand (auth store + delegation context)
+- TanStack Query 5 (data fetching, invalidation ciblée)
+- Leaflet (cartes), Konva (plans + racks)
+- next-themes + `AppearanceProvider` (bridge ADR-010)
 
 **Fonctionnalités transverses :**
-- ✅ Authentification complète (login + session + auto-refresh JWT)
-- ✅ Layout responsive (desktop + mobile)
-- ✅ Toast notifications (sonner)
-- ✅ Error boundaries (gestion crashes React)
+- ✅ Authentification complète (cookies HTTP-only + auto-refresh)
+- ✅ Layout responsive desktop + mobile (sidebar flex-col scrollable, déconnexion pinned)
+- ✅ Toast notifications (sonner), error boundaries par route
 - ✅ API Client avec retry et refresh token automatique
-- ✅ Middleware protection routes
-- ✅ PWA manifest + icons (192x192, 512x512)
-- ✅ Drag-drop (@dnd-kit pour mapping intégrations)
+- ✅ Middleware protection routes + setup wizard redirect
+- ✅ PWA (manifest + icons 192x192 + 512x512)
+- ✅ Drag-drop (@dnd-kit pour mapping intégrations + Kanban)
+- ✅ Recherche globale Cmd+K
+- ✅ Inbox notifications en temps réel
 
-**Métriques :**
-- ~55+ composants React
-- ~6500+ lignes de code TypeScript
-- 25 pages fonctionnelles
-- 10+ composants UI shadcn/ui
-- 10 modules métier complets
+**Métriques (mesurées 2026-04-19) :**
+- **~48 600** lignes TypeScript (frontend/src)
+- **45** composants dans `frontend/src/components/`
+- **53** pages Next.js
+- **18** sections dashboard
 
 **Documentation :**
 - ✅ Frontend README (frontend/README.md)
 - ✅ PWA Icons README (frontend/public/ICONS_README.md)
-- ✅ Checkpoints frontend (archivés dans docs/archive/frontend/)
+- ✅ Checkpoints frontend historiques (docs/archive/frontend/)
 
 ---
 
@@ -171,8 +202,9 @@ POST-MVP     ████████████████████ 100% (
 
 **Architecture :**
 - ✅ tech-stack.md - Stack technique complète avec justifications
-- ✅ database-schema.md - Schéma DB + ERD + 15 modèles Prisma
-- ✅ 5 ADR (Architecture Decision Records) complets
+- ✅ database-schema.md - Schéma DB + ERD (33 modèles Prisma + 18 enums au 2026-04-19)
+- ✅ AUTH_MODEL.md - Modèle d'autorisation v2 delegation-first (MANAGE / WRITE / READ + AccessOverride)
+- ✅ 10 ADRs dans docs/decisions/ : ADR-001 à ADR-010 (delegation-first = ADR-009, apparence = ADR-010)
 
 **Status & Planning :**
 - ✅ PROJECT_STATUS.md - Ce fichier (source de vérité unique)
@@ -184,10 +216,10 @@ POST-MVP     ████████████████████ 100% (
 - ✅ Checkpoints frontend (2 fichiers archivés)
 - ✅ Livraisons intermédiaires (versions historiques)
 
-**Total :**
-- ~27 fichiers Markdown
-- ~25000+ lignes de documentation
-- 30+ scénarios de troubleshooting documentés
+**Total (mesuré 2026-04-19) :**
+- Dizaines de fichiers Markdown dans `docs/` + 5 racine (`README.md`, `CLAUDE.md`, `CHANGELOG.md`, `DEVELOPMENT_LOG.md`, `LIVRAISON_MVP_100.md`)
+- `docs/00-INDEX.md` comme point d'entrée navigation
+- Reports d'audit : `phase1a-empty.md`, `phase1b-seeded.md`, `phase2-sast.md`, `phase3-zap.md`, `phase4-audit-correctifs.md`
 
 ---
 

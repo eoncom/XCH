@@ -9,7 +9,7 @@
         "@modelcontextprotocol/server-memory"
       ],
       "env": {
-        "MEMORY_FILE_PATH": "${workspaceFolder}/.claude/memory.jsonl"
+        "MEMORY_FILE_PATH": ".claude/memory.jsonl"
       }
     },
     "code-graph": {
@@ -19,10 +19,7 @@
         "-y",
         "@sdsrs/code-graph",
         "serve"
-      ],
-      "env": {
-        "CODE_GRAPH_ROOT": "${workspaceFolder}"
-      }
+      ]
     }
   }
 }
