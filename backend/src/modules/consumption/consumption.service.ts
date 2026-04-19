@@ -7,7 +7,10 @@ export interface ConsumptionResult {
   costMonth: number;
   currency: string;
   costPerKwh: number;
+  /** Total assets linked (any status) — matches /dashboard/assets?siteId=X and the site detail tab. */
   assetCount: number;
+  /** Active-only subset (IN_SERVICE / UNDER_MAINTENANCE) used for the watts/kWh computation. */
+  activeAssetCount: number;
   byType?: Record<string, { watts: number; count: number }>;
 }
 
@@ -33,13 +36,21 @@ export class ConsumptionService {
   }
 
   private computeFromAssets(
-    assets: Array<{ type: string; powerConsumption: number | null; dutyCyclePercent: number }>,
+    assets: Array<{ type: string; status?: string; powerConsumption: number | null; dutyCyclePercent: number }>,
     cfg: TenantElectricityConfig,
   ): ConsumptionResult {
     let totalWatts = 0;
+    let activeAssetCount = 0;
     const byType: Record<string, { watts: number; count: number }> = {};
+    // Only active-state assets contribute to the watts sum. The `assetCount`
+    // reflects EVERY asset linked regardless of status so the figure matches
+    // the other pages (user spec "tous les équipements qui appartiennent au site").
+    const ACTIVE_STATUSES = new Set(['IN_SERVICE', 'UNDER_MAINTENANCE']);
 
     for (const asset of assets) {
+      const isActive = asset.status ? ACTIVE_STATUSES.has(asset.status) : true;
+      if (!isActive) continue;
+      activeAssetCount++;
       if (!asset.powerConsumption) continue;
       const watts = asset.powerConsumption * (asset.dutyCyclePercent / 100);
       totalWatts += watts;
@@ -58,6 +69,7 @@ export class ConsumptionService {
       currency: cfg.currency,
       costPerKwh: cfg.costPerKwh,
       assetCount: assets.length,
+      activeAssetCount,
       byType,
     };
   }
@@ -69,13 +81,14 @@ export class ConsumptionService {
     });
     if (!site) throw new NotFoundException('Site not found');
 
+    // v1.4.x — we count ALL assets linked to the site so the value matches the
+    // "Équipements" tab on the site detail page and the `/dashboard/assets`
+    // filtered view. The consumption MATH still only weights IN_SERVICE /
+    // UNDER_MAINTENANCE assets (see computeFromAssetsScoped below) — broken
+    // or retired hardware doesn't consume.
     const assets = await this.prisma.asset.findMany({
-      where: {
-        tenantId,
-        siteId,
-        status: { in: ['IN_SERVICE', 'UNDER_MAINTENANCE'] },
-      },
-      select: { type: true, powerConsumption: true, dutyCyclePercent: true },
+      where: { tenantId, siteId },
+      select: { type: true, status: true, powerConsumption: true, dutyCyclePercent: true },
     });
 
     const cfg = await this.getElectricityConfig(tenantId);
@@ -108,8 +121,10 @@ export class ConsumptionService {
         name: true,
         code: true,
         assets: {
-          where: { status: { in: ['IN_SERVICE', 'UNDER_MAINTENANCE'] as any } },
-          select: { type: true, powerConsumption: true, dutyCyclePercent: true },
+          // v1.4.x — include all linked assets (any status) so the per-site
+          // Assets column matches the Équipements page filtered by site.
+          // Active-only filter now lives in computeFromAssets().
+          select: { type: true, status: true, powerConsumption: true, dutyCyclePercent: true },
         },
       },
     });
@@ -124,6 +139,7 @@ export class ConsumptionService {
         kWhMonth: r.kWhMonth,
         costMonth: r.costMonth,
         assetCount: r.assetCount,
+        activeAssetCount: r.activeAssetCount,
       };
     });
 

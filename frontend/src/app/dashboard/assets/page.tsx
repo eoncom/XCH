@@ -274,7 +274,18 @@ export default function AssetsPage() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Équipements</h1>
           <p className="text-muted-foreground">
-            Gérez votre inventaire d'équipements ({filteredAssets?.length || 0})
+            {/* v1.4.x — header shows the authoritative total from the server
+                (meta.total = everything matching the applied filters including
+                "no site"), plus the post-client-filter count only when client
+                filters (warranty / monitoring) actually narrow the page. */}
+            Gérez votre inventaire d&apos;équipements (
+            {(() => {
+              const serverTotal = meta?.total ?? assets.length;
+              const clientFiltered = filteredAssets.length;
+              const showBoth = clientFiltered !== assets.length && (warrantyFilter !== 'all' || monitorFilter !== 'all');
+              return showBoth ? `${clientFiltered} visibles / ${serverTotal} au total` : serverTotal;
+            })()}
+            )
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

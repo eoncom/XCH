@@ -151,8 +151,12 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
           Importer un catalogue fabricant
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      {/* v1.4.x fix — the dialog body was overflowing the viewport so users
+          couldn't scroll to "Voir le schéma JSON attendu" at the bottom.
+          Use a flex column with a scrollable middle region instead of relying
+          on the inner list's max-height. */}
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="p-6 pb-2 flex-shrink-0">
           <DialogTitle>Catalogues fabricants</DialogTitle>
           <DialogDescription>
             Pré-remplissez votre catalogue de modèles avec les specs officielles des fabricants
@@ -161,12 +165,13 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
           </DialogDescription>
         </DialogHeader>
 
+        <div className="px-6 pb-6 flex-1 overflow-y-auto space-y-4">
         {isLoading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin mr-2" /> Chargement…
           </div>
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+          <div className="space-y-2">
             {vendors.map((v) => {
               const disabled = v.status === 'planned' || running !== null;
               return (
@@ -277,6 +282,7 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
               sont aussi acceptés directement.
             </p>
           </details>
+        </div>
         </div>
       </DialogContent>
     </Dialog>

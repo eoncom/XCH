@@ -5429,3 +5429,24 @@ fix(build): narrow includeGlobal comparison to any-cast to satisfy strict typing
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-19
+
+**Date:** 2026-04-19 11:01:27
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix(asset-models): route order — specific import/upload before import/:vendor
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

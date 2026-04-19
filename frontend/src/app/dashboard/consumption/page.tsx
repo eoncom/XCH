@@ -41,12 +41,14 @@ export default function ConsumptionPage() {
           Estimation de la consommation et du coût mensuel (24h/24, 30j) par site — {totals.costPerKwh.toFixed(3)} {totals.currency}/kWh
         </p>
         <div className="mt-3 text-xs text-muted-foreground bg-muted/50 border rounded-md px-3 py-2 max-w-3xl">
-          <strong className="text-foreground">Pourquoi le total « Assets » diffère de la page Équipements&nbsp;?</strong>
-          {' '}Ici chaque ligne compte <em>tous les équipements associés au site</em> qui ont une
-          consommation électrique déclarée (watts via <code>AssetModel</code> ou réglage manuel),
-          y compris ceux montés dans les baies. La page <Link href="/dashboard/assets" className="underline">Équipements</Link>
-          {' '}liste uniquement les équipements « racine » (sans compter les items internes des baies
-          ni les assets désactivés). Les deux chiffres sont donc volontairement différents.
+          <strong className="text-foreground">Comment lire ce tableau&nbsp;?</strong>
+          {' '}Chaque ligne compte <em>tous les équipements liés au site</em> (colonne « Assets »).
+          Ce chiffre correspond exactement à celui affiché sur la page{' '}
+          <Link href="/dashboard/assets" className="underline">Équipements</Link> (filtrée par site)
+          et sur l&apos;onglet Équipements de la fiche site. Le sous-total entre parenthèses
+          («&nbsp;X actifs&nbsp;») indique les assets <em>IN_SERVICE</em> ou <em>UNDER_MAINTENANCE</em>{' '}
+          — seuls ceux-ci contribuent au calcul des watts et du coût, car un équipement hors service
+          ne consomme pas.
         </div>
       </div>
 
@@ -117,7 +119,14 @@ export default function ConsumptionPage() {
                       </Link>
                       <div className="text-xs text-muted-foreground">{s.site.code}</div>
                     </TableCell>
-                    <TableCell>{s.assetCount}</TableCell>
+                    <TableCell>
+                      {s.assetCount}
+                      {typeof (s as any).activeAssetCount === 'number' && (s as any).activeAssetCount !== s.assetCount && (
+                        <span className="text-xs text-muted-foreground ml-1" title="Actifs (IN_SERVICE / UNDER_MAINTENANCE) — seuls ceux-ci contribuent au calcul de la consommation">
+                          ({(s as any).activeAssetCount} actifs)
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>{s.totalWatts.toFixed(0)} W</TableCell>
                     <TableCell>{s.kWhMonth.toFixed(1)} kWh</TableCell>
                     <TableCell className="font-semibold">
