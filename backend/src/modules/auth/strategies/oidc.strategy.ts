@@ -2,20 +2,46 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-openidconnect';
 import { ConfigService } from '@nestjs/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, DelegationRight } from '@prisma/client';
 import { AuthService } from '../auth.service';
 
 /**
- * Default role mapping: OIDC groups/roles → XCH roles.
+ * Default OIDC group → DelegationRight mapping.
  * Can be overridden per tenant via Tenant.config.sso.roleMapping.
+ * Both legacy labels (ADMIN/MANAGER/TECHNICIEN/VIEWER, pre-v1.2) and
+ * new ones (MANAGE/WRITE/READ) are accepted — normalizeRight() translates.
  */
 const DEFAULT_ROLE_MAPPING: Record<string, string> = {
-  admin: 'ADMIN',
-  manager: 'MANAGER',
-  technician: 'TECHNICIEN',
-  technicien: 'TECHNICIEN',
-  viewer: 'VIEWER',
+  admin: 'MANAGE',
+  manager: 'MANAGE',
+  technician: 'WRITE',
+  technicien: 'WRITE',
+  viewer: 'READ',
 };
+
+/**
+ * Translate a configured role label into a DelegationRight.
+ * Accepts legacy User.role values (deprecated since v1.2) for backward compat.
+ */
+function normalizeRight(value: string | undefined): DelegationRight {
+  if (!value) return 'READ';
+  const upper = value.toUpperCase();
+  switch (upper) {
+    case 'MANAGE':
+    case 'ADMIN':
+    case 'MANAGER':
+      return 'MANAGE';
+    case 'WRITE':
+    case 'TECHNICIEN':
+    case 'TECHNICIAN':
+      return 'WRITE';
+    case 'READ':
+    case 'VIEWER':
+      return 'READ';
+    default:
+      return 'READ';
+  }
+}
 
 /**
  * A mapping entry can be a simple string (role only, backward compat)
@@ -33,7 +59,7 @@ interface RoleMappingEntry {
 
 interface SsoDelegationEntry {
   delegationId: string;
-  role?: string;
+  right: DelegationRight;
 }
 
 @Injectable()
@@ -67,15 +93,15 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
       const tenantId = tenant?.id || this.config.get('DEFAULT_TENANT_ID') || 'tenant_default';
       const tenantConfig = tenant?.config as Record<string, any> | null;
 
-      // Determine role + scopes from OIDC claims
-      const { role, scopes } = this.mapRoleAndScopes(profile, tenantConfig);
+      // Determine right + scopes from OIDC claims
+      const { right, scopes } = this.mapRightAndScopes(profile, tenantConfig);
 
       // Convert scopes to SsoDelegationEntry format for auth service
       const delegationEntries: SsoDelegationEntry[] = scopes
         .filter(s => s.type === 'DELEGATION' && s.id)
-        .map(s => ({ delegationId: s.id!, role }));
+        .map(s => ({ delegationId: s.id!, right }));
 
-      const user = await this.authService.oidcLogin(profile, tenantId, role, delegationEntries as any);
+      const user = await this.authService.oidcLogin(profile, tenantId, right, delegationEntries);
       done(null, user);
     } catch (error) {
       done(error, null);
@@ -83,20 +109,20 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
   }
 
   /**
-   * Map OIDC profile claims to an XCH role + scopes.
+   * Map OIDC profile claims to a DelegationRight + scopes.
    * Supports both legacy format (string values) and new format (object with role+scopes).
    *
-   * Legacy:  { "admin": "ADMIN", "tech": "TECHNICIEN" }
-   * New:     { "admin": { "role": "ADMIN", "scopes": [{ "type": "TENANT" }] },
-   *            "tech-idf": { "role": "TECHNICIEN", "scopes": [{ "type": "DIVISION", "id": "div-123" }] } }
+   * Legacy:  { "admin": "MANAGE", "tech": "WRITE" }
+   * Also accepted (backward compat): { "admin": "ADMIN", "tech": "TECHNICIEN" }
+   * New:     { "admin": { "role": "MANAGE", "scopes": [{ "type": "DELEGATION", "id": "d-123" }] } }
    */
-  private mapRoleAndScopes(
+  private mapRightAndScopes(
     profile: any,
     tenantConfig: Record<string, any> | null,
-  ): { role: string; scopes: ScopeEntry[] } {
+  ): { right: DelegationRight; scopes: ScopeEntry[] } {
     const roleMapping: Record<string, string | RoleMappingEntry> = tenantConfig?.sso?.roleMapping || DEFAULT_ROLE_MAPPING;
     const defaultEntry = roleMapping.default;
-    const defaultRole = typeof defaultEntry === 'object' ? defaultEntry.role : (defaultEntry || 'VIEWER');
+    const defaultRoleStr = typeof defaultEntry === 'object' ? defaultEntry.role : (defaultEntry || 'READ');
     const defaultScopes: ScopeEntry[] = typeof defaultEntry === 'object' ? (defaultEntry.scopes || []) : [];
 
     // Extract groups/roles from OIDC profile
@@ -108,7 +134,7 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
 
     // Collect all matching scopes (union from all matched groups)
     const allScopes: ScopeEntry[] = [];
-    let matchedRole: string | null = null;
+    let matchedRoleStr: string | null = null;
 
     const resolveEntry = (entry: string | RoleMappingEntry): { role: string; scopes: ScopeEntry[] } => {
       if (typeof entry === 'string') return { role: entry, scopes: [] };
@@ -121,13 +147,13 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
       // Check exact match
       if (roleMapping[group]) {
         const { role, scopes } = resolveEntry(roleMapping[group]);
-        if (!matchedRole) matchedRole = role;
+        if (!matchedRoleStr) matchedRoleStr = role;
         allScopes.push(...scopes);
         continue;
       }
       if (roleMapping[groupLower]) {
         const { role, scopes } = resolveEntry(roleMapping[groupLower]);
-        if (!matchedRole) matchedRole = role;
+        if (!matchedRoleStr) matchedRoleStr = role;
         allScopes.push(...scopes);
         continue;
       }
@@ -136,7 +162,7 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
       for (const [key, mappedEntry] of Object.entries(roleMapping)) {
         if (key !== 'default' && groupLower.includes(key.toLowerCase())) {
           const { role, scopes } = resolveEntry(mappedEntry as string | RoleMappingEntry);
-          if (!matchedRole) matchedRole = role;
+          if (!matchedRoleStr) matchedRoleStr = role;
           allScopes.push(...scopes);
           break;
         }
@@ -144,7 +170,7 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
     }
 
     return {
-      role: matchedRole || defaultRole,
+      right: normalizeRight(matchedRoleStr || defaultRoleStr),
       scopes: allScopes.length > 0 ? allScopes : defaultScopes,
     };
   }

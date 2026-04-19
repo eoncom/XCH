@@ -55,8 +55,8 @@ export class OrganizationController {
   }
 
   @Patch('delegations/:id')
-  @RequireWrite()
-  @ApiOperation({ summary: 'Update a delegation' })
+  @RequireManage()
+  @ApiOperation({ summary: 'Update a delegation (MANAGE on the delegation — see AUTH_MODEL §7 “Ma délégation”)' })
   updateDelegation(@Param('id') id: string, @Body() dto: UpdateDelegationDto, @Request() req: AuthRequest) {
     return this.organizationService.updateDelegation(id, req.user.tenantId, dto, req.user.userId);
   }
