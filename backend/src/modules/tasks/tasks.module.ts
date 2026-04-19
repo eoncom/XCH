@@ -4,6 +4,7 @@ import { TasksService } from './tasks.service';
 import { TasksController } from './tasks.controller';
 import { StorageService } from '../../common/services/storage.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { ExpensesModule } from '../expenses/expenses.module';
 import { memoryStorage } from 'multer';
 import { attachmentFileFilter } from '../../common/utils/upload-security';
 
@@ -16,6 +17,8 @@ import { attachmentFileFilter } from '../../common/utils/upload-security';
       },
       fileFilter: attachmentFileFilter,
     }),
+    // ADR-011: TasksController calls ExpensesService.createFromTask / resyncExpense
+    ExpensesModule,
   ],
   controllers: [TasksController],
   providers: [TasksService, StorageService, AuditLogService],

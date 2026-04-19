@@ -12,6 +12,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
+import { ExpensesService } from '../expenses/expenses.service';
 
 @ApiTags('assets')
 @Controller('assets')
@@ -21,6 +22,7 @@ export class AssetsController {
   constructor(
     private readonly assetsService: AssetsService,
     private readonly permissionService: PermissionService,
+    private readonly expensesService: ExpensesService,
   ) {}
 
   @Post()
@@ -322,5 +324,72 @@ export class AssetsController {
     @Request() req: AuthRequest,
   ) {
     return this.assetsService.deleteAttachment(attachmentId, req.user.tenantId, id);
+  }
+
+  // ========== ADR-011 Inline Expense generation ==========
+
+  /**
+   * Generate an Expense from this asset.
+   * - kind=ACQUISITION → ONE_TIME EQUIPMENT (acquisitionPrice)
+   * - kind=MONTHLY     → MONTHLY LICENSE (monthlyPrice)
+   * Multiple expenses can be linked over time (1:N via Expense.assetId).
+   */
+  @Post(':id/generate-expense')
+  @RequireWrite()
+  @ApiOperation({
+    summary:
+      'Generate an Expense linked to this asset (ADR-011). Validates that the caller has WRITE on the target site / delegation.',
+  })
+  async generateExpense(
+    @Param('id') id: string,
+    @Body() body: { kind: 'ACQUISITION' | 'MONTHLY'; bearerId: string; label?: string; type?: string },
+    @Request() req: AuthRequest,
+  ) {
+    // Resolve permission per-resource (scoped check, same pattern as create())
+    const asset = await this.assetsService.findOne(id, req.user.tenantId);
+    if (asset.siteId) {
+      const perm = await this.permissionService.resolve(
+        req.user.userId, asset.siteId, 'expenses', req.user.tenantId,
+      );
+      if (perm !== 'WRITE') {
+        throw new ForbiddenException('Insufficient permissions to create expenses on this site');
+      }
+    }
+    return this.expensesService.createFromAsset(
+      req.user.tenantId,
+      id,
+      { ...body, fallbackDelegationId: req.delegationId },
+      req.user.userId,
+    );
+  }
+
+  /**
+   * Resync the totalAmount of an Expense linked to this asset, based on the
+   * current asset/AssetModel price. Frozen-by-default policy (ADR-011 §2):
+   * this is the explicit way to refresh after a price update.
+   */
+  @Patch(':id/expenses/:expenseId/resync')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Resync linked expense from asset price (ADR-011)' })
+  async resyncExpense(
+    @Param('id') id: string,
+    @Param('expenseId') expenseId: string,
+    @Body() body: { kind: 'ACQUISITION' | 'MONTHLY' },
+    @Request() req: AuthRequest,
+  ) {
+    const asset = await this.assetsService.findOne(id, req.user.tenantId);
+    if (asset.siteId) {
+      const perm = await this.permissionService.resolve(
+        req.user.userId, asset.siteId, 'expenses', req.user.tenantId,
+      );
+      if (perm !== 'WRITE') {
+        throw new ForbiddenException('Insufficient permissions to edit expenses on this site');
+      }
+    }
+    return this.expensesService.resyncExpense(req.user.tenantId, expenseId, {
+      kind: 'asset',
+      sourceId: id,
+      assetExpenseKind: body.kind,
+    });
   }
 }

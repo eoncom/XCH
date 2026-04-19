@@ -82,4 +82,11 @@ export const connectivityApi = {
 
   generateExpense: (id: string, body: { bearerId: string; label?: string }) =>
     apiClient.post<ConnectivityLink>(`/api/connectivity/${id}/generate-expense`, body),
+
+  // ADR-011 resync linked expense from current monthlyPrice
+  resyncExpense: (id: string) =>
+    apiClient.patch<{ expense: any; before: number; after: number }>(
+      `/api/connectivity/${id}/resync-expense`,
+      {},
+    ),
 };

@@ -681,6 +681,12 @@ model Task {
   actualCost    Decimal? @db.Decimal(10, 2)
   costCurrency  String   @default("EUR")
 
+  // Linked expense (ADR-011) — 1:1, populated when the user opts in to
+  // generate an Expense from this task on completion. Symmetric with
+  // ConnectivityLink.expenseId.
+  expenseId String?
+  expense   Expense? @relation("taskExpense", fields: [expenseId], references: [id], onDelete: SetNull)
+
   completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -695,6 +701,7 @@ model Task {
   @@index([tenantId, status])
   @@index([tenantId, assignedTo])
   @@index([tenantId, dueDate])
+  @@index([expenseId])
   @@map("tasks")
 }
 
@@ -1137,6 +1144,10 @@ model Expense {
 
   // Linked connectivity (optional reverse for ConnectivityLink.expenseId)
   connectivityLinks ConnectivityLink[]
+
+  // Linked task (ADR-011) — reverse for Task.expenseId. 1:1 in practice
+  // (the Task carries the FK and there's at most one task per expense).
+  task Task? @relation("taskExpense")
 
   @@index([tenantId])
   @@index([tenantId, type])

@@ -14,6 +14,7 @@ import { RequireModule } from '../../common/decorators/require-module.decorator'
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
+import { ExpensesService } from '../expenses/expenses.service';
 
 @RequireModule('tasks')
 @ApiTags('tasks')
@@ -24,6 +25,7 @@ export class TasksController {
   constructor(
     private readonly tasksService: TasksService,
     private readonly permissionService: PermissionService,
+    private readonly expensesService: ExpensesService,
   ) {}
 
   @Post()
@@ -269,5 +271,69 @@ export class TasksController {
   ) {
     const localRole = (req as any).localRole || (req.user.isSuperAdmin ? 'ADMIN' : 'VIEWER');
     return this.tasksService.deleteComment(commentId, req.user.tenantId, req.user.id, localRole);
+  }
+
+  // ========== ADR-011 Inline Expense generation ==========
+
+  /**
+   * Generate an Expense (SERVICE / ONE_TIME) from this task's actualCost
+   * (or estimatedCost when useEstimated=true). 1:1 relationship — refuses
+   * if the task already has an expense linked.
+   */
+  @Post(':id/generate-expense')
+  @RequireWrite()
+  @ApiOperation({
+    summary:
+      'Generate an Expense linked to this task (ADR-011). Validates that the caller has WRITE on the task site.',
+  })
+  async generateExpense(
+    @Param('id') id: string,
+    @Body() body: { bearerId: string; label?: string; useEstimated?: boolean },
+    @Request() req: AuthRequest,
+  ) {
+    const task = await this.tasksService.findOne(id, req.user.tenantId);
+    if (task.siteId) {
+      const perm = await this.permissionService.resolve(
+        req.user.userId, task.siteId, 'expenses', req.user.tenantId,
+      );
+      if (perm !== 'WRITE') {
+        throw new ForbiddenException('Insufficient permissions to create expenses on this site');
+      }
+    }
+    return this.expensesService.createFromTask(
+      req.user.tenantId,
+      id,
+      { ...body, fallbackDelegationId: req.delegationId },
+      req.user.id,
+    );
+  }
+
+  /**
+   * Resync the linked Expense's totalAmount from the current task cost
+   * (frozen-by-default, ADR-011 §2).
+   */
+  @Patch(':id/resync-expense')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Resync linked expense from task cost (ADR-011)' })
+  async resyncExpense(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+  ) {
+    const task = await this.tasksService.findOne(id, req.user.tenantId);
+    if (!(task as any).expenseId) {
+      throw new BadRequestException('No expense linked to this task');
+    }
+    if (task.siteId) {
+      const perm = await this.permissionService.resolve(
+        req.user.userId, task.siteId, 'expenses', req.user.tenantId,
+      );
+      if (perm !== 'WRITE') {
+        throw new ForbiddenException('Insufficient permissions to edit expenses on this site');
+      }
+    }
+    return this.expensesService.resyncExpense(req.user.tenantId, (task as any).expenseId, {
+      kind: 'task',
+      sourceId: id,
+    });
   }
 }

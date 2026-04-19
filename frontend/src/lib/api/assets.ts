@@ -104,4 +104,16 @@ export const assetsApi = {
 
   importTemplate: () =>
     apiClient.get<{ filename: string; content: string }>('/api/assets/import/template'),
+
+  // ADR-011 — inline expense generation
+  generateExpense: (
+    id: string,
+    body: { kind: 'ACQUISITION' | 'MONTHLY'; bearerId: string; label?: string; type?: string },
+  ) => apiClient.post<any>(`/api/assets/${id}/generate-expense`, body),
+
+  resyncExpense: (id: string, expenseId: string, body: { kind: 'ACQUISITION' | 'MONTHLY' }) =>
+    apiClient.patch<{ expense: any; before: number; after: number }>(
+      `/api/assets/${id}/expenses/${expenseId}/resync`,
+      body,
+    ),
 };

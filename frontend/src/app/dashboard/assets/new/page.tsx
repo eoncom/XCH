@@ -22,6 +22,10 @@ import { assetsApi } from '@/lib/api/assets';
 import { GroupedSiteSelector } from '@/components/ui/grouped-site-selector';
 import { organizationApi } from '@/lib/api/organization';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
+import { GenerateExpenseToggle, type GenerateExpensePayload } from '@/components/expenses/GenerateExpenseToggle';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useState } from 'react';
+import { showToast } from '@/lib/toast';
 import { ArrowLeft, Info, Wifi, ExternalLink, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -130,6 +134,15 @@ export default function NewAssetPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const defaultSiteId = searchParams.get('siteId') || undefined;
+  const { canWrite } = usePermissions();
+  // ADR-011: payload from the inline expense toggle. The parent decides which
+  // expense kind to generate (acquisition vs monthly) based on which price is set.
+  const [acquisitionPayload, setAcquisitionPayload] = useState<GenerateExpensePayload>({
+    enabled: false, bearerId: '', label: '',
+  });
+  const [monthlyPayload, setMonthlyPayload] = useState<GenerateExpensePayload>({
+    enabled: false, bearerId: '', label: '',
+  });
   const {
     register,
     handleSubmit,
@@ -156,12 +169,44 @@ export default function NewAssetPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: CreateAssetDto) => assetsApi.create(data),
-    onSuccess: (asset) => {
+    onSuccess: async (asset) => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       if (asset.siteId) {
         queryClient.invalidateQueries({ queryKey: ['sites', asset.siteId] });
       }
+
+      // ADR-011: chain inline expense generation if user opted in. Failures
+      // are non-fatal — the asset is already created, the user can retry the
+      // generate-expense from the asset detail page later.
+      const tasks: Promise<void>[] = [];
+      if (acquisitionPayload.enabled && acquisitionPayload.bearerId) {
+        tasks.push(
+          assetsApi
+            .generateExpense(asset.id, {
+              kind: 'ACQUISITION',
+              bearerId: acquisitionPayload.bearerId,
+              label: acquisitionPayload.label || undefined,
+            })
+            .then(() => { showToast.success("Dépense d'achat créée"); })
+            .catch((e: any) => { showToast.error(`Dépense d'achat : ${e?.message || 'erreur'}`); }),
+        );
+      }
+      if (monthlyPayload.enabled && monthlyPayload.bearerId) {
+        tasks.push(
+          assetsApi
+            .generateExpense(asset.id, {
+              kind: 'MONTHLY',
+              bearerId: monthlyPayload.bearerId,
+              label: monthlyPayload.label || undefined,
+            })
+            .then(() => { showToast.success('Dépense mensuelle créée'); })
+            .catch((e: any) => { showToast.error(`Dépense mensuelle : ${e?.message || 'erreur'}`); }),
+        );
+      }
+      await Promise.all(tasks);
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+
       router.push(`/dashboard/assets/${asset.id}`);
     },
   });
@@ -237,6 +282,10 @@ export default function NewAssetPage() {
   const siteId = watch('siteId');
   const locationScope = watch('locationScope');
   const delegationId = watch('delegationId');
+  const acquisitionPrice = Number(watch('acquisitionPrice')) || 0;
+  const monthlyPrice = Number(watch('monthlyPrice')) || 0;
+  const priceCurrency = watch('priceCurrency') || 'EUR';
+  const assetName = watch('name') || watch('serialNumber') || watch('model') || 'équipement';
 
 
   return (
@@ -821,6 +870,47 @@ export default function NewAssetPage() {
           </CardContent>
         </Card>
 
+        {/* ADR-011 — Inline expense generation. The two toggles render once a
+            price is detected (auto pre-checked). The acquisitionPrice case
+            produces a ONE_TIME EQUIPMENT expense, monthlyPrice produces a
+            MONTHLY LICENSE expense (covers software subscriptions and rental
+            equipment). The bearer (cost center) is mandatory before submit. */}
+        {(acquisitionPrice > 0 || monthlyPrice > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Dépense liée (optionnel)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {acquisitionPrice > 0 && (
+                <GenerateExpenseToggle
+                  title="Dépense d'achat"
+                  helper="Créer une dépense ONE_TIME EQUIPMENT pour cet achat."
+                  defaultLabel={`Achat ${assetName}`}
+                  defaultAmount={acquisitionPrice}
+                  currency={priceCurrency}
+                  typeBadge="EQUIPMENT"
+                  frequencyBadge="ONE_TIME"
+                  canWrite={canWrite}
+                  onChange={setAcquisitionPayload}
+                />
+              )}
+              {monthlyPrice > 0 && (
+                <GenerateExpenseToggle
+                  title="Dépense mensuelle"
+                  helper="Créer une dépense MONTHLY LICENSE (abonnement / location)."
+                  defaultLabel={`Location ${assetName}`}
+                  defaultAmount={monthlyPrice}
+                  currency={priceCurrency}
+                  typeBadge="LICENSE"
+                  frequencyBadge="MONTHLY"
+                  canWrite={canWrite}
+                  onChange={setMonthlyPayload}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Actions */}
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -835,7 +925,14 @@ export default function NewAssetPage() {
             >
               Annuler
             </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
+            <Button
+              type="submit"
+              disabled={
+                createMutation.isPending ||
+                (acquisitionPayload.enabled && !acquisitionPayload.bearerId) ||
+                (monthlyPayload.enabled && !monthlyPayload.bearerId)
+              }
+            >
               {createMutation.isPending ? 'Création...' : 'Créer l\'équipement'}
             </Button>
           </div>

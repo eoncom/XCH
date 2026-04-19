@@ -9,13 +9,18 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead, RequireManage } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
+import { ExpensesService } from '../expenses/expenses.service';
+import { BadRequestException } from '@nestjs/common';
 
 @ApiTags('connectivity')
 @Controller('connectivity')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ConnectivityController {
-  constructor(private readonly service: ConnectivityService) {}
+  constructor(
+    private readonly service: ConnectivityService,
+    private readonly expensesService: ExpensesService,
+  ) {}
 
   @Post()
   @RequireWrite()
@@ -61,5 +66,23 @@ export class ConnectivityController {
     @Request() req: AuthRequest,
   ) {
     return this.service.generateExpense(req.user.tenantId, id, body, req.user.id);
+  }
+
+  /**
+   * Resync the linked Expense's totalAmount from the current monthlyPrice
+   * (frozen-by-default policy, ADR-011 §2). Returns { expense, before, after }.
+   */
+  @Patch(':id/resync-expense')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Resync linked expense from connectivity monthly price (ADR-011)' })
+  async resyncExpense(@Param('id') id: string, @Request() req: AuthRequest) {
+    const link = await this.service.findOne(req.user.tenantId, id);
+    if (!(link as any).expenseId) {
+      throw new BadRequestException('No expense linked to this connectivity link');
+    }
+    return this.expensesService.resyncExpense(req.user.tenantId, (link as any).expenseId, {
+      kind: 'connectivity',
+      sourceId: id,
+    });
   }
 }

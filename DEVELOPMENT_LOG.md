@@ -5639,3 +5639,24 @@ chore(frontend): P3 — cleanup legacy types + staleTime + UserWithDelegations
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-20
+
+**Date:** 2026-04-20 01:11:57
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 8
+- Frontend files modified: 6
+
+**Commit message:**
+```
+docs(adr): ADR-011 — inline expense creation from asset/connectivity/task
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

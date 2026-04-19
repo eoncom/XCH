@@ -506,4 +506,196 @@ export class ExpensesService {
       throw new BadRequestException(`Contact "${contact.name}" is not a PROVIDER type`);
     }
   }
+
+  // ============================================================================
+  // ADR-011 — Inline expense generation from Asset / Task
+  // ============================================================================
+
+  /**
+   * Generate an Expense from an Asset (purchase or monthly rental).
+   * - kind=ACQUISITION → uses asset.acquisitionPrice (or AssetModel.acquisitionPrice)
+   *   produces ONE_TIME / EQUIPMENT
+   * - kind=MONTHLY → uses asset.monthlyPrice (or AssetModel.monthlyPrice)
+   *   produces MONTHLY / LICENSE
+   * Multiple expenses can be linked to the same asset (1:N via Expense.assetId).
+   */
+  async createFromAsset(
+    tenantId: string,
+    assetId: string,
+    body: { kind: 'ACQUISITION' | 'MONTHLY'; bearerId: string; label?: string; type?: string; fallbackDelegationId?: string },
+    createdBy: string,
+  ) {
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+      include: {
+        site: { select: { id: true, name: true, delegationId: true } },
+        assetModel: { select: { acquisitionPrice: true, monthlyPrice: true, currency: true } },
+      },
+    });
+    if (!asset) throw new NotFoundException('Asset not found');
+
+    const amount =
+      body.kind === 'ACQUISITION'
+        ? Number((asset as any).acquisitionPrice ?? asset.assetModel?.acquisitionPrice ?? 0)
+        : Number((asset as any).monthlyPrice ?? asset.assetModel?.monthlyPrice ?? 0);
+    if (!amount || amount <= 0) {
+      throw new BadRequestException(
+        `No ${body.kind === 'ACQUISITION' ? 'acquisition' : 'monthly'} price set on asset or asset model`,
+      );
+    }
+
+    // Target delegation: site.delegationId or caller's active delegation (R1)
+    const delegationId = asset.site?.delegationId ?? body.fallbackDelegationId ?? null;
+    if (!delegationId) {
+      throw new BadRequestException(
+        'No target delegation: asset has no site and no active delegation in the request',
+      );
+    }
+
+    const bearer = await this.prisma.billingEntity.findFirst({
+      where: { id: body.bearerId, tenantId },
+    });
+    if (!bearer) throw new NotFoundException('Bearer billing entity not found');
+
+    const defaultType = body.kind === 'ACQUISITION' ? 'EQUIPMENT' : 'LICENSE';
+    const defaultLabel =
+      body.kind === 'ACQUISITION'
+        ? `Achat ${asset.name || asset.serialNumber || asset.type}`
+        : `Location ${asset.name || asset.serialNumber || asset.type}`;
+
+    return this.prisma.expense.create({
+      data: {
+        tenantId,
+        label: body.label || defaultLabel,
+        type: (body.type || defaultType) as any,
+        totalAmount: amount,
+        currency: (asset as any).currency || asset.assetModel?.currency || 'EUR',
+        frequency: (body.kind === 'ACQUISITION' ? 'ONE_TIME' : 'MONTHLY') as any,
+        dateIncurred: (asset as any).acquisitionDate || new Date(),
+        dateStart: body.kind === 'MONTHLY' ? ((asset as any).acquisitionDate || new Date()) : null,
+        bearerId: bearer.id,
+        delegationId,
+        siteId: asset.site?.id ?? null,
+        assetId: asset.id,
+        createdBy,
+      } as any,
+      include: EXPENSE_INCLUDE,
+    });
+  }
+
+  /**
+   * Generate an Expense from a completed Task (prestation prestataire).
+   * 1:1 — refuses if task already has expenseId.
+   * Uses task.actualCost first, falls back to task.estimatedCost if useEstimated=true.
+   */
+  async createFromTask(
+    tenantId: string,
+    taskId: string,
+    body: { bearerId: string; label?: string; useEstimated?: boolean; fallbackDelegationId?: string },
+    createdBy: string,
+  ) {
+    const task = await this.prisma.task.findFirst({
+      where: { id: taskId, tenantId },
+      include: {
+        site: { select: { id: true, name: true, delegationId: true } },
+      },
+    });
+    if (!task) throw new NotFoundException('Task not found');
+    if ((task as any).expenseId) {
+      throw new BadRequestException('An expense is already linked to this task');
+    }
+
+    const amountSrc = body.useEstimated
+      ? task.estimatedCost ?? task.actualCost
+      : task.actualCost ?? task.estimatedCost;
+    const amount = amountSrc ? Number(amountSrc) : 0;
+    if (!amount || amount <= 0) {
+      throw new BadRequestException('Task has no actualCost nor estimatedCost set');
+    }
+
+    const delegationId = task.site?.delegationId ?? body.fallbackDelegationId ?? null;
+    if (!delegationId) {
+      throw new BadRequestException('No target delegation: task site missing and no active delegation');
+    }
+
+    const bearer = await this.prisma.billingEntity.findFirst({
+      where: { id: body.bearerId, tenantId },
+    });
+    if (!bearer) throw new NotFoundException('Bearer billing entity not found');
+
+    const defaultLabel = `Prestation ${task.title}`;
+
+    const expense = await this.prisma.expense.create({
+      data: {
+        tenantId,
+        label: body.label || defaultLabel,
+        type: 'SERVICE' as any,
+        totalAmount: amount,
+        currency: task.costCurrency || 'EUR',
+        frequency: 'ONE_TIME' as any,
+        dateIncurred: task.completedAt || new Date(),
+        bearerId: bearer.id,
+        delegationId,
+        siteId: task.site?.id ?? null,
+        createdBy,
+      } as any,
+      include: EXPENSE_INCLUDE,
+    });
+
+    await this.prisma.task.update({
+      where: { id: taskId },
+      data: { expenseId: expense.id },
+    });
+
+    return expense;
+  }
+
+  /**
+   * Resync the totalAmount of an Expense from its source (Asset / Task /
+   * ConnectivityLink). Frozen-by-default policy: this is the explicit
+   * opt-in to update an Expense after the source price changed.
+   * Returns the updated Expense + a `before/after` diff for the dialog.
+   */
+  async resyncExpense(
+    tenantId: string,
+    expenseId: string,
+    source: { kind: 'asset' | 'task' | 'connectivity'; sourceId: string; assetExpenseKind?: 'ACQUISITION' | 'MONTHLY' },
+  ) {
+    const expense = await this.prisma.expense.findFirst({ where: { id: expenseId, tenantId } });
+    if (!expense) throw new NotFoundException('Expense not found');
+
+    let newAmount: number | null = null;
+    if (source.kind === 'asset') {
+      const asset = await this.prisma.asset.findFirst({
+        where: { id: source.sourceId, tenantId },
+        include: { assetModel: { select: { acquisitionPrice: true, monthlyPrice: true } } },
+      });
+      if (!asset) throw new NotFoundException('Asset not found');
+      newAmount =
+        source.assetExpenseKind === 'MONTHLY'
+          ? Number((asset as any).monthlyPrice ?? asset.assetModel?.monthlyPrice ?? 0)
+          : Number((asset as any).acquisitionPrice ?? asset.assetModel?.acquisitionPrice ?? 0);
+    } else if (source.kind === 'task') {
+      const task = await this.prisma.task.findFirst({ where: { id: source.sourceId, tenantId } });
+      if (!task) throw new NotFoundException('Task not found');
+      newAmount = Number(task.actualCost ?? task.estimatedCost ?? 0);
+    } else if (source.kind === 'connectivity') {
+      const link = await this.prisma.connectivityLink.findFirst({ where: { id: source.sourceId, tenantId } });
+      if (!link) throw new NotFoundException('ConnectivityLink not found');
+      newAmount = Number(link.monthlyPrice ?? 0);
+    }
+
+    if (!newAmount || newAmount <= 0) {
+      throw new BadRequestException('Source has no usable price');
+    }
+
+    const before = Number(expense.totalAmount);
+    const updated = await this.prisma.expense.update({
+      where: { id: expenseId },
+      data: { totalAmount: newAmount },
+      include: EXPENSE_INCLUDE,
+    });
+
+    return { expense: updated, before, after: newAmount };
+  }
 }

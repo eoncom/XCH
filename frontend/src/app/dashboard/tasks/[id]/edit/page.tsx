@@ -25,6 +25,10 @@ import { usersApi } from '@/lib/api/users';
 import { ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
 import type { Task, TaskStatus, TaskPriority, Site, Asset, User, UpdateTaskDto } from '@/types';
+import { GenerateExpenseToggle, type GenerateExpensePayload } from '@/components/expenses/GenerateExpenseToggle';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useState } from 'react';
+import { showToast } from '@/lib/toast';
 
 const taskStatusLabels: Record<TaskStatus, string> = {
   TODO: 'À faire',
@@ -126,13 +130,33 @@ export default function EditTaskPage() {
       : undefined,
   });
 
+  const { canWrite } = usePermissions();
+  // ADR-011: Task → Expense (1:1). Toggle is shown only when the task has no
+  // expense linked AND a cost is set (estimatedCost or actualCost).
+  const [expensePayload, setExpensePayload] = useState<GenerateExpensePayload>({
+    enabled: false, bearerId: '', label: '',
+  });
+
   const updateMutation = useMutation({
     mutationFn: (data: UpdateTaskDto) => tasksApi.update(taskId, data),
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       queryClient.invalidateQueries({ queryKey: ['task', taskId] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       if (result.siteId) {
         queryClient.invalidateQueries({ queryKey: ['sites', result.siteId] });
+      }
+      // Chain inline expense generation (ADR-011) — non-fatal on failure.
+      if (expensePayload.enabled && expensePayload.bearerId && !(task as any)?.expenseId) {
+        try {
+          await tasksApi.generateExpense(taskId, {
+            bearerId: expensePayload.bearerId,
+            label: expensePayload.label || undefined,
+          });
+          showToast.success('Dépense de prestation créée');
+          queryClient.invalidateQueries({ queryKey: ['expenses'] });
+        } catch (e: any) {
+          showToast.error(`Dépense : ${e?.message || 'erreur'}`);
+        }
       }
       router.push(`/dashboard/tasks/${taskId}`);
     },
@@ -294,6 +318,29 @@ export default function EditTaskPage() {
           </CardContent>
         </Card>
 
+        {/* ADR-011 — generate Expense from this task. Visible only when no
+            expense is already linked AND a cost is set. Toggle is auto pre-checked. */}
+        {!(task as any)?.expenseId && (Number(watch('actualCost')) > 0 || Number(watch('estimatedCost')) > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Dépense liée (optionnel)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <GenerateExpenseToggle
+                title="Dépense de prestation"
+                helper="Crée une dépense ONE_TIME SERVICE à partir du coût réel (ou estimé si non saisi)."
+                defaultLabel={`Prestation ${watch('title') || 'tâche'}`}
+                defaultAmount={Number(watch('actualCost')) > 0 ? Number(watch('actualCost')) : Number(watch('estimatedCost')) || 0}
+                currency={watch('costCurrency') || 'EUR'}
+                typeBadge="SERVICE"
+                frequencyBadge="ONE_TIME"
+                canWrite={canWrite}
+                onChange={setExpensePayload}
+              />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Actions */}
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -302,7 +349,10 @@ export default function EditTaskPage() {
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => router.push(`/dashboard/tasks/${taskId}`)}>Annuler</Button>
-            <Button type="submit" disabled={updateMutation.isPending}>
+            <Button
+              type="submit"
+              disabled={updateMutation.isPending || (expensePayload.enabled && !expensePayload.bearerId)}
+            >
               {updateMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
             </Button>
           </div>

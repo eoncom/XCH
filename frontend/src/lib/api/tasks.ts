@@ -83,4 +83,14 @@ export const tasksApi = {
 
   deleteComment: (id: string, commentId: string) =>
     apiClient.delete(`/api/tasks/${id}/comments/${commentId}`),
+
+  // ADR-011 — inline expense generation
+  generateExpense: (id: string, body: { bearerId: string; label?: string; useEstimated?: boolean }) =>
+    apiClient.post<any>(`/api/tasks/${id}/generate-expense`, body),
+
+  resyncExpense: (id: string) =>
+    apiClient.patch<{ expense: any; before: number; after: number }>(
+      `/api/tasks/${id}/resync-expense`,
+      {},
+    ),
 };
