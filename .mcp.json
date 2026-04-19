@@ -9,7 +9,8 @@
         "@modelcontextprotocol/server-memory"
       ],
       "env": {
-        "MEMORY_FILE_PATH": ".claude/memory.jsonl"
+        "_comment": "@modelcontextprotocol/server-memory resolves non-absolute MEMORY_FILE_PATH relative to its own dist folder in npm-cache, NOT to process.cwd(). An absolute path is therefore required. Windows dev machines use the line below; Linux/Mac devs should replace with their own absolute path pointing at <repo-root>/.claude/memory.jsonl. The memory file is git-ignored — one file per developer machine.",
+        "MEMORY_FILE_PATH": "C:\\xampp\\htdocs\\XCH\\.claude\\memory.jsonl"
       }
     },
     "code-graph": {
