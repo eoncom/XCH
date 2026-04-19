@@ -40,7 +40,6 @@ model Tenant {
 
   // Relations
   users               User[]
-  authProviders       AuthProvider[]
   delegations         Delegation[]
   sites               Site[]
   assets              Asset[]
@@ -154,42 +153,12 @@ model User {
   @@map("users")
 }
 
-enum AuthProviderType {
-  OIDC
-  SAML
-}
-
-model AuthProvider {
-  id       String           @id @default(cuid())
-  tenantId String
-  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  type     AuthProviderType
-  name     String
-  enabled  Boolean          @default(false)
-
-  // OIDC config
-  issuer       String?
-  clientId     String?
-  clientSecret String? // Encrypted at-rest
-  scopes       String[] @default(["openid", "profile", "email"])
-
-  // SAML config (future)
-  samlConfig Json? @db.JsonB
-
-  // Attribute mapping
-  attributeMap Json? @db.JsonB
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([tenantId, type, name])
-  @@index([tenantId, enabled])
-  @@map("auth_providers")
-}
-
 // ============================================================================
 // ORGANISATION (Delegation → Site) — Delegation-first model
 // ============================================================================
+// Note: SSO configuration lives in Tenant.config.sso (JSON). The AuthProvider
+// model + AuthProviderType enum were removed in v1.4.x (never exposed by any
+// controller, fully covered by the JSON config path).
 
 model Delegation {
   id       String @id @default(cuid())

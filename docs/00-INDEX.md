@@ -176,11 +176,11 @@
 **📅 Date:** 2024-12-XX
 **✅ Statut:** Accepté
 
-#### ADR-004: RBAC Casbin
+#### ADR-004: RBAC Casbin (⚠️ Superseded by ADR-009)
 **📍 Chemin:** [`docs/decisions/adr-004-rbac-casbin.md`](docs/decisions/adr-004-rbac-casbin.md)
 **📝 Décision:** Gestion des permissions avec Casbin (4 rôles)
 **📅 Date:** 2024-12-XX
-**✅ Statut:** Accepté
+**⛔ Statut:** Obsolète — Casbin a été retiré en v1.3 (cf. ADR-009 `delegation-first-model`). Le module `casbin/`, la table `casbinRule` et l'enum `UserRole` ne font plus partie du code. Document conservé pour historique uniquement.
 
 #### ADR-005: CI/CD GitLab
 **📍 Chemin:** [`docs/decisions/adr-005-cicd-gitlab.md`](docs/decisions/adr-005-cicd-gitlab.md)

@@ -661,23 +661,16 @@ model AuditLog {
 }
 ```
 
-### Casbin (Permissions)
+### Autorisation (delegation-first)
 
-```prisma
-// Table gérée par Casbin TypeORM adapter
-model CasbinRule {
-  id    Int     @id @default(autoincrement())
-  ptype String  // 'p' (policy) ou 'g' (grouping)
-  v0    String? // subject (role ou userId)
-  v1    String? // object (resource)
-  v2    String? // action
-  v3    String? // tenant
-  v4    String?
-  v5    String?
+> ⚠️ **Obsolète :** le modèle Casbin (`model CasbinRule`, 4 rôles `ADMIN/MANAGER/TECHNICIEN/VIEWER`, 83 policies) décrit dans les anciennes versions de ce document a été **retiré en v1.3** (cf. [ADR-009 delegation-first](../decisions/adr-009-delegation-first-model.md)).
 
-  @@index([ptype, v0, v1, v2, v3])
-}
-```
+L'autorisation repose désormais sur trois tables :
+- `UserDelegation(userId, delegationId, right: MANAGE|WRITE|READ)` — source de vérité principale
+- `User.isSuperAdmin Boolean` — flag tenant-wide
+- `AccessOverride(userId, delegationId, siteId?, type: ALLOW|DENY, permission?)` — surcharges fines par site
+
+Voir [AUTH_MODEL.md](./AUTH_MODEL.md) pour la spec complète.
 
 ---
 
@@ -705,8 +698,9 @@ npx prisma migrate dev --name init
 # Appliquer production
 npx prisma migrate deploy
 
-# Seed initial (tenant, admin user, policies Casbin)
-npx prisma db seed
+# Seed initial (tenant, admin user, 3 délégations démo, sites, assets, etc.)
+# Déclenché par POST /api/setup/initialize { loadDemoData: true }
+# ou programmatiquement via SeedService (modules/seed/seed.service.ts)
 ```
 
 ---

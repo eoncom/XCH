@@ -70,15 +70,6 @@ export class PermissionGuard implements CanActivate {
 
     // FAIL-CLOSED: no decorator on a non-public, non-skip route → deny
     if (!requiredRight) {
-      // Check for legacy @Resource/@Action decorators (transitional support)
-      const legacyResource = this.reflector.get<string>('resource', context.getHandler());
-      const legacyAction = this.reflector.get<string>('action', context.getHandler());
-
-      if (legacyResource && legacyAction) {
-        // Transitional: map legacy action to right
-        return this.handleLegacy(request, legacyAction);
-      }
-
       this.logger.warn(
         `FAIL-CLOSED: No permission decorator on ${request.method} ${request.url} — access denied`,
       );
@@ -101,40 +92,6 @@ export class PermissionGuard implements CanActivate {
     }
 
     // Check: does localRole satisfy requiredRight?
-    return rightSatisfies(localRole, requiredRight);
-  }
-
-  /**
-   * Transitional handler for legacy @Resource/@Action decorators.
-   * Maps old action verbs to new rights during migration (Lot 3).
-   * Will be removed after all controllers are migrated.
-   */
-  private handleLegacy(request: any, action: string): boolean {
-    const user = request.user;
-    if (!user) return false;
-    if (user.isSuperAdmin) return true;
-
-    const localRole = request.localRole as string | undefined;
-    if (!localRole) return false;
-
-    // Map legacy actions to required rights
-    let requiredRight: RequiredRight;
-    switch (action) {
-      case 'create':
-      case 'update':
-      case 'delete':
-        requiredRight = 'WRITE';
-        break;
-      case 'read':
-        requiredRight = 'READ';
-        break;
-      case 'manage':
-        requiredRight = 'MANAGE';
-        break;
-      default:
-        requiredRight = 'WRITE';
-    }
-
     return rightSatisfies(localRole, requiredRight);
   }
 }

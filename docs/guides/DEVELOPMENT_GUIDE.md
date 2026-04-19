@@ -3,6 +3,16 @@
 **Date** : 2025-12-31
 **Objectif** : Implémenter les 7 modules core de l'application
 
+> ⚠️ **Document historique — partiellement obsolète (v1.4.x).**
+>
+> Ce guide date du démarrage projet (décembre 2025, pré-MVP). Il décrit l'architecture initiale — dont un module `casbin/` avec `@Resource/@Action` et 4 rôles `ADMIN/MANAGER/TECHNICIEN/VIEWER` — qui a été entièrement remplacé.
+>
+> Pour l'autorisation actuelle, voir :
+> - [AUTH_MODEL.md](../architecture/AUTH_MODEL.md) — modèle delegation-first v2 (Casbin retiré v1.3)
+> - [ADR-009 delegation-first](../decisions/adr-009-delegation-first-model.md)
+>
+> La structure `backend/src/modules/` a également évolué : on compte aujourd'hui 27 modules NestJS (cf. [PROJECT_STATUS.md](../status/PROJECT_STATUS.md)), pas 7.
+
 ---
 
 ## 📁 STRUCTURE CRÉÉE

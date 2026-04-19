@@ -120,9 +120,11 @@ else:
 ```
 
 Fichiers clés :
-- `backend/src/modules/auth/permission.guard.ts` — la garde
-- `backend/src/common/services/permission.service.ts` — résolution effective
-- `backend/src/common/decorators/require-right.decorator.ts` — les décorateurs
+- `backend/src/common/guards/permission.guard.ts` — la garde (APP_GUARD global)
+- `backend/src/common/guards/delegation.guard.ts` — lit `X-Delegation-Id` et pose `request.localRole`
+- `backend/src/common/services/permission.service.ts` — résolution effective (site + AccessOverride)
+- `backend/src/common/decorators/require-right.decorator.ts` — les décorateurs `@RequireRead/Write/Manage`
+- `backend/src/common/decorators/skip-delegation.decorator.ts` — `@SkipDelegation`
 
 ---
 
@@ -171,10 +173,10 @@ Matrice de visibilité des onglets de `/dashboard/settings` par rôle effectif :
 | Sécurité | Tous | `/auth/2fa/*`, `/users/me/change-password` | 👤 personnel |
 | Apparence | Tous (deux sections) | `GET /users/me/effective-appearance`, `PATCH /users/me/appearance` (personnel) + `PATCH /tenants/appearance` (super admin) | 👤 personnel + 🌐 tenant (super admin) |
 | **Ma délégation** | `MANAGE` sur la délégation active (non super admin) | `PATCH /delegations/:id`, `POST /users`, `/user-delegations` | 🏢 délégation |
-| Notifications | `MANAGE` sur délégation OU super admin | `/notification-configs/*` | 🏢 délégation |
+| Notifications | `MANAGE` sur délégation OU super admin | `/notifications/config`, `/notifications/config/resolved`, `/notifications/test`, `/notifications/logs` (délégation) + `/notifications/configs` (super admin overview) | 🏢 délégation |
 | **Structure** | 🛡 SuperAdmin uniquement | `POST /delegations`, `DELETE /delegations/:id` | 🌐 tenant |
-| **Tenant** | 🛡 SuperAdmin | `PATCH /tenants/current`, `/tenants/current/config` | 🌐 tenant |
-| **SSO** | 🛡 SuperAdmin | `PATCH /tenants/sso-config`, `/auth-providers/*` | 🌐 tenant |
+| **Tenant** | 🛡 SuperAdmin | `PATCH /tenants/current` (+ `GET /tenants/current/config`) | 🌐 tenant |
+| **SSO** | 🛡 SuperAdmin | `PATCH /tenants/sso-config` (config SSO sous `Tenant.config.sso`, pas de model `AuthProvider` exposé) | 🌐 tenant |
 | **Modules** | 🛡 SuperAdmin | `PATCH /tenants/modules` | 🌐 tenant |
 | **Types** (EnumLabel) | 🛡 SuperAdmin | `POST /admin/enum-labels`, `DELETE /admin/enum-labels/:id` | 🌐 tenant |
 | **Modèles** (AssetModel) | 🛡 SuperAdmin | `POST /asset-models`, `PATCH /asset-models/:id`, `DELETE /asset-models/:id` | 🌐 tenant (catalogue) |
@@ -212,6 +214,7 @@ Les onglets **globaux** sont masqués aux utilisateurs `MANAGE` pour ne laisser 
 - **v1.2** : delegation-first, introduction de `UserDelegation` + `AccessOverride`, `User.role` marqué deprecated.
 - **v1.3** : Casbin définitivement retiré (module `casbin/` supprimé, `casbinRule` table vide), `PermissionGuard` fail-closed, décorateurs obligatoires.
 - **v1.4** : corrections post-audit phase 4 — `GET /users` scope = union des `MANAGE` du caller (plus la délégation active uniquement) + `@RequireManage()` (plus `@RequireRead()`) ; `GET /audit` = super admin only (`@SkipDelegation + @RequireManage + isSuperAdmin`) ; `GET /delegations` filtré par `UserDelegation` du caller (plus de fuite des délégations système pour les MANAGE). Nouveau flux Apparence (ADR-010) — deux niveaux tenant/utilisateur avec verrou admin.
+- **v1.4.x** : audit de cohérence phase 5 — ajout des décorateurs manquants sur `notification.controller.ts` (8 endpoints étaient sans `@Require*`/`@SkipDelegation` donc fail-closed pour tout non-super-admin), `@Public()` sur le webhook monitoring externe, `@RequireWrite()` → `@RequireManage()` sur `POST/PATCH/DELETE /user-delegations/*` et `PATCH /delegations/:id` (prévention d'élévation de privilège local). OIDC strategy refondue : le mapping SSO produit maintenant un `DelegationRight` (MANAGE/WRITE/READ) normalisé au lieu d'un string `role` qui était silencieusement ignoré par `syncSsoDelegations`. Model Prisma `AuthProvider` + enum `AuthProviderType` retirés (dead model, SSO piloté par `Tenant.config.sso`).
 
 ---
 
