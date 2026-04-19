@@ -115,6 +115,10 @@ export const assetModelsApi = {
   importVendor: (vendorKey: string) =>
     apiClient.post<ImportVendorResult>(`/api/asset-models/import/${vendorKey}`, {}),
 
+  /** Upload a raw catalog JSON (generic or Fortinet-native). */
+  uploadCatalog: (catalog: Record<string, any>) =>
+    apiClient.post<ImportVendorResult>('/api/asset-models/import/upload', catalog),
+
   /** @deprecated use importVendor('fortinet') */
   importFortinet: () =>
     apiClient.post<ImportVendorResult>('/api/asset-models/import/fortinet', {}),

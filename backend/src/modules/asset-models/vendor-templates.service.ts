@@ -14,6 +14,45 @@ export interface VendorCatalogDescriptor {
 }
 
 /**
+ * Normalised single-model payload for the upload import (generic schema).
+ * One row in the uploaded catalog equals one AssetModel.
+ */
+export interface AssetModelTemplateItem {
+  name: string;
+  manufacturer?: string;
+  type: string; // AssetType enum value (WIFI_AP, SWITCH, FIREWALL, PRINTER, …)
+  powerConsumption?: number | null;
+  weight?: number | null;
+  defaultUHeight?: number | null;
+  acquisitionPrice?: number | null;
+  monthlyPrice?: number | null;
+  currency?: string | null;
+  pricingMode?: string | null;
+  wifiCoverageRadius?: number | null;
+  wifiFrequency?: string | null;
+  wifiAntennaType?: string | null;
+  wifiTxPowerDbm?: number | null;
+  notes?: string | null;
+}
+
+/**
+ * Shape accepted by the upload endpoint. Either:
+ *   - Fortinet-native (`fortiap`, `fortiswitch`, `fortigate`), auto-detected, OR
+ *   - Generic: `{ vendor, items: AssetModelTemplateItem[] }`.
+ */
+export interface UploadedCatalog {
+  vendor?: string;
+  version?: string;
+  sources?: string[];
+  items?: AssetModelTemplateItem[];
+  // Fortinet-native escape hatch
+  fortiap?: any[];
+  fortiswitch?: any[];
+  fortigate?: any[];
+  metadata?: any;
+}
+
+/**
  * Central registry of bundled vendor catalogs. New vendors (Cisco, Aruba,
  * Meraki, HP, Yealink, Starlink, …) are added by dropping their JSON in
  * `./templates/` and registering here. The `planned` entries surface in
@@ -134,6 +173,186 @@ export class VendorTemplatesService {
     return Object.values(VENDOR_REGISTRY)
       .filter((v) => v.status === 'available')
       .map((v) => v.key);
+  }
+
+  /**
+   * Import an operator-uploaded catalog JSON. The payload is either:
+   *   - A Fortinet-native bundle (has `fortiap`/`fortiswitch`/`fortigate` arrays) —
+   *     reuses the existing Fortinet mapping so a freshly-crawled Fortinet dump
+   *     can be re-imported without code changes.
+   *   - A generic bundle `{ vendor?, items: AssetModelTemplateItem[] }` — each
+   *     item becomes one AssetModel; `manufacturer` is derived from the payload
+   *     or per-item.
+   *
+   * The endpoint is super-admin only (enforced by the controller). Here we
+   * focus on validation + mapping. Throws 400 for malformed payloads.
+   */
+  async importCustomCatalog(
+    tenantId: string,
+    catalog: UploadedCatalog,
+  ): Promise<{
+    vendor: string;
+    version: string;
+    created: number;
+    updated: number;
+    skipped: number;
+    errors: Array<{ model: string; message: string }>;
+    sources: string[];
+  }> {
+    // Shape-detect — Fortinet-native wins if present
+    const hasFortinetShape =
+      Array.isArray(catalog?.fortiap) ||
+      Array.isArray(catalog?.fortiswitch) ||
+      Array.isArray(catalog?.fortigate);
+
+    if (hasFortinetShape) {
+      // Reuse the bundled Fortinet routine but with the uploaded payload.
+      // We monkey-assign temporarily — clean but isolated to this call.
+      return this.importFortinetLike(tenantId, catalog);
+    }
+
+    if (!Array.isArray(catalog?.items) || catalog.items.length === 0) {
+      throw new BadRequestException(
+        'Payload invalide : fournissez soit un catalogue Fortinet-native (fortiap/fortiswitch/fortigate), soit un catalogue générique avec `items: [...]`.',
+      );
+    }
+
+    const counters = { created: 0, updated: 0, skipped: 0 };
+    const errors: Array<{ model: string; message: string }> = [];
+    const vendorLabel = catalog.vendor || inferVendor(catalog.items);
+
+    for (const item of catalog.items) {
+      try {
+        if (!item?.name || typeof item.name !== 'string') {
+          throw new Error('champ `name` manquant ou invalide');
+        }
+        if (!item?.type || typeof item.type !== 'string') {
+          throw new Error('champ `type` manquant ou invalide');
+        }
+        const touched = await this.upsertAssetModel(tenantId, {
+          name: item.name,
+          manufacturer: item.manufacturer || vendorLabel || 'Inconnu',
+          type: item.type,
+          powerConsumption: num(item.powerConsumption),
+          weight: num(item.weight),
+          defaultUHeight: num(item.defaultUHeight) !== null
+            ? Math.round(num(item.defaultUHeight)!)
+            : null,
+          wifiCoverageRadius: num(item.wifiCoverageRadius),
+          wifiFrequency: item.wifiFrequency || null,
+          wifiAntennaType: item.wifiAntennaType || null,
+          wifiTxPowerDbm: num(item.wifiTxPowerDbm) !== null
+            ? Math.round(num(item.wifiTxPowerDbm)!)
+            : null,
+          notes: item.notes || genericNotes(vendorLabel, item, catalog.sources),
+        });
+        counters[touched]++;
+      } catch (err: any) {
+        errors.push({ model: item?.name || '<sans nom>', message: err?.message || String(err) });
+        counters.skipped++;
+      }
+    }
+
+    this.logger.log(
+      `Custom catalog import "${vendorLabel}" for tenant ${tenantId}: created=${counters.created} updated=${counters.updated} skipped=${counters.skipped} errors=${errors.length}`,
+    );
+
+    return {
+      vendor: vendorLabel || 'Custom',
+      version: catalog.version || 'unknown',
+      ...counters,
+      errors,
+      sources: catalog.sources || [],
+    };
+  }
+
+  /**
+   * Shared routine for Fortinet-shape payloads (bundled OR uploaded).
+   * Keeping it private so `importFortinet()` (the no-arg bundled variant) and
+   * `importCustomCatalog()` (the upload) both flow through one code path.
+   */
+  private async importFortinetLike(
+    tenantId: string,
+    cat: any,
+  ): Promise<{
+    vendor: string;
+    version: string;
+    created: number;
+    updated: number;
+    skipped: number;
+    errors: Array<{ model: string; message: string }>;
+    sources: string[];
+  }> {
+    const counters = { created: 0, updated: 0, skipped: 0 };
+    const errors: Array<{ model: string; message: string }> = [];
+    const sources = cat?.metadata?.sources || cat?.sources || [];
+
+    for (const ap of cat.fortiap || []) {
+      try {
+        const touched = await this.upsertAssetModel(tenantId, {
+          name: ap.model,
+          manufacturer: 'Fortinet',
+          type: 'WIFI_AP',
+          powerConsumption: num(ap?.power?.consumption_max_w),
+          weight: num(ap?.physical?.weight_kg),
+          wifiCoverageRadius:
+            num(ap?.wifi?.coverage_radius_m?.chantier_estime) ??
+            num(ap?.wifi?.coverage_radius_m?.indoor_standard),
+          wifiFrequency: mapFrequency(ap?.wifi?.frequency_bands_ghz),
+          wifiAntennaType: mapAntenna(ap?.wifi?.antenna?.type),
+          wifiTxPowerDbm: pickMaxTxPower(ap?.wifi?.tx_power_dbm_max),
+          notes: fortiapNotes(ap, sources),
+        });
+        counters[touched]++;
+      } catch (err: any) {
+        errors.push({ model: ap?.model || '<ap>', message: err?.message || String(err) });
+        counters.skipped++;
+      }
+    }
+    for (const sw of cat.fortiswitch || []) {
+      try {
+        const touched = await this.upsertAssetModel(tenantId, {
+          name: sw.model,
+          manufacturer: 'Fortinet',
+          type: 'SWITCH',
+          powerConsumption:
+            num(sw?.power?.consumption_max_w) ?? num(sw?.power?.consumption_avg_w),
+          weight: num(sw?.physical?.weight_kg),
+          defaultUHeight: detectUHeight(sw?.physical?.form_factor),
+          notes: fortiswitchNotes(sw, sources),
+        });
+        counters[touched]++;
+      } catch (err: any) {
+        errors.push({ model: sw?.model || '<sw>', message: err?.message || String(err) });
+        counters.skipped++;
+      }
+    }
+    for (const fw of cat.fortigate || []) {
+      try {
+        const touched = await this.upsertAssetModel(tenantId, {
+          name: fw.model,
+          manufacturer: 'Fortinet',
+          type: 'FIREWALL',
+          powerConsumption:
+            num(fw?.power?.consumption_max_w) ?? num(fw?.power?.consumption_avg_w),
+          weight: num(fw?.physical?.weight_kg),
+          defaultUHeight: detectUHeight(fw?.physical?.form_factor),
+          notes: fortigateNotes(fw, sources),
+        });
+        counters[touched]++;
+      } catch (err: any) {
+        errors.push({ model: fw?.model || '<fw>', message: err?.message || String(err) });
+        counters.skipped++;
+      }
+    }
+
+    return {
+      vendor: 'Fortinet',
+      version: cat?.metadata?.version || cat?.version || 'unknown',
+      ...counters,
+      errors,
+      sources,
+    };
   }
 
   /**
@@ -407,6 +626,44 @@ function fortiswitchNotes(sw: any, sources?: string[]): string {
   if (sw.note) lines.push(`- ℹ ${sw.note}`);
   const src = (sources || []).find((s: string) => /fortiswitch/i.test(s));
   if (src) lines.push(`- Source: ${src}`);
+  return lines.join('\n');
+}
+
+/**
+ * Infer a vendor label from a generic payload by majority vote of items[].manufacturer.
+ * Fallback to "Catalogue personnalisé" when no manufacturer can be derived.
+ */
+function inferVendor(items: AssetModelTemplateItem[]): string {
+  const counts = new Map<string, number>();
+  for (const it of items) {
+    const m = (it?.manufacturer || '').trim();
+    if (m) counts.set(m, (counts.get(m) || 0) + 1);
+  }
+  if (counts.size === 0) return 'Catalogue personnalisé';
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+/**
+ * Build a default notes block for generic-catalog items that didn't include their own.
+ */
+function genericNotes(
+  vendor: string,
+  item: AssetModelTemplateItem,
+  sources?: string[],
+): string {
+  const lines: string[] = [];
+  lines.push(`**${vendor || item.manufacturer || 'Catalogue'}** · ${item.name}`);
+  if (item.type) lines.push(`- Type: ${item.type}`);
+  if (item.weight != null) lines.push(`- Poids: ${item.weight} kg`);
+  if (item.powerConsumption != null) lines.push(`- Consommation: ${item.powerConsumption} W`);
+  if (item.wifiCoverageRadius != null) {
+    lines.push(`- Couverture WiFi (rayon): ${item.wifiCoverageRadius} m`);
+  }
+  if (item.wifiFrequency) lines.push(`- Bandes: ${item.wifiFrequency}`);
+  if (sources?.length) {
+    const src = sources[0];
+    lines.push(`- Source: ${src}`);
+  }
   return lines.join('\n');
 }
 

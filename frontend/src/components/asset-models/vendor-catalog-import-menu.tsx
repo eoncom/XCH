@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,7 +12,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Database, Download, Loader2 } from 'lucide-react';
+import { Database, Download, Loader2, Upload, FileJson } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   assetModelsApi,
@@ -32,6 +32,8 @@ interface Props {
 export function VendorCatalogImportMenu({ onImported }: Props) {
   const [open, setOpen] = useState(false);
   const [running, setRunning] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   const { data: vendors = [], isLoading } = useQuery<VendorCatalogDescriptor[]>({
     queryKey: ['asset-models-import-vendors'],
@@ -39,6 +41,78 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
     enabled: open,
     staleTime: 5 * 60_000,
   });
+
+  /**
+   * Upload a JSON catalog chosen by the operator. Parses client-side for early
+   * validation + a preview count so the confirm dialog says something useful.
+   * Server re-validates + upserts idempotently.
+   */
+  const handleFileSelected = async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Fichier trop volumineux (10 Mo max).');
+      return;
+    }
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      toast.error('Impossible de lire le fichier.');
+      return;
+    }
+    let catalog: any;
+    try {
+      catalog = JSON.parse(text);
+    } catch {
+      toast.error('JSON invalide. Vérifiez la syntaxe.');
+      return;
+    }
+
+    // Client-side shape detection for the confirm dialog
+    const fortinetCount =
+      (catalog?.fortiap?.length || 0) +
+      (catalog?.fortiswitch?.length || 0) +
+      (catalog?.fortigate?.length || 0);
+    const genericCount = Array.isArray(catalog?.items) ? catalog.items.length : 0;
+    const total = fortinetCount || genericCount;
+    if (total === 0) {
+      toast.error(
+        "Aucun modèle détecté dans le fichier. Le JSON doit contenir soit `items: [...]`, soit des tableaux Fortinet (fortiap / fortiswitch / fortigate).",
+      );
+      return;
+    }
+    const vendorHint =
+      catalog?.vendor ||
+      (fortinetCount > 0 ? 'Fortinet' : 'Catalogue personnalisé');
+
+    const ok = confirm(
+      `Importer ${total} modèle(s) depuis ce fichier ?\n\n` +
+        `Fabricant détecté : ${vendorHint}.\n` +
+        `Les modèles existants portant le même nom seront mis à jour. Vos notes personnalisées sont préservées.`,
+    );
+    if (!ok) return;
+
+    setUploading(true);
+    const t = toast.loading(`Import du catalogue ${vendorHint}…`);
+    try {
+      const res = await assetModelsApi.uploadCatalog(catalog);
+      toast.success(
+        `${res.vendor} : ${res.created} créé(s), ${res.updated} mis à jour${res.skipped > 0 ? `, ${res.skipped} ignoré(s)` : ''}.`,
+        { id: t, duration: 8000 },
+      );
+      if (res.errors.length) {
+        toast.error(`${res.errors.length} erreur(s) — voir la console`, { duration: 6000 });
+        // eslint-disable-next-line no-console
+        console.table(res.errors);
+      }
+      onImported();
+      setOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Échec de l'import du fichier", { id: t });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const runImport = async (v: VendorCatalogDescriptor) => {
     const ok = confirm(
@@ -139,11 +213,71 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
           </div>
         )}
 
-        <p className="text-xs text-muted-foreground border-t pt-3">
-          Un fabricant manque&nbsp;? Déposez son catalogue JSON dans{' '}
-          <code className="text-[10.5px]">backend/src/modules/asset-models/templates/</code>{' '}
-          et inscrivez-le dans le registre du service <code>VendorTemplatesService</code>.
-        </p>
+        {/* Upload zone — operator-provided JSON catalog */}
+        <div className="border-t pt-3 space-y-2">
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+            <FileJson className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">Importer depuis un fichier JSON</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Votre fabricant n&apos;est pas dans la liste&nbsp;? Uploadez un catalogue{' '}
+                JSON (schéma générique <code>items: [...]</code> ou bundle Fortinet-native).
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Taille max&nbsp;: 10 Mo. Chaque item doit avoir au minimum <code>name</code> et <code>type</code>.
+              </p>
+            </div>
+            <Button
+              variant="default"
+              size="sm"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? (
+                <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Import…</>
+              ) : (
+                <><Upload className="h-3.5 w-3.5 mr-1.5" /> Choisir un fichier</>
+              )}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFileSelected(f);
+              }}
+            />
+          </div>
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer hover:text-foreground">Voir le schéma JSON attendu</summary>
+            <pre className="mt-2 p-2 bg-muted/50 rounded text-[10.5px] overflow-x-auto">{`{
+  "vendor": "Cisco",                 // optionnel, déduit sinon
+  "version": "1.0",
+  "sources": ["https://cisco.com/ds.pdf"],
+  "items": [
+    {
+      "name": "C9200-24T",           // OBLIGATOIRE
+      "manufacturer": "Cisco",
+      "type": "SWITCH",              // OBLIGATOIRE (WIFI_AP, SWITCH, FIREWALL, ...)
+      "powerConsumption": 54,        // Watts
+      "weight": 3.6,                 // kg
+      "defaultUHeight": 1,
+      "wifiCoverageRadius": 20,      // m, pour WIFI_AP uniquement
+      "wifiFrequency": "DUAL",       // 2.4GHz | 5GHz | 6GHz | DUAL | TRI
+      "wifiAntennaType": "OMNI",
+      "wifiTxPowerDbm": 23,
+      "notes": "Optionnel — sinon généré auto."
+    }
+  ]
+}`}</pre>
+            <p className="mt-2">
+              Les bundles Fortinet-native (avec <code>fortiap</code>/<code>fortiswitch</code>/<code>fortigate</code>){' '}
+              sont aussi acceptés directement.
+            </p>
+          </details>
+        </div>
       </DialogContent>
     </Dialog>
   );

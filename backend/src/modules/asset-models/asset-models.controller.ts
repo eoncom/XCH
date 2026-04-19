@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AssetModelsService } from './asset-models.service';
 import { VendorTemplatesService } from './vendor-templates.service';
 import { CreateAssetModelDto, UpdateAssetModelDto, FilterAssetModelDto } from './dto/create-asset-model.dto';
+import { UploadCatalogDto } from './dto/upload-catalog.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead, RequireManage } from '../../common/decorators/require-right.decorator';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
@@ -42,6 +43,18 @@ export class AssetModelsController {
   @ApiOperation({ summary: 'Import a vendor catalog by key (e.g. "fortinet"). Super admin only.' })
   importVendor(@Param('vendor') vendor: string, @Request() req: AuthRequest) {
     return this.vendorTemplates.importVendor(vendor, req.user.tenantId);
+  }
+
+  /**
+   * Upload an operator-provided vendor catalog JSON (Fortinet-native OR generic shape).
+   * Super-admin only. The service validates the payload shape and upserts by (tenantId, name).
+   * Use this when a fabricant isn't yet registered in the built-in registry.
+   */
+  @Post('import/upload')
+  @RequireManage()
+  @ApiOperation({ summary: 'Upload and import a vendor catalog JSON (super admin only)' })
+  importUploaded(@Body() dto: UploadCatalogDto, @Request() req: AuthRequest) {
+    return this.vendorTemplates.importCustomCatalog(req.user.tenantId, dto);
   }
 
   /**

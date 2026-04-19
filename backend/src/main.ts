@@ -55,6 +55,14 @@ async function bootstrap() {
   // Cookie parser (required for HTTP-only cookies auth)
   app.use(cookieParser());
 
+  // Body size — default Express is 100kb which is too tight for operator-uploaded
+  // vendor catalogs (the bundled Fortinet JSON is ~85kb and a fuller Cisco /
+  // Aruba / HP catalog will easily exceed that). 10MB is generous but still
+  // safely bounded against memory-exhaustion DoS (rate limiting covers the rest).
+  const bodyParser = require('body-parser');
+  app.use(bodyParser.json({ limit: '10mb' }));
+  app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
+
   // Compression
   app.use(compression());
 
