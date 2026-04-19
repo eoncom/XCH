@@ -12,7 +12,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 60 * 1000, // 1 minute
+            // Bumped from 60s to 5min (phase 6 T8). Pages that need fresher
+            // data (e.g. notification inbox) already override staleTime locally.
+            staleTime: 5 * 60 * 1000,
             refetchOnWindowFocus: false,
           },
         },

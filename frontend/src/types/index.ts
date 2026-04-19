@@ -1,8 +1,10 @@
 // User & Auth types
-/** @deprecated Use DelegationRight instead */
-export type UserRole = 'ADMIN' | 'MANAGER' | 'TECHNICIEN' | 'VIEWER';
+// UserRole enum (ADMIN/MANAGER/TECHNICIEN/VIEWER) was removed in v1.2 —
+// authorization is now carried by UserDelegation.right (DelegationRight below)
+// + User.isSuperAdmin + AccessOverride. Phase 6 cleanup removed the deprecated
+// alias (0 consumers across frontend/src).
 
-/** New authorization rights: MANAGE > WRITE > READ */
+/** Authorization right on a delegation: MANAGE > WRITE > READ */
 export type DelegationRight = 'MANAGE' | 'WRITE' | 'READ';
 
 export interface User {
@@ -20,6 +22,24 @@ export interface User {
   updatedAt: string;
 }
 
+/**
+ * Shape returned by `GET /api/users` — includes the embedded userDelegations
+ * so the users list can render badges per delegation without a second roundtrip.
+ * The `GET /api/users/:id` endpoint returns a plain `User` (use
+ * `GET /api/user-delegations/user/:id` to fetch delegations on the detail page).
+ */
+export interface UserWithDelegations extends User {
+  userDelegations?: Array<{
+    id: string;
+    right: DelegationRight;
+    delegation: {
+      id: string;
+      name: string;
+      groupLabel?: string;
+    };
+  }>;
+}
+
 export interface LoginCredentials {
   email: string;
   password: string;
@@ -31,19 +51,10 @@ export interface AuthResponse {
   user: User;
 }
 
-// Provider types
-export type ProviderType = 'TELECOM' | 'INTERNET' | 'CLOUD' | 'HOSTING' | 'SECURITY' | 'NETWORK' | 'MAINTENANCE' | 'ENERGY' | 'CUSTOM' | 'OTHER';
-
-export interface Provider {
-  id: number;
-  name: string;
-  type: ProviderType;
-  customType?: string; // For CUSTOM type
-  contact?: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+// Legacy Provider type + ProviderType enum (pre-v1.1) — renamed to Contact in
+// v1.1, the `providers-legacy` backend controller was retired in phase 5, and
+// the `providers` API client was dropped in phase 6 (grep across frontend/src
+// shows zero consumers). Use Contact types directly.
 
 // Site types
 export type SiteStatus = 'PREPARATION' | 'ACTIVE' | 'CLOSED';

@@ -5597,3 +5597,24 @@ fix(frontend): P1 — UX polish, FR labels alignés, tooltip Consumption
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-19
+
+**Date:** 2026-04-19 23:25:36
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix(frontend): P2 — accessibility + mutation error handling
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
