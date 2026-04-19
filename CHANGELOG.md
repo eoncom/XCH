@@ -7,6 +7,101 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased] — Audit phase 5 (correctifs AUTH_MODEL + UX Notifications)
+
+### Security / Fixed (P0 — élévation de privilège & endpoints cassés)
+- **`notification.controller.ts`** — 8 endpoints n'avaient aucun décorateur
+  `@Require*` ni `@SkipDelegation`, donc tous `403 fail-closed` pour tout
+  utilisateur non super-admin. Les helpers `requireAdmin`/`requireAdminOrManager`
+  /`checkDelegationAccess` testaient `localRole === 'ADMIN'` qui n'a jamais
+  pu matcher (`UserDelegation.right` = MANAGE/WRITE/READ). Ajout des
+  décorateurs corrects (`@RequireManage()` pour routes délégation,
+  `@SkipDelegation + @RequireManage` pour l'overview tenant-wide,
+  `@SkipDelegation + @RequireRead` pour `/meta`) + remplacement des 3 helpers
+  morts par un `requireSuperAdminForGlobal` unique.
+- **`monitoring-webhook.controller.ts`** — `POST /integrations/monitoring/webhook`
+  sans `@Public()` → `JwtAuthGuard` global renvoyait `401` à chaque webhook
+  Uptime Kuma / Gatus. Ajout `@Public() + @SkipDelegation()` au niveau classe ;
+  la vérif `x-webhook-secret` dans le service reste autoritative.
+- **`user-delegations.controller.ts`** — `POST/PATCH/DELETE` utilisaient
+  `@RequireWrite()` alors que la docstring disait « Only ADMIN of the
+  delegation ». Un user WRITE pouvait promouvoir quelqu'un en MANAGE ou
+  retirer un MANAGE peer → élévation de privilège. Les 3 endpoints passent
+  à `@RequireManage()`.
+
+### Fixed (P1 — semantic dead-code + scope incorrect)
+- **OIDC strategy** — le mapping SSO `ADMIN/MANAGER/TECHNICIEN/VIEWER` était
+  placé dans les entries sous `role`, mais `syncSsoDelegations` lisait
+  `d.right` → la valeur était silencieusement droppée et tous les nouveaux
+  utilisateurs OIDC tombaient en READ par défaut. `normalizeRight()` traduit
+  maintenant les deux conventions (legacy + MANAGE/WRITE/READ) vers
+  `DelegationRight`. `SsoDelegationEntry.right` remplace `.role`, le `as any`
+  cast est retiré. `DEFAULT_ROLE_MAPPING` émet directement MANAGE/WRITE/READ.
+- **`PATCH /delegations/:id`** — passage de `@RequireWrite()` à
+  `@RequireManage()` pour matcher AUTH_MODEL §7 onglet « Ma délégation »
+  (renommer/configurer une délégation = action admin, pas éditeur).
+
+### Fixed (bugs révélés par le déblocage notifications)
+- **`GET /notifications/config/global` — 404** : le front
+  (`notificationsApi.getConfig/deleteConfig`) construisait l'URL en path-based
+  avec sentinel `'global'`, mais le backend n'exposait que la variante
+  query-based `/config?delegationId=…`. Ajout de `GET /config/:delegationId`
+  avec normalisation `'global' → null` (super-admin only via
+  `requireSuperAdminForGlobal`). `GET /config/resolved` déclaré avant pour
+  éviter la collision de route. Patch identique sur le DELETE existant.
+- **Settings → Notifications — latence initiale sur non super-admins** :
+  la page s'ouvrait toujours sur `scopeMode='GLOBAL'` et hit
+  `/config/global`, renvoyé en 403 pour tout non super-admin → lag visible
+  sur les onglets Canaux / Événements / Journal. Défaut maintenant
+  `DELEGATION` avec la délégation active pré-sélectionnée, sélecteur
+  « Niveau » masqué hors super-admin, pas de 403 réseau au mount.
+
+### Removed (code mort / drift doc)
+- **`handleLegacy()`** + lecture des metadata `@Resource`/`@Action` dans
+  `PermissionGuard`. 0 controller n'utilisait les décorateurs legacy depuis
+  la migration v1.3 → ~35 lignes supprimées.
+- **Model Prisma `AuthProvider` + enum `AuthProviderType`** + relation
+  `Tenant.authProviders`. Aucun controller ni service ne les utilisait
+  — SSO passe entièrement par `Tenant.config.sso` (JSON) consommé par
+  `OidcStrategy`. La table `auth_providers` (vide) est droppée par
+  `prisma db push --accept-data-loss` au prochain démarrage backend.
+  Les métriques passent à **32 modèles / 17 enums** (au lieu de 33 / 18).
+- **`backend/src/modules/contacts/providers-legacy.controller.ts`** — shim
+  backward-compat `GET /providers` / `GET /providers/:id` datant du
+  rename v1.1 Providers → Contacts. `grep '/providers'` frontend = 0,
+  retrait complet.
+- **`auth.controller DELETE /2fa/user/:userId`** — suppression du check
+  `localRole !== 'MANAGE'` vestigial (la route `@SkipDelegation + @RequireManage`
+  est déjà super-admin-only via `PermissionGuard`).
+
+### Changed (documentation)
+- **`AUTH_MODEL.md`** — §4 chemins corrigés
+  (`backend/src/common/guards/permission.guard.ts` au lieu de
+  `modules/auth/…`) ; §7 onglets Notifications / SSO / Tenant alignés sur
+  les endpoints réels (plus de `/auth-providers/*` ni
+  `PATCH /tenants/current/config` fantômes) ; §9 historique v1.4.x ajouté.
+- **`docs/architecture/database-schema.md`** — section « Casbin
+  (Permissions) » remplacée par un pointeur vers AUTH_MODEL ; seed command
+  alignée sur `SeedService` (plus de `prisma:seed` npm script).
+- **`docs/00-INDEX.md`** — ADR-004 RBAC Casbin marqué ⛔ obsolète
+  (superseded by ADR-009).
+- **`docs/guides/DEVELOPMENT_GUIDE.md`** — bandeau « partiellement
+  obsolète » ajouté en tête (le document décrit l'architecture initiale
+  casbin/ + 4 rôles qui a été entièrement remplacée).
+- **`docs/status/PROJECT_STATUS.md`** — métriques refondues
+  (262 → 261 endpoints, 33 → 32 modèles, 18 → 17 enums).
+- **`reports/phase5-audit-coherence-v1.4.md`** — rapport complet de
+  l'audit read-only qui a précédé ces correctifs.
+
+### Deploy
+- `prisma db push --accept-data-loss` exécuté automatiquement par
+  `backend/docker-entrypoint.sh` au démarrage — drop la table
+  `auth_providers` sans perte de données (la table était vide).
+- Build serveur validé (webpack 5.97.1 compiled successfully en 15.7s,
+  aucun breaking change TypeScript).
+
+---
+
 ## [1.4.0] - 2026-04-18
 
 ### Post-audit Phase 4 + feature Apparence

@@ -32,9 +32,9 @@
 _Métriques mesurées le 2026-04-19 (v1.4.x) — voir section « Métriques réelles » plus bas pour le détail._
 
 ```
-Backend      ████████████████████ 100% (27 modules NestJS, 262 endpoints REST)
+Backend      ████████████████████ 100% (27 modules NestJS, 261 endpoints REST)
 Frontend     ████████████████████ 100% (18 sections dashboard, 53 pages, 45 composants)
-DB schema    ████████████████████ 100% (33 modèles Prisma + 18 enums)
+DB schema    ████████████████████ 100% (32 modèles Prisma + 17 enums)
 Docs         ████████████████████ 100% (10 ADRs, AUTH_MODEL v2, INSTALL dev + prod)
 Tests        ███░░░░░░░░░░░░░░░░░  15% (2/57 E2E Playwright, pas de tests unitaires backend)
 CI/CD        ██████████░░░░░░░░░░  50% (GitHub Actions workflow, pas de quality gates)
@@ -44,21 +44,21 @@ MVP TOTAL    ████████████████████ 100% (
 POST-MVP v1.4 ████████████████████ 100% (Delegation-first + Apparence + Catalogues packs + MCP mémoire)
 ```
 
-### 📐 Métriques réelles mesurées le 2026-04-19 (v1.4.x)
+### 📐 Métriques réelles mesurées le 2026-04-19 (v1.4.x, post-audit phase 5)
 
 Commandes reproductibles :
 ```bash
 ls -1 backend/src/modules | wc -l                          # 27 modules
-grep -c "^model " backend/prisma/schema.prisma             # 33 modèles
-grep -c "^enum " backend/prisma/schema.prisma              # 18 enums
-grep -rEnh "@(Get|Post|Patch|Put|Delete)\(" backend/src/modules --include="*.controller.ts" | wc -l   # 262 endpoints
+grep -c "^model " backend/prisma/schema.prisma             # 32 modèles  (-1 : AuthProvider retiré en phase 5)
+grep -c "^enum " backend/prisma/schema.prisma              # 17 enums    (-1 : AuthProviderType retiré)
+grep -rEnh "@(Get|Post|Patch|Put|Delete)\(" backend/src/modules --include="*.controller.ts" | wc -l   # 261 endpoints (-2 providers-legacy +1 GET /notifications/config/:delegationId)
 find frontend/src/app/dashboard -maxdepth 1 -type d | tail -n +2 | wc -l   # 18 sections
 find frontend/src/app/dashboard -name 'page.tsx' | wc -l   # 53 pages
 find frontend/src/components -name '*.tsx' | wc -l         # 45 composants
-find backend/src -name '*.ts' | xargs cat | wc -l          # ~27 300 lignes
-find frontend/src -name '*.ts' -o -name '*.tsx' | xargs cat | wc -l   # ~48 600 lignes
+find backend/src -name '*.ts' | xargs cat | wc -l          # ~27 200 lignes
+find frontend/src -name '*.ts' -o -name '*.tsx' | xargs cat | wc -l   # ~48 700 lignes
 ls docs/decisions/ | grep -c adr                           # 10 ADRs
-git tag --sort=-v:refname | head -1                         # v1.4.0
+git tag --sort=-v:refname | head -1                         # v1.4.0 (correctifs phase 5 non-tagués)
 ```
 
 > **Note** : les anciennes sections « Modules livrés : 10/10 » et « 15 modules / 11 modules » qui figuraient ici avant v1.4 étaient restées figées depuis v1.0 (décembre 2025). L'architecture a énormément évolué depuis (ADR-009 delegation-first, ADR-010 apparence, Coûts avancés, VendorCatalog, etc.). Les tableaux ci-dessous ont été refondus en v1.4.x pour refléter l'état réel et sont à re-mesurer à chaque bump de version.
@@ -103,10 +103,10 @@ Liste exacte des modules NestJS (`backend/src/modules/`) :
 - ✅ Account lockout (5 échecs → 14 min)
 - ✅ Validation class-validator + helmet + CSP/COOP/CORP/X-Frame-Options (audit phase 2/3 propres)
 
-**Métriques (mesurées 2026-04-19) :**
-- **262** endpoints REST décorés
-- **~27 300** lignes TypeScript (backend/src)
-- **33** modèles Prisma + **18** enums — inclut `Delegation`, `UserDelegation`, `AccessOverride`, `BillingEntity`, `Expense`, `CostAllocation`, `Budget`, `ConnectivityLink`, `AssetModel`, `VendorCatalog`, `UserNotification`, `EnumLabel`, `AuditLog`, `AuthProvider`, `NotificationConfig` + les entités métier core
+**Métriques (mesurées 2026-04-19, post-audit phase 5) :**
+- **261** endpoints REST décorés
+- **~27 200** lignes TypeScript (backend/src)
+- **32** modèles Prisma + **17** enums — inclut `Delegation`, `UserDelegation`, `AccessOverride`, `BillingEntity`, `Expense`, `CostAllocation`, `Budget`, `ConnectivityLink`, `AssetModel`, `VendorCatalog`, `UserNotification`, `EnumLabel`, `AuditLog`, `NotificationConfig` + les entités métier core (AuthProvider + enum AuthProviderType retirés en phase 5 — SSO piloté par `Tenant.config.sso`)
 - **0** policy Casbin (retiré), **0** référence à `User.role` pour autoriser (déprécié depuis v1.2)
 - **3** niveaux de droits : MANAGE ⊃ WRITE ⊃ READ
 - Ressources concernées par RBAC : sites, assets, racks, tasks, floor-plans, contacts, expenses, budgets, user-delegations, access-overrides, audit, netbox, monitoring, consumption, costs, tenants, users, delegations, appearance
@@ -202,7 +202,7 @@ Sections dashboard actuelles (`frontend/src/app/dashboard/<section>/`) :
 
 **Architecture :**
 - ✅ tech-stack.md - Stack technique complète avec justifications
-- ✅ database-schema.md - Schéma DB + ERD (33 modèles Prisma + 18 enums au 2026-04-19)
+- ✅ database-schema.md - Schéma DB + ERD (32 modèles Prisma + 17 enums, post-audit phase 5)
 - ✅ AUTH_MODEL.md - Modèle d'autorisation v2 delegation-first (MANAGE / WRITE / READ + AccessOverride)
 - ✅ 10 ADRs dans docs/decisions/ : ADR-001 à ADR-010 (delegation-first = ADR-009, apparence = ADR-010)
 
