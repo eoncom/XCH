@@ -3,9 +3,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Bell, CheckCheck, Trash2, Loader2 } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, Loader2, Settings } from 'lucide-react';
 import { notificationsInboxApi, type UserNotification } from '@/lib/api/notifications-inbox';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export default function NotificationsPage() {
@@ -60,11 +61,7 @@ export default function NotificationsPage() {
           <div>
             <h1 className="text-2xl font-bold">Boîte de réception</h1>
             <p className="text-sm text-muted-foreground">
-              {unreadCount > 0 ? `${unreadCount} non lue(s)` : 'Tout est lu'}
-              {' · '}
-              <Link href="/dashboard/settings/notifications" className="underline hover:no-underline">
-                Configurer les règles (qui reçoit quoi)
-              </Link>
+              {unreadCount > 0 ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Tout est lu'}
             </p>
           </div>
         </div>
@@ -92,6 +89,18 @@ export default function NotificationsPage() {
           <Button variant="outline" onClick={markAll} disabled={unreadCount === 0}>
             <CheckCheck className="mr-2 h-4 w-4" /> Tout marquer lu
           </Button>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" asChild aria-label="Configurer les notifications">
+                  <Link href="/dashboard/settings/notifications">
+                    <Settings className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Règles et canaux</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
 

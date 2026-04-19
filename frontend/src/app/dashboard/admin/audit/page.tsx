@@ -116,9 +116,9 @@ function AuditLogPageInner() {
                 className="mt-1 block w-full border rounded-md px-3 py-2 text-sm bg-background"
               >
                 <option value="">Toutes</option>
-                <option value="CREATE">CREATE</option>
-                <option value="UPDATE">UPDATE</option>
-                <option value="DELETE">DELETE</option>
+                <option value="CREATE">Créer</option>
+                <option value="UPDATE">Modifier</option>
+                <option value="DELETE">Supprimer</option>
               </select>
             </div>
             <div>

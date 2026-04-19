@@ -6,8 +6,10 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Zap, Server, Euro, TrendingUp } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Zap, Server, Euro, TrendingUp, Info } from 'lucide-react';
 import { consumptionApi, type ConsumptionSummary } from '@/lib/api/consumption';
+import { assetStatusLabels } from '@/lib/asset-labels';
 
 export default function ConsumptionPage() {
   const [data, setData] = useState<ConsumptionSummary | null>(null);
@@ -40,16 +42,6 @@ export default function ConsumptionPage() {
         <p className="text-muted-foreground mt-1">
           Estimation de la consommation et du coût mensuel (24h/24, 30j) par site — {totals.costPerKwh.toFixed(3)} {totals.currency}/kWh
         </p>
-        <div className="mt-3 text-xs text-muted-foreground bg-muted/50 border rounded-md px-3 py-2 max-w-3xl">
-          <strong className="text-foreground">Comment lire ce tableau&nbsp;?</strong>
-          {' '}Chaque ligne compte <em>tous les équipements liés au site</em> (colonne « Assets »).
-          Ce chiffre correspond exactement à celui affiché sur la page{' '}
-          <Link href="/dashboard/assets" className="underline">Équipements</Link> (filtrée par site)
-          et sur l&apos;onglet Équipements de la fiche site. Le sous-total entre parenthèses
-          («&nbsp;X actifs&nbsp;») indique les assets <em>IN_SERVICE</em> ou <em>UNDER_MAINTENANCE</em>{' '}
-          — seuls ceux-ci contribuent au calcul des watts et du coût, car un équipement hors service
-          ne consomme pas.
-        </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-4">
@@ -104,7 +96,31 @@ export default function ConsumptionPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Site</TableHead>
-                  <TableHead>Assets</TableHead>
+                  <TableHead>
+                    <span className="inline-flex items-center gap-1.5">
+                      Assets
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Détail de la colonne Assets"
+                              className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Info className="h-3.5 w-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">
+                            <p>Total des équipements liés au site.</p>
+                            <p className="mt-1">
+                              <strong>Actifs</strong> (parenthèses) = {assetStatusLabels.IN_SERVICE} +{' '}
+                              {assetStatusLabels.UNDER_MAINTENANCE} — seuls ces équipements consomment.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </span>
+                  </TableHead>
                   <TableHead>Puissance (W)</TableHead>
                   <TableHead>Mensuel (kWh)</TableHead>
                   <TableHead>Coût estimé</TableHead>
@@ -122,7 +138,7 @@ export default function ConsumptionPage() {
                     <TableCell>
                       {s.assetCount}
                       {typeof (s as any).activeAssetCount === 'number' && (s as any).activeAssetCount !== s.assetCount && (
-                        <span className="text-xs text-muted-foreground ml-1" title="Actifs (IN_SERVICE / UNDER_MAINTENANCE) — seuls ceux-ci contribuent au calcul de la consommation">
+                        <span className="text-xs text-muted-foreground ml-1" title={`Actifs (${assetStatusLabels.IN_SERVICE} / ${assetStatusLabels.UNDER_MAINTENANCE}) — seuls ceux-ci contribuent au calcul de la consommation`}>
                           ({(s as any).activeAssetCount} actifs)
                         </span>
                       )}

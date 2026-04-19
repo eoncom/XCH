@@ -46,9 +46,9 @@ const NETBOX_SITE_STATUSES = [
 
 // XCH site statuses
 const XCH_SITE_STATUSES = [
-  { id: 'PREPARATION', label: 'Preparation', color: '#f59e0b' },
+  { id: 'PREPARATION', label: 'En préparation', color: '#f59e0b' },
   { id: 'ACTIVE', label: 'Actif', color: '#22c55e' },
-  { id: 'CLOSED', label: 'Ferme', color: '#6b7280' },
+  { id: 'CLOSED', label: 'Clôturé', color: '#6b7280' },
 ];
 
 // NetBox device roles (common roles)

@@ -271,9 +271,7 @@ export default function NotificationsSettingsPage() {
               <Bell className="h-6 w-6" /> Configuration des notifications
             </h1>
             <p className="text-sm text-muted-foreground">
-              Qui reçoit quoi, sur quels canaux (Email / MS Teams) et pour quels événements.
-              Pour consulter vos <Link href="/dashboard/notifications" className="underline hover:no-underline">notifications personnelles (boîte de réception)</Link>,
-              ouvrez la cloche en haut à droite.
+              Canaux et événements suivis par délégation.
             </p>
           </div>
         </div>

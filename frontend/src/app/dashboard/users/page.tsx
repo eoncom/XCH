@@ -31,8 +31,8 @@ import type { User } from '@/types';
 
 const rightLabels: Record<string, string> = {
   MANAGE: 'Administrateur',
-  WRITE: 'Écriture',
-  READ: 'Lecture',
+  WRITE: 'Éditeur',
+  READ: 'Lecteur',
 };
 
 export default function UsersPage() {
@@ -135,9 +135,9 @@ function UsersPageInner() {
       case 'MANAGE':
         return 'Administrateur';
       case 'WRITE':
-        return 'Écriture';
+        return 'Éditeur';
       case 'READ':
-        return 'Lecture';
+        return 'Lecteur';
       default:
         return right;
     }

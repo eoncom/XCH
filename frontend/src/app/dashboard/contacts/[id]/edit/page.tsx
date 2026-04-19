@@ -45,7 +45,7 @@ const categoryColors: Record<ContactCategory, string> = {
 const contactSchema = z.object({
   name: z.string().min(1, 'Le nom est requis').max(100, 'Le nom ne peut pas dépasser 100 caractères'),
   typeId: z.string().min(1, 'Le type est requis'),
-  email: z.string().email('Email invalide').max(200).optional().or(z.literal('')),
+  email: z.string().email('Email invalide').max(100, 'Max 100 caractères').optional().or(z.literal('')),
   phone: z.string().max(30, 'Le téléphone ne peut pas dépasser 30 caractères').optional().or(z.literal('')),
   mobile: z.string().max(30, 'Le mobile ne peut pas dépasser 30 caractères').optional().or(z.literal('')),
   address: z.string().max(500, 'L\'adresse ne peut pas dépasser 500 caractères').optional().or(z.literal('')),

@@ -28,6 +28,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { budgetsApi, type Budget, type BudgetStatus, type CreateBudgetData } from '@/lib/api/budgets';
 import { organizationApi, type Delegation } from '@/lib/api/organization';
+import { sitesApi } from '@/lib/api/sites';
+import { useDelegation } from '@/contexts/DelegationContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ArrowLeft, Plus, Pencil, Trash2, TrendingUp, AlertTriangle, Wallet } from 'lucide-react';
 import Link from 'next/link';
@@ -36,13 +38,17 @@ import { toast } from 'sonner';
 export default function BudgetsPage() {
   const queryClient = useQueryClient();
   const { canWrite } = usePermissions();
+  const { currentDelegation } = useDelegation();
+  const activeDelegationId = currentDelegation?.delegationId ?? null;
   const [showForm, setShowForm] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<Record<string, BudgetStatus>>({});
 
+  // queryKey depends on the active delegation so the list invalidates when the
+  // user switches delegation — backend filters server-side via X-Delegation-Id.
   const { data: budgetsRes, isLoading } = useQuery({
-    queryKey: ['budgets'],
+    queryKey: ['budgets', activeDelegationId],
     queryFn: () => budgetsApi.getAll({ pageSize: 100 }),
   });
 
@@ -78,6 +84,17 @@ export default function BudgetsPage() {
     amount: 0,
     currency: 'EUR',
   });
+
+  // Sites for the delegation picked in the budget form — lets the user scope
+  // a budget to a specific site. The list refreshes when the delegation changes.
+  const { data: sitesRes } = useQuery({
+    queryKey: ['sites', 'for-budget-form', formData.delegationId || 'all'],
+    queryFn: () => sitesApi.getAll({ pageSize: 500 }),
+    enabled: !!formData.delegationId,
+  });
+  const sitesForForm = (sitesRes?.data || []).filter(
+    (s: any) => !formData.delegationId || s.delegationId === formData.delegationId,
+  );
 
   const resetForm = () => {
     setFormData({
@@ -312,17 +329,48 @@ export default function BudgetsPage() {
                 <Input type="date" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} />
               </div>
             </div>
-            <div>
-              <Label>Délégation (optionnel)</Label>
-              <Select value={formData.delegationId || '__none__'} onValueChange={(v) => setFormData({ ...formData, delegationId: v === '__none__' ? undefined : v })}>
-                <SelectTrigger><SelectValue placeholder="Toutes" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Toutes les délégations</SelectItem>
-                  {(delegations || []).map((d: Delegation) => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Délégation (optionnel)</Label>
+                <Select
+                  value={formData.delegationId || '__none__'}
+                  onValueChange={(v) => {
+                    const nextDelegationId = v === '__none__' ? undefined : v;
+                    setFormData({
+                      ...formData,
+                      delegationId: nextDelegationId,
+                      // Clear siteId if it no longer belongs to the new delegation scope.
+                      siteId: nextDelegationId ? formData.siteId : undefined,
+                    });
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Toutes" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Toutes les délégations</SelectItem>
+                    {(delegations || []).map((d: Delegation) => (
+                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Site (optionnel)</Label>
+                <Select
+                  value={formData.siteId || '__none__'}
+                  onValueChange={(v) => setFormData({ ...formData, siteId: v === '__none__' ? undefined : v })}
+                  disabled={!formData.delegationId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={formData.delegationId ? 'Tous les sites' : 'Choisir d\'abord une délégation'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Tous les sites de la délégation</SelectItem>
+                    {sitesForForm.map((s: any) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <Label>Type de dépense (optionnel)</Label>

@@ -26,6 +26,7 @@ export const assetTypeLabels: Record<string, string> = {
 
 export const assetStatusLabels: Record<string, string> = {
   IN_SERVICE: 'En service',
+  UNDER_MAINTENANCE: 'En maintenance',
   OUT_OF_SERVICE: 'Hors service',
   IN_TRANSIT: 'En transit',
   STOCK: 'En stock',
@@ -34,6 +35,7 @@ export const assetStatusLabels: Record<string, string> = {
 
 export const assetStatusColors: Record<string, string> = {
   IN_SERVICE: 'success',
+  UNDER_MAINTENANCE: 'warning',
   OUT_OF_SERVICE: 'secondary',
   IN_TRANSIT: 'warning',
   STOCK: 'secondary',

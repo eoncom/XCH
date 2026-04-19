@@ -59,8 +59,8 @@ type UserFormData = z.infer<typeof userSchema>;
 
 const DELEGATION_RIGHT_LABELS: Record<string, string> = {
   MANAGE: 'Administrateur',
-  WRITE: 'Écriture',
-  READ: 'Lecture',
+  WRITE: 'Éditeur',
+  READ: 'Lecteur',
 };
 
 // All delegation rights are available — assignment controlled by authorization

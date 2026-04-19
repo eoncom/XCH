@@ -55,8 +55,8 @@ type InviteFormData = z.infer<typeof inviteSchema>;
 
 const DELEGATION_RIGHT_LABELS: Record<string, string> = {
   MANAGE: 'Administrateur',
-  WRITE: 'Écriture',
-  READ: 'Lecture',
+  WRITE: 'Éditeur',
+  READ: 'Lecteur',
 };
 
 export default function NewUserPage() {
