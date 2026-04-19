@@ -440,17 +440,13 @@ export class AuthController {
   @Delete('2fa/user/:userId')
   @RequireManage()
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Admin: disable 2FA for a specific user' })
+  @ApiOperation({ summary: 'Admin: disable 2FA for a specific user (super admin only via class-level @SkipDelegation + @RequireManage)' })
   async adminDisable2FA(
     @Request() req: AuthRequest,
     @Param('userId') userId: string,
   ) {
-    // Only MANAGE (local delegation role) or super admin can do this
-    const localRole = (req as any).localRole;
-    if (!req.user.isSuperAdmin && localRole !== 'MANAGE') {
-      throw new UnauthorizedException('Admin access required');
-    }
-
+    // Authorization already enforced by PermissionGuard:
+    //   class-level @SkipDelegation + method @RequireManage → isSuperAdmin only.
     await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -468,7 +464,10 @@ export class AuthController {
   @Post('invite')
   @RequireManage()
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Invite a new user by email (ADMIN/MANAGER)' })
+  @ApiOperation({
+    summary:
+      'Invite a new user by email. Class-level @SkipDelegation() + @RequireManage() resolves to super-admin only (see AUTH_MODEL §4 table). Delegation-scoped MANAGE users create members via POST /users instead.',
+  })
   @ApiResponse({ status: 201, description: 'Invitation sent' })
   async invite(@Body() body: InviteUserDto, @Request() req: AuthRequest) {
     return this.authService.invite(req.user.tenantId, body.email, body.name);

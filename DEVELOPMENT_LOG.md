@@ -5513,3 +5513,24 @@ docs(audit): phase 5 coherence audit report (v1.4.x)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-19
+
+**Date:** 2026-04-19 19:09:40
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 0
+
+**Commit message:**
+```
+chore(auth): P2 — remove dead code (handleLegacy, AuthProvider model) + doc drift
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
