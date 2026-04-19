@@ -344,15 +344,12 @@ model Site {
 
 // AssetType and AssetStatus enums removed in v1.3 — now dynamic Strings via EnumLabel
 
-/**
- * VendorCatalog — an imported "pack" of AssetModel templates.
- *
- * v1.4.x — operators can upload JSON catalogs from the UI, list them, download
- * them back (for backup / sharing) and delete them. Each imported AssetModel
- * is linked to its origin catalog via `AssetModel.vendorCatalogId` so deleting
- * a catalog can optionally cascade to its models. The raw JSON is kept in
- * `content` (JSONB) so the exact uploaded payload is recoverable.
- */
+/// VendorCatalog — an imported "pack" of AssetModel templates.
+/// v1.4.x — operators can upload JSON catalogs from the UI, list them, download
+/// them back (for backup / sharing) and delete them. Each imported AssetModel is
+/// linked to its origin catalog via AssetModel.vendorCatalogId so deleting a
+/// catalog can optionally cascade to its models. The raw JSON is kept in
+/// `content` (JSONB) so the exact uploaded payload is recoverable.
 model VendorCatalog {
   id          String   @id @default(cuid())
   tenantId    String
@@ -361,11 +358,11 @@ model VendorCatalog {
   vendor      String   @db.VarChar(100)
   version     String?  @db.VarChar(50)
   sources     String[] @default([])
-  /** Raw uploaded payload — preserved for re-download / audit / debugging. */
+  /// Raw uploaded payload — preserved for re-download / audit / debugging.
   content     Json     @db.JsonB
   itemCount   Int      @default(0)
 
-  /** true when the pack is the built-in bundled seed (Fortinet ships with the app). */
+  /// true when the pack is a built-in bundled seed shipped with the app.
   builtIn     Boolean  @default(false)
 
   importedAt  DateTime @default(now())
