@@ -34,7 +34,13 @@ import type { DelegationRight } from '@/types';
 const directSchema = z.object({
   name: z.string().min(1, 'Le nom est requis'),
   email: z.string().email('Email invalide'),
-  password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères'),
+  password: z
+    .string()
+    .min(8, 'Le mot de passe doit contenir au moins 8 caractères')
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/,
+      'Doit contenir au moins 1 minuscule, 1 majuscule et 1 chiffre',
+    ),
   phone: z.string().optional(),
 });
 

@@ -353,14 +353,22 @@ export default function NewExpensePage() {
       </Card>
 
       {/* Actions */}
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={() => router.push('/dashboard/costs')}>Annuler</Button>
-        <Button
-          onClick={handleSubmit}
-          disabled={!label || !totalAmount || !bearerId || !dateIncurred || totalPercentage > 100 || createMutation.isPending}
-        >
-          {createMutation.isPending ? 'Création...' : 'Créer la dépense'}
-        </Button>
+      <div className="flex flex-col items-end gap-2">
+        {!scope.delegationId && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            Sélectionnez une délégation pour rattacher la dépense (elle est obligatoire —
+            la portée Globale/Délégation se configure au niveau du Centre de coût).
+          </p>
+        )}
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push('/dashboard/costs')}>Annuler</Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!label || !totalAmount || !bearerId || !dateIncurred || !scope.delegationId || totalPercentage > 100 || createMutation.isPending}
+          >
+            {createMutation.isPending ? 'Création...' : 'Créer la dépense'}
+          </Button>
+        </div>
       </div>
     </div>
   );

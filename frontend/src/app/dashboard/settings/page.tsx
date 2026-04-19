@@ -518,7 +518,17 @@ function EnumLabelsTabContent() {
   );
 }
 
-const XCH_ROLES = ['ADMIN', 'MANAGER', 'TECHNICIEN', 'VIEWER'] as const;
+// AUTH_MODEL v2: MANAGE > WRITE > READ (phase 5 refactor). The OIDC strategy
+// (backend/src/modules/auth/strategies/oidc.strategy.ts) accepts both new
+// MANAGE/WRITE/READ labels and legacy ADMIN/MANAGER/TECHNICIEN/VIEWER for
+// backward compat, but the SSO UI should emit the v2 labels directly.
+const XCH_ROLES = ['MANAGE', 'WRITE', 'READ'] as const;
+
+const XCH_ROLE_LABELS: Record<string, string> = {
+  MANAGE: 'Administrateur (MANAGE)',
+  WRITE: 'Éditeur (WRITE)',
+  READ: 'Lecteur (READ)',
+};
 
 const SCOPE_TYPES = [
   { value: '', label: 'Aucune portée' },
@@ -565,13 +575,13 @@ function SsoConfigSection() {
   const [clientSecret, setClientSecret] = useState('');
   const [callbackUrl, setCallbackUrl] = useState('');
   const [roleMapping, setRoleMapping] = useState<Record<string, RoleMappingEntry>>({
-    admin: { role: 'ADMIN', scopes: [] },
-    manager: { role: 'MANAGER', scopes: [] },
-    technician: { role: 'TECHNICIEN', scopes: [] },
-    default: { role: 'VIEWER', scopes: [] },
+    admin: { role: 'MANAGE', scopes: [] },
+    manager: { role: 'MANAGE', scopes: [] },
+    technician: { role: 'WRITE', scopes: [] },
+    default: { role: 'READ', scopes: [] },
   });
   const [newMappingKey, setNewMappingKey] = useState('');
-  const [newMappingRole, setNewMappingRole] = useState('VIEWER');
+  const [newMappingRole, setNewMappingRole] = useState('READ');
 
   // Load org tree for scope selectors
   const [orgTree, setOrgTree] = useState<any[]>([]);
@@ -1185,8 +1195,8 @@ function SecurityTabContent() {
         </CardContent>
       </Card>
 
-      {/* Tenant Security Config (ADMIN only) */}
-      {isAdmin && securityConfig && (
+      {/* Tenant Security Config — super-admin only (tenant-wide policy) */}
+      {isSuperAdmin && securityConfig && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -2130,7 +2140,9 @@ export default function SettingsPage() {
   };
 
   const handleSaveTenant = async () => {
-    if (!isAdmin) return;
+    // Tenant-wide settings are super-admin only (backend: PATCH /tenants/current
+    // with class-level @SkipDelegation + @RequireManage).
+    if (!isSuperAdmin) return;
 
     setIsSaving(true);
     try {
@@ -2157,7 +2169,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveTheme = async () => {
-    if (!isAdmin) return;
+    if (!isSuperAdmin) return;
     setIsSavingTheme(true);
     try {
       await apiClient.patch('/api/tenants/current', {
@@ -2244,7 +2256,7 @@ export default function SettingsPage() {
   };
 
   const handleLoadDemo = async () => {
-    if (!isAdmin) return;
+    if (!isSuperAdmin) return;
 
     setIsLoadingDemo(true);
     try {
@@ -2259,7 +2271,7 @@ export default function SettingsPage() {
   };
 
   const handleResetData = async () => {
-    if (!isAdmin || !showResetConfirm) return;
+    if (!isSuperAdmin || !showResetConfirm) return;
 
     setIsResetting(true);
     try {
@@ -2985,8 +2997,8 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Backup Tab */}
-        {isAdmin && (
+        {/* Backup Tab — super-admin only (tenant-wide data) */}
+        {isSuperAdmin && (
           <TabsContent value="backup" className="space-y-6">
 
             {/* Section A — Créer une sauvegarde */}

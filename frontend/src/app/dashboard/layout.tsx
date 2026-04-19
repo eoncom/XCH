@@ -66,10 +66,20 @@ const navigation: Array<{
   { name: 'Consommation', href: '/dashboard/consumption', icon: Zap, moduleKey: 'consumption' },
 ];
 
-// Adminisation-only items (delegation MANAGE or SuperAdmin).
-const adminNavigation = [
+// Administration items — gated by the `isAdmin` section header (MANAGE local OR
+// super-admin). Items that are super-admin only carry `superAdminOnly: true`
+// so they are hidden for delegation MANAGE users (who would otherwise land on
+// an AccessGate blocker).
+type AdminNavItem = {
+  name: string;
+  href: string;
+  icon: typeof Users;
+  superAdminOnly?: boolean;
+};
+
+const adminNavigation: AdminNavItem[] = [
   { name: 'Utilisateurs', href: '/dashboard/users', icon: Users },
-  { name: 'Journal d\'audit', href: '/dashboard/admin/audit', icon: Activity },
+  { name: "Journal d'audit", href: '/dashboard/admin/audit', icon: Activity, superAdminOnly: true },
 ];
 
 // Personal items — always visible to any authenticated user because every user
@@ -244,7 +254,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Administration
                 </p>
-                {adminNavigation.map((item) => {
+                {adminNavigation
+                  .filter((item) => !item.superAdminOnly || isSuperAdmin)
+                  .map((item) => {
                   const isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href);
                   return (
                     <Link

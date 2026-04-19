@@ -49,7 +49,11 @@ export default function UsersPage() {
 
 function UsersPageInner() {
   const { canManage, isSuperAdmin } = usePermissions();
+  // MANAGE local covers scoped create/update/delete. The Invite endpoint
+  // (POST /auth/invite) is super-admin only (@SkipDelegation + @RequireManage)
+  // so a MANAGE user must not see the Invite dialog trigger.
   const canAct = canManage || isSuperAdmin;
+  const canInvite = isSuperAdmin;
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -165,7 +169,7 @@ function UsersPageInner() {
           <p className="text-muted-foreground">Gestion des utilisateurs de la plateforme</p>
         </div>
         <div className="flex items-center gap-2">
-          {canAct && <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+          {canInvite && <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" data-testid="invite-user-btn">
                 <Send className="h-4 w-4 mr-2" />

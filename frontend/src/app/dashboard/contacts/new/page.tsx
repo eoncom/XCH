@@ -61,11 +61,18 @@ export default function NewContactPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<ScopeValue>({ delegationId: null, siteId: null });
+  const [categoryFilter, setCategoryFilter] = useState<ContactCategory | 'ALL'>('ALL');
 
   const { data: contactTypes } = useQuery<ContactType[]>({
     queryKey: ['contact-types'],
     queryFn: () => contactTypesApi.getAll({ isActive: true }),
   });
+
+  // Filter types by the selected category (phase 6 T3: Contact → Category → Type cascade).
+  // 'ALL' keeps the previous behaviour (all types in the dropdown).
+  const filteredContactTypes = contactTypes?.filter(
+    (t) => categoryFilter === 'ALL' || t.category === categoryFilter,
+  );
 
   const {
     register,
@@ -150,11 +157,39 @@ export default function NewContactPage() {
                 {errors.name && <p className="text-sm text-red-600">{errors.name.message}</p>}
               </div>
               <div className="space-y-2">
+                <Label htmlFor="categoryFilter">Catégorie</Label>
+                <Select
+                  value={categoryFilter}
+                  onValueChange={(v) => {
+                    setCategoryFilter(v as ContactCategory | 'ALL');
+                    // Reset the type when the category changes so the user doesn't keep a
+                    // type that's no longer in the filtered list.
+                    if (v !== 'ALL' && selectedType && selectedType.category !== v) {
+                      setValue('typeId', '');
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Toutes les catégories</SelectItem>
+                    {(Object.keys(categoryLabels) as ContactCategory[]).map((cat) => (
+                      <SelectItem key={cat} value={cat}>{categoryLabels[cat]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="typeId">Type <span className="text-red-500">*</span></Label>
                 <Select value={typeId} onValueChange={(value) => setValue('typeId', value)}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un type" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder={
+                      filteredContactTypes && filteredContactTypes.length === 0
+                        ? 'Aucun type pour cette catégorie'
+                        : 'Sélectionner un type'
+                    } />
+                  </SelectTrigger>
                   <SelectContent>
-                    {contactTypes?.map((type) => (
+                    {filteredContactTypes?.map((type) => (
                       <SelectItem key={type.id} value={type.id}>
                         <div className="flex items-center gap-2">
                           {type.color && (
