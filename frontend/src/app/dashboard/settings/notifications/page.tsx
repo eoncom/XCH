@@ -17,6 +17,7 @@ import { organizationApi } from '@/lib/api/organization';
 import { showToast } from '@/lib/toast';
 import { useAuthStore } from '@/stores/auth-store';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useDelegation } from '@/contexts/DelegationContext';
 import {
   Bell, Mail, MessageSquare, Settings, Save, TestTube, ArrowLeft,
   Check, X, ChevronRight, Info, RotateCcw, History, Loader2,
@@ -40,11 +41,31 @@ export default function NotificationsSettingsPage() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
   const tenantId = user?.tenantId || '';
-  const { isAdmin, isManagerOrAbove } = usePermissions();
+  const { isAdmin, isManagerOrAbove, isSuperAdmin } = usePermissions();
+  const { delegations: userDelegations, currentDelegation } = useDelegation();
 
-  // Scope selection: global (null) or per-delegation
-  const [scopeMode, setScopeMode] = useState<string>('GLOBAL');
-  const [delegationId, setDelegationId] = useState<string | null>(null);
+  // Delegations where the caller has MANAGE — the only ones they can
+  // configure notifications on. Super admins are not restricted here;
+  // the backend /delegations fetch below powers their picker.
+  const manageableDelegations = useMemo(
+    () => userDelegations.filter((d) => d.right === 'MANAGE'),
+    [userDelegations],
+  );
+
+  // Scope defaults:
+  // - Super admin opens on GLOBAL (tenant-wide config) — historical behaviour.
+  // - Everyone else opens on DELEGATION, pre-selecting their active delegation
+  //   (or the first delegation where they hold MANAGE). This avoids the
+  //   slow 403 bounce on GET /config/global that the page used to trigger
+  //   at mount even for delegation-scoped MANAGE users.
+  const defaultDelegationId =
+    currentDelegation?.delegationId ||
+    manageableDelegations[0]?.delegationId ||
+    null;
+  const [scopeMode, setScopeMode] = useState<string>(isSuperAdmin ? 'GLOBAL' : 'DELEGATION');
+  const [delegationId, setDelegationId] = useState<string | null>(
+    isSuperAdmin ? null : defaultDelegationId,
+  );
 
   // Defer the Journal tab data fetch until the user actually opens it.
   // Before v1.4.x, logs were fetched on every mount which added ~1s latency
@@ -66,19 +87,29 @@ export default function NotificationsSettingsPage() {
     staleTime: 5 * 60_000,
   });
 
-  // Fetch delegations for scope selection (stable — 1 min cache)
-  const { data: delegations } = useQuery({
+  // Fetch delegations for scope selection — super admin only. Non-super-admins
+  // pick from their own MANAGE delegations (already in DelegationContext).
+  const { data: delegationsFromApi } = useQuery({
     queryKey: ['delegations'],
     queryFn: () => organizationApi.getDelegations(),
-    enabled: isAdmin,
+    enabled: isSuperAdmin,
     staleTime: 60_000,
   });
 
-  // Fetch config for the currently selected scope
+  // Delegations shown in the scope picker. Super admins see everything from
+  // the server; others see only the ones where they hold MANAGE.
+  const delegations = isSuperAdmin
+    ? delegationsFromApi
+    : manageableDelegations.map((ud) => ({ id: ud.delegationId, name: ud.delegation.name }));
+
+  // Fetch config for the currently selected scope.
+  // We never hit /config/global for non-super-admins — the backend would 403
+  // and that 403 used to add a visible latency to the Canaux/Événements/Journal
+  // sections as the fail branch resolved.
   const { data: config, isLoading: configLoading } = useQuery({
     queryKey: ['notification-config', delegationId],
     queryFn: () => notificationsApi.getConfig(delegationId),
-    enabled: scopeMode === 'GLOBAL' || !!delegationId,
+    enabled: (scopeMode === 'GLOBAL' && isSuperAdmin) || !!delegationId,
     staleTime: 30_000,
   });
 
@@ -101,13 +132,19 @@ export default function NotificationsSettingsPage() {
     }
   }, [config]);
 
-  // Reset delegationId when scope mode changes
+  // Reset delegationId when scope mode changes.
+  // Switching to DELEGATION pre-selects the active delegation (or the first
+  // MANAGE one) so the config loads immediately without an intermediate
+  // "Choose..." empty state.
   useEffect(() => {
     if (scopeMode === 'GLOBAL') {
       setDelegationId(null);
-    } else {
-      setDelegationId('');
+    } else if (!delegationId) {
+      setDelegationId(defaultDelegationId || '');
     }
+    // defaultDelegationId intentionally excluded from deps — we only want to
+    // re-seed when scopeMode flips, not when the active delegation changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeMode]);
 
   // Save mutation
@@ -257,32 +294,50 @@ export default function NotificationsSettingsPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Périmètre de configuration</CardTitle>
-          <CardDescription>Les configurations par délégation héritent de la configuration globale</CardDescription>
+          <CardDescription>
+            {isSuperAdmin
+              ? 'Les configurations par délégation héritent de la configuration globale.'
+              : 'Vous configurez les notifications pour les délégations que vous administrez.'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 items-end">
-            <div className="w-48">
-              <Label>Niveau</Label>
-              <Select value={scopeMode} onValueChange={setScopeMode}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="GLOBAL">Global</SelectItem>
-                  {isAdmin && <SelectItem value="DELEGATION">Par délégation</SelectItem>}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {scopeMode === 'DELEGATION' && delegations && (
-              <div className="w-64">
-                <Label>Délégation</Label>
-                <Select value={delegationId || ''} onValueChange={setDelegationId}>
-                  <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
+          <div className="flex gap-4 items-end flex-wrap">
+            {/* Level picker — only super admins can flip between global and delegation.
+                Non-super-admins are locked on DELEGATION (no point showing a
+                single-option select that would 403 on Global anyway). */}
+            {isSuperAdmin && (
+              <div className="w-48">
+                <Label>Niveau</Label>
+                <Select value={scopeMode} onValueChange={setScopeMode}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {delegations.map((d: any) => (
-                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                    ))}
+                    <SelectItem value="GLOBAL">Global</SelectItem>
+                    <SelectItem value="DELEGATION">Par délégation</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {/* Delegation picker — visible whenever DELEGATION scope is active.
+                For non-super-admins with a single manageable delegation, we skip
+                the Select and just show the name as read-only. */}
+            {scopeMode === 'DELEGATION' && delegations && delegations.length > 0 && (
+              <div className="w-64">
+                <Label>Délégation</Label>
+                {!isSuperAdmin && delegations.length === 1 ? (
+                  <div className="h-10 flex items-center px-3 rounded-md border bg-muted/40 text-sm">
+                    {delegations[0].name}
+                  </div>
+                ) : (
+                  <Select value={delegationId || ''} onValueChange={setDelegationId}>
+                    <SelectTrigger><SelectValue placeholder="Choisir..." /></SelectTrigger>
+                    <SelectContent>
+                      {delegations.map((d: any) => (
+                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             )}
 
