@@ -84,6 +84,10 @@ export class OrganizationService {
       where: { id, tenantId },
       include: {
         sites: { select: { id: true, code: true, name: true, status: true } },
+        // Counts consumed by the "Ma délégation" settings tab (sites + members).
+        // findAllDelegations already selects them; kept aligned here so the
+        // single-delegation fetch doesn't silently show 0.
+        _count: { select: { sites: true, userDelegations: true } },
       },
     });
     if (!delegation) throw new NotFoundException('Delegation not found');
