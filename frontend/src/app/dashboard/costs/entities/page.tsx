@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,7 +63,9 @@ export default function BillingEntitiesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['billing-entities'] });
       resetForm();
+      toast.success('Centre de coût créé');
     },
+    onError: (e: any) => toast.error(e?.message || 'Erreur lors de la création'),
   });
 
   const updateMutation = useMutation({
@@ -70,12 +73,18 @@ export default function BillingEntitiesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['billing-entities'] });
       resetForm();
+      toast.success('Centre de coût mis à jour');
     },
+    onError: (e: any) => toast.error(e?.message || 'Erreur lors de la mise à jour'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => billingEntitiesApi.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['billing-entities'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing-entities'] });
+      toast.success('Centre de coût supprimé');
+    },
+    onError: (e: any) => toast.error(e?.message || 'Erreur lors de la suppression'),
   });
 
   const resetForm = () => {
@@ -208,7 +217,13 @@ export default function BillingEntitiesPage() {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         {canUpdate('billing-entities') && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEdit(entity)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => startEdit(entity)}
+                            aria-label={`Modifier le centre de coût ${entity.name}`}
+                          >
                             <Pencil className="h-4 w-4" />
                           </Button>
                         )}
@@ -218,6 +233,7 @@ export default function BillingEntitiesPage() {
                             size="icon"
                             className="h-8 w-8 text-destructive"
                             onClick={() => setPendingDeleteEntity(entity)}
+                            aria-label={`Supprimer le centre de coût ${entity.name}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>

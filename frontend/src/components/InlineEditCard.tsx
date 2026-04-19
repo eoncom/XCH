@@ -68,6 +68,7 @@ export function InlineEditCard({
             size="icon"
             onClick={handleEdit}
             className="h-8 w-8"
+            aria-label={typeof title === 'string' ? `Modifier ${title}` : 'Modifier'}
           >
             <Pencil className="h-4 w-4" />
           </Button>

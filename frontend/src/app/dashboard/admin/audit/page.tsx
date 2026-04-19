@@ -91,8 +91,9 @@ function AuditLogPageInner() {
         <CardContent className="pt-6">
           <div className="grid gap-3 md:grid-cols-5">
             <div>
-              <label className="text-xs font-medium">Entité</label>
+              <label htmlFor="audit-entity" className="text-xs font-medium">Entité</label>
               <input
+                id="audit-entity"
                 value={filters.entity || ''}
                 onChange={(e) => setFilters({ ...filters, entity: e.target.value })}
                 placeholder="Asset, Site, Task..."
@@ -100,8 +101,9 @@ function AuditLogPageInner() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium">Entity ID</label>
+              <label htmlFor="audit-entity-id" className="text-xs font-medium">Entity ID</label>
               <input
+                id="audit-entity-id"
                 value={filters.entityId || ''}
                 onChange={(e) => setFilters({ ...filters, entityId: e.target.value })}
                 placeholder="clxxxxxxxx"
@@ -109,8 +111,9 @@ function AuditLogPageInner() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium">Action</label>
+              <label htmlFor="audit-action" className="text-xs font-medium">Action</label>
               <select
+                id="audit-action"
                 value={filters.action || ''}
                 onChange={(e) => setFilters({ ...filters, action: (e.target.value || undefined) as any })}
                 className="mt-1 block w-full border rounded-md px-3 py-2 text-sm bg-background"
@@ -122,8 +125,9 @@ function AuditLogPageInner() {
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium">Depuis</label>
+              <label htmlFor="audit-from" className="text-xs font-medium">Depuis</label>
               <input
+                id="audit-from"
                 type="date"
                 value={filters.from ? filters.from.slice(0, 10) : ''}
                 onChange={(e) => setFilters({ ...filters, from: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
@@ -131,8 +135,9 @@ function AuditLogPageInner() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium">Jusqu&apos;au</label>
+              <label htmlFor="audit-to" className="text-xs font-medium">Jusqu&apos;au</label>
               <input
+                id="audit-to"
                 type="date"
                 value={filters.to ? filters.to.slice(0, 10) : ''}
                 onChange={(e) => setFilters({ ...filters, to: e.target.value ? new Date(e.target.value).toISOString() : undefined })}

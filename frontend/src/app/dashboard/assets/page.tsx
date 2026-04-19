@@ -329,6 +329,7 @@ export default function AssetsPage() {
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Rechercher..."
+            aria-label="Rechercher un équipement"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"

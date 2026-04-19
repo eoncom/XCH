@@ -5576,3 +5576,24 @@ fix(frontend): P0 — 7 critiques audit phase 6
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-19
+
+**Date:** 2026-04-19 23:24:07
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 5
+
+**Commit message:**
+```
+fix(frontend): P1 — UX polish, FR labels alignés, tooltip Consumption
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

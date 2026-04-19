@@ -323,7 +323,13 @@ export default function NewExpensePage() {
                   {new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount * alloc.percentage / 100)}
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => removeAllocation(index)}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => removeAllocation(index)}
+                aria-label="Supprimer cette allocation"
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>
