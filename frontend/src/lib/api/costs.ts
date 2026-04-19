@@ -133,7 +133,7 @@ export interface TargetReport {
   allocationCount: number;
 }
 
-function buildExpenseParams(params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; delegationId?: string; siteId?: string; page?: number; pageSize?: number }) {
+function buildExpenseParams(params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; delegationId?: string; siteId?: string; assetId?: string; page?: number; pageSize?: number }) {
   const qs = new URLSearchParams();
   if (params?.type) qs.set('type', params.type);
   if (params?.bearerId) qs.set('bearerId', params.bearerId);
@@ -144,13 +144,14 @@ function buildExpenseParams(params?: { type?: string; bearerId?: string; vendorI
   if (params?.search) qs.set('search', params.search);
   if (params?.delegationId) qs.set('delegationId', params.delegationId);
   if (params?.siteId) qs.set('siteId', params.siteId);
+  if (params?.assetId) qs.set('assetId', params.assetId);
   if (params?.page) qs.set('page', String(params.page));
   if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
   return qs;
 }
 
 export const expensesApi = {
-  getAll: async (params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; delegationId?: string; siteId?: string; page?: number; pageSize?: number }): Promise<Expense[]> => {
+  getAll: async (params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; delegationId?: string; siteId?: string; assetId?: string; page?: number; pageSize?: number }): Promise<Expense[]> => {
     const qs = buildExpenseParams(params);
     const query = qs.toString();
     const res = await apiClient.get<PaginatedResponse<Expense>>(`/api/expenses${query ? `?${query}` : ''}`);

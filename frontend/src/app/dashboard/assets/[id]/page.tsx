@@ -16,9 +16,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { assetsApi } from '@/lib/api/assets';
+import { expensesApi } from '@/lib/api/costs';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Attachments } from '@/components/Attachments';
 import { InlineEditCard } from '@/components/InlineEditCard';
+import { ResyncExpenseButton } from '@/components/expenses/ResyncExpenseButton';
+import { Receipt } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
@@ -100,6 +103,15 @@ export default function AssetDetailPage({
   const { data: movements = [] } = useQuery<AssetMovement[]>({
     queryKey: ['assets', id, 'movements'],
     queryFn: () => assetsApi.getMovements(id),
+    enabled: !!id,
+  });
+
+  // ADR-011 — list expenses linked to this asset (1:N — purchase, monthly,
+  // maintenance, etc.). Renders a small "Dépenses liées" card with a Resync
+  // button per row. Empty when none — only super-admin / cost owners see them.
+  const { data: linkedExpenses = [] } = useQuery<any[]>({
+    queryKey: ['expenses', { assetId: id }],
+    queryFn: () => expensesApi.getAll({ assetId: id, pageSize: 50 }),
     enabled: !!id,
   });
 
@@ -678,6 +690,56 @@ export default function AssetDetailPage({
                     <p className="text-sm mt-1 whitespace-pre-wrap">{asset.rackNotes}</p>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+          {/* ADR-011 — Linked expenses with Resync action. Shown only when at
+              least one Expense.assetId points to this asset (frozen-by-default
+              policy means the user opts in to refresh after a price change). */}
+          {linkedExpenses.length > 0 && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Receipt className="h-4 w-4 text-muted-foreground" />
+                  Dépenses liées ({linkedExpenses.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {linkedExpenses.map((exp: any) => {
+                    const isMonthly = exp.frequency === 'MONTHLY';
+                    return (
+                      <div
+                        key={exp.id}
+                        className="flex items-center justify-between gap-3 px-3 py-2 rounded-md border bg-muted/20"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{exp.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: exp.currency || 'EUR' }).format(exp.totalAmount)}
+                            {' · '}
+                            <Badge variant="secondary" className="text-[10px]">{exp.type}</Badge>
+                            {' '}
+                            <Badge variant="outline" className="text-[10px]">{exp.frequency}</Badge>
+                          </p>
+                        </div>
+                        {canUpdate('assets', asset?.siteId) && (
+                          <ResyncExpenseButton
+                            resyncFn={() => assetsApi.resyncExpense(id, exp.id, { kind: isMonthly ? 'MONTHLY' : 'ACQUISITION' })}
+                            currency={exp.currency || 'EUR'}
+                            invalidateKeys={[['expenses'], ['expenses', { assetId: id }]]}
+                          >
+                            Sync
+                          </ResyncExpenseButton>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Le montant des dépenses est figé à la création (ADR-011).
+                  Cliquez « Sync » pour réaligner sur le prix actuel de l'équipement.
+                </p>
               </CardContent>
             </Card>
           )}

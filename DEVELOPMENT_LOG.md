@@ -5660,3 +5660,24 @@ docs(adr): ADR-011 — inline expense creation from asset/connectivity/task
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-20
+
+**Date:** 2026-04-20 01:47:20
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 5
+
+**Commit message:**
+```
+fix(tasks): import BadRequestException in tasks controller (resync-expense)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

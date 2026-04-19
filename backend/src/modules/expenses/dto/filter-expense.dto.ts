@@ -48,6 +48,11 @@ export class FilterExpenseDto extends PaginationDto {
   @IsString()
   vendorId?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by linked asset ID (ADR-011)' })
+  @IsOptional()
+  @IsString()
+  assetId?: string;
+
   @ApiPropertyOptional({
     description: 'Field to sort by',
     enum: ['dateIncurred', 'totalAmount', 'label', 'createdAt'],

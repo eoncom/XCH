@@ -2,6 +2,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { ResyncExpenseButton } from '@/components/expenses/ResyncExpenseButton';
+import { GenerateExpenseToggle, type GenerateExpensePayload } from '@/components/expenses/GenerateExpenseToggle';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -103,11 +105,25 @@ export function ConnectivityLinksManager({ siteId, initialLinks = [], canEdit }:
     setDialogOpen(true);
   };
 
-  const handleSave = async (data: CreateConnectivityLinkData) => {
+  const handleSave = async (data: CreateConnectivityLinkData, expensePayload?: GenerateExpensePayload) => {
     if (editing) {
       await connectivityApi.update(editing.id, data);
     } else {
-      await connectivityApi.create({ ...data, siteId });
+      const created = await connectivityApi.create({ ...data, siteId });
+      // ADR-011 Lot 8 — chain expense generation if user opted in. Failure
+      // is non-fatal: the link exists, user can retry via the per-row
+      // "Générer dépense" dialog.
+      if (expensePayload?.enabled && expensePayload.bearerId) {
+        try {
+          await connectivityApi.generateExpense(created.id, {
+            bearerId: expensePayload.bearerId,
+            label: expensePayload.label || undefined,
+          });
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('Inline expense generation failed', e);
+        }
+      }
     }
     setDialogOpen(false);
     setEditing(null);
@@ -202,12 +218,25 @@ export function ConnectivityLinksManager({ siteId, initialLinks = [], canEdit }:
                       {Number(link.monthlyPrice).toFixed(2)} {link.currency}/mois
                     </span>
                     {link.expense ? (
-                      <Link
-                        href={`/dashboard/costs?highlight=${link.expense.id}`}
-                        className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
-                      >
-                        <Receipt className="h-3 w-3" /> Dépense liée <ExternalLink className="h-3 w-3" />
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/dashboard/costs?highlight=${link.expense.id}`}
+                          className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
+                        >
+                          <Receipt className="h-3 w-3" /> Dépense liée <ExternalLink className="h-3 w-3" />
+                        </Link>
+                        {/* ADR-011 — Resync linked Expense from current monthlyPrice. */}
+                        {canEdit && (
+                          <ResyncExpenseButton
+                            resyncFn={() => connectivityApi.resyncExpense(link.id)}
+                            currency={link.currency || 'EUR'}
+                            invalidateKeys={[['expenses'], ['site', siteId, 'connectivity']]}
+                            size="sm"
+                          >
+                            Sync
+                          </ResyncExpenseButton>
+                        )}
+                      </div>
                     ) : canEdit ? (
                       <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExpenseDialog(link)}>
                         <Receipt className="h-3 w-3 mr-1" /> Générer dépense
@@ -226,6 +255,7 @@ export function ConnectivityLinksManager({ siteId, initialLinks = [], canEdit }:
 
       {/* Create/Edit Dialog */}
       <ConnectivityLinkDialog
+        canWrite={canEdit}
         open={dialogOpen}
         onClose={() => {
           setDialogOpen(false);
@@ -273,14 +303,22 @@ function ConnectivityLinkDialog({
   onClose,
   onSave,
   editing,
+  canWrite,
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (data: CreateConnectivityLinkData) => Promise<void>;
+  onSave: (data: CreateConnectivityLinkData, expensePayload?: GenerateExpensePayload) => Promise<void>;
   editing: ConnectivityLink | null;
+  canWrite: boolean;
 }) {
   const [form, setForm] = useState<Partial<CreateConnectivityLinkData>>({});
   const [saving, setSaving] = useState(false);
+  // ADR-011 Lot 8 — toggle visible only on creation (no editing) when no
+  // expense is already linked. Mode edit keeps the existing UX (separate
+  // dialog for after-the-fact generation).
+  const [expensePayload, setExpensePayload] = useState<GenerateExpensePayload>({
+    enabled: false, bearerId: '', label: '',
+  });
 
   useEffect(() => {
     if (open) {
@@ -309,7 +347,9 @@ function ConnectivityLinkDialog({
     if (!form.provider || !form.type || !form.role) return;
     setSaving(true);
     try {
-      await onSave(form as CreateConnectivityLinkData);
+      // Pass the expense payload along to the parent so it can chain
+      // create + generateExpense atomically (only on first creation).
+      await onSave(form as CreateConnectivityLinkData, editing ? undefined : expensePayload);
     } finally {
       setSaving(false);
     }
@@ -442,11 +482,32 @@ function ConnectivityLinkDialog({
               rows={2}
             />
           </div>
+
+          {/* ADR-011 Lot 8 — generate the linked Expense in the same flow as
+              the connectivity link creation. Hidden in edit mode (link may
+              already have an expense; the per-row "Générer dépense" dialog
+              still handles that case). */}
+          {!editing && Number(form.monthlyPrice) > 0 && (
+            <GenerateExpenseToggle
+              title="Dépense mensuelle liée"
+              helper="Crée immédiatement la dépense MONTHLY SERVICE associée."
+              defaultLabel={`Connectivité ${form.provider || ''} ${form.type ? '(' + form.type + ')' : ''}`.trim()}
+              defaultAmount={Number(form.monthlyPrice) || 0}
+              currency={form.currency || 'EUR'}
+              typeBadge="SERVICE"
+              frequencyBadge="MONTHLY"
+              canWrite={canWrite}
+              onChange={setExpensePayload}
+            />
+          )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Annuler</Button>
-          <Button onClick={handleSubmit} disabled={saving || !form.provider || !form.type || !form.role}>
+          <Button
+            onClick={handleSubmit}
+            disabled={saving || !form.provider || !form.type || !form.role || (expensePayload.enabled && !expensePayload.bearerId)}
+          >
             {saving ? 'Enregistrement...' : 'Enregistrer'}
           </Button>
         </DialogFooter>

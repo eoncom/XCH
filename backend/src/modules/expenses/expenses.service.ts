@@ -106,6 +106,9 @@ export class ExpensesService {
     // Site filter
     if (filters.siteId) where.siteId = filters.siteId;
 
+    // Asset filter (ADR-011 — list expenses linked to a specific asset)
+    if ((filters as any).assetId) where.assetId = (filters as any).assetId;
+
     const page = filters.page ?? 1;
     const pageSize = filters.pageSize ?? 25;
     const sortField = filters.sortBy || 'dateIncurred';

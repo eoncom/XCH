@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { tasksApi } from '@/lib/api/tasks';
+import { ResyncExpenseButton } from '@/components/expenses/ResyncExpenseButton';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Attachments } from '@/components/Attachments';
 import { InlineEditCard } from '@/components/InlineEditCard';
@@ -737,8 +738,23 @@ export default function TaskDetailPage({
               {(task.estimatedCost || task.actualCost) && (
                 <div className="flex items-start gap-3">
                   <Receipt className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Coûts</p>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium">Coûts</p>
+                      {/* ADR-011 — Resync visible only when an Expense is linked
+                          (Task.expenseId set). Click recalculates the Expense
+                          totalAmount from current task.actualCost / estimatedCost. */}
+                      {(task as any).expenseId && canUpdate('tasks', task.siteId) && (
+                        <ResyncExpenseButton
+                          resyncFn={() => tasksApi.resyncExpense(id)}
+                          currency={task.costCurrency || 'EUR'}
+                          invalidateKeys={[['expenses'], ['task', id]]}
+                          size="sm"
+                        >
+                          Sync dépense
+                        </ResyncExpenseButton>
+                      )}
+                    </div>
                     {task.estimatedCost != null && (
                       <p className="text-sm text-muted-foreground">
                         Estimé : {Number(task.estimatedCost).toLocaleString('fr-FR')} {task.costCurrency || 'EUR'}
@@ -747,6 +763,11 @@ export default function TaskDetailPage({
                     {task.actualCost != null && (
                       <p className="text-sm text-muted-foreground">
                         Réel : {Number(task.actualCost).toLocaleString('fr-FR')} {task.costCurrency || 'EUR'}
+                      </p>
+                    )}
+                    {(task as any).expenseId && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Dépense liée — montant figé à la création (ADR-011).
                       </p>
                     )}
                   </div>
