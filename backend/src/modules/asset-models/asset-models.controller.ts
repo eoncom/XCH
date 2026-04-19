@@ -38,12 +38,9 @@ export class AssetModelsController {
     return this.vendorTemplates.listVendors();
   }
 
-  @Post('import/:vendor')
-  @RequireManage()
-  @ApiOperation({ summary: 'Import a vendor catalog by key (e.g. "fortinet"). Super admin only.' })
-  importVendor(@Param('vendor') vendor: string, @Request() req: AuthRequest) {
-    return this.vendorTemplates.importVendor(vendor, req.user.tenantId);
-  }
+  // NOTE: `import/upload` and `import/fortinet` MUST be declared before
+  // `import/:vendor` — Nest resolves routes in declaration order and a
+  // param route would otherwise swallow them (matched `:vendor='upload'`).
 
   /**
    * Upload an operator-provided vendor catalog JSON (Fortinet-native OR generic shape).
@@ -66,6 +63,13 @@ export class AssetModelsController {
   @ApiOperation({ summary: '[Legacy] Import the bundled Fortinet catalog. Prefer POST import/:vendor' })
   importFortinet(@Request() req: AuthRequest) {
     return this.vendorTemplates.importFortinet(req.user.tenantId);
+  }
+
+  @Post('import/:vendor')
+  @RequireManage()
+  @ApiOperation({ summary: 'Import a vendor catalog by key (e.g. "fortinet"). Super admin only.' })
+  importVendor(@Param('vendor') vendor: string, @Request() req: AuthRequest) {
+    return this.vendorTemplates.importVendor(vendor, req.user.tenantId);
   }
 
   @Post()
