@@ -187,7 +187,20 @@
       "Bash(mkdir -p $DST/frontend/src/components/costs)",
       "Bash(cp frontend/src/components/costs/vendor-combobox.tsx $DST/frontend/src/components/costs/)",
       "Bash(cp frontend/src/types/index.ts $DST/frontend/src/types/)",
-      "Bash(cp frontend/src/lib/api/contacts.ts $DST/frontend/src/lib/api/)"
+      "Bash(cp frontend/src/lib/api/contacts.ts $DST/frontend/src/lib/api/)",
+      "mcp__memory__search_nodes",
+      "mcp__memory__read_graph",
+      "mcp__code-graph__find_references",
+      "mcp__memory__delete_observations",
+      "mcp__memory__add_observations",
+      "mcp__memory__create_entities",
+      "mcp__memory__create_relations",
+      "mcp__code-graph__semantic_code_search",
+      "Bash(code-graph-mcp grep *)",
+      "Bash(awk '/^function SiteConnectivitySection/,/^function [A-Z]/' frontend/src/app/dashboard/sites/[id]/page.tsx)",
+      "Bash(awk 'NR==917,NR==1041' frontend/src/app/dashboard/sites/[id]/page.tsx)",
+      "Bash(sed -i.bak '917,1040d' frontend/src/app/dashboard/sites/[id]/page.tsx)",
+      "Bash(rm frontend/src/app/dashboard/sites/[id]/page.tsx.bak)"
     ]
   }
 }

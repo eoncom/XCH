@@ -1245,6 +1245,11 @@ model ConnectivityLink {
   contractRef    String?
   notes          String?           @db.Text
 
+  // Monitoring — phase 6.5: moved from Site.connectivity.links[i].monitorName
+  // and .status when the legacy JSON was dropped.
+  monitorName    String?
+  status         String?           // 'up' | 'down' | 'unknown'
+
   // Linked recurring expense (optional)
   expenseId String?
   expense   Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
