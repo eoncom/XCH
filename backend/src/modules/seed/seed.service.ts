@@ -276,11 +276,6 @@ export class SeedService {
         contacts: [
           { name: 'Romain Lacombe', phone: '+33 4 72 00 00 00', email: 'r.lacombe@lyon-partdieu.fr', role: 'Responsable site', isPrimary: true },
         ],
-        connectivity: {
-          links: [
-            { id: 'lnk-lyo-primary', role: 'primary', type: 'Fibre optique', provider: 'SFR Business', ref: 'FTTH-LYO-001', bandwidth: '1 Gbps / 300 Mbps' },
-          ],
-        },
         notes: 'Tour Part-Dieu - 3ᵉ étage. Exploité par la délégation Lyon Métropole.',
       },
       {
@@ -297,12 +292,6 @@ export class SeedService {
         contacts: [
           { name: 'Stéphanie Borel', phone: '+33 4 91 00 00 00', email: 's.borel@euromed.fr', role: 'Responsable site', isPrimary: true },
         ],
-        connectivity: {
-          links: [
-            { id: 'lnk-mrs-primary', role: 'primary', type: 'Fibre optique', provider: 'Orange Business', ref: 'FTTO-MRS-001', bandwidth: '500 Mbps / 200 Mbps' },
-            { id: 'lnk-mrs-backup', role: 'backup', type: '4G', provider: 'Bouygues Telecom', ref: '4G-MRS-001', bandwidth: '100 Mbps' },
-          ],
-        },
         notes: 'Quartier Euroméditerranée - bureaux et showroom. Exploité par la délégation Marseille.',
       },
     ];
