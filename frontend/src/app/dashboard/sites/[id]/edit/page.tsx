@@ -363,15 +363,11 @@ function EditSitePage({
   const buildPayload = (data: SiteFormData) => {
     const cleanedData = { ...data };
 
-    // Build V2 connectivity
-    const cleanedLinks = connectivityLinks.filter(l =>
-      l.type || l.provider || l.ref || l.bandwidth || l.assetId
-    );
-    const connectivity: any = {};
-    if (cleanedLinks.length > 0) connectivity.links = cleanedLinks;
-    if (sdwan.enabled) connectivity.sdwan = sdwan;
-    if (cleanedData.cutProcedure) connectivity.cutProcedure = cleanedData.cutProcedure;
-    delete (cleanedData as any).cutProcedure;
+    // Phase 6.5: connectivity links no longer round-trip through Site payload.
+    // They live in the ConnectivityLink table and are managed via the dedicated
+    // /api/connectivity endpoints (rendered by the ConnectivityLinksManager
+    // component inside the site detail page's "Infos pratiques" tab).
+    // The cutProcedure stays on the site itself (Site.cutProcedure scalar).
 
     // Build metadata with serverInfo
     const hasServerInfo = serverInfo.smbPath || serverInfo.sharepointUrl || serverInfo.gedUrl || serverInfo.accessRightsUrl || serverInfo.notes;
@@ -381,7 +377,6 @@ function EditSitePage({
 
     return {
       ...cleanedData,
-      connectivity: Object.keys(connectivity).length > 0 ? connectivity : undefined,
       contacts: contacts.filter(c => c.name && c.email),
       accessNotes,
       ...(metadata ? { metadata } : {}),

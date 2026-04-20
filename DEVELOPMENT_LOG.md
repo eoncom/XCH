@@ -5681,3 +5681,24 @@ fix(tasks): import BadRequestException in tasks controller (resync-expense)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-20
+
+**Date:** 2026-04-20 11:26:15
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 10
+- Frontend files modified: 2
+
+**Commit message:**
+```
+docs(adr): ADR-012 — Gatus bidirectional integration (auto-register + notifications scope)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

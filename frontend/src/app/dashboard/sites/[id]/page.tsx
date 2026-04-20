@@ -914,130 +914,6 @@ function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: strin
   );
 }
 
-// === Connectivité côte à côte ===
-function SiteConnectivitySection({ connectivity, siteId, assets }: { connectivity: Site['connectivity']; siteId: string; assets?: Asset[] }) {
-  const hasLinks = connectivity && Array.isArray(connectivity.links) && connectivity.links.length > 0;
-
-  if (!connectivity || !hasLinks) return null;
-
-  const links = connectivity.links || [];
-
-  const sdwan = connectivity.sdwan;
-
-  const getAssetName = (assetId?: string) => {
-    if (!assetId || !assets) return null;
-    const asset = assets.find(a => a.id === assetId);
-    return asset ? (asset.name || `${asset.type} ${asset.model || ''}`.trim()) : null;
-  };
-
-  const statusColor = (status?: string) => {
-    if (status === 'up') return 'bg-green-500';
-    if (status === 'down') return 'bg-red-500';
-    return 'bg-gray-400';
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Wifi className="h-5 w-5" />
-            Connectivité
-          </CardTitle>
-          <SiteEditIconLink href={`/dashboard/sites/${siteId}/edit?step=2`} />
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid md:grid-cols-2 gap-4">
-          {links.map((link) => (
-            <div key={link.id} className={`border rounded-lg p-4 ${link.role === 'backup' ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800' : ''}`}>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                      Lien {link.role === 'primary' ? 'primaire' : 'backup'}
-                    </p>
-                    {(link as any).status && (
-                      <span className={`inline-block w-2 h-2 rounded-full ${statusColor((link as any).status)}`} title={(link as any).status} />
-                    )}
-                  </div>
-                  {link.provider && <p className="text-lg font-bold mt-0.5">{link.provider}</p>}
-                  {link.type && <p className="text-sm text-muted-foreground">{link.type}</p>}
-                </div>
-                <Badge variant={link.role === 'primary' ? 'success' : 'warning'}>
-                  {link.role === 'primary' ? 'Actif' : 'Veille'}
-                </Badge>
-              </div>
-              <div className="space-y-2">
-                {link.ref && (
-                  <div className="bg-muted/50 rounded-lg p-2">
-                    <p className="text-xs text-muted-foreground font-medium">Référence</p>
-                    <p className="text-sm font-mono mt-0.5">{link.ref}</p>
-                  </div>
-                )}
-                {(link as any).bandwidth && (
-                  <div className="bg-muted/50 rounded-lg p-2">
-                    <p className="text-xs text-muted-foreground font-medium">Bande passante</p>
-                    <p className="text-sm mt-0.5">{(link as any).bandwidth}</p>
-                  </div>
-                )}
-                {(link as any).assetId && getAssetName((link as any).assetId) && (
-                  <div className="bg-muted/50 rounded-lg p-2">
-                    <p className="text-xs text-muted-foreground font-medium">Équipement</p>
-                    <Link href={`/dashboard/assets/${(link as any).assetId}`} className="text-sm text-blue-600 hover:underline mt-0.5 inline-block">
-                      {getAssetName((link as any).assetId)}
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* SD-WAN section */}
-        {sdwan?.enabled && (
-          <div className="border rounded-lg p-4 bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Server className="h-4 w-4" />
-                <p className="text-sm font-semibold">SD-WAN</p>
-                {sdwan.status && (
-                  <span className={`inline-block w-2 h-2 rounded-full ${statusColor(sdwan.status)}`} title={sdwan.status} />
-                )}
-              </div>
-              {sdwan.firewallIds?.length === 2 && (
-                <Badge variant="outline" className="text-xs">HA</Badge>
-              )}
-            </div>
-            {sdwan.provider && <p className="text-sm text-muted-foreground">{sdwan.provider}</p>}
-            {sdwan.firewallIds && sdwan.firewallIds.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {sdwan.firewallIds.map(fwId => {
-                  const name = getAssetName(fwId);
-                  return name ? (
-                    <Link key={fwId} href={`/dashboard/assets/${fwId}`}>
-                      <Badge variant="secondary" className="text-xs hover:bg-secondary/80 cursor-pointer">{name}</Badge>
-                    </Link>
-                  ) : null;
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {connectivity.cutProcedure && (
-          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-            <p className="text-sm font-medium flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
-              <AlertTriangle className="h-4 w-4" />
-              Procédure en cas de coupure
-            </p>
-            <p className="text-sm mt-1 text-yellow-700 dark:text-yellow-300">{connectivity.cutProcedure}</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 // === Ressources & Partages (bien visible en haut) ===
 function SiteResourcesSection({ serverInfo, siteId }: { serverInfo: any; siteId: string }) {
@@ -1857,10 +1733,8 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             {/* Contacts en grille de 3 */}
             <SiteContactsGrid contacts={site.contacts || []} siteId={id} />
 
-            {/* Connectivité primary + backup côte à côte */}
-            <SiteConnectivitySection connectivity={site.connectivity} siteId={id} assets={assets} />
-
-            {/* Connectivité structurée (liens avec prix, dépenses récurrentes) */}
+            {/* Connectivité — source unique : ConnectivityLink[] (phase 6.5 :
+                ancienne section SiteConnectivitySection retirée, legacy JSON drop) */}
             <ConnectivityLinksManager
               siteId={id}
               initialLinks={(site as any).connectivityLinks || []}

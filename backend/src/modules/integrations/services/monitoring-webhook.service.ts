@@ -60,13 +60,15 @@ export class MonitoringWebhookService {
       return;
     }
 
-    // 4. Find site by code
+    // 4. Find site by code + structured ConnectivityLink rows (phase 6.5:
+    // legacy Site.connectivity JSON was dropped — links live in their own table).
     const site = await this.prisma.site.findFirst({
       where: { code: parsed.siteCode },
       include: {
         assets: {
           select: { id: true, name: true, type: true, networkInfo: true },
         },
+        connectivityLinks: true,
       },
     });
 
@@ -86,9 +88,19 @@ export class MonitoringWebhookService {
       },
     };
 
-    // Update cached statuses in connectivity
+    // Persist the new status on every ConnectivityLink row that carries this
+    // monitorName (phase 6.5: direct table write, no more JSON update).
+    await this.prisma.connectivityLink.updateMany({
+      where: { siteId: site.id, monitorName: event.monitorName },
+      data: { status: normalizedStatus },
+    });
+
+    // Reload the links with the new status so the aggregation sees fresh data.
+    const updatedLinks = await this.prisma.connectivityLink.findMany({
+      where: { siteId: site.id },
+    });
     const updatedConnectivity = this.healthAggregation.updateCachedStatuses(
-      site.connectivity,
+      updatedLinks,
       monitorStatusMap,
     );
 
@@ -131,12 +143,13 @@ export class MonitoringWebhookService {
     metadata.healthBreakdown = breakdown;
     metadata.lastWebhookReceived = new Date().toISOString();
 
+    // Phase 6.5: no more `connectivity` field to persist — link statuses
+    // already written to the ConnectivityLink table above.
     await this.prisma.site.update({
       where: { id: site.id },
       data: {
         healthStatus: breakdown.overall as PrismaHealthStatus,
         lastHealthCheck: new Date(),
-        connectivity: updatedConnectivity,
         metadata,
       },
     });
@@ -245,14 +258,17 @@ export class MonitoringWebhookService {
   /**
    * Build a full monitor status map from cached connectivity data + new event.
    * This ensures HealthAggregation has all known statuses when recalculating.
+   *
+   * Phase 6.5: accepts a ConnectivityV2 already normalized from links rows
+   * (no more raw JSON input).
    */
   private buildFullMonitorStatusMap(
-    connectivity: any,
+    connectivity: import('../../../common/utils/connectivity-migration').ConnectivityV2,
     assets: Array<{ networkInfo: any }>,
     newEventMap: Record<string, { status: 'up' | 'down' | 'unknown'; responseTime?: number }>,
   ): Record<string, { status: 'up' | 'down' | 'unknown'; responseTime?: number }> {
     const map: Record<string, { status: 'up' | 'down' | 'unknown'; responseTime?: number }> = {};
-    const v2 = normalizeConnectivity(connectivity);
+    const v2 = connectivity;
 
     // Collect from links
     for (const link of v2.links) {

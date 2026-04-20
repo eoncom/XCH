@@ -56,14 +56,18 @@ export class HealthAggregationService {
   private readonly logger = new Logger(HealthAggregationService.name);
 
   /**
-   * Calculate site health from all monitored components
+   * Calculate site health from all monitored components.
    *
-   * @param connectivity Raw connectivity JSON from the site
+   * Phase 6.5: the first parameter is now `ConnectivityLink[]` rows from the
+   * structured table (or a ConnectivityV2-shaped object for callers that
+   * already normalized). The legacy Site.connectivity JSON column was dropped.
+   *
+   * @param connectivitySource Either ConnectivityLink[] rows or a pre-normalized ConnectivityV2 object
    * @param siteAssets Assets belonging to the site (with networkInfo)
-   * @param monitorStatuses Map of monitor name → status from Uptime Kuma
+   * @param monitorStatuses Map of monitor name → status
    */
   calculateSiteHealth(
-    connectivity: any,
+    connectivitySource: any,
     siteAssets: Array<{
       id: string;
       name?: string;
@@ -73,7 +77,10 @@ export class HealthAggregationService {
     monitorStatuses: MonitorStatusMap,
   ): HealthBreakdown {
     const components: HealthComponent[] = [];
-    const v2 = normalizeConnectivity(connectivity);
+    // Accept both shapes: an already-normalized ConnectivityV2, or raw links rows.
+    const v2: ConnectivityV2 = this.isAlreadyV2(connectivitySource)
+      ? (connectivitySource as ConnectivityV2)
+      : normalizeConnectivity(Array.isArray(connectivitySource) ? connectivitySource : []);
 
     // 1. Evaluate connectivity links
     for (const link of v2.links) {
@@ -310,28 +317,41 @@ export class HealthAggregationService {
   }
 
   /**
-   * Update cached statuses in connectivity links and SD-WAN
-   * Returns the modified connectivity object (for saving to DB)
+   * Adapt ConnectivityLink[] rows to the ConnectivityV2 shape and stamp
+   * cached statuses from the given monitor map. Returns a new V2 object
+   * for the downstream aggregation — persistence of link.status happens
+   * elsewhere (monitoring-webhook.service updates ConnectivityLink rows
+   * directly via Prisma).
    */
   updateCachedStatuses(
-    connectivity: any,
+    links: any[] | ConnectivityV2,
     monitorStatuses: MonitorStatusMap,
-  ): any {
-    const v2 = normalizeConnectivity(connectivity);
+  ): ConnectivityV2 {
+    const v2 = this.isAlreadyV2(links)
+      ? { ...(links as ConnectivityV2) }
+      : normalizeConnectivity(Array.isArray(links) ? links : []);
 
-    // Update link statuses
     for (const link of v2.links) {
       if (link.monitorName && monitorStatuses[link.monitorName]) {
         link.status = monitorStatuses[link.monitorName].status;
       }
     }
 
-    // Update SD-WAN status
     if (v2.sdwan?.monitorName && monitorStatuses[v2.sdwan.monitorName]) {
       v2.sdwan.status = monitorStatuses[v2.sdwan.monitorName].status;
     }
 
     return v2;
+  }
+
+  /** Runtime guard: is the value already a ConnectivityV2 (has .links array)? */
+  private isAlreadyV2(value: any): boolean {
+    return (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Array.isArray((value as any).links)
+    );
   }
 
   /**

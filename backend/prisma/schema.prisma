@@ -260,8 +260,12 @@ model Site {
   // Access notes (JSON)
   accessNotes Json? @db.JsonB // {schedules, badges, procedures, safety}
 
-  // Connectivity (JSON)
-  connectivity Json? @db.JsonB // {primary: {type, provider, ref}, backup, cutProcedure}
+  // Connectivity moved to the structured ConnectivityLink[] table in v1.3
+  // (ADR-009 follow-up). Legacy JSON column dropped in phase 6.5 — the
+  // structured model carries FKs to Expense (ADR-011) and is the single
+  // source of truth. The `cutProcedure` field migrated to Site.cutProcedure
+  // below, and per-link data lives in ConnectivityLink rows filtered by siteId.
+  cutProcedure String? @db.Text
 
   // Document Emplacements (JSON array)
   emplacements Json? @db.JsonB // [{type: 'smb'|'sharepoint', url, description}]

@@ -668,13 +668,16 @@ export class IntegrationsService {
 
     const healthStatus = provider.mapToHealthStatus(monitorStatus.status);
 
+    // Phase 6.5: site-level monitor mapping now lives in Site.metadata.monitoring
+    // (small JSON blob), the per-link monitor names live on ConnectivityLink.monitorName.
+    const existingMeta = (site.metadata as Record<string, any>) || {};
     await this.prisma.site.update({
       where: { id: siteId },
       data: {
         healthStatus: healthStatus as HealthStatus,
         lastHealthCheck: new Date(),
-        connectivity: {
-          ...((site.connectivity as any) || {}),
+        metadata: {
+          ...existingMeta,
           monitoring: {
             source: 'monitoring',
             monitor: monitorIdentifier,
@@ -695,8 +698,9 @@ export class IntegrationsService {
   }
 
   /**
-   * Map an Uptime Kuma monitor to a site (or unmap)
-   * Stores the monitor name in site.connectivity.monitoring.monitor
+   * Map an Uptime Kuma / Gatus monitor to a site (or unmap).
+   * Phase 6.5: mapping moved from Site.connectivity.monitoring.monitor (JSON,
+   * dropped) to Site.metadata.monitoring — same shape, different home.
    */
   async mapMonitorToSite(
     siteId: string,
@@ -711,23 +715,21 @@ export class IntegrationsService {
       throw new NotFoundException('Site not found');
     }
 
-    const connectivity = (site.connectivity as Record<string, any>) || {};
+    const metadata = (site.metadata as Record<string, any>) || {};
 
     if (monitorName) {
-      // Assign monitor to site
-      connectivity.monitoring = {
-        ...(connectivity.monitoring || {}),
+      metadata.monitoring = {
+        ...(metadata.monitoring || {}),
         source: 'monitoring',
         monitor: monitorName,
       };
     } else {
-      // Unmap: remove monitoring
-      delete connectivity.monitoring;
+      delete metadata.monitoring;
     }
 
     await this.prisma.site.update({
       where: { id: siteId },
-      data: { connectivity },
+      data: { metadata },
     });
 
     this.logger.log(
@@ -740,18 +742,20 @@ export class IntegrationsService {
   }
 
   /**
-   * Get all monitor-to-site mappings (reverse lookup)
+   * Get all monitor-to-site mappings (reverse lookup).
+   * Phase 6.5: reads Site.metadata.monitoring.monitor (moved from the
+   * dropped Site.connectivity.monitoring.monitor JSON path).
    */
   async getMonitorMappings(tenantId: string) {
     const sites = await this.prisma.site.findMany({
       where: { tenantId },
-      select: { id: true, name: true, connectivity: true },
+      select: { id: true, name: true, metadata: true },
     });
 
     const mappings: Record<string, { siteId: string; siteName: string }> = {};
 
     for (const site of sites) {
-      const monitorName = (site.connectivity as any)?.monitoring?.monitor;
+      const monitorName = (site.metadata as any)?.monitoring?.monitor;
       if (monitorName) {
         mappings[monitorName] = { siteId: site.id, siteName: site.name };
       }
@@ -781,13 +785,15 @@ export class IntegrationsService {
 
     this.logger.log(`Fetched ${allMonitors.length} monitors for health sync`);
 
-    // 2. Get all sites with their assets (only monitoring-enabled sites)
+    // 2. Get all monitoring-enabled sites + their assets + connectivity links
+    // (phase 6.5: links live in their own table since v1.3, JSON column dropped)
     const sites = await this.prisma.site.findMany({
       where: { tenantId, monitoringEnabled: true },
       include: {
         assets: {
           select: { id: true, name: true, type: true, networkInfo: true },
         },
+        connectivityLinks: true,
       },
     });
 
@@ -800,7 +806,7 @@ export class IntegrationsService {
 
     for (const site of sites) {
       try {
-        const v2Connectivity = normalizeConnectivity(site.connectivity);
+        const v2Connectivity = normalizeConnectivity(site.connectivityLinks);
 
         // Check if there's any monitoring configured
         const hasLinkMonitors = v2Connectivity.links.some(l => l.monitorName);
@@ -814,11 +820,20 @@ export class IntegrationsService {
           continue;
         }
 
-        // 3. Update cached statuses in connectivity
+        // 3. Compute updated V2 (in-memory) + persist link.status directly to table
         const updatedConnectivity = this.healthAggregation.updateCachedStatuses(
-          site.connectivity,
+          site.connectivityLinks,
           monitorStatusMap,
         );
+        for (const link of updatedConnectivity.links) {
+          const statusFromMap = link.monitorName ? monitorStatusMap[link.monitorName]?.status : undefined;
+          if (statusFromMap) {
+            await this.prisma.connectivityLink.update({
+              where: { id: link.id },
+              data: { status: statusFromMap },
+            });
+          }
+        }
 
         // 4. Update cached statuses in monitored assets
         for (const asset of site.assets) {
@@ -850,7 +865,8 @@ export class IntegrationsService {
           monitorStatusMap,
         );
 
-        // 6. Save health status + breakdown + updated connectivity
+        // 6. Save health status + breakdown (connectivity link statuses
+        // were already persisted to their own table above — phase 6.5)
         const metadata = (site.metadata as Record<string, any>) || {};
         metadata.healthBreakdown = breakdown;
 
@@ -859,7 +875,6 @@ export class IntegrationsService {
           data: {
             healthStatus: breakdown.overall as HealthStatus,
             lastHealthCheck: new Date(),
-            connectivity: updatedConnectivity,
             metadata,
           },
         });

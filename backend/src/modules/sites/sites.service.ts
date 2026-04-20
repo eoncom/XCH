@@ -168,7 +168,7 @@ export class SitesService {
         s.country,
         s.contacts,
         s."accessNotes",
-        s.connectivity,
+        s."cutProcedure",
         s.emplacements,
         s."governanceDocsRef",
         s."healthStatus",
@@ -226,7 +226,7 @@ export class SitesService {
         s.country,
         s.contacts,
         s."accessNotes",
-        s.connectivity,
+        s."cutProcedure",
         s.emplacements,
         s."governanceDocsRef",
         s."healthStatus",
@@ -266,6 +266,33 @@ export class SitesService {
       orderBy: [{ role: 'asc' }, { provider: 'asc' }],
     });
 
+    // Backward-compat computed `connectivity` object so existing frontend code
+    // (FloorPlanViewer NRO pins, export-site, sites list) that reads
+    // `site.connectivity.primary.provider` etc. keeps working against the
+    // new table-based source. Phase 6.5: JSON column dropped, this computed
+    // shape is the only live source.
+    const primary = connectivityLinks.find((l: any) => l.role === 'PRIMARY');
+    const backup = connectivityLinks.find((l: any) => l.role === 'BACKUP');
+    const computedConnectivity = {
+      primary: primary
+        ? { type: primary.type, provider: primary.provider, ref: primary.contractRef || primary.publicIp || null }
+        : null,
+      backup: backup
+        ? { type: backup.type, provider: backup.provider, ref: backup.contractRef || backup.publicIp || null }
+        : null,
+      links: connectivityLinks.map((l: any) => ({
+        id: l.id,
+        role: l.role === 'PRIMARY' ? 'primary' : 'backup',
+        type: l.type,
+        provider: l.provider,
+        ref: l.contractRef || l.publicIp,
+        bandwidth: l.bandwidthDown ? `${l.bandwidthDown}${l.bandwidthUp ? `/${l.bandwidthUp}` : ''} Mbps` : undefined,
+        monitorName: l.monitorName,
+        status: l.status,
+      })),
+      cutProcedure: site.cutProcedure,
+    };
+
     // Transform counts and org info to match structured format
     return {
       ...site,
@@ -277,6 +304,7 @@ export class SitesService {
         groupColor: site.delegation_groupColor,
       } : null,
       connectivityLinks,
+      connectivity: computedConnectivity,
       _count: {
         assets: Number(site._count_assets) || 0,
         racks: Number(site._count_racks) || 0,

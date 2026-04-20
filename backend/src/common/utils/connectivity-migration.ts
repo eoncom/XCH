@@ -1,15 +1,17 @@
-// NOTE: V1 format (primary/backup) is deprecated. All data should be in V2 format (links array).
 /**
- * Connectivity V1 → V2 migration utility
+ * Connectivity normalization utility.
  *
- * V1 format: { primary: {type, provider, ref}, backup: {type, provider, ref}, monitoring: {...}, cutProcedure }
- * V2 format: { links: [{id, role, type, provider, ref, bandwidth, assetId, monitorName, status}], sdwan: {...}, cutProcedure }
+ * In phase 6.5 (2026-04-20) the legacy `Site.connectivity` JSONB column was
+ * dropped. The structured `ConnectivityLink[]` table is now the single source
+ * of truth. This utility used to convert V1 JSON → V2 JSON in-memory; it now
+ * just adapts `ConnectivityLink[]` rows to the V2 shape expected by the
+ * downstream health-aggregation and monitoring-webhook services so they
+ * didn't need an internal refactor.
  *
- * This normalizer detects the format and converts V1 to V2 at read-time.
- * No database migration needed — JSONB columns are extended in place.
+ * Public API (kept backward compatible):
+ * - normalizeConnectivity(links) → ConnectivityV2
+ * - extractMonitorNames(v2)      → monitor targets for health aggregation
  */
-
-import { randomUUID } from 'crypto';
 
 export interface ConnectivityLinkV2 {
   id: string;
@@ -38,93 +40,63 @@ export interface ConnectivityV2 {
   cutProcedure?: string;
 }
 
-interface ConnectivityV1 {
-  primary?: { type?: string; provider?: string; ref?: string };
-  backup?: { type?: string; provider?: string; ref?: string };
-  monitoring?: {
-    source?: string;
-    monitor?: string;
-    lastCheck?: string;
-    uptime?: number;
-    responseTime?: number;
-  };
-  cutProcedure?: string;
-}
+/**
+ * Row shape coming from Prisma `ConnectivityLink` select. Kept loose on
+ * purpose so the adapter works whether the caller selected all fields or
+ * a subset (`provider`, `type`, `role`, `publicIp`, `monitorName`, `status`…).
+ */
+type DbConnectivityLink = {
+  id: string;
+  role: string;              // 'PRIMARY' | 'BACKUP' | 'OTHER' in the enum
+  type?: string | null;
+  provider?: string | null;
+  contractRef?: string | null;
+  bandwidthDown?: number | null;
+  bandwidthUp?: number | null;
+  publicIp?: string | null;
+  monitorName?: string | null;
+  status?: string | null;
+};
 
 /**
- * Detect whether raw connectivity JSON is V1 or V2 format
+ * Adapter: structured ConnectivityLink[] rows → V2 shape.
+ * `cutProcedure` now lives on Site.cutProcedure (passed separately when needed).
  */
-export function isV2Format(raw: any): boolean {
-  if (!raw || typeof raw !== 'object') return false;
-  return Array.isArray(raw.links);
-}
-
-/**
- * Normalize any connectivity format to V2
- * - V2 input → returned as-is
- * - V1 input → converted to V2
- * - null/undefined → empty V2 structure
- */
-export function normalizeConnectivity(raw: any): ConnectivityV2 {
-  // Null/undefined → empty V2
-  if (!raw || typeof raw !== 'object') {
-    return { links: [] };
+export function normalizeConnectivity(
+  links: DbConnectivityLink[] | null | undefined,
+  cutProcedure?: string | null,
+): ConnectivityV2 {
+  if (!Array.isArray(links) || links.length === 0) {
+    return { links: [], cutProcedure: cutProcedure || undefined };
   }
 
-  // Already V2 format
-  if (isV2Format(raw)) {
-    return {
-      links: raw.links || [],
-      sdwan: raw.sdwan || undefined,
-      cutProcedure: raw.cutProcedure || undefined,
-    };
-  }
-
-  // V1 format → convert
-  const v1 = raw as ConnectivityV1;
-  const links: ConnectivityLinkV2[] = [];
-
-  if (v1.primary && hasContent(v1.primary)) {
-    const link: ConnectivityLinkV2 = {
-      id: randomUUID(),
-      role: 'primary',
-      type: v1.primary.type,
-      provider: v1.primary.provider,
-      ref: v1.primary.ref,
-    };
-    // Migrate monitoring.monitor to primary link's monitorName
-    if (v1.monitoring?.monitor) {
-      link.monitorName = v1.monitoring.monitor;
-    }
-    links.push(link);
-  }
-
-  if (v1.backup && hasContent(v1.backup)) {
-    links.push({
-      id: randomUUID(),
-      role: 'backup',
-      type: v1.backup.type,
-      provider: v1.backup.provider,
-      ref: v1.backup.ref,
-    });
-  }
+  const v2Links: ConnectivityLinkV2[] = links.map((l) => ({
+    id: l.id,
+    // Enum values PRIMARY/BACKUP/OTHER → lowercase role recognised by downstream code.
+    // OTHER is treated as 'backup' for compat with the legacy 2-role aggregator.
+    role: (l.role === 'PRIMARY' ? 'primary' : 'backup') as 'primary' | 'backup',
+    type: l.type || undefined,
+    provider: l.provider || undefined,
+    ref: l.contractRef || l.publicIp || undefined,
+    bandwidth:
+      l.bandwidthDown
+        ? `${l.bandwidthDown}${l.bandwidthUp ? `/${l.bandwidthUp}` : ''}`
+        : undefined,
+    monitorName: l.monitorName || undefined,
+    status: (l.status as any) || undefined,
+  }));
 
   return {
-    links,
-    cutProcedure: v1.cutProcedure || undefined,
+    links: v2Links,
+    cutProcedure: cutProcedure || undefined,
+    // SD-WAN info is out of scope for ConnectivityLink rows — keep undefined
+    // until a proper model is added (current monitoring handles it from firewall assets).
   };
 }
 
 /**
- * Check if an object has any non-empty content
- */
-function hasContent(obj: Record<string, any>): boolean {
-  return Object.values(obj).some(v => v !== undefined && v !== null && v !== '');
-}
-
-/**
- * Extract all monitor names from a V2 connectivity structure
- * Returns an array of { monitorName, target } for health aggregation
+ * Extract monitor targets from a V2 connectivity structure.
+ * Unchanged from phase 5 — still used by HealthAggregationService.
  */
 export function extractMonitorNames(connectivity: ConnectivityV2): Array<{
   monitorName: string;
@@ -141,7 +113,6 @@ export function extractMonitorNames(connectivity: ConnectivityV2): Array<{
     role?: string;
   }> = [];
 
-  // Links with monitorName
   for (const link of connectivity.links) {
     if (link.monitorName) {
       monitors.push({
@@ -154,7 +125,6 @@ export function extractMonitorNames(connectivity: ConnectivityV2): Array<{
     }
   }
 
-  // SD-WAN with monitorName
   if (connectivity.sdwan?.monitorName) {
     monitors.push({
       monitorName: connectivity.sdwan.monitorName,

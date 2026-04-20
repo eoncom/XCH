@@ -159,13 +159,14 @@ export class IntegrationsController {
       select: { id: true, networkInfo: true },
     });
 
-    // Get accessible sites with connectivity info for link/sdwan monitors
-    const accessibleSites = await this.prisma.site.findMany({
+    // Get accessible connectivity link rows for link monitors
+    // (phase 6.5: links live in ConnectivityLink table since v1.3, JSON dropped)
+    const accessibleLinks = await this.prisma.connectivityLink.findMany({
       where: {
-        id: { in: accessibleSiteIds },
+        siteId: { in: accessibleSiteIds },
         tenantId: req.user.tenantId,
       },
-      select: { id: true, connectivity: true },
+      select: { id: true, monitorName: true },
     });
 
     // Build set of allowed monitor names
@@ -179,15 +180,9 @@ export class IntegrationsController {
       }
     }
 
-    // From site connectivity (links + sdwan)
-    for (const site of accessibleSites) {
-      const connectivity = site.connectivity as any;
-      const links = connectivity?.links || connectivity?.v2?.links || [];
-      for (const link of links) {
-        if (link.monitorName) allowedMonitorNames.add(link.monitorName);
-      }
-      const sdwan = connectivity?.sdwan || connectivity?.v2?.sdwan;
-      if (sdwan?.monitorName) allowedMonitorNames.add(sdwan.monitorName);
+    // From connectivity link rows
+    for (const link of accessibleLinks) {
+      if (link.monitorName) allowedMonitorNames.add(link.monitorName);
     }
 
     // Filter monitors

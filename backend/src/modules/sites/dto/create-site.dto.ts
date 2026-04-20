@@ -63,10 +63,13 @@ export class CreateSiteDto {
   @IsOptional()
   accessNotes?: any;
 
-  @ApiProperty({ required: false })
-  @IsObject()
+  // Connectivity moved to the structured ConnectivityLink table in v1.3 —
+  // POST/PATCH connectivity data via /api/connectivity, not via the Site DTO.
+
+  @ApiProperty({ required: false, description: 'Cut-off procedure note (moved from connectivity JSON in phase 6.5)' })
+  @IsString()
   @IsOptional()
-  connectivity?: any;
+  cutProcedure?: string;
 
   @ApiProperty({ required: false, description: 'Array of document emplacements (SMB/SharePoint links)' })
   @IsObject()

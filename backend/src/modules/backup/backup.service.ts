@@ -199,10 +199,13 @@ export class BackupService {
           // JSON fields
           contacts: siteData.contacts || undefined,
           accessNotes: siteData.accessNotes || undefined,
-          connectivity: siteData.connectivity || undefined,
+          // Legacy `connectivity` JSON dropped in phase 6.5 — connectivity
+          // now lives in the structured ConnectivityLink table (restored
+          // separately by the backup flow via restoreConnectivityLinks()).
           emplacements: siteData.emplacements || undefined,
           metadata: siteData.metadata || undefined,
           // String fields
+          cutProcedure: siteData.cutProcedure || undefined,
           governanceDocsRef: siteData.governanceDocsRef || undefined,
           notes: siteData.notes || undefined,
           monitoringEnabled: siteData.monitoringEnabled ?? true,
@@ -628,9 +631,10 @@ export class BackupService {
             healthStatus: siteData.healthStatus || 'UNKNOWN',
             contacts: siteData.contacts || undefined,
             accessNotes: siteData.accessNotes || undefined,
-            connectivity: siteData.connectivity || undefined,
+            // Legacy `connectivity` JSON dropped in phase 6.5.
             emplacements: siteData.emplacements || undefined,
             metadata: siteData.metadata || undefined,
+            cutProcedure: siteData.cutProcedure || undefined,
             governanceDocsRef: siteData.governanceDocsRef || undefined,
             notes: siteData.notes || undefined,
             monitoringEnabled: siteData.monitoringEnabled ?? true,

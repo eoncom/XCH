@@ -180,14 +180,7 @@ export class SeedService {
           { name: 'Pierre Durand', phone: '+33 1 41 26 00 00', email: 'p.durand@alto.fr', role: 'Responsable IT site', isPrimary: true },
           { name: 'Marie Lefebvre', phone: '+33 6 12 34 56 78', email: 'm.lefebvre@alto.fr', role: 'Chef de site' },
         ],
-        connectivity: {
-          links: [
-            { id: 'lnk-def-primary', role: 'primary', type: 'Fibre optique dédiée', provider: 'Orange Business', ref: 'FTTO-DEF-001', bandwidth: '1 Gbps / 1 Gbps' },
-            { id: 'lnk-def-backup', role: 'backup', type: '4G/5G', provider: 'Bouygues Telecom', ref: '4G-DEF-001', bandwidth: '300 Mbps' },
-          ],
-          sdwan: { enabled: true, provider: 'Fortinet SD-WAN', firewallIds: [] as string[], notes: 'HA Active/Passive avec 2 FortiGate 100F' },
-          cutProcedure: 'Contacter le NOC au 01 XX XX XX XX puis basculer SD-WAN',
-        },
+        cutProcedure: 'Contacter le NOC au 01 XX XX XX XX puis basculer SD-WAN',
         notes: 'Grand site Tour Alto - 8 étages, salle IT au RDC et étage 4. Accès badge NEXITY + escorte zone serveur.',
       },
       {
@@ -203,13 +196,6 @@ export class SeedService {
         contacts: [
           { name: 'Thomas Bernard', phone: '+33 1 69 15 00 00', email: 't.bernard@saclay.fr', role: 'DSI Campus', isPrimary: true },
         ],
-        connectivity: {
-          links: [
-            { id: 'lnk-sac-primary', role: 'primary', type: 'Fibre optique', provider: 'SFR Business', ref: 'FTTH-SAC-001', bandwidth: '500 Mbps / 200 Mbps' },
-            { id: 'lnk-sac-backup', role: 'backup', type: '5G', provider: 'Bouygues Telecom', ref: '5G-SAC-001', bandwidth: '200 Mbps' },
-          ],
-          sdwan: { enabled: true, provider: 'Fortinet SD-WAN', firewallIds: [] as string[] },
-        },
         notes: 'Campus universitaire - 3 bâtiments interconnectés. WiFi haute densité (amphithéâtres 500 places).',
       },
       {
@@ -226,12 +212,6 @@ export class SeedService {
           { name: 'Claire Moreau', phone: '+33 1 39 46 00 00', email: 'c.moreau@omega.fr', role: 'Responsable technique', isPrimary: true },
           { name: 'Julien Petit', phone: '+33 6 98 76 54 32', email: 'j.petit@omega.fr', role: 'Technicien réseau' },
         ],
-        connectivity: {
-          links: [
-            { id: 'lnk-vel-primary', role: 'primary', type: 'Fibre optique', provider: 'Bouygues Telecom', ref: 'FTTH-VEL-001', bandwidth: '500 Mbps / 200 Mbps' },
-            { id: 'lnk-vel-backup', role: 'backup', type: '4G', provider: 'Convergence', ref: '4G-VEL-001', bandwidth: '150 Mbps' },
-          ],
-        },
         notes: 'Immeuble bureaux 5 étages. Warning: climatisation salle serveur en maintenance depuis 2 semaines.',
       },
       // === CHANTIERS MOYENS (2 baies, équipement standard) ===
@@ -248,12 +228,6 @@ export class SeedService {
         contacts: [
           { name: 'François Dubois', phone: '+33 1 46 02 00 00', email: 'f.dubois@residenceparc.fr', role: 'Responsable site', isPrimary: true },
         ],
-        connectivity: {
-          links: [
-            { id: 'lnk-stc-primary', role: 'primary', type: 'FTTH', provider: 'Orange', ref: 'FTTH-STC-001', bandwidth: '1 Gbps / 300 Mbps' },
-            { id: 'lnk-stc-backup', role: 'backup', type: '4G', provider: 'Bouygues Telecom', ref: '4G-STC-001', bandwidth: '100 Mbps' },
-          ],
-        },
         notes: 'Résidence en construction - 2 bâtiments. Salle technique au sous-sol bâtiment A.',
       },
       {
@@ -269,12 +243,6 @@ export class SeedService {
         contacts: [
           { name: 'Isabelle Roche', phone: '+33 1 60 13 00 00', email: 'i.roche@atlantis.fr', role: 'Directrice technique', isPrimary: true },
         ],
-        connectivity: {
-          links: [
-            { id: 'lnk-mas-primary', role: 'primary', type: 'Fibre optique', provider: 'Free Pro', ref: 'FTTH-MAS-001', bandwidth: '1 Gbps / 600 Mbps' },
-            { id: 'lnk-mas-backup', role: 'backup', type: '4G', provider: 'Convergence', ref: '4G-MAS-001', bandwidth: '100 Mbps' },
-          ],
-        },
         notes: 'Pôle commercial et bureaux - 3 étages. Déploiement phase 2 en cours.',
       },
       // === PETIT CHANTIER (pas de baie dédiée, équipement minimal) ===
@@ -291,11 +259,6 @@ export class SeedService {
         contacts: [
           { name: 'Élodie Garnier', phone: '+33 6 45 67 89 01', email: 'e.garnier@marcel.fr', role: 'Chef de projet', isPrimary: true },
         ],
-        connectivity: {
-          links: [
-            { id: 'lnk-bou-primary', role: 'primary', type: '5G', provider: 'Bouygues Telecom', ref: '5G-BOU-001', bandwidth: '300 Mbps' },
-          ],
-        },
         notes: 'Petit showroom temporaire - installation prévue semaine prochaine. Pas de salle serveur, équipement sous bureau.',
       },
       // === DELEGATIONS LYON + MARSEILLE (1 site chacune — exerce multi-délégation) ===
@@ -778,30 +741,11 @@ export class SeedService {
       assets.push(asset);
     }
 
-    // Link firewall IDs to SD-WAN config + assetIds to links
-    const fwDef1 = assets.find(a => a.serialNumber === 'FGT100F-DEF-001');
-    const fwDef2 = assets.find(a => a.serialNumber === 'FGT100F-DEF-002');
-    const fwSac = assets.find(a => a.serialNumber === 'FGT80F-SAC-001');
-
-    if (defense && fwDef1 && fwDef2) {
-      const conn = defense.connectivity as any;
-      conn.sdwan.firewallIds = [fwDef1.id, fwDef2.id];
-      // Link primary lien to FortiGate Active (link → firewall for visual association)
-      if (conn.links?.[0]) conn.links[0].assetId = fwDef1.id;
-      await this.prisma.site.update({
-        where: { id: defense.id },
-        data: { connectivity: conn },
-      });
-    }
-    if (saclay && fwSac) {
-      const conn = saclay.connectivity as any;
-      conn.sdwan.firewallIds = [fwSac.id];
-      if (conn.links?.[0]) conn.links[0].assetId = fwSac.id;
-      await this.prisma.site.update({
-        where: { id: saclay.id },
-        data: { connectivity: conn },
-      });
-    }
+    // Phase 6.5: SD-WAN firewallIds / link ↔ asset association used to live
+    // inside the Site.connectivity JSON. The JSON column is gone; these
+    // relationships now rely on ConnectivityLink.assetId (added separately
+    // when needed) and on the health aggregation treating firewalls with
+    // networkInfo.monitorName as SD-WAN components. No post-asset update step.
 
     return assets;
   }
@@ -1143,8 +1087,9 @@ export class SeedService {
   }
 
   /**
-   * Mirror a subset of Site.connectivity JSON into the ConnectivityLink table so
-   * the v1.3 structured view + Coûts cross-link is exercised.
+   * Seed realistic connectivity links for all demo sites. Phase 6.5: this is
+   * now the canonical place where connectivity data lives (the legacy
+   * Site.connectivity JSON column was dropped).
    */
   private async createConnectivityLinksForDemo(tenantId: string, sites: any[]) {
     const data: Array<{
@@ -1155,14 +1100,33 @@ export class SeedService {
       bandwidthDown?: number;
       bandwidthUp?: number;
       monthlyPrice?: number;
+      contractRef?: string;
     }> = [
-      { siteCode: 'DEF-01', role: 'PRIMARY', provider: 'Orange Business', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 1000, monthlyPrice: 890 },
-      { siteCode: 'DEF-01', role: 'BACKUP', provider: 'Bouygues Telecom', type: '4G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 59 },
-      { siteCode: 'SAC-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 620 },
-      { siteCode: 'LYO-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 780 },
-      { siteCode: 'MRS-01', role: 'PRIMARY', provider: 'Orange Business', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 640 },
+      // La Défense — Tour Alto (grand site, fibre dédiée + 4G/5G backup)
+      { siteCode: 'DEF-01', role: 'PRIMARY', provider: 'Orange Business', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 1000, monthlyPrice: 890, contractRef: 'FTTO-DEF-001' },
+      { siteCode: 'DEF-01', role: 'BACKUP', provider: 'Bouygues Telecom', type: '4G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 59, contractRef: '4G-DEF-001' },
+      // Saclay — Campus Sciences
+      { siteCode: 'SAC-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 620, contractRef: 'FTTH-SAC-001' },
+      { siteCode: 'SAC-01', role: 'BACKUP', provider: 'Bouygues Telecom', type: '5G', bandwidthDown: 200, bandwidthUp: 40, monthlyPrice: 49, contractRef: '5G-SAC-001' },
+      // Vélizy — Immeuble Omega
+      { siteCode: 'VEL-01', role: 'PRIMARY', provider: 'Bouygues Telecom', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 420, contractRef: 'FTTH-VEL-001' },
+      { siteCode: 'VEL-01', role: 'BACKUP', provider: 'Convergence', type: '4G', bandwidthDown: 150, bandwidthUp: 30, monthlyPrice: 39, contractRef: '4G-VEL-001' },
+      // Saint-Cloud — Résidence Parc
+      { siteCode: 'STC-01', role: 'PRIMARY', provider: 'Orange', type: 'FTTH', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 45, contractRef: 'FTTH-STC-001' },
+      { siteCode: 'STC-01', role: 'BACKUP', provider: 'Bouygues Telecom', type: '4G', bandwidthDown: 100, bandwidthUp: 20, monthlyPrice: 29, contractRef: '4G-STC-001' },
+      // Massy — Pôle Atlantis
+      { siteCode: 'MAS-01', role: 'PRIMARY', provider: 'Free Pro', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 600, monthlyPrice: 69, contractRef: 'FTTH-MAS-001' },
+      { siteCode: 'MAS-01', role: 'BACKUP', provider: 'Convergence', type: '4G', bandwidthDown: 100, bandwidthUp: 20, monthlyPrice: 29, contractRef: '4G-MAS-001' },
+      // Boulogne — Showroom Marcel (petit site, 5G seule)
+      { siteCode: 'BOU-01', role: 'PRIMARY', provider: 'Bouygues Telecom', type: '5G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 79, contractRef: '5G-BOU-001' },
+      // Lyon (si présent) — Presqu'île
+      { siteCode: 'LYO-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 780, contractRef: 'FTTH-LYO-001' },
+      { siteCode: 'LYO-01', role: 'BACKUP', provider: 'Orange', type: '4G', bandwidthDown: 150, bandwidthUp: 30, monthlyPrice: 35, contractRef: '4G-LYO-001' },
+      // Marseille (si présent) — Joliette
+      { siteCode: 'MRS-01', role: 'PRIMARY', provider: 'Orange Business', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 640, contractRef: 'FTTH-MRS-001' },
     ];
 
+    let count = 0;
     for (const d of data) {
       const site = sites.find((s) => s.code === d.siteCode);
       if (!site) continue;
@@ -1183,11 +1147,13 @@ export class SeedService {
           bandwidthUp: d.bandwidthUp,
           monthlyPrice: d.monthlyPrice as any,
           currency: 'EUR',
+          contractRef: d.contractRef,
         },
       });
+      count++;
     }
 
-    this.logger.log('ConnectivityLinks seeded');
+    this.logger.log(`ConnectivityLinks seeded (${count} rows)`);
   }
 
   /**
