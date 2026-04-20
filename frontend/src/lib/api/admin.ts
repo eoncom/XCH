@@ -11,6 +11,8 @@ export interface EnumLabelItem {
   isHidden: boolean;
   isBuiltIn: boolean;
   isActive: boolean;
+  // AssetType-only flag. True = eligible to terminate a ConnectivityLink.
+  isConnectivityCapable: boolean;
 }
 
 export type EnumLabelsResponse = Record<string, EnumLabelItem[]>;
@@ -23,6 +25,7 @@ export interface UpdateEnumLabelData {
   color?: string;
   sortOrder?: number;
   isHidden?: boolean;
+  isConnectivityCapable?: boolean;
 }
 
 export interface CreateEnumValueData {

@@ -18,10 +18,17 @@ export interface ConnectivityLink {
   endDate: string | null;
   contractRef: string | null;
   notes: string | null;
+  assetId: string | null;
   expenseId: string | null;
   createdAt: string;
   updatedAt: string;
   site?: { id: string; name: string; code: string; delegationId: string } | null;
+  asset?: {
+    id: string;
+    name: string | null;
+    type: string;
+    serialNumber: string | null;
+  } | null;
   expense?: {
     id: string;
     label: string;
@@ -44,6 +51,8 @@ export interface CreateConnectivityLinkData {
   endDate?: string;
   contractRef?: string;
   notes?: string;
+  // Explicit null = detach the currently linked asset on update.
+  assetId?: string | null;
 }
 
 export type UpdateConnectivityLinkData = Partial<CreateConnectivityLinkData>;

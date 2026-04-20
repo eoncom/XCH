@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,7 @@ import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds } from '@/lib/warranty';
 import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import { ConnectivityLinksManager } from '@/components/connectivity/ConnectivityLinksManager';
+import { SdwanSection } from '@/components/sdwan/SdwanSection';
 
 const healthStatusColors = {
   HEALTHY: 'success' as const,
@@ -1086,7 +1087,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
-  const [activeTab, setActiveTab] = useState('info');
+  // Phase 6.6 — honor `?tab=practical` so sites/new can land users directly
+  // on the Infos pratiques tab to finish their configuration (connectivité,
+  // SD-WAN, contacts post-création).
+  const searchParams = useSearchParams();
+  const tabParam = searchParams?.get('tab');
+  const initialTab = tabParam === 'practical' ? 'infos-pratiques' : tabParam || 'info';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [taskSearch, setTaskSearch] = useState('');
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<string>('all');
@@ -1740,6 +1747,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               initialLinks={(site as any).connectivityLinks || []}
               canEdit={canUpdate('sites', id)}
             />
+
+            {/* SD-WAN — modèle structuré (phase 6.6) */}
+            <SdwanSection siteId={id} canEdit={canUpdate('sites', id)} />
 
             {/* Health Breakdown (live enriched) */}
             {liveHealthComponents.length > 0 && (

@@ -5744,3 +5744,24 @@ docs(prompts): bake "règles de l'art, zéro dette" directive into both prompts
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-20
+
+**Date:** 2026-04-20 18:13:58
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 11
+
+**Commit message:**
+```
+feat(backend): phase 6.6 — structured SD-WAN + ConnectivityLink.assetId
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

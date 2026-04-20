@@ -1,7 +1,7 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ResyncExpenseButton } from '@/components/expenses/ResyncExpenseButton';
 import { GenerateExpenseToggle, type GenerateExpensePayload } from '@/components/expenses/GenerateExpenseToggle';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +44,11 @@ import {
   type CreateConnectivityLinkData,
 } from '@/lib/api/connectivity';
 import { billingEntitiesApi, type BillingEntity } from '@/lib/api/costs';
+import { assetsApi } from '@/lib/api/assets';
+import { useEnumLabels } from '@/hooks/useEnumLabels';
+import { EntitySelectCombobox } from '@/components/ui/entity-select-combobox';
+import { useQuery } from '@tanstack/react-query';
+import { formatMonthlyPrice } from '@/lib/currency';
 
 interface Props {
   siteId: string;
@@ -156,7 +161,7 @@ export function ConnectivityLinksManager({ siteId, initialLinks = [], canEdit }:
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <Wifi className="h-5 w-5" />
-            Connectivité (structurée)
+            Connectivité
           </CardTitle>
           {canEdit && (
             <Button size="sm" onClick={handleOpenNew}>
@@ -211,11 +216,22 @@ export function ConnectivityLinksManager({ siteId, initialLinks = [], canEdit }:
                   {link.contractRef && (
                     <p className="text-xs text-muted-foreground">Contrat : {link.contractRef}</p>
                   )}
+                  {link.asset && (
+                    <p className="text-xs text-muted-foreground">
+                      Équipement :{' '}
+                      <Link
+                        href={`/dashboard/assets/${link.asset.id}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        {link.asset.name || link.asset.serialNumber || link.asset.type}
+                      </Link>
+                    </p>
+                  )}
                 </div>
                 {link.monthlyPrice && (
                   <div className="flex items-center justify-between text-sm pt-2 border-t">
                     <span className="font-medium">
-                      {Number(link.monthlyPrice).toFixed(2)} {link.currency}/mois
+                      {formatMonthlyPrice(link.monthlyPrice, link.currency)}
                     </span>
                     {link.expense ? (
                       <div className="flex items-center gap-2">
@@ -256,6 +272,7 @@ export function ConnectivityLinksManager({ siteId, initialLinks = [], canEdit }:
       {/* Create/Edit Dialog */}
       <ConnectivityLinkDialog
         canWrite={canEdit}
+        siteId={siteId}
         open={dialogOpen}
         onClose={() => {
           setDialogOpen(false);
@@ -304,15 +321,44 @@ function ConnectivityLinkDialog({
   onSave,
   editing,
   canWrite,
+  siteId,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (data: CreateConnectivityLinkData, expensePayload?: GenerateExpensePayload) => Promise<void>;
   editing: ConnectivityLink | null;
   canWrite: boolean;
+  siteId: string;
 }) {
   const [form, setForm] = useState<Partial<CreateConnectivityLinkData>>({});
   const [saving, setSaving] = useState(false);
+
+  // Candidate assets for the "terminating equipment" picker: assets of this
+  // site whose type is flagged `isConnectivityCapable` on EnumLabel. The
+  // picker stays usable for super-admins with no flag set by falling back to
+  // the firewall/router/switch/5G hardcoded codes (they're the Prisma default
+  // built-ins so they will always be present).
+  const { getLabelsForType } = useEnumLabels('AssetType');
+  const capableValues = useMemo(() => {
+    const dyn = getLabelsForType('AssetType')
+      .filter((item) => item.isConnectivityCapable)
+      .map((item) => item.enumValue);
+    // Defensive fallback — ensures the picker isn't empty while the labels
+    // query is loading or if a tenant accidentally unflagged everything.
+    if (dyn.length === 0) return ['ROUTER', 'FIREWALL', 'BOX_5G', 'SWITCH'];
+    return dyn;
+  }, [getLabelsForType]);
+
+  const { data: siteAssets = [] } = useQuery({
+    queryKey: ['assets', { siteId, connectivityPicker: true }],
+    queryFn: () => assetsApi.getAll({ siteId }),
+    enabled: open,
+  });
+
+  const assetCandidates = useMemo(
+    () => siteAssets.filter((a: any) => capableValues.includes(a.type)),
+    [siteAssets, capableValues],
+  );
   // ADR-011 Lot 8 — toggle visible only on creation (no editing) when no
   // expense is already linked. Mode edit keeps the existing UX (separate
   // dialog for after-the-fact generation).
@@ -336,9 +382,10 @@ function ConnectivityLinkDialog({
           endDate: editing.endDate ? editing.endDate.split('T')[0] : undefined,
           contractRef: editing.contractRef ?? undefined,
           notes: editing.notes ?? undefined,
+          assetId: editing.assetId ?? null,
         });
       } else {
-        setForm({ role: 'PRIMARY', type: 'FIBER', currency: 'EUR' });
+        setForm({ role: 'PRIMARY', type: 'FIBER', currency: 'EUR', assetId: null });
       }
     }
   }, [open, editing]);
@@ -453,6 +500,36 @@ function ConnectivityLinkDialog({
                 onChange={(e) => setForm({ ...form, contractRef: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="connectivity-asset">Équipement associé</Label>
+            <EntitySelectCombobox
+              id="connectivity-asset"
+              ariaLabel="Sélectionner l'équipement qui termine le lien"
+              options={assetCandidates.map((a: any) => ({
+                value: a.id,
+                label: (a.name || a.serialNumber || a.type) as string,
+                searchText: [a.name, a.serialNumber, a.type].filter(Boolean).join(' '),
+                render: () => (
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">
+                      {a.name || a.serialNumber || a.type}
+                    </div>
+                    {a.serialNumber && a.name && (
+                      <div className="truncate text-xs text-muted-foreground font-mono">
+                        {a.serialNumber}
+                      </div>
+                    )}
+                  </div>
+                ),
+              }))}
+              value={form.assetId ?? null}
+              onChange={(v) => setForm({ ...form, assetId: v })}
+              placeholder="Aucun (optionnel)"
+              searchPlaceholder="Rechercher..."
+              emptyMessage="Aucun équipement compatible sur ce site."
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
