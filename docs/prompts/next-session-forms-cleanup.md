@@ -9,6 +9,35 @@
 ```
 Reprise : cohérence formulaires et UX XCH (phase 6.6).
 
+PRINCIPE DIRECTEUR XCH (valable pour toute cette session ET pour toutes
+les sessions futures — c'est une règle du projet énoncée par l'utilisateur
+le 2026-04-20) :
+
+  "Toujours faire propre, pas de dette technique.
+   L'app doit être développée selon les règles de l'art d'aujourd'hui.
+   Harmoniser, cohérence, effacer toute dette — sans négliger la sécurité."
+
+Conséquences concrètes et non-négociables pour le code :
+  - Pas de champ JSON "sac à tout" quand un modèle Prisma structuré
+    peut porter la sémantique (FK, contraintes, index, query). La dette
+    technique cumulée des "Tenant.config.xxx", "Site.metadata.yyy",
+    "Asset.networkInfo" doit se réduire avec le temps, pas grandir.
+  - Pas de "on verra plus tard", pas de "provisoire". Si une décision
+    pose une dette, on choisit l'option qui n'en pose pas, même si le
+    scope augmente.
+  - Type-safety bout en bout (TypeScript strict, Prisma enums, zod
+    alignés avec DTOs class-validator).
+  - Sécurité par défaut : décorateurs @Require*, validation inputs,
+    pas de secret en clair, RBAC scopé, rate-limiting, échappement
+    XSS/SQL. Aucune régression tolérée.
+  - UX : composants réutilisables (pas de copier-coller), accessibilité
+    de base (aria-label, htmlFor, focus trap), labels FR cohérents via
+    les helpers existants.
+
+Cette règle prend le pas sur la vitesse. Si un choix rapide crée de la
+dette, on prend l'option plus longue qui la supprime.
+
+
 ÉTAT À LA FIN DE LA SESSION PRÉCÉDENTE
 ---------------------------------------
 - Phase 6.5 livrée : Site.connectivity JSON droppé ; ConnectivityLink
@@ -53,18 +82,17 @@ CE QUI RESTE — LES 4 POINTS À TRAITER
 - DTO `CreateConnectivityLinkDto` : ajouter `assetId?: string` optional.
 
 ### 1c. Partie prix absente du formulaire sites/new
-- Actuellement sites/new ne propose PAS de configurer les
-  ConnectivityLink dès la création. L'user doit créer le site puis
-  aller dans /sites/[id] Infos pratiques pour ajouter les liens.
-- Décision à prendre : soit **garder ce flow** (deux temps — cohérent
-  avec la philosophie "le site existe avant la connectivité"), soit
-  **permettre inline à la création** (un petit `<ConnectivityLinks
-  Manager>` en étape N+1 du wizard, qui POST /connectivity après le
-  POST /sites).
-- Recommandation : inline à la création avec un bouton "Ajouter un
-  lien" en étape 2 (Connectivité), qui sauve en mémoire et POST à la
-  soumission du site. Cohérence avec le besoin utilisateur ("partie
-  prix manquante").
+- **DÉCISION ACTÉE (2026-04-20)** : **deux temps**. Un site peut exister
+  sans connectivité configurée. Après création, l'utilisateur ouvre
+  `/dashboard/sites/[id]` onglet Infos pratiques et ajoute les liens
+  (+ prix) via `<ConnectivityLinksManager>`.
+- Nettoyage : dans l'étape 2 actuelle du wizard sites/new, retirer les
+  champs legacy (primary/backup/type/provider JSON-style) s'ils existent
+  encore — l'étape 2 ne doit plus évoquer la connectivité, uniquement
+  l'adresse / coordonnées / accès.
+- UX : à la fin de la création du site, afficher un toast "Site créé.
+  Ajoutez maintenant sa connectivité." avec un lien direct vers la
+  fiche Infos pratiques.
 
 ### 1d. Cohérence globale prix dans l'app
 - L'utilisateur mentionne : "il faut être cohérent sur tout l'app XCH
@@ -95,17 +123,70 @@ CE QUI RESTE — LES 4 POINTS À TRAITER
      FGT100F-DEF-001 via ConnectivityLink.assetId.
    - Pour SAC-01, lie le PRIMARY au firewall FGT80F-SAC-001.
 2. SD-WAN : v1.3 SD-WAN vivait dans connectivity.sdwan.firewallIds
-   (JSON). Phase 6.5 ne l'a pas migré. Deux options :
-   - Option A (propre) : nouveau modèle `SdwanConfig` par site
-     (enabled, provider, firewallIds array, monitorName).
-   - Option B (pragmatique) : champ JSON `Site.metadata.sdwan` qui
-     contient cette même structure. Cohérent avec ce qu'on fait
-     déjà pour Site.metadata.monitoring.
-   - Recommandation : Option B pour v1 (pas de refacto schema),
-     migrer en table plus tard si le besoin grandit.
-3. Le HealthAggregationService.calculateSdwanHealth lit déjà
-   v2.sdwan.firewallIds (in-memory, depuis normalizeConnectivity) —
-   adapter pour lire depuis Site.metadata.sdwan côté caller.
+   (JSON). Phase 6.5 ne l'a pas migré. **DÉCISION ACTÉE (2026-04-20) :
+   modèle Prisma structuré, pas de JSON.**
+
+   Nouveau schema :
+     model SdwanConfig {
+       id          String   @id @default(cuid())
+       tenantId    String
+       tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+       siteId      String   @unique  // 1:1 avec Site (une config SD-WAN par site)
+       site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+       enabled     Boolean  @default(true)
+       provider    String?  // "Fortinet SD-WAN", "Cisco Meraki", etc.
+       monitorName String?
+       status      String?  // 'up' | 'down' | 'degraded' | 'unknown'
+       notes       String?  @db.Text
+       createdAt   DateTime @default(now())
+       updatedAt   DateTime @updatedAt
+       firewalls   SdwanFirewall[]
+       @@index([tenantId])
+       @@map("sdwan_configs")
+     }
+
+     model SdwanFirewall {
+       id             String       @id @default(cuid())
+       sdwanConfigId  String
+       sdwanConfig    SdwanConfig  @relation(fields: [sdwanConfigId], references: [id], onDelete: Cascade)
+       assetId        String
+       asset          Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+       role           String?      // 'active' | 'passive' | 'peer'
+       createdAt      DateTime     @default(now())
+       @@unique([sdwanConfigId, assetId])
+       @@index([sdwanConfigId])
+       @@index([assetId])
+       @@map("sdwan_firewalls")
+     }
+
+   + relations inverses sur Site (`sdwanConfig SdwanConfig?`) et
+   Asset (`sdwanRoles SdwanFirewall[]`).
+
+   Service/module NestJS `backend/src/modules/sdwan/` :
+     - SdwanService : CRUD + attach/detach firewall
+     - SdwanController : endpoints scopés `@RequireWrite()` sur le site
+       - PUT /sdwan/:siteId (upsert config)
+       - POST /sdwan/:siteId/firewalls (attach asset firewall)
+       - DELETE /sdwan/:siteId/firewalls/:assetId
+       - GET /sdwan/:siteId (retourne config + firewalls avec leurs
+         metadata monitoring)
+     - DTOs : CreateSdwanConfigDto, AttachFirewallDto, class-validator
+       à jour.
+
+   Zéro dette : pas de JSON, FK partout, unique sur siteId, cascade
+   propre, RBAC scopé, index pour les lookups fréquents.
+
+3. Le HealthAggregationService.calculateSdwanHealth consomme à présent
+   `SdwanConfig` + `SdwanFirewall[]` (via Prisma include) au lieu de
+   `v2.sdwan.firewallIds`. La fonction `normalizeConnectivity` n'a
+   plus à exposer sdwan — elle ne traite que les links. Refacto
+   signature de `calculateSiteHealth` pour recevoir sdwanConfig en
+   paramètre séparé.
+
+4. Seed v1.4.x : pour DEF-01 et SAC-01 existants avec 2 FortiGate,
+   créer la SdwanConfig + 2 SdwanFirewall rows post-création d'assets.
+   + frontend UI section "SD-WAN" sur la fiche site (Infos pratiques)
+   avec badges des firewalls + status monitoring agrégé.
 
 ## 3. Selects searchable partout (UX critique à 250+ items)
 
@@ -148,9 +229,14 @@ exact documenté. Composants impliqués :
    quels — la recherche n'apporte rien.
 
 ### Sous-décision
-- Virtualiser la liste (react-virtual ou @tanstack/react-virtual) si
-  on s'attend à >1000 items ? Recommandation v1 : non, cmdk gère
-  bien jusqu'à ~500. Virtualiser si plaintes ultérieures.
+- **DÉCISION ACTÉE (2026-04-20)** : "on a tout le temps qu'il faut pour
+  bien faire". Donc virtualisation **oui dès la v1** via
+  `@tanstack/react-virtual` pour le composant `<EntitySelectCombobox>`.
+  Même si la volumétrie pilote est < 500 items, un outil de gestion IT
+  chantiers qui grandit passera les 1000 rapidement. Faire propre
+  maintenant pour ne pas redévelopper plus tard.
+- Tests avec jeu de données artificiel à 2000 items — viewport doit
+  rester fluide (<16ms par scroll).
 
 ## 4. P1 cascade restants (phase 6.5 audit)
 
@@ -164,41 +250,81 @@ commit `fbed82a` (mentionnés en "Not fixed"):
   (passé ligne ~239) filtre bien les vendors côté fetch dans l'impl
   interne du composant. Si non, corriger.
 
-## SOUS-DÉCISIONS À VALIDER AVANT IMPL
+## SOUS-DÉCISIONS
 
-1. **Connectivité à la création du site (1c)** : inline wizard étape
-   ou deux temps ? Reco : inline.
-2. **SD-WAN stockage (2)** : Site.metadata.sdwan JSON (reco v1) ou
-   nouveau modèle Prisma SdwanConfig ?
-3. **Combobox virtualisé (3)** : activer dès maintenant ou non ?
-   Reco : non.
-4. **Types d'assets éligibles comme "équipement associé"** sur un
-   ConnectivityLink : ROUTER / FIREWALL / BOX_5G ? Ou tout asset
-   type + pas de filtre strict (l'user choisit) ? Reco : filtrer à
-   [ROUTER, FIREWALL, BOX_5G, SWITCH] comme valeurs par défaut,
-   avec toggle "Tous types" pour cas exotiques.
+1. **Connectivité à la création du site (1c)** : **ACTÉ — deux temps.**
+   Le site peut exister sans connectivité configurée.
+2. **SD-WAN stockage (2)** : **ACTÉ — modèles Prisma structurés
+   (SdwanConfig + SdwanFirewall), zéro JSON.**
+3. **Combobox virtualisé (3)** : **ACTÉ — virtualisation via
+   @tanstack/react-virtual dès la v1.**
+4. **Types d'assets éligibles sur un ConnectivityLink.assetId** :
+   filtrer par défaut à { ROUTER, FIREWALL, BOX_5G, SWITCH } avec
+   toggle "Tous les équipements" pour cas exotiques. À confirmer en
+   début de session si l'utilisateur veut ajuster la liste.
 
 ## ORDRE D'EXÉCUTION PROPOSÉ
 
-Lot 1 (~30 min) : terminologie "Structurée" retirée.
-Lot 2 (~1h) : schema ConnectivityLink.assetId + DTO + normalize
-             + ConnectivityLinksManager dialog (Select asset filtré
-             par siteId).
-Lot 3 (~1h30) : seed DEF-01/SAC-01 liens firewalls + Site.metadata.
-              sdwan pour les 2 sites concernés + UI affichage
-              badges firewall/SD-WAN.
-Lot 4 (~3h) : composant EntitySelectCombobox + remplacement dans
-            les 10 formulaires prioritaires.
-Lot 5 (~45 min) : P1 cascade restants (sites/new step 3, budgets,
-                VendorCombobox audit).
-Lot 6 (~45 min) : audit prix dans l'app — formatage currency
-                uniforme. Helper <Currency amount=... /> si pattern
-                répété >5 fois.
-Lot 7 (~30 min) : sites/new étape Connectivité inline (si décision
-                1c = "inline"). Skip sinon.
-Lot 8 (~30 min) : deploy + tests + rapport.
+Lot 1 (~30 min) — Terminologie "Structurée" retirée partout.
 
-Charge totale estimée : ~8-9h selon profondeur combobox.
+Lot 2 (~1h30) — ConnectivityLink.assetId :
+  - Schema : ajouter FK + relation inverse Asset.connectivityLinks.
+  - CreateConnectivityLinkDto + UpdateConnectivityLinkDto : assetId?.
+  - normalizeConnectivity : propager assetId dans V2 shape.
+  - ConnectivityLinksManager dialog : nouveau Select Combobox
+    (cf. Lot 4) filtré par siteId + types éligibles.
+  - Affichage par row : nom de l'asset lié si présent.
+
+Lot 3 (~3h) — SD-WAN modèle Prisma structuré :
+  - Schema : SdwanConfig + SdwanFirewall (1:1 site, N:1 firewalls).
+  - Module NestJS sdwan/ : service + controller + DTOs + RBAC.
+  - Endpoints : PUT /sdwan/:siteId, POST/DELETE /firewalls, GET.
+  - HealthAggregationService : refacto signature pour recevoir
+    sdwanConfig + firewalls en paramètre séparé (normalizeConnectivity
+    ne traite plus sdwan).
+  - Seed : SdwanConfig pour DEF-01 + SAC-01, SdwanFirewall rows
+    pour les FortiGate existants.
+  - UI Infos pratiques : section "SD-WAN" avec provider, status
+    agrégé, badges firewalls. Edit dialog pour attach/detach.
+
+Lot 4 (~3h30) — EntitySelectCombobox virtualisé :
+  - Ajout deps : @radix-ui/react-popover, cmdk, @tanstack/react-virtual.
+  - Composant <EntitySelectCombobox<T>> : props génériques typées,
+    recherche full-text nom+code, virtual scroll, loading state,
+    empty state, a11y complète (role, aria-labels, focus trap).
+  - Tests manuels à 2000 items fictifs : scroll 60fps.
+  - Remplacement dans ~12 formulaires prioritaires (liste dans le
+    prompt, Lot 4 détaillé plus bas).
+
+Lot 5 (~45 min) — P1 cascade restants : sites/new step 3 allContacts
+  scopé delegation, budgets/page site fetch scopé, audit
+  VendorCombobox (lire son impl et s'assurer que delegationId filtre
+  bien — corriger sinon).
+
+Lot 6 (~1h) — Cohérence formatage currency + prix :
+  - Audit : grep des usages Intl.NumberFormat / € / EUR ad-hoc.
+  - Nouveau helper <Currency amount={X} currency={Y} /> +
+    utilitaire formatCurrency(amount, currency) pour les usages hors
+    JSX (export-site PDF, alerts, toasts).
+  - Remplacement systématique partout — zéro formatage manuel.
+
+Lot 7 (~30 min) — UX sites/new deux-temps propre :
+  - Retirer toute mention connectivity/prix de l'étape 2 du wizard.
+  - Toast post-création avec lien "Ajoutez maintenant sa connectivité"
+    vers /sites/[id] onglet Infos pratiques.
+  - Sous-titre de la page Infos pratiques : "Connectivité, contacts,
+    ressources et accès" (retirer "Structurée").
+
+Lot 8 (~45 min) — Deploy + tests :
+  - prisma db push --accept-data-loss (nouvelles tables SdwanConfig,
+    SdwanFirewall).
+  - Reset + reseed DB.
+  - Curl : vérifier ConnectivityLink.assetId rendu, SdwanConfig
+    présent pour DEF-01/SAC-01, combobox searchable visuellement,
+    P1 cascades corrigés.
+  - Rapport court phase 6.6 au format phase 5/6.
+
+Charge totale estimée : ~10-11h pour tout finir proprement.
 
 WORKFLOW
 --------

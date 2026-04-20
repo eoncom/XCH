@@ -9,6 +9,35 @@
 ```
 Reprise : implémentation du module monitoring natif XCH (ADR-012 bis).
 
+PRINCIPE DIRECTEUR XCH (règle projet énoncée par l'utilisateur le
+2026-04-20, s'applique à toutes les sessions) :
+
+  "Toujours faire propre, pas de dette technique.
+   L'app doit être développée selon les règles de l'art d'aujourd'hui.
+   Harmoniser, cohérence, effacer toute dette — sans négliger la sécurité."
+
+Conséquences concrètes pour cette session :
+  - Le modèle MonitorCheck + MonitorResult sont des tables Prisma
+    structurées (pas de JSON "sac à tout"). Un champ target en string
+    est OK car la sémantique (host/url/ip) est unifiée ; un champ
+    config HTTP plus riche (headers, method, expected status)
+    justifiera un deuxième modèle MonitorHttpConfig en 1:0-1 avec
+    MonitorCheck, pas un JSON optional.
+  - Le worker NestJS est un process séparé avec ses propres deps
+    minimales, permissions limitées (CAP_NET_RAW seulement), image
+    partagée avec l'API pour éviter la duplication de build.
+  - Sécurité : le worker n'expose AUCUN port HTTP. Probes timeout
+    courts. Rate-limiting interne (max N probes parallèles). Pas de
+    SSRF : le target d'un HTTP probe doit être validé contre une
+    allowlist de schèmes (http/https) et bloquer localhost/link-local
+    par défaut. Ajouter un toggle "allow internal targets" par tenant.
+  - Code coverage raisonnable sur le probe core (TCP/HTTP/ICMP
+    individuellement testables).
+  - Zéro dette : pas de "on mettra un TODO quelque part", pas de
+    "// TODO: clean up later". Si un choix pose dette, prendre l'option
+    qui ne pose pas.
+
+
 CONTEXTE
 --------
 Dans les sessions précédentes on a :
