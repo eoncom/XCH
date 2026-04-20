@@ -36,4 +36,13 @@ export class UpdateEnumLabelDto {
   @IsBoolean()
   @IsOptional()
   isHidden?: boolean;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'AssetType-only flag. True = this asset type is eligible to terminate a ConnectivityLink.',
+  })
+  @IsBoolean()
+  @IsOptional()
+  isConnectivityCapable?: boolean;
 }

@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   normalizeConnectivity,
-  extractMonitorNames,
   ConnectivityV2,
   ConnectivityLinkV2,
 } from '../../common/utils/connectivity-migration';
@@ -11,7 +10,7 @@ import {
  *
  * Calculates intelligent site health from multiple components:
  * - Connectivity links (primary/backup) with their Uptime Kuma status
- * - SD-WAN status (derived from component firewalls)
+ * - SD-WAN status (derived from component firewalls declared in SdwanConfig)
  * - Monitored assets (equipment)
  *
  * Rules:
@@ -21,11 +20,25 @@ import {
  * 3. HEALTHY if: everything is UP
  * 4. UNKNOWN if: no monitoring configured
  *
- * SD-WAN: status is derived from component firewalls on the site.
- * If 2 firewalls and 1 is UP → "degraded" (WARNING).
+ * SD-WAN (phase 6.6): fed by the SdwanConfig Prisma model — no more JSON
+ * blob. Status is derived from the attached firewalls' monitors; with 2
+ * firewalls and 1 UP → "degraded" (WARNING).
  */
 
 export type HealthStatus = 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
+
+/**
+ * Subset of SdwanConfig fields relevant to health aggregation. Callers pass
+ * this shape (typically a Prisma `sdwanConfig` with `firewalls` included);
+ * null means the site has no SD-WAN configured.
+ */
+export interface SdwanConfigForHealth {
+  enabled: boolean;
+  provider?: string | null;
+  monitorName?: string | null;
+  status?: string | null;
+  firewalls: Array<{ assetId: string; role?: string | null }>;
+}
 
 export interface HealthComponent {
   type: 'link' | 'sdwan' | 'asset';
@@ -58,16 +71,14 @@ export class HealthAggregationService {
   /**
    * Calculate site health from all monitored components.
    *
-   * Phase 6.5: the first parameter is now `ConnectivityLink[]` rows from the
-   * structured table (or a ConnectivityV2-shaped object for callers that
-   * already normalized). The legacy Site.connectivity JSON column was dropped.
-   *
    * @param connectivitySource Either ConnectivityLink[] rows or a pre-normalized ConnectivityV2 object
+   * @param sdwanConfig SdwanConfig with firewalls included, or null if unconfigured
    * @param siteAssets Assets belonging to the site (with networkInfo)
    * @param monitorStatuses Map of monitor name → status
    */
   calculateSiteHealth(
     connectivitySource: any,
+    sdwanConfig: SdwanConfigForHealth | null | undefined,
     siteAssets: Array<{
       id: string;
       name?: string;
@@ -108,29 +119,31 @@ export class HealthAggregationService {
       });
     }
 
-    // 2. Evaluate SD-WAN — derive status from component firewalls
-    if (v2.sdwan?.enabled) {
-      const sdwanFirewalls = siteAssets.filter(
-        a => a.type === 'FIREWALL' && (a.networkInfo as any)?.monitorName,
-      );
+    // 2. Evaluate SD-WAN — derive status from attached firewalls (structured)
+    if (sdwanConfig?.enabled && sdwanConfig.firewalls.length > 0) {
+      const firewallAssets = sdwanConfig.firewalls
+        .map((fw) => siteAssets.find((a) => a.id === fw.assetId))
+        .filter((a): a is NonNullable<typeof a> => !!a);
 
       let sdwanStatus: 'up' | 'down' | 'degraded' | 'unknown';
       let sdwanImpact: 'critical' | 'warning' | 'none' = 'none';
       let sdwanDetail: string | undefined;
-      const sdwanBaseName = `SD-WAN ${v2.sdwan.provider || ''}`.trim();
+      const sdwanBaseName = `SD-WAN ${sdwanConfig.provider || ''}`.trim();
 
-      if (sdwanFirewalls.length > 0) {
-        // Derive SD-WAN status from its component firewalls
-        const fwStatuses = sdwanFirewalls.map(fw =>
+      // Only firewalls with a monitor can contribute to the derived status.
+      const monitored = firewallAssets.filter((fw) => (fw.networkInfo as any)?.monitorName);
+
+      if (monitored.length > 0) {
+        const fwStatuses = monitored.map((fw) =>
           this.resolveMonitorStatus(
             (fw.networkInfo as any).monitorName,
             (fw.networkInfo as any).monitorStatus,
             monitorStatuses,
           ),
         );
-        const upCount = fwStatuses.filter(s => s === 'up').length;
-        const downCount = fwStatuses.filter(s => s === 'down').length;
-        const total = sdwanFirewalls.length;
+        const upCount = fwStatuses.filter((s) => s === 'up').length;
+        const downCount = fwStatuses.filter((s) => s === 'down').length;
+        const total = monitored.length;
 
         sdwanDetail = `${upCount}/${total} UP`;
 
@@ -140,17 +153,16 @@ export class HealthAggregationService {
           sdwanStatus = 'down';
           sdwanImpact = 'warning';
         } else if (upCount > 0) {
-          // Partial — degraded
           sdwanStatus = 'degraded';
           sdwanImpact = 'warning';
         } else {
           sdwanStatus = 'unknown';
         }
       } else {
-        // No firewalls with monitors — fall back to SD-WAN's own monitor
+        // No firewall-level monitors — fall back to the overlay's own monitor if any.
         const fallbackStatus = this.resolveMonitorStatus(
-          v2.sdwan.monitorName,
-          v2.sdwan.status,
+          sdwanConfig.monitorName ?? undefined,
+          sdwanConfig.status ?? undefined,
           monitorStatuses,
         );
         sdwanStatus = fallbackStatus;
@@ -163,13 +175,20 @@ export class HealthAggregationService {
         name: sdwanBaseName,
         status: sdwanStatus,
         impact: sdwanImpact,
-        monitorName: v2.sdwan.monitorName,
+        monitorName: sdwanConfig.monitorName ?? undefined,
         detail: sdwanDetail,
       });
     }
 
     // 3. Evaluate monitored assets
+    // Firewalls already surfaced inside the SD-WAN block are skipped to avoid
+    // counting the same equipment twice.
+    const sdwanFirewallIds = new Set(
+      (sdwanConfig?.firewalls ?? []).map((fw) => fw.assetId),
+    );
     for (const asset of siteAssets) {
+      if (sdwanFirewallIds.has(asset.id)) continue;
+
       const networkInfo = asset.networkInfo as any;
       if (!networkInfo?.monitorName) continue;
 
@@ -190,7 +209,7 @@ export class HealthAggregationService {
     }
 
     // 4. Calculate overall health
-    const overall = this.calculateOverallHealth(components, v2);
+    const overall = this.calculateOverallHealth(components);
 
     return {
       overall,
@@ -273,7 +292,6 @@ export class HealthAggregationService {
    */
   private calculateOverallHealth(
     components: HealthComponent[],
-    connectivity: ConnectivityV2,
   ): HealthStatus {
     // No components with monitoring → UNKNOWN
     if (components.length === 0) return 'UNKNOWN';
@@ -335,10 +353,6 @@ export class HealthAggregationService {
       if (link.monitorName && monitorStatuses[link.monitorName]) {
         link.status = monitorStatuses[link.monitorName].status;
       }
-    }
-
-    if (v2.sdwan?.monitorName && monitorStatuses[v2.sdwan.monitorName]) {
-      v2.sdwan.status = monitorStatuses[v2.sdwan.monitorName].status;
     }
 
     return v2;

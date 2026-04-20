@@ -78,6 +78,11 @@ export class CreateConnectivityLinkDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Equipment that terminates this link (router, firewall, 5G box...)' })
+  @IsOptional()
+  @IsString()
+  assetId?: string | null;
 }
 
 export class UpdateConnectivityLinkDto extends PartialType(CreateConnectivityLinkDto) {}

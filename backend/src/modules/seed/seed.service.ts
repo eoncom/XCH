@@ -31,7 +31,8 @@ export class SeedService {
     // v1.4 post-audit enrichments (ADR-010 + phase 4 demo coverage)
     await this.createAccessOverrides(tenantId, users, sites);
     await this.createDemoBudgetsAndExpenses(tenantId, delegations, sites, users);
-    await this.createConnectivityLinksForDemo(tenantId, sites);
+    await this.createConnectivityLinksForDemo(tenantId, sites, assets);
+    await this.createSdwanConfigsForDemo(tenantId, sites, assets);
     await this.createDemoUserNotifications(tenantId, users, tasks, sites);
     await this.seedDemoAuditLogEntries(tenantId, users, sites, assets);
     await this.applyTechnicianCustomAppearance(tenantId);
@@ -80,6 +81,10 @@ export class SeedService {
       // v1.3+/v1.4 tables — wipe before deleting parents
       await this.prisma.userNotification.deleteMany({ where: { tenantId } });
       await this.prisma.connectivityLink.deleteMany({ where: { tenantId } });
+      // SD-WAN (phase 6.6) — firewalls cascade from assets/configs but wipe
+      // explicitly for self-documenting reset order.
+      await this.prisma.sdwanFirewall.deleteMany({ where: { sdwanConfig: { tenantId } } });
+      await this.prisma.sdwanConfig.deleteMany({ where: { tenantId } });
       // Cost allocation tables
       await this.prisma.costAllocation.deleteMany({ where: { expense: { tenantId } } });
       await this.prisma.expense.deleteMany({ where: { tenantId } });
@@ -1080,7 +1085,18 @@ export class SeedService {
    * now the canonical place where connectivity data lives (the legacy
    * Site.connectivity JSON column was dropped).
    */
-  private async createConnectivityLinksForDemo(tenantId: string, sites: any[]) {
+  private async createConnectivityLinksForDemo(tenantId: string, sites: any[], assets: any[]) {
+    // Which piece of on-site equipment actually terminates the PRIMARY link.
+    // Empty/missing asset → link stays asset-less (fine, the FK is nullable).
+    const primaryAssetBySite: Record<string, string /* serialNumber */ | undefined> = {
+      'DEF-01': 'FGT100F-DEF-001',
+      'SAC-01': 'FGT80F-SAC-001',
+      'VEL-01': 'FGT80F-VEL-001',
+      'STC-01': 'FGT60F-STC-001',
+      'MAS-01': 'FGT60F-MAS-001',
+      'BOU-01': 'TPL5G-BOU-001',
+    };
+
     const data: Array<{
       siteCode: string;
       role: 'PRIMARY' | 'BACKUP';
@@ -1125,6 +1141,16 @@ export class SeedService {
       });
       if (existing) continue;
 
+      // Wire the terminating equipment on PRIMARY links only (see map above).
+      let assetId: string | null = null;
+      if (d.role === 'PRIMARY') {
+        const serial = primaryAssetBySite[d.siteCode];
+        if (serial) {
+          const terminating = assets.find((a) => a.serialNumber === serial && a.siteId === site.id);
+          if (terminating) assetId = terminating.id;
+        }
+      }
+
       await this.prisma.connectivityLink.create({
         data: {
           tenantId,
@@ -1137,12 +1163,94 @@ export class SeedService {
           monthlyPrice: d.monthlyPrice as any,
           currency: 'EUR',
           contractRef: d.contractRef,
+          assetId,
         },
       });
       count++;
     }
 
     this.logger.log(`ConnectivityLinks seeded (${count} rows)`);
+  }
+
+  /**
+   * Seed SD-WAN configs + attached firewalls for the demo sites (phase 6.6 —
+   * replaces the legacy Site.connectivity.sdwan JSON block).
+   */
+  private async createSdwanConfigsForDemo(tenantId: string, sites: any[], assets: any[]) {
+    const plans: Array<{
+      siteCode: string;
+      provider: string;
+      firewalls: Array<{ serial: string; role: 'active' | 'passive' | 'peer' }>;
+      notes?: string;
+    }> = [
+      {
+        siteCode: 'DEF-01',
+        provider: 'Fortinet SD-WAN',
+        firewalls: [
+          { serial: 'FGT100F-DEF-001', role: 'active' },
+          { serial: 'FGT100F-DEF-002', role: 'passive' },
+        ],
+        notes: 'HA actif/passif — site siège',
+      },
+      {
+        siteCode: 'SAC-01',
+        provider: 'Fortinet SD-WAN',
+        firewalls: [{ serial: 'FGT80F-SAC-001', role: 'active' }],
+        notes: 'Fortinet autonome',
+      },
+      {
+        siteCode: 'VEL-01',
+        provider: 'Fortinet SD-WAN',
+        firewalls: [{ serial: 'FGT80F-VEL-001', role: 'active' }],
+      },
+      {
+        siteCode: 'STC-01',
+        provider: 'Fortinet SD-WAN',
+        firewalls: [{ serial: 'FGT60F-STC-001', role: 'active' }],
+      },
+      {
+        siteCode: 'MAS-01',
+        provider: 'Fortinet SD-WAN',
+        firewalls: [{ serial: 'FGT60F-MAS-001', role: 'active' }],
+      },
+    ];
+
+    let configCount = 0;
+    let firewallCount = 0;
+    for (const plan of plans) {
+      const site = sites.find((s) => s.code === plan.siteCode);
+      if (!site) continue;
+
+      const config = await this.prisma.sdwanConfig.upsert({
+        where: { siteId: site.id },
+        create: {
+          tenantId,
+          siteId: site.id,
+          enabled: true,
+          provider: plan.provider,
+          notes: plan.notes ?? null,
+        },
+        update: {
+          provider: plan.provider,
+          notes: plan.notes ?? null,
+        },
+      });
+      configCount++;
+
+      for (const fw of plan.firewalls) {
+        const asset = assets.find((a) => a.serialNumber === fw.serial && a.siteId === site.id);
+        if (!asset) continue;
+        await this.prisma.sdwanFirewall.upsert({
+          where: {
+            sdwanConfigId_assetId: { sdwanConfigId: config.id, assetId: asset.id },
+          },
+          create: { sdwanConfigId: config.id, assetId: asset.id, role: fw.role },
+          update: { role: fw.role },
+        });
+        firewallCount++;
+      }
+    }
+    this.logger.log(`SD-WAN configs seeded (${configCount} configs, ${firewallCount} firewalls)`);
   }
 
   /**

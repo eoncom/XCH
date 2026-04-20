@@ -33,6 +33,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AssetModelsModule } from './modules/asset-models/asset-models.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { ConnectivityModule } from './modules/connectivity/connectivity.module';
+import { SdwanModule } from './modules/sdwan/sdwan.module';
 import { ConsumptionModule } from './modules/consumption/consumption.module';
 import { SearchModule } from './modules/search/search.module';
 import { AuditModule } from './modules/audit/audit.module';
@@ -95,6 +96,7 @@ import { AuditModule } from './modules/audit/audit.module';
     AssetModelsModule,
     BudgetsModule,
     ConnectivityModule,
+    SdwanModule,
     ConsumptionModule,
     SearchModule,
     AuditModule,

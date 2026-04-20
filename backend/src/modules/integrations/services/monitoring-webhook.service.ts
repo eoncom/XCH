@@ -62,6 +62,7 @@ export class MonitoringWebhookService {
 
     // 4. Find site by code + structured ConnectivityLink rows (phase 6.5:
     // legacy Site.connectivity JSON was dropped — links live in their own table).
+    // Phase 6.6: SD-WAN config lives in SdwanConfig/SdwanFirewall — load it too.
     const site = await this.prisma.site.findFirst({
       where: { code: parsed.siteCode },
       include: {
@@ -69,6 +70,9 @@ export class MonitoringWebhookService {
           select: { id: true, name: true, type: true, networkInfo: true },
         },
         connectivityLinks: true,
+        sdwanConfig: {
+          include: { firewalls: true },
+        },
       },
     });
 
@@ -122,8 +126,13 @@ export class MonitoringWebhookService {
     }
 
     // 6. Recalculate site health using existing aggregation logic
-    // Build a full monitor status map from current connectivity + the new event
-    const fullMonitorMap = this.buildFullMonitorStatusMap(updatedConnectivity, site.assets, monitorStatusMap);
+    // Build a full monitor status map from current connectivity + SD-WAN + the new event
+    const fullMonitorMap = this.buildFullMonitorStatusMap(
+      updatedConnectivity,
+      site.sdwanConfig,
+      site.assets,
+      monitorStatusMap,
+    );
 
     const assetsForHealth = site.assets.map((a) => ({
       id: a.id,
@@ -134,6 +143,7 @@ export class MonitoringWebhookService {
 
     const breakdown = this.healthAggregation.calculateSiteHealth(
       updatedConnectivity,
+      site.sdwanConfig,
       assetsForHealth,
       fullMonitorMap,
     );
@@ -264,22 +274,24 @@ export class MonitoringWebhookService {
    */
   private buildFullMonitorStatusMap(
     connectivity: import('../../../common/utils/connectivity-migration').ConnectivityV2,
+    sdwanConfig: { monitorName: string | null; status: string | null } | null | undefined,
     assets: Array<{ networkInfo: any }>,
     newEventMap: Record<string, { status: 'up' | 'down' | 'unknown'; responseTime?: number }>,
   ): Record<string, { status: 'up' | 'down' | 'unknown'; responseTime?: number }> {
     const map: Record<string, { status: 'up' | 'down' | 'unknown'; responseTime?: number }> = {};
-    const v2 = connectivity;
 
     // Collect from links
-    for (const link of v2.links) {
+    for (const link of connectivity.links) {
       if (link.monitorName && link.status) {
         map[link.monitorName] = { status: link.status as 'up' | 'down' | 'unknown' };
       }
     }
 
-    // Collect from SD-WAN
-    if (v2.sdwan?.monitorName && v2.sdwan.status) {
-      map[v2.sdwan.monitorName] = { status: v2.sdwan.status as 'up' | 'down' | 'unknown' };
+    // Collect from SD-WAN overlay monitor (phase 6.6 — structured table)
+    if (sdwanConfig?.monitorName && sdwanConfig.status) {
+      map[sdwanConfig.monitorName] = {
+        status: sdwanConfig.status as 'up' | 'down' | 'unknown',
+      };
     }
 
     // Collect from assets

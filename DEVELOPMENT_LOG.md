@@ -5723,3 +5723,24 @@ fix(seed): remove last 2 residual connectivity: {} literals on LYO and MRS sites
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-20
+
+**Date:** 2026-04-20 18:13:32
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 15
+- Frontend files modified: 0
+
+**Commit message:**
+```
+docs(prompts): bake "règles de l'art, zéro dette" directive into both prompts
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

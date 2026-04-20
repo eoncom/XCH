@@ -1,16 +1,14 @@
 /**
  * Connectivity normalization utility.
  *
- * In phase 6.5 (2026-04-20) the legacy `Site.connectivity` JSONB column was
+ * Phase 6.5 (2026-04-20): the legacy `Site.connectivity` JSONB column was
  * dropped. The structured `ConnectivityLink[]` table is now the single source
- * of truth. This utility used to convert V1 JSON → V2 JSON in-memory; it now
- * just adapts `ConnectivityLink[]` rows to the V2 shape expected by the
- * downstream health-aggregation and monitoring-webhook services so they
- * didn't need an internal refactor.
+ * of truth. This utility adapts `ConnectivityLink[]` rows to a V2 shape the
+ * health-aggregation and monitoring-webhook services consume.
  *
- * Public API (kept backward compatible):
- * - normalizeConnectivity(links) → ConnectivityV2
- * - extractMonitorNames(v2)      → monitor targets for health aggregation
+ * Phase 6.6 (2026-04-20): SD-WAN moved to its own Prisma models
+ * (`SdwanConfig` + `SdwanFirewall`); the V2 shape no longer carries a `sdwan`
+ * field. Health aggregation receives `sdwanConfig` as a separate argument.
  */
 
 export interface ConnectivityLinkV2 {
@@ -25,18 +23,11 @@ export interface ConnectivityLinkV2 {
   status?: 'up' | 'down' | 'unknown';
 }
 
-export interface SdwanConfigV2 {
-  enabled: boolean;
-  provider?: string;
-  firewallIds: string[];
-  monitorName?: string;
-  status?: 'up' | 'down' | 'unknown';
-  notes?: string;
-}
-
+// Phase 6.6: SD-WAN moved to its own Prisma models (SdwanConfig + SdwanFirewall).
+// The V2 shape no longer carries a `sdwan` field — HealthAggregationService
+// receives sdwanConfig as a separate argument.
 export interface ConnectivityV2 {
   links: ConnectivityLinkV2[];
-  sdwan?: SdwanConfigV2;
   cutProcedure?: string;
 }
 
@@ -56,6 +47,7 @@ type DbConnectivityLink = {
   publicIp?: string | null;
   monitorName?: string | null;
   status?: string | null;
+  assetId?: string | null;
 };
 
 /**
@@ -82,6 +74,7 @@ export function normalizeConnectivity(
       l.bandwidthDown
         ? `${l.bandwidthDown}${l.bandwidthUp ? `/${l.bandwidthUp}` : ''}`
         : undefined,
+    assetId: l.assetId || undefined,
     monitorName: l.monitorName || undefined,
     status: (l.status as any) || undefined,
   }));
@@ -89,50 +82,6 @@ export function normalizeConnectivity(
   return {
     links: v2Links,
     cutProcedure: cutProcedure || undefined,
-    // SD-WAN info is out of scope for ConnectivityLink rows — keep undefined
-    // until a proper model is added (current monitoring handles it from firewall assets).
   };
 }
 
-/**
- * Extract monitor targets from a V2 connectivity structure.
- * Unchanged from phase 5 — still used by HealthAggregationService.
- */
-export function extractMonitorNames(connectivity: ConnectivityV2): Array<{
-  monitorName: string;
-  targetType: 'link' | 'sdwan';
-  targetId: string;
-  targetName: string;
-  role?: string;
-}> {
-  const monitors: Array<{
-    monitorName: string;
-    targetType: 'link' | 'sdwan';
-    targetId: string;
-    targetName: string;
-    role?: string;
-  }> = [];
-
-  for (const link of connectivity.links) {
-    if (link.monitorName) {
-      monitors.push({
-        monitorName: link.monitorName,
-        targetType: 'link',
-        targetId: link.id,
-        targetName: `${link.type || 'Link'} ${link.provider || ''}`.trim(),
-        role: link.role,
-      });
-    }
-  }
-
-  if (connectivity.sdwan?.monitorName) {
-    monitors.push({
-      monitorName: connectivity.sdwan.monitorName,
-      targetType: 'sdwan',
-      targetId: 'sdwan',
-      targetName: `SD-WAN ${connectivity.sdwan.provider || ''}`.trim(),
-    });
-  }
-
-  return monitors;
-}

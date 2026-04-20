@@ -59,6 +59,7 @@ model Tenant {
   assetModels         AssetModel[]
   budgets             Budget[]
   connectivityLinks   ConnectivityLink[]
+  sdwanConfigs        SdwanConfig[]
   userNotifications   UserNotification[]
   vendorCatalogs      VendorCatalog[]
 
@@ -304,6 +305,7 @@ model Site {
   movementsTo     AssetMovement[]  @relation("movementToSite")
   budgets         Budget[]
   connectivityLinks ConnectivityLink[]
+  sdwanConfig     SdwanConfig?
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -451,11 +453,13 @@ model Asset {
   updatedAt DateTime @updatedAt
 
   // Relations
-  pins         Pin[]
-  tasks        Task[]
-  externalRefs ExternalRef[]
-  photos       Photo[]
-  movements    AssetMovement[]
+  pins              Pin[]
+  tasks             Task[]
+  externalRefs      ExternalRef[]
+  photos            Photo[]
+  movements         AssetMovement[]
+  connectivityLinks ConnectivityLink[]
+  sdwanRoles        SdwanFirewall[]
 
   @@unique([tenantId, serialNumber])
   @@index([tenantId])
@@ -1034,6 +1038,12 @@ model EnumLabel {
   isBuiltIn Boolean @default(false) // true = valeur système non-supprimable
   isActive  Boolean @default(true)  // false = désactivée (pas proposée dans les selects)
 
+  // Per-row semantic flags. Only meaningful for certain (enumType, enumValue)
+  // pairs — e.g. `isConnectivityCapable` applies to AssetType rows for
+  // ROUTER / FIREWALL / BOX_5G / SWITCH etc. Used by the ConnectivityLink
+  // asset picker to restrict the candidate list.
+  isConnectivityCapable Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1245,6 +1255,12 @@ model ConnectivityLink {
   contractRef    String?
   notes          String?           @db.Text
 
+  // Equipment that terminates this link (router, firewall, 5G box, ...).
+  // Optional: some links are abstract (fiber drop not yet cabled to a box).
+  // Filtering of eligible asset types is driven by EnumLabel.isConnectivityCapable.
+  assetId String?
+  asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
   // Monitoring — phase 6.5: moved from Site.connectivity.links[i].monitorName
   // and .status when the legacy JSON was dropped.
   monitorName    String?
@@ -1259,7 +1275,58 @@ model ConnectivityLink {
 
   @@index([tenantId, siteId])
   @@index([tenantId, role])
+  @@index([assetId])
   @@map("connectivity_links")
+}
+
+// ============================================================================
+// SD-WAN
+// ============================================================================
+// One SD-WAN configuration per site (1:1). Firewalls attached to a config are
+// the physical/virtual appliances realising the overlay (active/passive HA,
+// or peers in a full mesh). Health aggregation uses these rows to derive the
+// SD-WAN status from the underlying firewall monitors. Phase 6.6 — replaces
+// the legacy Site.connectivity.sdwan JSON blob dropped in phase 6.5.
+
+model SdwanConfig {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  siteId String @unique
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  enabled     Boolean @default(true)
+  provider    String? // "Fortinet SD-WAN", "Cisco Meraki", "VeloCloud", ...
+  monitorName String? // External monitor key (Uptime Kuma) for the overlay as a whole
+  status      String? // 'up' | 'down' | 'degraded' | 'unknown' — cached by health aggregation
+  notes       String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  firewalls SdwanFirewall[]
+
+  @@index([tenantId])
+  @@map("sdwan_configs")
+}
+
+model SdwanFirewall {
+  id            String      @id @default(cuid())
+  sdwanConfigId String
+  sdwanConfig   SdwanConfig @relation(fields: [sdwanConfigId], references: [id], onDelete: Cascade)
+
+  assetId String
+  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  role String? // 'active' | 'passive' | 'peer' — free-form label, semantics up to the provider
+
+  createdAt DateTime @default(now())
+
+  @@unique([sdwanConfigId, assetId])
+  @@index([sdwanConfigId])
+  @@index([assetId])
+  @@map("sdwan_firewalls")
 }
 
 // ============================================================================

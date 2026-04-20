@@ -787,6 +787,7 @@ export class IntegrationsService {
 
     // 2. Get all monitoring-enabled sites + their assets + connectivity links
     // (phase 6.5: links live in their own table since v1.3, JSON column dropped)
+    // (phase 6.6: SD-WAN lives in SdwanConfig/SdwanFirewall — load it too)
     const sites = await this.prisma.site.findMany({
       where: { tenantId, monitoringEnabled: true },
       include: {
@@ -794,6 +795,9 @@ export class IntegrationsService {
           select: { id: true, name: true, type: true, networkInfo: true },
         },
         connectivityLinks: true,
+        sdwanConfig: {
+          include: { firewalls: true },
+        },
       },
     });
 
@@ -810,7 +814,7 @@ export class IntegrationsService {
 
         // Check if there's any monitoring configured
         const hasLinkMonitors = v2Connectivity.links.some(l => l.monitorName);
-        const hasSdwanMonitor = v2Connectivity.sdwan?.monitorName;
+        const hasSdwanMonitor = !!site.sdwanConfig?.monitorName;
         const hasAssetMonitors = site.assets.some(
           a => (a.networkInfo as any)?.monitorName,
         );
@@ -861,6 +865,7 @@ export class IntegrationsService {
         }));
         const breakdown = this.healthAggregation.calculateSiteHealth(
           updatedConnectivity,
+          site.sdwanConfig,
           assetsForHealth,
           monitorStatusMap,
         );

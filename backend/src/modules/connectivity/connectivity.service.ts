@@ -9,6 +9,7 @@ import {
 const LINK_INCLUDE = {
   site: { select: { id: true, name: true, code: true, delegationId: true } },
   expense: { select: { id: true, label: true, totalAmount: true, frequency: true } },
+  asset: { select: { id: true, name: true, type: true, serialNumber: true } },
 };
 
 @Injectable()
@@ -21,6 +22,10 @@ export class ConnectivityService {
       where: { id: dto.siteId, tenantId },
     });
     if (!site) throw new NotFoundException('Site not found');
+
+    if (dto.assetId) {
+      await this.validateAssetForSite(tenantId, dto.assetId, dto.siteId);
+    }
 
     return this.prisma.connectivityLink.create({
       data: {
@@ -38,9 +43,28 @@ export class ConnectivityService {
         endDate: dto.endDate ? new Date(dto.endDate) : null,
         contractRef: dto.contractRef ?? null,
         notes: dto.notes ?? null,
+        assetId: dto.assetId ?? null,
       },
       include: LINK_INCLUDE,
     });
+  }
+
+  /**
+   * Ensure the asset belongs to the same tenant and (if the asset has a site)
+   * to the same site as the connectivity link. Keeps a connectivity link from
+   * pointing to an equipment located elsewhere.
+   */
+  private async validateAssetForSite(tenantId: string, assetId: string, siteId: string) {
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+      select: { id: true, siteId: true },
+    });
+    if (!asset) throw new NotFoundException('Asset not found');
+    if (asset.siteId && asset.siteId !== siteId) {
+      throw new BadRequestException(
+        'Asset belongs to a different site than this connectivity link',
+      );
+    }
   }
 
   async findAll(tenantId: string, filters: FilterConnectivityLinkDto = {}) {
@@ -71,9 +95,15 @@ export class ConnectivityService {
     });
     if (!existing) throw new NotFoundException('Connectivity link not found');
 
+    if (dto.assetId !== undefined && dto.assetId !== null) {
+      await this.validateAssetForSite(tenantId, dto.assetId, existing.siteId);
+    }
+
     const data: any = { ...dto };
     if (dto.startDate !== undefined) data.startDate = dto.startDate ? new Date(dto.startDate) : null;
     if (dto.endDate !== undefined) data.endDate = dto.endDate ? new Date(dto.endDate) : null;
+    // Explicit null → detach the current asset.
+    if (dto.assetId === null) data.assetId = null;
 
     const updated = await this.prisma.connectivityLink.update({
       where: { id },
