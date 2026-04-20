@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Zap, Server, Euro, TrendingUp, Info } from 'lucide-react';
 import { consumptionApi, type ConsumptionSummary } from '@/lib/api/consumption';
 import { assetStatusLabels } from '@/lib/asset-labels';
+import { formatCurrency } from '@/lib/currency';
 
 export default function ConsumptionPage() {
   const [data, setData] = useState<ConsumptionSummary | null>(null);
@@ -76,7 +77,7 @@ export default function ConsumptionPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{totals.costMonth.toFixed(2)} {totals.currency}</p>
+            <p className="text-3xl font-bold">{formatCurrency(totals.costMonth, totals.currency)}</p>
             <p className="text-xs text-muted-foreground mt-1">par mois</p>
           </CardContent>
         </Card>
@@ -146,7 +147,7 @@ export default function ConsumptionPage() {
                     <TableCell>{s.totalWatts.toFixed(0)} W</TableCell>
                     <TableCell>{s.kWhMonth.toFixed(1)} kWh</TableCell>
                     <TableCell className="font-semibold">
-                      {s.costMonth.toFixed(2)} {totals.currency}
+                      {formatCurrency(s.costMonth, totals.currency)}
                     </TableCell>
                   </TableRow>
                 ))}

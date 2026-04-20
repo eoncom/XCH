@@ -62,6 +62,7 @@ import Image from 'next/image';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { assetTypeLabels, assetStatusLabels, assetStatusColors } from '@/lib/asset-labels';
+import { formatCurrency } from '@/lib/currency';
 import type { Asset, AssetType, AssetStatus, AssetMovement, AssetMovementType } from '@/types';
 
 const taskStatusConfig: Record<string, { label: string; variant: 'secondary' | 'default' | 'error' | 'success' | 'warning'; icon: typeof Circle }> = {
@@ -716,7 +717,7 @@ export default function AssetDetailPage({
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium truncate">{exp.label}</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: exp.currency || 'EUR' }).format(exp.totalAmount)}
+                            {formatCurrency(exp.totalAmount, exp.currency)}
                             {' · '}
                             <Badge variant="secondary" className="text-[10px]">{exp.type}</Badge>
                             {' '}

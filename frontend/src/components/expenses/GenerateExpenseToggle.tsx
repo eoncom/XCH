@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { billingEntitiesApi, type BillingEntity } from '@/lib/api/costs';
 import { Receipt, Lock } from 'lucide-react';
+import { formatCurrency } from '@/lib/currency';
 
 /**
  * ADR-011 — Reusable inline expense toggle.
@@ -125,9 +126,7 @@ export function GenerateExpenseToggle({
         </div>
         <div className="text-right">
           <p className="text-2xl font-bold">
-            {defaultAmount > 0
-              ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(defaultAmount)
-              : '—'}
+            {defaultAmount > 0 ? formatCurrency(defaultAmount, currency) : '—'}
           </p>
           <div className="flex gap-1 mt-1 justify-end">
             <Badge variant="secondary" className="text-[10px]">{typeBadge}</Badge>

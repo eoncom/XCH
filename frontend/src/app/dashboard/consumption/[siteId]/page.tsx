@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Zap, Server, Euro } from 'lucide-react';
 import { consumptionApi, type SiteConsumption } from '@/lib/api/consumption';
+import { formatCurrency } from '@/lib/currency';
 
 export default function SiteConsumptionPage({ params }: { params: Promise<{ siteId: string }> }) {
   const { siteId } = use(params);
@@ -78,10 +79,10 @@ export default function SiteConsumptionPage({ params }: { params: Promise<{ site
             <CardTitle className="text-sm">Coût mensuel</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
-              {data.costMonth.toFixed(2)} {data.currency}
+            <p className="text-2xl font-bold">{formatCurrency(data.costMonth, data.currency)}</p>
+            <p className="text-xs text-muted-foreground">
+              {data.costPerKwh.toFixed(3)} {data.currency}/kWh
             </p>
-            <p className="text-xs text-muted-foreground">{data.costPerKwh.toFixed(3)} {data.currency}/kWh</p>
           </CardContent>
         </Card>
       </div>

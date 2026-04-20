@@ -27,6 +27,7 @@ import {
 import { Plus, Search, Receipt, Building2, TrendingUp, DollarSign, Trash2, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useMemo, useEffect } from 'react';
+import { formatCurrency } from '@/lib/currency';
 
 const EXPENSE_TYPE_LABELS: Record<string, string> = {
   EQUIPMENT: 'Équipement',
@@ -52,10 +53,6 @@ const FREQ_LABELS: Record<string, string> = {
   QUARTERLY: 'Trimestriel',
   YEARLY: 'Annuel',
 };
-
-function formatCurrency(amount: number, currency = 'EUR') {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount);
-}
 
 export default function CostsPage() {
   const [search, setSearch] = useState('');

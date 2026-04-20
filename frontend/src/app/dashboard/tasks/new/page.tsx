@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { EntitySelectCombobox } from '@/components/ui/entity-select-combobox';
 import { tasksApi } from '@/lib/api/tasks';
 import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
@@ -178,12 +179,20 @@ export default function NewTaskPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="siteId">Site <span className="text-red-500">*</span></Label>
-                <Select value={siteId} onValueChange={(value) => setValue('siteId', value)}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un site" /></SelectTrigger>
-                  <SelectContent>
-                    {sites?.map((site) => (<SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>))}
-                  </SelectContent>
-                </Select>
+                <EntitySelectCombobox
+                  id="siteId"
+                  ariaLabel="Site concerné par la tâche"
+                  options={(sites || []).map((site) => ({
+                    value: site.id,
+                    label: site.name,
+                    searchText: `${site.name} ${site.code ?? ''}`.trim(),
+                  }))}
+                  value={siteId || null}
+                  onChange={(v) => setValue('siteId', v ?? '')}
+                  clearable={false}
+                  placeholder="Sélectionner un site"
+                  searchPlaceholder="Rechercher un site..."
+                />
                 {errors.siteId && <p className="text-sm text-red-600">{errors.siteId.message}</p>}
               </div>
             </div>
@@ -215,27 +224,37 @@ export default function NewTaskPage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="assetId">Équipement lié</Label>
-                <Select value={assetId} onValueChange={(value) => setValue('assetId', value === 'none' ? '' : value)}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un équipement" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Aucun</SelectItem>
-                    {assets?.map((asset) => (
-                      <SelectItem key={asset.id} value={asset.id}>
-                        {asset.name || asset.type} - {asset.manufacturer || ''} {asset.model || asset.serialNumber || asset.id.substring(0, 8)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <EntitySelectCombobox
+                  id="assetId"
+                  ariaLabel="Équipement concerné (optionnel)"
+                  options={(assets || []).map((asset) => ({
+                    value: asset.id,
+                    label: `${asset.name || asset.type} ${asset.serialNumber ? `— ${asset.serialNumber}` : ''}`.trim(),
+                    searchText: [asset.name, asset.type, asset.manufacturer, asset.model, asset.serialNumber]
+                      .filter(Boolean)
+                      .join(' '),
+                  }))}
+                  value={assetId || null}
+                  onChange={(v) => setValue('assetId', v ?? '')}
+                  placeholder="Aucun équipement"
+                  searchPlaceholder="Rechercher un équipement..."
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="assignedTo">Assigné à</Label>
-                <Select value={assignedTo} onValueChange={(value) => setValue('assignedTo', value === 'none' ? '' : value)}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner un utilisateur" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Non assigné</SelectItem>
-                    {users?.map((user) => (<SelectItem key={user.id} value={user.id}>{user.name} ({user.email})</SelectItem>))}
-                  </SelectContent>
-                </Select>
+                <EntitySelectCombobox
+                  id="assignedTo"
+                  ariaLabel="Utilisateur assigné (optionnel)"
+                  options={(users || []).map((user) => ({
+                    value: user.id,
+                    label: `${user.name} (${user.email})`,
+                    searchText: `${user.name} ${user.email}`,
+                  }))}
+                  value={assignedTo || null}
+                  onChange={(v) => setValue('assignedTo', v ?? '')}
+                  placeholder="Non assigné"
+                  searchPlaceholder="Rechercher un utilisateur..."
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="dueDate">Date d'échéance</Label>

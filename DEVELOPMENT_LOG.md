@@ -5765,3 +5765,24 @@ feat(backend): phase 6.6 — structured SD-WAN + ConnectivityLink.assetId
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-20
+
+**Date:** 2026-04-20 18:14:28
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 15
+
+**Commit message:**
+```
+feat(frontend): EntitySelectCombobox + SD-WAN section + currency helper
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

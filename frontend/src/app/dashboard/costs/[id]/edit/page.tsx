@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { EntitySelectCombobox } from '@/components/ui/entity-select-combobox';
+import { formatCurrency } from '@/lib/currency';
 import { expensesApi, billingEntitiesApi, type BillingEntity, type Expense } from '@/lib/api/costs';
 import { assetsApi } from '@/lib/api/assets';
 import { ScopeSelector, type ScopeValue } from '@/components/ui/scope-selector';
@@ -227,12 +229,20 @@ export default function EditExpensePage() {
       <Card>
         <CardHeader><CardTitle>Porteur (qui paie)</CardTitle></CardHeader>
         <CardContent>
-          <Select value={bearerId} onValueChange={setBearerId}>
-            <SelectTrigger><SelectValue placeholder="Sélectionner le porteur..." /></SelectTrigger>
-            <SelectContent>
-              {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <EntitySelectCombobox
+            id="expense-bearer"
+            ariaLabel="Centre de coût porteur de la dépense"
+            options={entities.map((e) => ({
+              value: e.id,
+              label: `${e.code} — ${e.name}`,
+              searchText: `${e.code} ${e.name}`,
+            }))}
+            value={bearerId || null}
+            onChange={(v) => setBearerId(v ?? '')}
+            clearable={false}
+            placeholder="Sélectionner le porteur..."
+            searchPlaceholder="Rechercher un centre de coût..."
+          />
         </CardContent>
       </Card>
 
@@ -336,7 +346,7 @@ export default function EditExpensePage() {
               </div>
               <div className="w-28 text-right">
                 <p className="text-sm font-medium">
-                  {new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount * alloc.percentage / 100)}
+                  {formatCurrency(amount * alloc.percentage / 100, currency)}
                 </p>
               </div>
               <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => removeAllocation(index)}>

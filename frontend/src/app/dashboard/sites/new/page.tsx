@@ -43,18 +43,6 @@ import Link from 'next/link';
 import type { Contact, ContactType, ContactCategory, ConnectivityLink } from '@/types';
 import { toast } from 'sonner';
 
-// Types de connexion disponibles
-const CONNECTIVITY_TYPES = [
-  'Fibre optique',
-  '4G',
-  '5G',
-  'ADSL',
-  'VDSL',
-  'Satellite',
-  'Radio',
-  'Autre',
-];
-
 // Business rule (phase 6 fix): a site must have either a street address OR
 // GPS coordinates — temporary/mobile construction sites often only carry
 // lat/lng without a postal address. The refine() below enforces that at
@@ -79,7 +67,6 @@ const siteSchema = z.object({
     if (typeof val === 'number' && !isNaN(val)) return val;
     return undefined;
   }),
-  cutProcedure: z.string().max(2000, 'Max 2000 caractères').optional().or(z.literal('')),
 }).refine(
   (data) => (data.address && data.city) || (typeof data.latitude === 'number' && typeof data.longitude === 'number'),
   {
@@ -90,10 +77,13 @@ const siteSchema = z.object({
 
 type SiteFormData = z.infer<typeof siteSchema>;
 
+// Phase 6.6 (2026-04-20) — 2-step wizard. Connectivité moved out of the
+// creation flow: links, SD-WAN, prix et équipements se configurent après
+// création depuis l'onglet Infos pratiques de la fiche site (structure FK
+// stricte, voir ConnectivityLinksManager + SdwanSection).
 const STEPS = [
   { id: 1, name: 'Informations de base', description: 'Code, nom, adresse' },
-  { id: 2, name: 'Connectivité', description: 'Liaisons réseau' },
-  { id: 3, name: 'Contacts & Accès', description: 'Contacts et notes d\'accès' },
+  { id: 2, name: 'Contacts & Accès', description: 'Contacts et notes d\'accès' },
 ];
 
 export default function NewSitePage() {
@@ -115,11 +105,6 @@ export default function NewSitePage() {
     mode: 'onChange',
     defaultValues: {
       status: 'ACTIVE',
-      connectivity: {
-        primary: { type: '', provider: '', ref: '' },
-        backup: { type: '', provider: '', ref: '' },
-        cutProcedure: '',
-      },
     },
   });
 
@@ -135,40 +120,19 @@ export default function NewSitePage() {
   });
   const [isGeocoding, setIsGeocoding] = useState(false);
 
-  // V2 connectivity state (links) managed outside react-hook-form
-  const [connectivityLinks, setConnectivityLinks] = useState<ConnectivityLink[]>([]);
+  // Délégation cible du site (peut être pré-remplie, sinon sélectionnée en étape 1).
+  // Les contacts sont scopés sur la même délégation — un site « IDF Ouest » ne
+  // propose que les contacts IDF Ouest + globaux, pas ceux de Lyon.
+  const formDelegationId = watch('delegationId');
 
-  const addLink = () => {
-    const hasP = connectivityLinks.some(l => l.role === 'primary');
-    setConnectivityLinks([...connectivityLinks, {
-      id: crypto.randomUUID(),
-      role: hasP ? 'backup' : 'primary',
-    }]);
-  };
-
-  const removeLink = (linkId: string) => {
-    setConnectivityLinks(connectivityLinks.filter(l => l.id !== linkId));
-  };
-
-  const updateLink = (linkId: string, field: keyof ConnectivityLink, value: any) => {
-    setConnectivityLinks(connectivityLinks.map(l =>
-      l.id === linkId ? { ...l, [field]: value } : l
-    ));
-  };
-
-  // Charger les contacts de catégorie PROVIDER pour les opérateurs
-  const { data: providerContacts } = useQuery<Contact[]>({
-    queryKey: ['contacts', { category: 'PROVIDER' }],
-    queryFn: () => contactsApi.getAll({ category: 'PROVIDER' }),
-  });
-
-  // Charger tous les contacts pour l'étape 3
+  // Contacts pour l'étape Contacts & Accès — scopés sur la délégation cible
   const { data: allContacts } = useQuery<Contact[]>({
-    queryKey: ['contacts'],
-    queryFn: () => contactsApi.getAll(),
+    queryKey: ['contacts', { delegationId: formDelegationId || null }],
+    queryFn: () =>
+      contactsApi.getAll(formDelegationId ? { delegationId: formDelegationId } : undefined),
   });
 
-  // Charger les types de contacts pour le filtre
+  // Types de contacts (pour le filtre)
   const { data: contactTypes } = useQuery<ContactType[]>({
     queryKey: ['contact-types'],
     queryFn: () => contactTypesApi.getAll(),
@@ -182,14 +146,29 @@ export default function NewSitePage() {
 
   const createMutation = useMutation({
     mutationFn: (data: SiteFormData) => sitesApi.create(data),
-    onSuccess: () => {
+    onSuccess: (createdSite: any) => {
       queryClient.invalidateQueries({ queryKey: ['sites'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      router.push('/dashboard/sites');
+      // Phase 6.6 — two-step UX: the site exists, now invite the user to
+      // configure connectivity / SD-WAN from the Infos pratiques tab.
+      const siteId = createdSite?.id;
+      if (siteId) {
+        toast.success('Site créé. Ajoutez maintenant sa connectivité.', {
+          action: {
+            label: 'Infos pratiques',
+            onClick: () => router.push(`/dashboard/sites/${siteId}?tab=practical`),
+          },
+          duration: 8000,
+        });
+        router.push(`/dashboard/sites/${siteId}?tab=practical`);
+      } else {
+        toast.success('Site créé.');
+        router.push('/dashboard/sites');
+      }
     },
     onError: (error) => {
       console.error('Erreur création site:', error);
-      alert(`Erreur lors de la création: ${error.message}`);
+      toast.error(`Erreur lors de la création : ${error.message}`);
     },
   });
 
@@ -199,26 +178,20 @@ export default function NewSitePage() {
       return;
     }
 
-    // Build V2 connectivity from links state
-    const cleanedData = { ...data };
-    const cleanedLinks = connectivityLinks.filter(l =>
-      l.type || l.provider || l.ref
-    );
-    const connectivity: any = {};
-    if (cleanedLinks.length > 0) connectivity.links = cleanedLinks;
-    if (cleanedData.cutProcedure) connectivity.cutProcedure = cleanedData.cutProcedure;
-    delete (cleanedData as any).cutProcedure;
-
-    // Build metadata with serverInfo
-    const hasServerInfo = serverInfo.smbPath || serverInfo.sharepointUrl || serverInfo.gedUrl || serverInfo.accessRightsUrl || serverInfo.notes;
+    const hasServerInfo =
+      serverInfo.smbPath ||
+      serverInfo.sharepointUrl ||
+      serverInfo.gedUrl ||
+      serverInfo.accessRightsUrl ||
+      serverInfo.notes;
 
     const payload = {
-      ...cleanedData,
-      connectivity: Object.keys(connectivity).length > 0 ? connectivity : undefined,
-      contacts: contacts.filter(c => c.name && c.email),
-      accessNotes: (accessNotes.schedules || accessNotes.badges || accessNotes.procedures || accessNotes.safety)
-        ? accessNotes
-        : undefined,
+      ...data,
+      contacts: contacts.filter((c) => c.name && c.email),
+      accessNotes:
+        accessNotes.schedules || accessNotes.badges || accessNotes.procedures || accessNotes.safety
+          ? accessNotes
+          : undefined,
       ...(hasServerInfo ? { metadata: { serverInfo } } : {}),
     };
 
@@ -548,106 +521,8 @@ export default function NewSitePage() {
               </div>
             )}
 
-            {/* STEP 2: Connectivité */}
+            {/* STEP 2: Contacts & Accès */}
             {currentStep === 2 && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold">Connectivité</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Configuration des liaisons réseau du site
-                  </p>
-                </div>
-
-                {/* Liens Internet (dynamique V2) */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Liens Internet</h4>
-                    <Button type="button" variant="outline" size="sm" onClick={addLink}>
-                      <Plus className="h-4 w-4 mr-1" /> Ajouter un lien
-                    </Button>
-                  </div>
-
-                  {connectivityLinks.length === 0 && (
-                    <p className="text-sm text-muted-foreground italic py-4 text-center border border-dashed rounded-lg">
-                      Aucun lien configuré. Cliquez sur &quot;Ajouter un lien&quot; pour commencer.
-                    </p>
-                  )}
-
-                  {connectivityLinks.map((link) => (
-                    <div key={link.id} className={`border rounded-lg p-4 space-y-3 ${link.role === 'primary' ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-amber-500'}`}>
-                      <div className="flex items-center justify-between">
-                        <Badge variant={link.role === 'primary' ? 'success' : 'warning'} className="text-xs">
-                          {link.role === 'primary' ? 'Primaire' : 'Backup'}
-                        </Badge>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeLink(link.id)}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Rôle</Label>
-                          <Select value={link.role} onValueChange={(v) => updateLink(link.id, 'role', v)}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="primary">Primaire</SelectItem>
-                              <SelectItem value="backup">Backup</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Type</Label>
-                          <Select value={link.type || ''} onValueChange={(v) => updateLink(link.id, 'type', v)}>
-                            <SelectTrigger><SelectValue placeholder="Type de lien" /></SelectTrigger>
-                            <SelectContent>
-                              {CONNECTIVITY_TYPES.map((t) => (
-                                <SelectItem key={t} value={t}>{t}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Opérateur</Label>
-                          <Select value={link.provider || ''} onValueChange={(v) => updateLink(link.id, 'provider', v)}>
-                            <SelectTrigger><SelectValue placeholder="Sélectionner un opérateur" /></SelectTrigger>
-                            <SelectContent>
-                              {(providerContacts || []).map((contact) => (
-                                <SelectItem key={contact.id} value={contact.name}>
-                                  {contact.name}{contact.company ? ` (${contact.company})` : ''}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Référence Contrat</Label>
-                          <Input
-                            value={link.ref || ''}
-                            onChange={(e) => updateLink(link.id, 'ref', e.target.value)}
-                            placeholder="Ex: CTR-2024-0001"
-                            maxLength={100}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Cut Procedure */}
-                <div className="space-y-2">
-                  <Label htmlFor="cutProcedure">Procédure Coupure</Label>
-                  <Textarea
-                    id="cutProcedure"
-                    {...register('cutProcedure')}
-                    placeholder="Procédure à suivre en cas de coupure réseau (contacts, escalade, basculement backup...)"
-                    rows={4}
-                    maxLength={2000}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* STEP 3: Contacts & Accès */}
-            {currentStep === 3 && (
               <div className="space-y-6">
                 {/* Contacts */}
                 <div>

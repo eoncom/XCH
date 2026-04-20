@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { EntitySelectCombobox } from '@/components/ui/entity-select-combobox';
 import { floorPlansApi } from '@/lib/api/floor-plans';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
@@ -913,29 +914,31 @@ export default function FloorPlanDetailPage({
               </div>
             ) : (
               <div className="space-y-2">
-                <Label>Équipement associé (optionnel)</Label>
-                <Select value={newPinAssetId || 'none'} onValueChange={(value) => {
-                  const assetId = value === 'none' ? '' : value;
-                  setNewPinAssetId(assetId);
-                  if (assetId && assets) {
-                    const asset = assets.find(a => a.id === assetId);
-                    if (asset && !newPinLabel) {
-                      setNewPinLabel(asset.name || getAssetLabel(asset));
+                <Label htmlFor="pin-asset">Équipement associé (optionnel)</Label>
+                <EntitySelectCombobox
+                  id="pin-asset"
+                  ariaLabel="Équipement associé au repère"
+                  options={(assets || []).map((asset: any) => ({
+                    value: asset.id,
+                    label: getAssetLabel(asset),
+                    searchText: [asset.name, asset.type, asset.manufacturer, asset.model, asset.serialNumber]
+                      .filter(Boolean)
+                      .join(' '),
+                  }))}
+                  value={newPinAssetId || null}
+                  onChange={(v) => {
+                    const assetId = v ?? '';
+                    setNewPinAssetId(assetId);
+                    if (assetId && assets) {
+                      const asset = assets.find((a: any) => a.id === assetId);
+                      if (asset && !newPinLabel) {
+                        setNewPinLabel(asset.name || getAssetLabel(asset));
+                      }
                     }
-                  }
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Aucun équipement" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Aucun équipement</SelectItem>
-                    {assets?.map((asset) => (
-                      <SelectItem key={asset.id} value={asset.id}>
-                        {getAssetLabel(asset)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  }}
+                  placeholder="Aucun équipement"
+                  searchPlaceholder="Rechercher un équipement..."
+                />
                 {newPinAssetId && assets && (
                   <p className="text-xs text-muted-foreground">
                     Lien vers la fiche équipement dans les détails du repère

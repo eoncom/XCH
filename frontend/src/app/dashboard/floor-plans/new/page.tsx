@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { EntitySelectCombobox } from '@/components/ui/entity-select-combobox';
 import { floorPlansApi } from '@/lib/api/floor-plans';
 import type { PdfInspectResult } from '@/lib/api/floor-plans';
 import { sitesApi } from '@/lib/api/sites';
@@ -184,18 +185,20 @@ export default function NewFloorPlanPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="siteId">Site <span className="text-red-600">*</span></Label>
-                  <Select value={siteId} onValueChange={(value) => setValue('siteId', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un site" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sites?.map((site) => (
-                        <SelectItem key={site.id} value={site.id}>
-                          {site.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <EntitySelectCombobox
+                    id="siteId"
+                    ariaLabel="Site concerné par le plan"
+                    options={(sites || []).map((site) => ({
+                      value: site.id,
+                      label: site.name,
+                      searchText: `${site.name} ${site.code ?? ''}`.trim(),
+                    }))}
+                    value={siteId || null}
+                    onChange={(v) => setValue('siteId', v ?? '')}
+                    clearable={false}
+                    placeholder="Sélectionner un site"
+                    searchPlaceholder="Rechercher un site..."
+                  />
                   {errors.siteId && (
                     <p className="text-sm text-red-600">{errors.siteId.message}</p>
                   )}

@@ -10,10 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { expensesApi, type BearerReport, type TargetReport } from '@/lib/api/costs';
 import { ArrowLeft, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import Link from 'next/link';
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount);
-}
+import { formatCurrency } from '@/lib/currency';
 
 export default function CostReportsPage() {
   const { data: bearerReport = [] } = useQuery<BearerReport[]>({

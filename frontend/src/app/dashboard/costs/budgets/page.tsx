@@ -34,6 +34,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { ArrowLeft, Plus, Pencil, Trash2, TrendingUp, AlertTriangle, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/currency';
 
 export default function BudgetsPage() {
   const queryClient = useQueryClient();
@@ -85,16 +86,13 @@ export default function BudgetsPage() {
     currency: 'EUR',
   });
 
-  // Sites for the delegation picked in the budget form — lets the user scope
-  // a budget to a specific site. The list refreshes when the delegation changes.
-  const { data: sitesRes } = useQuery({
-    queryKey: ['sites', 'for-budget-form', formData.delegationId || 'all'],
-    queryFn: () => sitesApi.getAll({ pageSize: 500 }),
+  // Sites for the delegation picked in the budget form — backend-filtered by
+  // delegationId so we don't pull 500 sites just to drop 95% client-side.
+  const { data: sitesForForm = [] } = useQuery({
+    queryKey: ['sites', 'for-budget-form', formData.delegationId || 'none'],
+    queryFn: () => sitesApi.getAll({ delegationId: formData.delegationId, pageSize: 500 }),
     enabled: !!formData.delegationId,
   });
-  const sitesForForm = (sitesRes?.data || []).filter(
-    (s: any) => !formData.delegationId || s.delegationId === formData.delegationId,
-  );
 
   const resetForm = () => {
     setFormData({
@@ -197,7 +195,7 @@ export default function BudgetsPage() {
               <Wallet className="h-8 w-8 text-blue-500" />
               <div>
                 <p className="text-sm text-muted-foreground">Total budgété</p>
-                <p className="text-2xl font-bold">{totalBudgeted.toLocaleString('fr-FR')} EUR</p>
+                <p className="text-2xl font-bold">{formatCurrency(totalBudgeted)}</p>
               </div>
             </div>
           </CardContent>
@@ -208,7 +206,7 @@ export default function BudgetsPage() {
               <TrendingUp className="h-8 w-8 text-green-500" />
               <div>
                 <p className="text-sm text-muted-foreground">Total dépensé</p>
-                <p className="text-2xl font-bold">{totalSpent.toLocaleString('fr-FR')} EUR</p>
+                <p className="text-2xl font-bold">{formatCurrency(totalSpent)}</p>
               </div>
             </div>
           </CardContent>
@@ -267,7 +265,9 @@ export default function BudgetsPage() {
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">
-                        {status ? `${status.spent.toLocaleString('fr-FR')} / ${status.budgeted.toLocaleString('fr-FR')} ${budget.currency}` : 'Calcul...'}
+                        {status
+                          ? `${formatCurrency(status.spent, budget.currency)} / ${formatCurrency(status.budgeted, budget.currency)}`
+                          : 'Calcul...'}
                       </span>
                       <span className={`font-medium ${isOver ? 'text-red-600' : ''}`}>
                         {progressPct}%
@@ -281,7 +281,7 @@ export default function BudgetsPage() {
                     {status && status.remaining < 0 && (
                       <p className="text-xs text-red-600 font-medium flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" />
-                        Dépassement de {Math.abs(status.remaining).toLocaleString('fr-FR')} {budget.currency}
+                        Dépassement de {formatCurrency(Math.abs(status.remaining), budget.currency)}
                       </p>
                     )}
                   </div>

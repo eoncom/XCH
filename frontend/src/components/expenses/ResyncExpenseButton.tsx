@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Loader2, RotateCcw } from 'lucide-react';
 import { showToast } from '@/lib/toast';
+import { formatCurrency } from '@/lib/currency';
 
 /**
  * ADR-011 — Resync the linked Expense's totalAmount from the current source
@@ -60,8 +61,7 @@ export function ResyncExpenseButton({
   const mutation = useMutation({
     mutationFn: resyncFn,
     onSuccess: ({ before, after }) => {
-      const fmt = (n: number) =>
-        new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(n);
+      const fmt = (n: number) => formatCurrency(n, currency);
       if (before === after) {
         showToast.success(`Dépense synchronisée — montant inchangé (${fmt(after)})`);
       } else {

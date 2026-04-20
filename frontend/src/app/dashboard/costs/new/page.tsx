@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { EntitySelectCombobox } from '@/components/ui/entity-select-combobox';
+import { formatCurrency } from '@/lib/currency';
 import { expensesApi, billingEntitiesApi, type BillingEntity, type CreateExpenseData } from '@/lib/api/costs';
 import { assetsApi } from '@/lib/api/assets';
 import { ScopeSelector, type ScopeValue } from '@/components/ui/scope-selector';
@@ -205,13 +207,21 @@ export default function NewExpensePage() {
         <CardHeader><CardTitle>Porteur (qui paie)</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1">
-            <Label>Centre de coût porteur <span className="text-red-500">*</span></Label>
-            <Select value={bearerId} onValueChange={setBearerId}>
-              <SelectTrigger><SelectValue placeholder="Sélectionner le porteur..." /></SelectTrigger>
-              <SelectContent>
-                {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="expense-bearer">Centre de coût porteur <span className="text-red-500">*</span></Label>
+            <EntitySelectCombobox
+              id="expense-bearer"
+              ariaLabel="Centre de coût porteur de la dépense"
+              options={entities.map((e) => ({
+                value: e.id,
+                label: `${e.code} — ${e.name}`,
+                searchText: `${e.code} ${e.name}`,
+              }))}
+              value={bearerId || null}
+              onChange={(v) => setBearerId(v ?? '')}
+              clearable={false}
+              placeholder="Sélectionner le porteur..."
+              searchPlaceholder="Rechercher un centre de coût..."
+            />
           </div>
         </CardContent>
       </Card>
@@ -254,18 +264,24 @@ export default function NewExpensePage() {
             </div>
             {type === 'EQUIPMENT' && (
               <div className="space-y-1">
-                <Label className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Equipement lie</Label>
-                <Select value={assetId} onValueChange={(v) => setAssetId(v === 'none' ? '' : v)}>
-                  <SelectTrigger><SelectValue placeholder="Aucun" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Aucun</SelectItem>
-                    {assets.map(a => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.manufacturer} {a.model} ({a.serialNumber || a.type})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="expense-asset" className="flex items-center gap-1">
+                  <Package className="h-3.5 w-3.5" /> Équipement lié
+                </Label>
+                <EntitySelectCombobox
+                  id="expense-asset"
+                  ariaLabel="Équipement lié à la dépense (optionnel)"
+                  options={assets.map((a) => ({
+                    value: a.id,
+                    label: `${a.manufacturer ?? ''} ${a.model ?? ''} (${a.serialNumber || a.type})`.trim(),
+                    searchText: [a.manufacturer, a.model, a.serialNumber, a.type, a.name]
+                      .filter(Boolean)
+                      .join(' '),
+                  }))}
+                  value={assetId || null}
+                  onChange={(v) => setAssetId(v ?? '')}
+                  placeholder="Aucun"
+                  searchPlaceholder="Rechercher un équipement..."
+                />
               </div>
             )}
             <div className="space-y-1">
@@ -329,7 +345,7 @@ export default function NewExpensePage() {
               </div>
               <div className="w-28 text-right">
                 <p className="text-sm font-medium">
-                  {new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount * alloc.percentage / 100)}
+                  {formatCurrency(amount * alloc.percentage / 100, currency)}
                 </p>
               </div>
               <Button
