@@ -26,6 +26,7 @@ import { ArrowLeft, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import type { TaskStatus, TaskPriority, Site, Asset, User, CreateTaskDto } from '@/types';
+import { useDelegation } from '@/contexts/DelegationContext';
 
 const taskStatusLabels: Record<TaskStatus, string> = {
   TODO: 'À faire',
@@ -80,19 +81,28 @@ export default function NewTaskPage() {
     },
   });
 
-  const { data: sites } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
-  });
+  // Phase 6.5 cascade audit: scope the Selects to the active delegation so the
+  // user doesn't see sites/assets/users they can't actually use for this task.
+  const { currentDelegation } = useDelegation();
+  const activeDelegationId = currentDelegation?.delegationId;
 
-  const { data: assets } = useQuery<Asset[]>({
-    queryKey: ['assets'],
-    queryFn: () => assetsApi.getAll(),
+  const { data: sites } = useQuery<Site[]>({
+    queryKey: ['sites', { delegationId: activeDelegationId }],
+    queryFn: () => sitesApi.getAll({ delegationId: activeDelegationId }),
   });
 
   const { data: users } = useQuery({
     queryKey: ['users'],
     queryFn: () => usersApi.getAll(),
+  });
+
+  // Assets are loaded lazily — once the user has picked a site. Fetch is
+  // scoped to that site so hors-portée assets never appear.
+  const watchedSiteId = watch('siteId');
+  const { data: assets } = useQuery<Asset[]>({
+    queryKey: ['assets', { siteId: watchedSiteId }],
+    queryFn: () => assetsApi.getAll({ siteId: watchedSiteId }),
+    enabled: !!watchedSiteId,
   });
 
   const createMutation = useMutation({

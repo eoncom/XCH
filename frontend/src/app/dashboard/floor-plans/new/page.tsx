@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
+import { useDelegation } from '@/contexts/DelegationContext';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
@@ -58,9 +59,12 @@ export default function NewFloorPlanPage() {
     resolver: zodResolver(floorPlanSchema),
   });
 
+  // Phase 6.5 cascade audit: only show sites from the active delegation.
+  const { currentDelegation } = useDelegation();
+  const activeDelegationId = currentDelegation?.delegationId;
   const { data: sites } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
+    queryKey: ['sites', { delegationId: activeDelegationId }],
+    queryFn: () => sitesApi.getAll({ delegationId: activeDelegationId }),
   });
 
   const createMutation = useMutation({

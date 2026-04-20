@@ -63,8 +63,11 @@ export default function NewContactPage() {
   const [scope, setScope] = useState<ScopeValue>({ delegationId: null, siteId: null });
   const [categoryFilter, setCategoryFilter] = useState<ContactCategory | 'ALL'>('ALL');
 
+  // Phase 6.5 cascade audit: still fetches the full list (types are tenant-wide
+  // and typically small), but the queryKey includes the category filter so any
+  // future server-side filter invalidates cleanly. Client-side filter below.
   const { data: contactTypes } = useQuery<ContactType[]>({
-    queryKey: ['contact-types'],
+    queryKey: ['contact-types', { isActive: true }],
     queryFn: () => contactTypesApi.getAll({ isActive: true }),
   });
 

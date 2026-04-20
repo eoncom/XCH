@@ -63,14 +63,23 @@ export default function NewExpensePage() {
   const [notes, setNotes] = useState('');
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
 
+  // Phase 6.5 cascade audit: both lists now follow the Expense's chosen scope.
+  // BillingEntities are fetched with delegationId + includeGlobal=true so the
+  // picker always shows tenant-wide centres de coût + the delegation ones.
+  // Assets are scoped to the selected site (or empty until the user picks one).
   const { data: entities = [] } = useQuery<BillingEntity[]>({
-    queryKey: ['billing-entities'],
-    queryFn: () => billingEntitiesApi.getAll(),
+    queryKey: ['billing-entities', { delegationId: scope.delegationId }],
+    queryFn: () => billingEntitiesApi.getAll({
+      delegationId: scope.delegationId || undefined,
+      includeGlobal: true,
+      isActive: 'true',
+    }),
   });
 
   const { data: assets = [] } = useQuery<Asset[]>({
-    queryKey: ['assets'],
-    queryFn: () => assetsApi.getAll({}),
+    queryKey: ['assets', { siteId: scope.siteId }],
+    queryFn: () => assetsApi.getAll(scope.siteId ? { siteId: scope.siteId } : {}),
+    enabled: !!scope.siteId,
   });
 
   const createMutation = useMutation({

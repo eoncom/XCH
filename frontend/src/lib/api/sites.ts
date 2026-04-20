@@ -2,8 +2,12 @@ import { apiClient } from '../api-client';
 import type { Site } from '@/types';
 
 export const sitesApi = {
-  getAll: async (): Promise<Site[]> => {
-    const res = await apiClient.get<{ data: Site[]; meta: any }>('/api/sites');
+  getAll: async (params?: { delegationId?: string; pageSize?: number }): Promise<Site[]> => {
+    const qs = new URLSearchParams();
+    if (params?.delegationId) qs.append('delegationId', params.delegationId);
+    if (params?.pageSize) qs.append('pageSize', String(params.pageSize));
+    const query = qs.toString();
+    const res = await apiClient.get<{ data: Site[]; meta: any }>(`/api/sites${query ? `?${query}` : ''}`);
     return res.data;
   },
 
