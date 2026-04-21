@@ -31,6 +31,19 @@ import { formatCurrency } from '@/lib/currency';
 import { saveAs } from 'file-saver';
 import { CostsEvolutionChart } from '@/components/costs/CostsEvolutionChart';
 import { BearerSummaryCard } from '@/components/costs/BearerSummaryCard';
+import { AccessGate } from '@/components/AccessGate';
+
+export default function CostsPageWrapper() {
+  return (
+    <AccessGate
+      required="manage"
+      title="Accès refusé"
+      description="Le module Coûts est réservé aux administrateurs de délégation et aux super administrateurs."
+    >
+      <CostsPage />
+    </AccessGate>
+  );
+}
 
 const EXPENSE_TYPE_LABELS: Record<string, string> = {
   EQUIPMENT: 'Équipement',
@@ -57,7 +70,7 @@ const FREQ_LABELS: Record<string, string> = {
   YEARLY: 'Annuel',
 };
 
-export default function CostsPage() {
+function CostsPage() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterBearerId, setFilterBearerId] = useState('');

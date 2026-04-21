@@ -55,6 +55,19 @@ import {
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/currency';
+import { AccessGate } from '@/components/AccessGate';
+
+export default function BudgetsPageWrapper() {
+  return (
+    <AccessGate
+      required="manage"
+      title="Accès refusé"
+      description="Le module Budgets est réservé aux administrateurs de délégation et aux super administrateurs."
+    >
+      <BudgetsPage />
+    </AccessGate>
+  );
+}
 
 interface BudgetWithChildren extends Budget {
   _children?: BudgetWithChildren[];
@@ -76,7 +89,7 @@ const FREQ_LABELS: Record<string, string> = {
   YEARLY: 'Annuel',
 };
 
-export default function BudgetsPage() {
+function BudgetsPage() {
   const queryClient = useQueryClient();
   const { canWrite } = usePermissions();
   const { currentDelegation } = useDelegation();

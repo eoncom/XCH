@@ -11,8 +11,21 @@ import { expensesApi, type BearerReport, type TargetReport } from '@/lib/api/cos
 import { ArrowLeft, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/currency';
+import { AccessGate } from '@/components/AccessGate';
 
-export default function CostReportsPage() {
+export default function CostReportsPageWrapper() {
+  return (
+    <AccessGate
+      required="manage"
+      title="Accès refusé"
+      description="Les rapports de coûts sont réservés aux administrateurs de délégation et aux super administrateurs."
+    >
+      <CostReportsPage />
+    </AccessGate>
+  );
+}
+
+function CostReportsPage() {
   const { data: bearerReport = [] } = useQuery<BearerReport[]>({
     queryKey: ['report-by-bearer'],
     queryFn: () => expensesApi.reportByBearer(),

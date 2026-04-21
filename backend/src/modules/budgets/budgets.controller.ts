@@ -1,57 +1,87 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BudgetsService } from './budgets.service';
 import { CreateBudgetDto, UpdateBudgetDto, FilterBudgetDto } from './dto/create-budget.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RequireWrite, RequireRead, RequireManage } from '../../common/decorators/require-right.decorator';
+import { RequireManage } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
+import { PermissionService } from '../../common/services/permission.service';
 
 @ApiTags('budgets')
 @Controller('budgets')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class BudgetsController {
-  constructor(private readonly service: BudgetsService) {}
+  constructor(
+    private readonly service: BudgetsService,
+    private readonly permissionService: PermissionService,
+  ) {}
+
+  private async scopeOrFail(req: AuthRequest, filterDelegationId?: string | null): Promise<string[] | null> {
+    const scope = await this.permissionService.getManagedDelegationIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    if (scope === null) return null;
+    if (scope.length === 0) {
+      throw new ForbiddenException('Aucune délégation managée — accès refusé.');
+    }
+    if (filterDelegationId && !scope.includes(filterDelegationId)) {
+      throw new ForbiddenException('Délégation hors périmètre managé.');
+    }
+    return scope;
+  }
 
   @Post()
-  @RequireWrite()
+  @RequireManage()
   @ApiOperation({ summary: 'Create a budget' })
-  create(@Body() dto: CreateBudgetDto, @Request() req: AuthRequest) {
+  async create(@Body() dto: CreateBudgetDto, @Request() req: AuthRequest) {
+    await this.scopeOrFail(req, dto.delegationId ?? undefined);
     return this.service.create(req.user.tenantId, dto);
   }
 
   @Get()
-  @RequireRead()
-  @ApiOperation({ summary: 'List budgets' })
-  findAll(@Query() filters: FilterBudgetDto, @Request() req: AuthRequest) {
-    return this.service.findAll(req.user.tenantId, filters);
+  @RequireManage()
+  @ApiOperation({ summary: 'List budgets (scoped to managed delegations)' })
+  async findAll(@Query() filters: FilterBudgetDto, @Request() req: AuthRequest) {
+    const scope = await this.scopeOrFail(req, filters.delegationId);
+    return this.service.findAll(req.user.tenantId, filters, scope);
   }
 
   @Get(':id')
-  @RequireRead()
+  @RequireManage()
   @ApiOperation({ summary: 'Get a budget' })
-  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.service.findOne(req.user.tenantId, id);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
+    const budget = await this.service.findOne(req.user.tenantId, id);
+    await this.scopeOrFail(req, (budget as any).delegationId ?? undefined);
+    return budget;
   }
 
   @Get(':id/status')
-  @RequireRead()
-  @ApiOperation({ summary: 'Get budget status (spent vs budgeted)' })
-  getStatus(@Param('id') id: string, @Request() req: AuthRequest) {
+  @RequireManage()
+  @ApiOperation({ summary: 'Get budget status (spent vs budgeted + matching expenses)' })
+  async getStatus(@Param('id') id: string, @Request() req: AuthRequest) {
+    const budget = await this.service.findOne(req.user.tenantId, id);
+    await this.scopeOrFail(req, (budget as any).delegationId ?? undefined);
     return this.service.getStatus(req.user.tenantId, id);
   }
 
   @Patch(':id')
-  @RequireWrite()
+  @RequireManage()
   @ApiOperation({ summary: 'Update a budget' })
-  update(@Param('id') id: string, @Body() dto: UpdateBudgetDto, @Request() req: AuthRequest) {
+  async update(@Param('id') id: string, @Body() dto: UpdateBudgetDto, @Request() req: AuthRequest) {
+    const existing = await this.service.findOne(req.user.tenantId, id);
+    await this.scopeOrFail(req, (existing as any).delegationId ?? undefined);
+    if (dto.delegationId) await this.scopeOrFail(req, dto.delegationId);
     return this.service.update(req.user.tenantId, id, dto);
   }
 
   @Delete(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Delete a budget' })
-  remove(@Param('id') id: string, @Request() req: AuthRequest) {
+  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
+    const existing = await this.service.findOne(req.user.tenantId, id);
+    await this.scopeOrFail(req, (existing as any).delegationId ?? undefined);
     return this.service.remove(req.user.tenantId, id);
   }
 }

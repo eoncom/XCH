@@ -44,7 +44,11 @@ export class BudgetsService {
     });
   }
 
-  async findAll(tenantId: string, filters: FilterBudgetDto = {}) {
+  async findAll(
+    tenantId: string,
+    filters: FilterBudgetDto = {},
+    scopeDelegationIds: string[] | null = null,
+  ) {
     const where: any = { tenantId };
     if (filters.delegationId) where.delegationId = filters.delegationId;
     if (filters.siteId) where.siteId = filters.siteId;
@@ -52,6 +56,15 @@ export class BudgetsService {
 
     const page = Number(filters.page) || 1;
     const pageSize = Number(filters.pageSize) || 25;
+
+    if (scopeDelegationIds !== null) {
+      if (scopeDelegationIds.length === 0) {
+        return buildPaginatedResponse([], 0, page, pageSize);
+      }
+      // A budget with delegationId=null is global — visible if no scope filter.
+      // Managers only see budgets strictly in their managed delegations.
+      where.delegationId = { in: scopeDelegationIds };
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.budget.findMany({

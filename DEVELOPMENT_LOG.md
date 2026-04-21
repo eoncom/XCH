@@ -5870,3 +5870,24 @@ fix(a11y+labels): phase 6 P2 residuals
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-21
+
+**Date:** 2026-04-21 13:07:19
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 7
+- Frontend files modified: 7
+
+**Commit message:**
+```
+feat(costs): sub-budgets, threshold alerts, expenses-per-budget view, chart, CSV export
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

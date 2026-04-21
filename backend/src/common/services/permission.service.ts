@@ -224,4 +224,27 @@ export class PermissionService {
     const resolved = await this.resolveAllSites(userId, tenantId);
     return Array.from(resolved.keys());
   }
+
+  /**
+   * Get all delegation IDs a user has MANAGE on.
+   * Returns null if super admin (= all delegations visible).
+   * Returns [] if the user has no MANAGE anywhere — denies everything.
+   *
+   * Used by the cost module to restrict expense / budget / billing-entity
+   * visibility to a manager's own delegations, never leak cross-delegation.
+   */
+  async getManagedDelegationIds(tenantId: string, userId: string): Promise<string[] | null> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { isSuperAdmin: true },
+    });
+    if (!user) return [];
+    if (user.isSuperAdmin) return null;
+
+    const delegations = await this.prisma.userDelegation.findMany({
+      where: { tenantId, userId, right: 'MANAGE' },
+      select: { delegationId: true },
+    });
+    return delegations.map((d) => d.delegationId);
+  }
 }

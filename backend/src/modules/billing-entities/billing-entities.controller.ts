@@ -1,35 +1,61 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { BillingEntitiesService } from './billing-entities.service';
 import { CreateBillingEntityDto, UpdateBillingEntityDto } from './dto/create-billing-entity.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
+import { RequireManage } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
+import { PermissionService } from '../../common/services/permission.service';
 
 @ApiTags('billing-entities')
 @Controller('billing-entities')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class BillingEntitiesController {
-  constructor(private readonly billingEntitiesService: BillingEntitiesService) {}
+  constructor(
+    private readonly billingEntitiesService: BillingEntitiesService,
+    private readonly permissionService: PermissionService,
+  ) {}
+
+  private async scopeOrFail(req: AuthRequest, filterDelegationId?: string | null): Promise<string[] | null> {
+    const scope = await this.permissionService.getManagedDelegationIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    if (scope === null) return null;
+    if (scope.length === 0) {
+      throw new ForbiddenException('Aucune délégation managée — accès refusé.');
+    }
+    if (filterDelegationId && !scope.includes(filterDelegationId)) {
+      throw new ForbiddenException('Délégation hors périmètre managé.');
+    }
+    return scope;
+  }
 
   @Post()
-  @RequireWrite()
+  @RequireManage()
   @ApiOperation({ summary: 'Create a billing entity' })
-  create(@Body() dto: CreateBillingEntityDto, @Request() req: AuthRequest) {
+  async create(@Body() dto: CreateBillingEntityDto, @Request() req: AuthRequest) {
+    // Allow global entities (delegationId=null) only for super-admins.
+    const scope = await this.scopeOrFail(req, dto.delegationId ?? undefined);
+    if (scope !== null && !dto.delegationId) {
+      throw new ForbiddenException(
+        'Un centre de coût global (sans délégation) est réservé aux super administrateurs.',
+      );
+    }
     return this.billingEntitiesService.create(req.user.tenantId, dto);
   }
 
   @Get()
-  @RequireRead()
-  @ApiOperation({ summary: 'List all billing entities' })
+  @RequireManage()
+  @ApiOperation({ summary: 'List all billing entities (managed delegations + globals)' })
   @ApiQuery({ name: 'type', required: false })
   @ApiQuery({ name: 'isActive', required: false })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'delegationId', required: false })
   @ApiQuery({ name: 'siteId', required: false })
   @ApiQuery({ name: 'includeGlobal', required: false })
-  findAll(
+  async findAll(
     @Query('type') type: string,
     @Query('isActive') isActive: string,
     @Query('search') search: string,
@@ -38,36 +64,69 @@ export class BillingEntitiesController {
     @Query('includeGlobal') includeGlobal: string,
     @Request() req: AuthRequest,
   ) {
-    return this.billingEntitiesService.findAll(req.user.tenantId, {
-      type, isActive, search, delegationId, siteId, includeGlobal: includeGlobal !== 'false',
-    });
+    const scope = await this.scopeOrFail(req, delegationId);
+    return this.billingEntitiesService.findAll(
+      req.user.tenantId,
+      { type, isActive, search, delegationId, siteId, includeGlobal: includeGlobal !== 'false' },
+      scope,
+    );
   }
 
   @Get(':id')
-  @RequireRead()
+  @RequireManage()
   @ApiOperation({ summary: 'Get a billing entity' })
-  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.billingEntitiesService.findOne(req.user.tenantId, id);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
+    const entity = await this.billingEntitiesService.findOne(req.user.tenantId, id);
+    // Globals (delegationId=null) visible to everyone with MANAGE; scoped
+    // entities enforced.
+    if ((entity as any).delegationId) {
+      await this.scopeOrFail(req, (entity as any).delegationId);
+    }
+    return entity;
   }
 
   @Get(':id/summary')
-  @RequireRead()
+  @RequireManage()
   @ApiOperation({ summary: 'Get billing entity summary (totals)' })
-  getSummary(@Param('id') id: string, @Request() req: AuthRequest) {
+  async getSummary(@Param('id') id: string, @Request() req: AuthRequest) {
+    const entity = await this.billingEntitiesService.findOne(req.user.tenantId, id);
+    if ((entity as any).delegationId) {
+      await this.scopeOrFail(req, (entity as any).delegationId);
+    }
     return this.billingEntitiesService.getSummary(req.user.tenantId, id);
   }
 
   @Patch(':id')
-  @RequireWrite()
+  @RequireManage()
   @ApiOperation({ summary: 'Update a billing entity' })
-  update(@Param('id') id: string, @Body() dto: UpdateBillingEntityDto, @Request() req: AuthRequest) {
+  async update(@Param('id') id: string, @Body() dto: UpdateBillingEntityDto, @Request() req: AuthRequest) {
+    const existing = await this.billingEntitiesService.findOne(req.user.tenantId, id);
+    if ((existing as any).delegationId) {
+      await this.scopeOrFail(req, (existing as any).delegationId);
+    } else {
+      // Global entity — super-admin only.
+      const scope = await this.scopeOrFail(req);
+      if (scope !== null) {
+        throw new ForbiddenException('Seul un super administrateur peut modifier un centre de coût global.');
+      }
+    }
+    if (dto.delegationId) await this.scopeOrFail(req, dto.delegationId);
     return this.billingEntitiesService.update(req.user.tenantId, id, dto);
   }
 
   @Delete(':id')
-  @RequireWrite()
+  @RequireManage()
   @ApiOperation({ summary: 'Delete a billing entity' })
-  remove(@Param('id') id: string, @Request() req: AuthRequest) {
+  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
+    const existing = await this.billingEntitiesService.findOne(req.user.tenantId, id);
+    if ((existing as any).delegationId) {
+      await this.scopeOrFail(req, (existing as any).delegationId);
+    } else {
+      const scope = await this.scopeOrFail(req);
+      if (scope !== null) {
+        throw new ForbiddenException('Seul un super administrateur peut supprimer un centre de coût global.');
+      }
+    }
     return this.billingEntitiesService.remove(req.user.tenantId, id);
   }
 }

@@ -110,11 +110,27 @@ export class ExpensesService {
     return expense;
   }
 
-  async findAll(tenantId: string, filters: FilterExpenseDto = {}) {
+  /**
+   * When `scopeDelegationIds` is null, the caller is super-admin — no
+   * delegation restriction. When it's an array, every expense must match one
+   * of those delegationIds (including merging with an explicit `delegationId`
+   * filter, which the controller guarantees is already in-scope).
+   */
+  async findAll(
+    tenantId: string,
+    filters: FilterExpenseDto = {},
+    scopeDelegationIds: string[] | null = null,
+  ) {
     const where: any = { tenantId };
     if (filters.type) where.type = filters.type;
     if (filters.bearerId) where.bearerId = filters.bearerId;
     if (filters.vendorId) where.vendorId = filters.vendorId;
+    if (scopeDelegationIds !== null) {
+      if (scopeDelegationIds.length === 0) {
+        return buildPaginatedResponse([], 0, Number(filters.page) || 1, Number(filters.pageSize) || 25);
+      }
+      where.delegationId = { in: scopeDelegationIds };
+    }
 
     if (filters.search) {
       where.OR = [
@@ -262,7 +278,11 @@ export class ExpensesService {
 
   // ========== REPORTS ==========
 
-  async reportByBearer(tenantId: string, filters?: { dateFrom?: string; dateTo?: string; delegationId?: string }) {
+  async reportByBearer(
+    tenantId: string,
+    filters?: { dateFrom?: string; dateTo?: string; delegationId?: string },
+    scopeDelegationIds: string[] | null = null,
+  ) {
     const where: any = { tenantId };
     if (filters?.dateFrom || filters?.dateTo) {
       where.dateIncurred = {};
@@ -270,6 +290,12 @@ export class ExpensesService {
       if (filters.dateTo) where.dateIncurred.lte = new Date(filters.dateTo);
     }
     if (filters?.delegationId) where.delegationId = filters.delegationId;
+    if (scopeDelegationIds !== null) {
+      if (scopeDelegationIds.length === 0) return [];
+      where.delegationId = where.delegationId
+        ? where.delegationId
+        : { in: scopeDelegationIds };
+    }
 
     const expenses = await this.prisma.expense.findMany({
       where,
@@ -311,7 +337,11 @@ export class ExpensesService {
     return Array.from(bearerMap.values()).sort((a, b) => b.totalBorne - a.totalBorne);
   }
 
-  async reportByTarget(tenantId: string, filters?: { dateFrom?: string; dateTo?: string; delegationId?: string }) {
+  async reportByTarget(
+    tenantId: string,
+    filters?: { dateFrom?: string; dateTo?: string; delegationId?: string },
+    scopeDelegationIds: string[] | null = null,
+  ) {
     const expenseWhere: any = { tenantId };
     if (filters?.dateFrom || filters?.dateTo) {
       expenseWhere.dateIncurred = {};
@@ -319,6 +349,12 @@ export class ExpensesService {
       if (filters.dateTo) expenseWhere.dateIncurred.lte = new Date(filters.dateTo);
     }
     if (filters?.delegationId) expenseWhere.delegationId = filters.delegationId;
+    if (scopeDelegationIds !== null) {
+      if (scopeDelegationIds.length === 0) return [];
+      expenseWhere.delegationId = expenseWhere.delegationId
+        ? expenseWhere.delegationId
+        : { in: scopeDelegationIds };
+    }
 
     const allocations = await this.prisma.costAllocation.findMany({
       where: { expense: expenseWhere },
@@ -359,6 +395,7 @@ export class ExpensesService {
   async reportByMonth(
     tenantId: string,
     filters?: { dateFrom?: string; dateTo?: string; delegationId?: string; expenseType?: string },
+    scopeDelegationIds: string[] | null = null,
   ) {
     const where: any = { tenantId };
     if (filters?.dateFrom || filters?.dateTo) {
@@ -368,6 +405,12 @@ export class ExpensesService {
     }
     if (filters?.delegationId) where.delegationId = filters.delegationId;
     if (filters?.expenseType) where.type = filters.expenseType;
+    if (scopeDelegationIds !== null) {
+      if (scopeDelegationIds.length === 0) return [];
+      where.delegationId = where.delegationId
+        ? where.delegationId
+        : { in: scopeDelegationIds };
+    }
 
     const expenses = await this.prisma.expense.findMany({
       where,
@@ -441,18 +484,25 @@ export class ExpensesService {
     return Math.max(0, months);
   }
 
-  async reportChargeback(tenantId: string, filters?: { dateFrom?: string; dateTo?: string }) {
+  async reportChargeback(
+    tenantId: string,
+    filters?: { dateFrom?: string; dateTo?: string },
+    scopeDelegationIds: string[] | null = null,
+  ) {
     const dateFilter: any = {};
     if (filters?.dateFrom) dateFilter.gte = new Date(filters.dateFrom);
     if (filters?.dateTo) dateFilter.lte = new Date(filters.dateTo);
 
+    if (scopeDelegationIds !== null && scopeDelegationIds.length === 0) return [];
+
+    const expenseWhere: any = {
+      tenantId,
+      ...(Object.keys(dateFilter).length ? { dateIncurred: dateFilter } : {}),
+      ...(scopeDelegationIds !== null ? { delegationId: { in: scopeDelegationIds } } : {}),
+    };
+
     const allocations = await this.prisma.costAllocation.findMany({
-      where: {
-        expense: {
-          tenantId,
-          ...(Object.keys(dateFilter).length ? { dateIncurred: dateFilter } : {}),
-        },
-      },
+      where: { expense: expenseWhere },
       include: {
         target: { select: { id: true, name: true, code: true } },
         expense: {

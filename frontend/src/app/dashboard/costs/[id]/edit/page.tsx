@@ -19,6 +19,19 @@ import { VendorCombobox } from '@/components/costs/vendor-combobox';
 import { ArrowLeft, Plus, X, Percent, Package } from 'lucide-react';
 import Link from 'next/link';
 import type { Asset } from '@/types';
+import { AccessGate } from '@/components/AccessGate';
+
+export default function EditExpensePageWrapper() {
+  return (
+    <AccessGate
+      required="manage"
+      title="Accès refusé"
+      description="L'édition de dépense est réservée aux administrateurs de délégation et aux super administrateurs."
+    >
+      <EditExpensePage />
+    </AccessGate>
+  );
+}
 
 const EXPENSE_TYPES = [
   { value: 'EQUIPMENT', label: 'Équipement' },
@@ -42,7 +55,7 @@ interface AllocationRow {
   notes: string;
 }
 
-export default function EditExpensePage() {
+function EditExpensePage() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();

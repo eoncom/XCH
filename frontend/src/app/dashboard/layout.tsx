@@ -62,7 +62,8 @@ const navigation: Array<{
   { name: 'NetBox', href: '/dashboard/netbox', icon: Database, moduleKey: 'integrations_netbox', permResource: 'netbox' },
   { name: 'Dashboard TV', href: '/tv', icon: Monitor, external: true },
   { name: 'Alertes', href: '/dashboard/alerts', icon: AlertTriangle, moduleKey: 'alerts' },
-  { name: 'Coûts', href: '/dashboard/costs', icon: Receipt, moduleKey: 'costs', permResource: 'expenses' },
+  // "Coûts" moved to adminNavigation below — MANAGE local OR super-admin only
+  // (decision 2026-04-21: cost data sensitivity doesn't match READ/WRITE scope).
   { name: 'Consommation', href: '/dashboard/consumption', icon: Zap, moduleKey: 'consumption' },
 ];
 
@@ -79,6 +80,7 @@ type AdminNavItem = {
 
 const adminNavigation: AdminNavItem[] = [
   { name: 'Utilisateurs', href: '/dashboard/users', icon: Users },
+  { name: 'Coûts', href: '/dashboard/costs', icon: Receipt },
   { name: "Journal d'audit", href: '/dashboard/admin/audit', icon: Activity, superAdminOnly: true },
 ];
 

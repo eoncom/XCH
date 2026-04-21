@@ -27,6 +27,19 @@ import { ScopeSelector, ScopeBadge, type ScopeValue } from '@/components/ui/scop
 import { usePermissions } from '@/hooks/usePermissions';
 import { ArrowLeft, Plus, Pencil, Trash2, Building2 } from 'lucide-react';
 import Link from 'next/link';
+import { AccessGate } from '@/components/AccessGate';
+
+export default function BillingEntitiesPageWrapper() {
+  return (
+    <AccessGate
+      required="manage"
+      title="Accès refusé"
+      description="Les centres de coût sont réservés aux administrateurs de délégation et aux super administrateurs."
+    >
+      <BillingEntitiesPage />
+    </AccessGate>
+  );
+}
 
 const ENTITY_TYPES = ['DIRECTION', 'BU', 'DELEGATION', 'SITE', 'SERVICE', 'OTHER'];
 const ENTITY_TYPE_LABELS: Record<string, string> = {
@@ -38,7 +51,7 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   OTHER: 'Autre',
 };
 
-export default function BillingEntitiesPage() {
+function BillingEntitiesPage() {
   const queryClient = useQueryClient();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const [showForm, setShowForm] = useState(false);

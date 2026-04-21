@@ -41,6 +41,7 @@ export class BillingEntitiesService {
       siteId?: string;
       includeGlobal?: boolean;
     },
+    scopeDelegationIds: string[] | null = null,
   ) {
     const where: any = { tenantId };
     if (filters?.type) where.type = filters.type;
@@ -71,6 +72,23 @@ export class BillingEntitiesService {
     }
 
     if (filters?.siteId) where.siteId = filters.siteId;
+
+    // Manager scope: see entities for managed delegations + globals.
+    if (scopeDelegationIds !== null) {
+      if (scopeDelegationIds.length === 0) return [];
+      const scopeCondition = [
+        { delegationId: { in: scopeDelegationIds } },
+        { delegationId: null },
+      ];
+      if (where.AND) {
+        where.AND.push({ OR: scopeCondition });
+      } else if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: scopeCondition }];
+        delete where.OR;
+      } else {
+        where.OR = scopeCondition;
+      }
+    }
 
     return this.prisma.billingEntity.findMany({
       where,
