@@ -45,6 +45,8 @@ import {
 } from '@/lib/api/connectivity';
 import { billingEntitiesApi, type BillingEntity } from '@/lib/api/costs';
 import { assetsApi } from '@/lib/api/assets';
+import { contactsApi } from '@/lib/api/contacts';
+import type { Contact } from '@/types';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
 import { EntitySelectCombobox } from '@/components/ui/entity-select-combobox';
 import { useQuery } from '@tanstack/react-query';
@@ -351,7 +353,10 @@ function ConnectivityLinkDialog({
 
   const { data: siteAssets = [] } = useQuery({
     queryKey: ['assets', { siteId, connectivityPicker: true }],
-    queryFn: () => assetsApi.getAll({ siteId }),
+    // pageSize 500: a site can have >25 assets, the default pageSize. Without
+    // this the picker silently hides the firewalls at position 26+ of the
+    // createdAt-desc list, which is exactly the equipment a user wants here.
+    queryFn: () => assetsApi.getAll({ siteId, pageSize: 500 }),
     enabled: open,
   });
 
@@ -359,6 +364,15 @@ function ConnectivityLinkDialog({
     () => siteAssets.filter((a: any) => capableValues.includes(a.type)),
     [siteAssets, capableValues],
   );
+
+  // PROVIDER contacts (ISPs) for the operator picker. The stored value on
+  // ConnectivityLink.provider is the contact's name string (kept that way so
+  // legacy free-text entries keep rendering).
+  const { data: providerContacts = [] } = useQuery<Contact[]>({
+    queryKey: ['contacts', { category: 'PROVIDER', picker: 'connectivity' }],
+    queryFn: () => contactsApi.getAll({ category: 'PROVIDER' }),
+    enabled: open,
+  });
   // ADR-011 Lot 8 — toggle visible only on creation (no editing) when no
   // expense is already linked. Mode edit keeps the existing UX (separate
   // dialog for after-the-fact generation).
@@ -439,11 +453,21 @@ function ConnectivityLinkDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Fournisseur / opérateur *</Label>
-            <Input
-              value={form.provider || ''}
-              onChange={(e) => setForm({ ...form, provider: e.target.value })}
-              placeholder="Orange, SFR, Free Pro, Starlink..."
+            <Label htmlFor="connectivity-provider">Fournisseur / opérateur *</Label>
+            <EntitySelectCombobox
+              id="connectivity-provider"
+              ariaLabel="Fournisseur / opérateur"
+              options={providerContacts.map((c) => ({
+                value: c.name,
+                label: c.company ? `${c.name} (${c.company})` : c.name,
+                searchText: [c.name, c.company, c.email].filter(Boolean).join(' '),
+              }))}
+              value={form.provider || null}
+              onChange={(v) => setForm({ ...form, provider: v ?? '' })}
+              clearable={false}
+              placeholder="Sélectionner un opérateur..."
+              searchPlaceholder="Rechercher un opérateur..."
+              emptyMessage="Aucun contact de catégorie PROVIDER. Créez-en un dans Contacts."
             />
           </div>
 

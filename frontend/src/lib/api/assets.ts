@@ -7,12 +7,14 @@ export const assetsApi = {
     status?: string;
     type?: string;
     search?: string;
+    pageSize?: number;
   }): Promise<Asset[]> => {
     const searchParams = new URLSearchParams();
     if (params?.siteId) searchParams.append('siteId', params.siteId);
     if (params?.status) searchParams.append('status', params.status);
     if (params?.type) searchParams.append('type', params.type);
     if (params?.search) searchParams.append('search', params.search);
+    if (params?.pageSize) searchParams.append('pageSize', String(params.pageSize));
 
     const query = searchParams.toString();
     const res = await apiClient.get<{ data: Asset[]; meta: any }>(`/api/assets${query ? `?${query}` : ''}`);

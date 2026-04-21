@@ -34,8 +34,11 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com https://raw.githubusercontent.com",
-      // APIs called from the browser; same-origin + NetBox/Uptime Kuma typically proxied
-      "connect-src 'self' blob:",
+      // APIs called from the browser; same-origin + NetBox/Uptime Kuma typically proxied.
+      // nominatim.openstreetmap.org is whitelisted explicitly because the "Actualiser
+      // GPS" button (sites/new + sites/[id]/edit) calls its /search endpoint directly
+      // to geocode an address into lat/lng — no server-side proxy for it.
+      "connect-src 'self' blob: https://nominatim.openstreetmap.org",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

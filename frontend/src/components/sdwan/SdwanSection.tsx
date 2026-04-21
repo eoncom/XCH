@@ -44,6 +44,8 @@ import {
   type UpsertSdwanConfigData,
 } from '@/lib/api/sdwan';
 import { assetsApi } from '@/lib/api/assets';
+import { contactsApi } from '@/lib/api/contacts';
+import type { Contact } from '@/types';
 import { useEnumLabels } from '@/hooks/useEnumLabels';
 
 const ROLE_LABELS: Record<SdwanFirewallRole, string> = {
@@ -295,6 +297,15 @@ function SdwanConfigDialog({
   const [monitorName, setMonitorName] = useState(existing?.monitorName ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
 
+  // PROVIDER contacts (vendors — Fortinet, Cisco, VeloCloud...). The stored
+  // value on SdwanConfig.provider is the contact's name string, same pattern
+  // as ConnectivityLink.provider.
+  const { data: providerContacts = [] } = useQuery<Contact[]>({
+    queryKey: ['contacts', { category: 'PROVIDER', picker: 'sdwan' }],
+    queryFn: () => contactsApi.getAll({ category: 'PROVIDER' }),
+    enabled: open,
+  });
+
   // Reset form state when the dialog opens or the config changes underneath.
   useEffect(() => {
     if (!open) return;
@@ -320,11 +331,19 @@ function SdwanConfigDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="sdwan-provider">Provider</Label>
-            <Input
+            <EntitySelectCombobox
               id="sdwan-provider"
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              placeholder="Fortinet SD-WAN, Cisco Meraki, VeloCloud..."
+              ariaLabel="Provider SD-WAN (vendor)"
+              options={providerContacts.map((c) => ({
+                value: c.name,
+                label: c.company ? `${c.name} (${c.company})` : c.name,
+                searchText: [c.name, c.company, c.email].filter(Boolean).join(' '),
+              }))}
+              value={provider || null}
+              onChange={(v) => setProvider(v ?? '')}
+              placeholder="Sélectionner un provider..."
+              searchPlaceholder="Rechercher un provider..."
+              emptyMessage="Aucun contact PROVIDER. Créez-en un dans Contacts."
             />
           </div>
           <div className="space-y-2">
@@ -409,7 +428,9 @@ function AttachFirewallDialog({
 
   const { data: siteAssets = [] } = useQuery({
     queryKey: ['assets', { siteId, sdwanPicker: true }],
-    queryFn: () => assetsApi.getAll({ siteId }),
+    // pageSize 500: see ConnectivityLinksManager note — default 25 hides
+    // firewalls on sites with 25+ assets.
+    queryFn: () => assetsApi.getAll({ siteId, pageSize: 500 }),
     enabled: open,
   });
 

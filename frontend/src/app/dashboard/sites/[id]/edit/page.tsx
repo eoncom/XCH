@@ -51,22 +51,10 @@ import { assetsApi } from '@/lib/api/assets';
 import { tasksApi } from '@/lib/api/tasks';
 import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
 import { organizationApi } from '@/lib/api/organization';
-import { ArrowLeft, ArrowRight, Check, Plus, Trash2, MapPin, UserPlus, FolderOpen, Globe, FileText, Shield, Search, Users, ExternalLink, Wifi, Network } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Plus, Trash2, MapPin, UserPlus, FolderOpen, Globe, FileText, Shield, Search, Users, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
-import type { Site, SiteContact, Contact, ContactType, ContactCategory, Asset, ConnectivityLink, SdwanConfig } from '@/types';
+import type { Site, SiteContact, Contact, ContactType, ContactCategory, Asset } from '@/types';
 import { toast } from 'sonner';
-
-// Types de connexion disponibles
-const CONNECTIVITY_TYPES = [
-  'Fibre optique',
-  '4G',
-  '5G',
-  'ADSL',
-  'VDSL',
-  'Satellite',
-  'Radio',
-  'Autre',
-];
 
 const siteSchema = z.object({
   delegationId: z.string().min(1, 'La délégation est requise'),
@@ -88,7 +76,6 @@ const siteSchema = z.object({
     if (typeof val === 'number' && !isNaN(val)) return val;
     return undefined;
   }),
-  cutProcedure: z.string().max(2000, 'Max 2000 caractères').optional().or(z.literal('')),
 }).refine(
   (data) => (data.address && data.city) || (typeof data.latitude === 'number' && typeof data.longitude === 'number'),
   {
@@ -99,10 +86,12 @@ const siteSchema = z.object({
 
 type SiteFormData = z.infer<typeof siteSchema>;
 
+// Phase 6.6 — 2-step edit wizard. Connectivity + SD-WAN are managed from the
+// site detail page (Infos pratiques tab) via the structured ConnectivityLink
+// and SdwanConfig models, not through the site payload.
 const STEPS = [
   { id: 1, name: 'Informations de base', description: 'Code, nom, adresse' },
-  { id: 2, name: 'Connectivité', description: 'Liaisons réseau' },
-  { id: 3, name: 'Contacts & Accès', description: 'Contacts et notes d\'accès' },
+  { id: 2, name: 'Contacts & Accès', description: 'Contacts et notes d\'accès' },
 ];
 
 export default function EditSitePageWrapper({
@@ -170,64 +159,9 @@ function EditSitePage({
           notes: site.notes || '',
           latitude: site.latitude,
           longitude: site.longitude,
-          cutProcedure: site.connectivity?.cutProcedure || '',
         }
       : undefined,
   });
-
-  // V2 connectivity state (links + SD-WAN) managed outside react-hook-form
-  const initLinks = (): ConnectivityLink[] => {
-    const conn = site?.connectivity;
-    if (!conn) return [];
-    if (Array.isArray(conn.links)) return conn.links;
-    return [];
-  };
-
-  const initSdwan = (): SdwanConfig => {
-    if (site?.connectivity?.sdwan) return site.connectivity.sdwan;
-    return { enabled: false, firewallIds: [] };
-  };
-
-  const [connectivityLinks, setConnectivityLinks] = useState<ConnectivityLink[]>(initLinks());
-  const [sdwan, setSdwan] = useState<SdwanConfig>(initSdwan());
-
-  // Load site assets for equipment association
-  const { data: siteAssets } = useQuery<Asset[]>({
-    queryKey: ['assets', { siteId: id }],
-    queryFn: () => assetsApi.getAll({ siteId: id }),
-    enabled: !!id,
-  });
-
-  // Re-initialize when site loads
-  useEffect(() => {
-    if (site) {
-      setConnectivityLinks(initLinks());
-      setSdwan(initSdwan());
-    }
-  }, [site?.id]);
-
-  const networkAssets = (siteAssets || []).filter(a =>
-    ['ROUTER', 'FIREWALL', 'BOX_5G', 'SWITCH'].includes(a.type)
-  );
-  const firewallAssets = (siteAssets || []).filter(a => a.type === 'FIREWALL');
-
-  const addLink = () => {
-    const hasP = connectivityLinks.some(l => l.role === 'primary');
-    setConnectivityLinks([...connectivityLinks, {
-      id: crypto.randomUUID(),
-      role: hasP ? 'backup' : 'primary',
-    }]);
-  };
-
-  const removeLink = (linkId: string) => {
-    setConnectivityLinks(connectivityLinks.filter(l => l.id !== linkId));
-  };
-
-  const updateLink = (linkId: string, field: keyof ConnectivityLink, value: any) => {
-    setConnectivityLinks(connectivityLinks.map(l =>
-      l.id === linkId ? { ...l, [field]: value } : l
-    ));
-  };
 
   const [contacts, setContacts] = useState<SiteContact[]>(site?.contacts || []);
   const [accessNotes, setAccessNotes] = useState(site?.accessNotes || {
@@ -250,13 +184,7 @@ function EditSitePage({
     }
   }, [site]);
 
-  // Charger les contacts de catégorie PROVIDER pour les opérateurs
-  const { data: providerContacts } = useQuery<Contact[]>({
-    queryKey: ['contacts', { category: 'PROVIDER' }],
-    queryFn: () => contactsApi.getAll({ category: 'PROVIDER' }),
-  });
-
-  // Charger tous les contacts pour l'étape 3
+  // Charger tous les contacts pour l'étape Contacts & Accès
   const { data: allContacts } = useQuery<Contact[]>({
     queryKey: ['contacts'],
     queryFn: () => contactsApi.getAll(),
@@ -363,11 +291,10 @@ function EditSitePage({
   const buildPayload = (data: SiteFormData) => {
     const cleanedData = { ...data };
 
-    // Phase 6.5: connectivity links no longer round-trip through Site payload.
-    // They live in the ConnectivityLink table and are managed via the dedicated
-    // /api/connectivity endpoints (rendered by the ConnectivityLinksManager
-    // component inside the site detail page's "Infos pratiques" tab).
-    // The cutProcedure stays on the site itself (Site.cutProcedure scalar).
+    // Phase 6.5/6.6: connectivity, SD-WAN and cutProcedure don't round-trip
+    // through this payload. Links live in the ConnectivityLink table, SD-WAN
+    // in SdwanConfig/SdwanFirewall, and cutProcedure is a direct Site scalar —
+    // all edited from the site detail page's Infos pratiques tab.
 
     // Build metadata with serverInfo
     const hasServerInfo = serverInfo.smbPath || serverInfo.sharepointUrl || serverInfo.gedUrl || serverInfo.accessRightsUrl || serverInfo.notes;
@@ -675,236 +602,8 @@ function EditSitePage({
               </div>
             )}
 
-            {/* Étape 2: Connectivité */}
+            {/* Étape 2: Contacts & Accès */}
             {currentStep === 2 && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <Wifi className="h-5 w-5" />
-                    Connectivité
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Liens Internet, SD-WAN et procédure de coupure
-                  </p>
-                </div>
-
-                {/* === Liens Internet (dynamique) === */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Liens Internet</h4>
-                    <Button type="button" variant="outline" size="sm" onClick={addLink}>
-                      <Plus className="h-4 w-4 mr-1" /> Ajouter un lien
-                    </Button>
-                  </div>
-
-                  {connectivityLinks.length === 0 && (
-                    <p className="text-sm text-muted-foreground italic py-4 text-center border border-dashed rounded-lg">
-                      Aucun lien configuré. Cliquez sur &quot;Ajouter un lien&quot; pour commencer.
-                    </p>
-                  )}
-
-                  {connectivityLinks.map((link, idx) => (
-                    <div key={link.id} className={`border rounded-lg p-4 space-y-3 ${link.role === 'primary' ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-amber-500'}`}>
-                      <div className="flex items-center justify-between">
-                        <Badge variant={link.role === 'primary' ? 'success' : 'warning'} className="text-xs">
-                          {link.role === 'primary' ? 'Primaire' : 'Backup'}
-                        </Badge>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeLink(link.id)}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Rôle</Label>
-                          <Select value={link.role} onValueChange={(v) => updateLink(link.id, 'role', v)}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="primary">Primaire</SelectItem>
-                              <SelectItem value="backup">Backup</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Type</Label>
-                          <Select value={link.type || ''} onValueChange={(v) => updateLink(link.id, 'type', v)}>
-                            <SelectTrigger><SelectValue placeholder="Type de lien" /></SelectTrigger>
-                            <SelectContent>
-                              {CONNECTIVITY_TYPES.map((t) => (
-                                <SelectItem key={t} value={t}>{t}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Opérateur</Label>
-                          <Input
-                            value={link.provider || ''}
-                            onChange={(e) => updateLink(link.id, 'provider', e.target.value)}
-                            placeholder="Orange, SFR..."
-                            maxLength={100}
-                            list="provider-suggestions"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Référence</Label>
-                          <Input
-                            value={link.ref || ''}
-                            onChange={(e) => updateLink(link.id, 'ref', e.target.value)}
-                            placeholder="FTTO-XXX-001"
-                            maxLength={100}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Bande passante</Label>
-                          <Input
-                            value={link.bandwidth || ''}
-                            onChange={(e) => updateLink(link.id, 'bandwidth', e.target.value)}
-                            placeholder="1 Gbps / 500 Mbps"
-                            maxLength={100}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Équipement associé</Label>
-                          <Select value={link.assetId || '_none'} onValueChange={(v) => updateLink(link.id, 'assetId', v === '_none' ? undefined : v)}>
-                            <SelectTrigger><SelectValue placeholder="Aucun" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="_none">Aucun</SelectItem>
-                              {networkAssets.map(a => (
-                                <SelectItem key={a.id} value={a.id}>
-                                  {a.name || a.type} {a.manufacturer ? `(${a.manufacturer})` : ''}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* === SD-WAN === */}
-                <div className="space-y-4 border rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Network className="h-5 w-5" />
-                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">SD-WAN</h4>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="sdwan-toggle" className="text-xs text-muted-foreground">
-                        {sdwan.enabled ? 'Activé' : 'Désactivé'}
-                      </Label>
-                      <Checkbox
-                        id="sdwan-toggle"
-                        checked={sdwan.enabled}
-                        onCheckedChange={(checked) => setSdwan({ ...sdwan, enabled: !!checked })}
-                      />
-                    </div>
-                  </div>
-
-                  {sdwan.enabled && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Fournisseur SD-WAN</Label>
-                        <Input
-                          value={sdwan.provider || ''}
-                          onChange={(e) => setSdwan({ ...sdwan, provider: e.target.value })}
-                          placeholder="Fortinet SD-WAN, Meraki, VeloCloud..."
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">
-                          Firewalls ({sdwan.firewallIds.length}/2)
-                          {sdwan.firewallIds.length === 2 && (
-                            <Badge variant="outline" className="ml-2 text-xs">HA</Badge>
-                          )}
-                        </Label>
-                        <Select
-                          value="_select"
-                          onValueChange={(v) => {
-                            if (v === '_select') return;
-                            if (sdwan.firewallIds.length >= 2) {
-                              toast.error('Maximum 2 firewalls pour HA');
-                              return;
-                            }
-                            if (!sdwan.firewallIds.includes(v)) {
-                              setSdwan({ ...sdwan, firewallIds: [...sdwan.firewallIds, v] });
-                            }
-                          }}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Ajouter un firewall..." /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="_select" disabled>Sélectionner...</SelectItem>
-                            {firewallAssets
-                              .filter(a => !sdwan.firewallIds.includes(a.id))
-                              .map(a => (
-                                <SelectItem key={a.id} value={a.id}>
-                                  {a.name || 'Firewall'} {a.model ? `(${a.model})` : ''}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                        {sdwan.firewallIds.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {sdwan.firewallIds.map(fwId => {
-                              const fw = firewallAssets.find(a => a.id === fwId);
-                              return (
-                                <Badge key={fwId} variant="secondary" className="gap-1">
-                                  {fw?.name || fw?.model || 'Firewall'}
-                                  <button
-                                    type="button"
-                                    onClick={() => setSdwan({ ...sdwan, firewallIds: sdwan.firewallIds.filter(id => id !== fwId) })}
-                                    className="ml-1 hover:text-red-500"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                </Badge>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                      <div className="space-y-1 md:col-span-2">
-                        <Label className="text-xs">Notes SD-WAN</Label>
-                        <Input
-                          value={sdwan.notes || ''}
-                          onChange={(e) => setSdwan({ ...sdwan, notes: e.target.value })}
-                          placeholder="Notes complémentaires..."
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Provider suggestions datalist */}
-                <datalist id="provider-suggestions">
-                  {(providerContacts || []).map((contact) => (
-                    <option key={contact.id} value={contact.name}>
-                      {contact.company ? `${contact.company}` : ''}
-                    </option>
-                  ))}
-                </datalist>
-
-                {/* Cut Procedure */}
-                <div className="space-y-2">
-                  <Label htmlFor="cutProcedure">Procédure Coupure</Label>
-                  <Textarea
-                    id="cutProcedure"
-                    {...register('cutProcedure')}
-                    placeholder="Procédure à suivre en cas de coupure réseau (contacts, escalade, basculement backup...)"
-                    rows={4}
-                    maxLength={2000}
-                  />
-                  {errors.cutProcedure && (
-                    <p className="text-sm text-red-600">
-                      {errors.cutProcedure.message}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Étape 3: Contacts & Accès */}
-            {currentStep === 3 && (
               <div className="space-y-6">
                 {/* Contacts */}
                 <div>
