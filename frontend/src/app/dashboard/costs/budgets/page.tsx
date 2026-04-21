@@ -91,7 +91,7 @@ const FREQ_LABELS: Record<string, string> = {
 
 function BudgetsPage() {
   const queryClient = useQueryClient();
-  const { canWrite } = usePermissions();
+  const { canWrite, isSuperAdmin } = usePermissions();
   const { currentDelegation } = useDelegation();
   const activeDelegationId = currentDelegation?.delegationId ?? null;
 
@@ -249,6 +249,13 @@ function BudgetsPage() {
   const handleSave = () => {
     if (!formData.label || !formData.amount) {
       toast.error('Label et montant requis');
+      return;
+    }
+    // A manager (non super-admin) can only create budgets on delegations they
+    // manage. Let the backend be the authority (403) but catch the common case
+    // early for a clean error.
+    if (!isSuperAdmin && !formData.delegationId) {
+      toast.error('Sélectionnez une délégation pour ce budget.');
       return;
     }
     if (editingBudget) {
@@ -601,9 +608,11 @@ function BudgetsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="b-deleg">Délégation (optionnel)</Label>
+                <Label htmlFor="b-deleg">
+                  Délégation {isSuperAdmin ? '(optionnel)' : <span className="text-red-500">*</span>}
+                </Label>
                 <Select
-                  value={formData.delegationId || '__none__'}
+                  value={formData.delegationId || (isSuperAdmin ? '__none__' : '')}
                   onValueChange={(v) => {
                     const nextDelegationId = v === '__none__' ? undefined : v;
                     setFormData({
@@ -614,10 +623,15 @@ function BudgetsPage() {
                   }}
                 >
                   <SelectTrigger id="b-deleg">
-                    <SelectValue placeholder="Toutes" />
+                    <SelectValue placeholder={isSuperAdmin ? 'Toutes' : 'Choisir une délégation'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">Toutes les délégations</SelectItem>
+                    {/* Global scope (no delegation) is a super-admin privilege —
+                        a manager who picks it would create a budget they can't
+                        see back because of the per-delegation read scope. */}
+                    {isSuperAdmin && (
+                      <SelectItem value="__none__">Toutes les délégations</SelectItem>
+                    )}
                     {(delegations || []).map((d: Delegation) => (
                       <SelectItem key={d.id} value={d.id}>
                         {d.name}

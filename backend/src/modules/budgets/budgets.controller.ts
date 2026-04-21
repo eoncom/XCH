@@ -36,7 +36,15 @@ export class BudgetsController {
   @RequireManage()
   @ApiOperation({ summary: 'Create a budget' })
   async create(@Body() dto: CreateBudgetDto, @Request() req: AuthRequest) {
-    await this.scopeOrFail(req, dto.delegationId ?? undefined);
+    const scope = await this.scopeOrFail(req, dto.delegationId ?? undefined);
+    // Non super-admins can't create a "global" budget (delegationId=null).
+    // Otherwise a manager could create a budget they're then unable to see
+    // back, because the read scope only exposes their managed delegations.
+    if (scope !== null && !dto.delegationId) {
+      throw new ForbiddenException(
+        'Un budget global (sans délégation) est réservé aux super administrateurs. Sélectionnez une délégation.',
+      );
+    }
     return this.service.create(req.user.tenantId, dto);
   }
 
@@ -71,8 +79,14 @@ export class BudgetsController {
   @ApiOperation({ summary: 'Update a budget' })
   async update(@Param('id') id: string, @Body() dto: UpdateBudgetDto, @Request() req: AuthRequest) {
     const existing = await this.service.findOne(req.user.tenantId, id);
-    await this.scopeOrFail(req, (existing as any).delegationId ?? undefined);
+    const scope = await this.scopeOrFail(req, (existing as any).delegationId ?? undefined);
     if (dto.delegationId) await this.scopeOrFail(req, dto.delegationId);
+    // Prevent a manager from "downgrading" an existing budget to global.
+    if (scope !== null && 'delegationId' in dto && !dto.delegationId) {
+      throw new ForbiddenException(
+        'Un budget global (sans délégation) est réservé aux super administrateurs.',
+      );
+    }
     return this.service.update(req.user.tenantId, id, dto);
   }
 
