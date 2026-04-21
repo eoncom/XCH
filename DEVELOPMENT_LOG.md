@@ -5891,3 +5891,24 @@ feat(costs): sub-budgets, threshold alerts, expenses-per-budget view, chart, CSV
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-21
+
+**Date:** 2026-04-21 15:21:30
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 6
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix(costs): expense form — Rattachement organisationnel is required, not optional
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

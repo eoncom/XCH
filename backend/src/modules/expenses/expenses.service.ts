@@ -33,6 +33,7 @@ export class ExpensesService {
     delegationId?: string | null;
     siteId?: string | null;
     type?: string | null;
+    bearerId?: string | null;
     dateIncurred: Date;
   }) {
     // Intentionally not awaited — don't block the HTTP response on alerting.
@@ -104,6 +105,7 @@ export class ExpensesService {
       delegationId: expense.delegationId,
       siteId: expense.siteId,
       type: expense.type,
+      bearerId: expense.bearerId,
       dateIncurred: expense.dateIncurred,
     });
 
@@ -260,6 +262,7 @@ export class ExpensesService {
       delegationId: updated.delegationId,
       siteId: updated.siteId,
       type: updated.type,
+      bearerId: updated.bearerId,
       dateIncurred: updated.dateIncurred,
     });
 

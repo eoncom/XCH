@@ -7,6 +7,7 @@ import { UserNotificationService } from '../notifications/user-notification.serv
 const BUDGET_INCLUDE = {
   delegation: { select: { id: true, name: true, code: true } },
   site: { select: { id: true, name: true, code: true } },
+  billingEntity: { select: { id: true, name: true, code: true, delegationId: true } },
   parent: { select: { id: true, label: true, amount: true } },
   _count: { select: { children: true } },
 };
@@ -22,6 +23,7 @@ export class BudgetsService {
 
   async create(tenantId: string, dto: CreateBudgetDto) {
     await this.validateHierarchy(tenantId, null, dto);
+    await this.validateBillingEntity(tenantId, dto.billingEntityId, dto.delegationId);
 
     return this.prisma.budget.create({
       data: {
@@ -30,6 +32,7 @@ export class BudgetsService {
         delegationId: dto.delegationId || null,
         siteId: dto.siteId || null,
         expenseType: dto.expenseType || null,
+        billingEntityId: dto.billingEntityId || null,
         period: dto.period,
         startDate: new Date(dto.startDate),
         endDate: new Date(dto.endDate),
@@ -110,10 +113,21 @@ export class BudgetsService {
       });
     }
 
+    // Re-validate the billingEntity if it changed, or if the delegation
+    // changed (since a CdC must belong to the budget's delegation or be global).
+    if (dto.billingEntityId !== undefined || dto.delegationId !== undefined) {
+      await this.validateBillingEntity(
+        tenantId,
+        dto.billingEntityId !== undefined ? dto.billingEntityId : existing.billingEntityId,
+        dto.delegationId !== undefined ? dto.delegationId : existing.delegationId,
+      );
+    }
+
     const data: any = { ...dto };
     if (dto.startDate) data.startDate = new Date(dto.startDate);
     if (dto.endDate) data.endDate = new Date(dto.endDate);
     if (dto.parentId !== undefined) data.parentId = dto.parentId || null;
+    if (dto.billingEntityId !== undefined) data.billingEntityId = dto.billingEntityId || null;
 
     return this.prisma.budget.update({
       where: { id },
@@ -244,6 +258,7 @@ export class BudgetsService {
     delegationId?: string | null;
     siteId?: string | null;
     type?: string | null;
+    bearerId?: string | null;
     dateIncurred: Date;
   }) {
     const candidateBudgets = await this.prisma.budget.findMany({
@@ -259,6 +274,9 @@ export class BudgetsService {
         AND: [
           { OR: [{ siteId: null }, { siteId: expense.siteId ?? undefined }] },
           { OR: [{ expenseType: null }, { expenseType: expense.type ?? undefined }] },
+          // Phase 6.7 (D1): CdC-scoped budgets only fire when the expense's
+          // bearer matches. Budgets without a billingEntityId match every bearer.
+          { OR: [{ billingEntityId: null }, { billingEntityId: expense.bearerId ?? undefined }] },
         ],
       },
       include: { delegation: true },
@@ -338,6 +356,7 @@ export class BudgetsService {
     delegationId: string | null;
     siteId: string | null;
     expenseType: string | null;
+    billingEntityId: string | null;
     startDate: Date;
     endDate: Date;
     tenantId: string;
@@ -349,7 +368,43 @@ export class BudgetsService {
     if (budget.delegationId) expenseWhere.delegationId = budget.delegationId;
     if (budget.siteId) expenseWhere.siteId = budget.siteId;
     if (budget.expenseType) expenseWhere.type = budget.expenseType;
+    // Phase 6.7 (D1): a CdC-scoped budget only matches expenses where this
+    // BillingEntity is the bearer (the raw invoiced owner — the refacturation
+    // math doesn't change what goes against the budget envelope).
+    if (budget.billingEntityId) expenseWhere.bearerId = budget.billingEntityId;
     return expenseWhere;
+  }
+
+  /**
+   * Validate that a budget's billingEntity (CdC) is coherent with its scope.
+   * Rules:
+   * - The BillingEntity must exist in the same tenant.
+   * - If the budget has a delegation, the BillingEntity must either be global
+   *   (delegationId=null) or belong to the same delegation.
+   *   → a "Budget CdC Direction IT" doesn't make sense if it's supposed to
+   *   track IDF-Ouest expenses but the CdC actually belongs to Lyon.
+   */
+  private async validateBillingEntity(
+    tenantId: string,
+    billingEntityId: string | null | undefined,
+    delegationId: string | null | undefined,
+  ) {
+    if (!billingEntityId) return;
+    const cdc = await this.prisma.billingEntity.findFirst({
+      where: { id: billingEntityId, tenantId },
+      select: { id: true, delegationId: true, name: true, isActive: true },
+    });
+    if (!cdc) {
+      throw new BadRequestException('Centre de coût introuvable.');
+    }
+    if (!cdc.isActive) {
+      throw new BadRequestException(`Centre de coût « ${cdc.name} » désactivé.`);
+    }
+    if (delegationId && cdc.delegationId && cdc.delegationId !== delegationId) {
+      throw new BadRequestException(
+        `Le centre de coût « ${cdc.name} » n'appartient pas à cette délégation.`,
+      );
+    }
   }
 
   /**

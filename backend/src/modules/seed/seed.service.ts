@@ -1024,24 +1024,53 @@ export class SeedService {
       },
     });
 
-    // Annual budget for IDF Ouest
-    const budgetLabel = `Budget IT ${new Date().getFullYear()} — IDF Ouest`;
-    const existingBudget = await this.prisma.budget.findFirst({
-      where: { tenantId, label: budgetLabel },
+    // Annual delegation-level budget for IDF Ouest, then a nested CdC budget
+    // for BU-IDF (demonstrates the Délégation → Centre de coût hierarchy
+    // introduced in phase 6.7 / D1).
+    const budgetYear = new Date().getFullYear();
+    const parentLabel = `Budget IT ${budgetYear} — IDF Ouest`;
+    let parentBudget = await this.prisma.budget.findFirst({
+      where: { tenantId, label: parentLabel },
     });
-    if (!existingBudget) {
-      await this.prisma.budget.create({
+    if (!parentBudget) {
+      parentBudget = await this.prisma.budget.create({
         data: {
           tenantId,
-          label: budgetLabel,
+          label: parentLabel,
           delegationId: idfOuest,
           expenseType: null,
           period: 'YEAR',
-          startDate: new Date(new Date().getFullYear(), 0, 1),
-          endDate: new Date(new Date().getFullYear(), 11, 31),
+          startDate: new Date(budgetYear, 0, 1),
+          endDate: new Date(budgetYear, 11, 31),
           amount: 120000 as any,
           currency: 'EUR',
-          notes: 'Budget annuel IT couvrant équipement, services et abonnements',
+          notes:
+            'Budget annuel IT couvrant équipement, services et abonnements de la délégation IDF Ouest.',
+        },
+      });
+    }
+
+    const cdcBudgetLabel = `Budget BU IDF ${budgetYear}`;
+    const existingCdcBudget = await this.prisma.budget.findFirst({
+      where: { tenantId, label: cdcBudgetLabel },
+    });
+    if (!existingCdcBudget) {
+      await this.prisma.budget.create({
+        data: {
+          tenantId,
+          label: cdcBudgetLabel,
+          delegationId: idfOuest,
+          billingEntityId: bu1.id,
+          parentId: parentBudget.id,
+          expenseType: null,
+          period: 'YEAR',
+          startDate: new Date(budgetYear, 0, 1),
+          endDate: new Date(budgetYear, 11, 31),
+          amount: 40000 as any,
+          currency: 'EUR',
+          notes:
+            "Sous-budget porté par la BU IDF (partie de l'enveloppe IDF Ouest). Démo hiérarchie Délégation → CdC.",
+          alertThresholdPct: 75,
         },
       });
     }

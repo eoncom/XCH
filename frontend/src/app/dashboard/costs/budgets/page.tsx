@@ -37,6 +37,7 @@ import {
 } from '@/lib/api/budgets';
 import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { sitesApi } from '@/lib/api/sites';
+import { billingEntitiesApi, type BillingEntity } from '@/lib/api/costs';
 import { useDelegation } from '@/contexts/DelegationContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
@@ -51,6 +52,7 @@ import {
   BellOff,
   ChevronRight,
   Eye,
+  Wallet2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -161,6 +163,7 @@ function BudgetsPage() {
     endDate: new Date().getFullYear() + '-12-31',
     amount: 0,
     currency: 'EUR',
+    billingEntityId: null,
     alertsEnabled: true,
     alertThresholdPct: 80,
   });
@@ -170,6 +173,20 @@ function BudgetsPage() {
     queryKey: ['sites', 'for-budget-form', formData.delegationId || 'none'],
     queryFn: () => sitesApi.getAll({ delegationId: formData.delegationId, pageSize: 500 }),
     enabled: !!formData.delegationId,
+  });
+
+  // Centres de coût pickable for the budget form:
+  // - Restrict to the delegation picked (if any) + globals (delegationId=null).
+  //   A CdC that belongs to a different delegation isn't semantically
+  //   trackable by this budget, so it's not offered.
+  const { data: billingEntitiesForForm = [] } = useQuery<BillingEntity[]>({
+    queryKey: ['billing-entities', 'for-budget-form', formData.delegationId || 'none'],
+    queryFn: () =>
+      billingEntitiesApi.getAll({
+        delegationId: formData.delegationId || undefined,
+        includeGlobal: true,
+        isActive: 'true',
+      }),
   });
 
   // Potential parents: all budgets minus the one being edited and its descendants.
@@ -202,6 +219,7 @@ function BudgetsPage() {
       delegationId: budget.delegationId || undefined,
       siteId: budget.siteId || undefined,
       expenseType: budget.expenseType || undefined,
+      billingEntityId: budget.billingEntityId || null,
       period: budget.period,
       startDate: budget.startDate.split('T')[0],
       endDate: budget.endDate.split('T')[0],
@@ -442,6 +460,12 @@ function BudgetsPage() {
                     {budget.expenseType && (
                       <Badge variant="secondary">
                         {EXPENSE_TYPE_LABELS[budget.expenseType] ?? budget.expenseType}
+                      </Badge>
+                    )}
+                    {budget.billingEntity && (
+                      <Badge variant="secondary" className="gap-1">
+                        <Wallet2 className="h-3 w-3" />
+                        {budget.billingEntity.code}
                       </Badge>
                     )}
                     {budget.parent && (
@@ -689,6 +713,35 @@ function BudgetsPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label htmlFor="b-cdc" className="flex items-center gap-2">
+                <Wallet2 className="h-4 w-4" />
+                Centre de coût (optionnel)
+              </Label>
+              <Select
+                value={formData.billingEntityId || '__none__'}
+                onValueChange={(v) =>
+                  setFormData({ ...formData, billingEntityId: v === '__none__' ? null : v })
+                }
+              >
+                <SelectTrigger id="b-cdc">
+                  <SelectValue placeholder="Toute la délégation" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Toute la délégation (pas de CdC)</SelectItem>
+                  {billingEntitiesForForm.map((cdc) => (
+                    <SelectItem key={cdc.id} value={cdc.id}>
+                      {cdc.code} — {cdc.name}
+                      {!cdc.delegationId ? ' (global)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Si renseigné, ce budget ne surveille que les dépenses portées par ce centre de
+                coût. La hiérarchie cible : Délégation → Centre de coût → Dépenses.
+              </p>
             </div>
             <div className="border-t pt-4 space-y-3">
               <div className="flex items-center justify-between">

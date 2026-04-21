@@ -13,6 +13,7 @@ export interface Budget {
   delegationId: string | null;
   siteId: string | null;
   expenseType: string | null;
+  billingEntityId: string | null;
   period: 'MONTH' | 'YEAR';
   startDate: string;
   endDate: string;
@@ -26,6 +27,7 @@ export interface Budget {
   updatedAt: string;
   delegation?: { id: string; name: string; code: string } | null;
   site?: { id: string; name: string; code: string } | null;
+  billingEntity?: { id: string; name: string; code: string; delegationId: string | null } | null;
   parent?: { id: string; label: string; amount: number } | null;
   _count?: { children: number };
 }
@@ -60,6 +62,7 @@ export interface CreateBudgetData {
   delegationId?: string;
   siteId?: string;
   expenseType?: string;
+  billingEntityId?: string | null;
   period: 'MONTH' | 'YEAR';
   startDate: string;
   endDate: string;

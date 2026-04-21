@@ -1103,6 +1103,8 @@ model BillingEntity {
   // Relations
   expensesBorne       Expense[]        @relation("bearer")
   allocationsReceived CostAllocation[] @relation("target")
+  // Phase 6.7 (D1): optional budgets scoped to this centre de coût.
+  budgets             Budget[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1215,6 +1217,15 @@ model Budget {
   delegation   Delegation?  @relation(fields: [delegationId], references: [id])
   siteId       String?
   site         Site?        @relation(fields: [siteId], references: [id])
+  // Phase 6.7 (D1, 2026-04-21): a budget can be scoped to a specific centre
+  // de coût (BillingEntity). When set, it only matches expenses whose
+  // bearerId == billingEntityId. Hierarchy is typically:
+  //   Budget Délégation (no billingEntityId) → Budget CdC (billingEntityId set)
+  // A CdC without its own budget just consumes the parent delegation budget.
+  // Restrict on delete: if a CdC is deleted while a budget targets it,
+  // refuse — forces the user to reassign the budget first.
+  billingEntityId String?
+  billingEntity   BillingEntity? @relation(fields: [billingEntityId], references: [id], onDelete: Restrict)
   expenseType  String?      // "EQUIPMENT" | "SERVICE" | ... (matches ExpenseType)
   period       BudgetPeriod @default(YEAR)
   startDate    DateTime
@@ -1247,6 +1258,7 @@ model Budget {
   @@index([tenantId, startDate, endDate])
   @@index([tenantId, delegationId])
   @@index([parentId])
+  @@index([billingEntityId])
   @@map("budgets")
 }
 

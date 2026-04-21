@@ -39,6 +39,13 @@ export class CreateBudgetDto {
   @IsString() @IsOptional()
   parentId?: string | null;
 
+  @ApiPropertyOptional({
+    description:
+      'Centre de coût (BillingEntity) this budget applies to. When set, only expenses where bearerId == billingEntityId match.',
+  })
+  @IsString() @IsOptional()
+  billingEntityId?: string | null;
+
   @ApiPropertyOptional({ default: true })
   @IsBoolean() @IsOptional()
   alertsEnabled?: boolean;
@@ -85,6 +92,10 @@ export class UpdateBudgetDto {
   parentId?: string | null;
 
   @ApiPropertyOptional()
+  @IsString() @IsOptional()
+  billingEntityId?: string | null;
+
+  @ApiPropertyOptional()
   @IsBoolean() @IsOptional()
   alertsEnabled?: boolean;
 
@@ -102,6 +113,9 @@ export class FilterBudgetDto {
 
   @ApiPropertyOptional() @IsString() @IsOptional()
   expenseType?: string;
+
+  @ApiPropertyOptional() @IsString() @IsOptional()
+  billingEntityId?: string;
 
   @ApiPropertyOptional() @IsOptional()
   page?: number;
