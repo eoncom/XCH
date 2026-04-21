@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { CreateBudgetDto, UpdateBudgetDto, FilterBudgetDto } from './dto/create-budget.dto';
 import { buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { UserNotificationService } from '../notifications/user-notification.service';
+import { validateDelegationSiteCoherence } from '../../common/utils/delegation-site-validation.util';
 
 const BUDGET_INCLUDE = {
   delegation: { select: { id: true, name: true, code: true } },
@@ -24,6 +25,10 @@ export class BudgetsService {
   async create(tenantId: string, dto: CreateBudgetDto) {
     await this.validateHierarchy(tenantId, null, dto);
     await this.validateBillingEntity(tenantId, dto.billingEntityId, dto.delegationId);
+    // Bug fix 2026-04-21: a budget scoped to a site must share the same
+    // delegation (R1). Reuses the same helper as the expenses module so the
+    // rule stays consistent across the whole cost domain.
+    await validateDelegationSiteCoherence(this.prisma as any, dto.delegationId, dto.siteId);
 
     return this.prisma.budget.create({
       data: {
@@ -123,6 +128,15 @@ export class BudgetsService {
       );
     }
 
+    // Re-check site coherence if delegation or site changed.
+    if (dto.delegationId !== undefined || dto.siteId !== undefined) {
+      await validateDelegationSiteCoherence(
+        this.prisma as any,
+        dto.delegationId !== undefined ? dto.delegationId : existing.delegationId,
+        dto.siteId !== undefined ? dto.siteId : existing.siteId,
+      );
+    }
+
     const data: any = { ...dto };
     if (dto.startDate) data.startDate = new Date(dto.startDate);
     if (dto.endDate) data.endDate = new Date(dto.endDate);
@@ -156,8 +170,17 @@ export class BudgetsService {
 
   /**
    * Compute budget status: how much has been spent vs budgeted.
-   * Matches expenses by scope (delegation/site/type) within the budget time window.
-   * Also returns the list of matching expenses so the UI can show them inline.
+   *
+   * The math differs depending on whether the budget is CdC-scoped:
+   * - Non-CdC (delegation-level): sum of raw totalAmount across matching
+   *   expenses. The delegation is the "ultimate buyer" — what it purchases,
+   *   before any internal refacturation.
+   * - CdC-scoped (billingEntityId=X): the REAL net money flowing through X.
+   *     • When X is the bearer  → contribution = totalAmount × (1 - Σ outgoing allocation %)
+   *     • When X is a target of an allocation → contribution = allocation.amount
+   *   This is the accounting-correct figure the user expects for "Budget IT
+   *   2026 = 40k": if IT pays 1000 € but refactures 300 € to BU Lyon, only
+   *   700 € should count against the IT budget.
    */
   async getStatus(tenantId: string, id: string) {
     const budget = await this.prisma.budget.findFirst({
@@ -166,73 +189,13 @@ export class BudgetsService {
     });
     if (!budget) throw new NotFoundException('Budget not found');
 
-    const expenseWhere = this.buildExpenseWhere(budget);
+    const isCdcBudget = !!budget.billingEntityId;
+    const spent = isCdcBudget
+      ? await this.computeCdcSpent(tenantId, budget)
+      : await this.computeDelegationSpent(tenantId, budget);
 
-    const [oneTimeAgg, recurringExpenses, allExpenses] = await Promise.all([
-      this.prisma.expense.aggregate({
-        where: { ...expenseWhere, frequency: 'ONE_TIME' },
-        _sum: { totalAmount: true },
-      }),
-      this.prisma.expense.findMany({
-        where: { ...expenseWhere, frequency: { not: 'ONE_TIME' } },
-        select: {
-          id: true,
-          label: true,
-          type: true,
-          frequency: true,
-          totalAmount: true,
-          currency: true,
-          dateIncurred: true,
-          dateStart: true,
-          dateEnd: true,
-          bearer: { select: { id: true, name: true, code: true } },
-          site: { select: { id: true, name: true, code: true } },
-        },
-      }),
-      this.prisma.expense.findMany({
-        where: expenseWhere,
-        select: {
-          id: true,
-          label: true,
-          type: true,
-          frequency: true,
-          totalAmount: true,
-          currency: true,
-          dateIncurred: true,
-          dateStart: true,
-          dateEnd: true,
-          bearer: { select: { id: true, name: true, code: true } },
-          site: { select: { id: true, name: true, code: true } },
-        },
-        orderBy: { dateIncurred: 'desc' },
-      }),
-    ]);
+    const allExpenses = await this.listMatchingExpenses(tenantId, budget);
 
-    let recurringTotal = 0;
-    const budgetStart = budget.startDate;
-    const budgetEnd = budget.endDate;
-
-    for (const exp of recurringExpenses) {
-      const effectiveStart = exp.dateStart && exp.dateStart > budgetStart ? exp.dateStart : budgetStart;
-      const effectiveEnd = exp.dateEnd && exp.dateEnd < budgetEnd ? exp.dateEnd : budgetEnd;
-      if (effectiveStart > effectiveEnd) continue;
-
-      const months = this.monthsBetween(effectiveStart, effectiveEnd);
-
-      switch (exp.frequency) {
-        case 'MONTHLY':
-          recurringTotal += Number(exp.totalAmount) * months;
-          break;
-        case 'QUARTERLY':
-          recurringTotal += Number(exp.totalAmount) * (months / 3);
-          break;
-        case 'YEARLY':
-          recurringTotal += Number(exp.totalAmount) * (months / 12);
-          break;
-      }
-    }
-
-    const spent = Number(oneTimeAgg._sum.totalAmount || 0) + recurringTotal;
     const budgeted = Number(budget.amount);
     const remaining = budgeted - spent;
     const progressPct = budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0;
@@ -250,6 +213,180 @@ export class BudgetsService {
   }
 
   /**
+   * Non-CdC budget (delegation / site / type): legacy raw-total logic. The
+   * refacturation math doesn't apply at the delegation level — a delegation
+   * "bought" the thing regardless of who is later invoiced for it.
+   */
+  private async computeDelegationSpent(
+    tenantId: string,
+    budget: any,
+  ): Promise<number> {
+    const expenseWhere = this.buildExpenseWhere(budget);
+
+    const [oneTimeAgg, recurringExpenses] = await Promise.all([
+      this.prisma.expense.aggregate({
+        where: { ...expenseWhere, frequency: 'ONE_TIME' },
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.expense.findMany({
+        where: { ...expenseWhere, frequency: { not: 'ONE_TIME' } },
+        select: { totalAmount: true, frequency: true, dateStart: true, dateEnd: true },
+      }),
+    ]);
+
+    let recurringTotal = 0;
+    for (const exp of recurringExpenses) {
+      const months = this.monthsForRecurring(exp, budget.startDate, budget.endDate);
+      if (months === 0) continue;
+      recurringTotal += Number(exp.totalAmount) * this.frequencyFactor(exp.frequency) * months;
+    }
+    return Number(oneTimeAgg._sum.totalAmount || 0) + recurringTotal;
+  }
+
+  /**
+   * CdC budget — bearer net + incoming refacturation. Fetches every expense
+   * where the CdC is either the bearer or a target of an allocation within
+   * the budget window, then sums the real contribution.
+   */
+  private async computeCdcSpent(tenantId: string, budget: any): Promise<number> {
+    const X = budget.billingEntityId as string;
+    const where: any = {
+      tenantId,
+      dateIncurred: { gte: budget.startDate, lte: budget.endDate },
+      OR: [
+        { bearerId: X },
+        { allocations: { some: { targetId: X } } },
+      ],
+    };
+    // A CdC budget still honours optional delegation/site/type filters.
+    if (budget.delegationId) where.delegationId = budget.delegationId;
+    if (budget.siteId) where.siteId = budget.siteId;
+    if (budget.expenseType) where.type = budget.expenseType;
+
+    const expenses = await this.prisma.expense.findMany({
+      where,
+      select: {
+        id: true,
+        totalAmount: true,
+        frequency: true,
+        dateStart: true,
+        dateEnd: true,
+        dateIncurred: true,
+        bearerId: true,
+        allocations: { select: { targetId: true, percentage: true, amount: true } },
+      },
+    });
+
+    let total = 0;
+    for (const exp of expenses) {
+      const contribution = this.expenseContributionForCdc(exp, X);
+      if (contribution === 0) continue;
+
+      if (exp.frequency === 'ONE_TIME') {
+        total += contribution;
+      } else {
+        const months = this.monthsForRecurring(exp, budget.startDate, budget.endDate);
+        if (months === 0) continue;
+        total += contribution * this.frequencyFactor(exp.frequency) * months;
+      }
+    }
+    return total;
+  }
+
+  /**
+   * Contribution of a single expense to a CdC X:
+   * - If bearer=X: totalAmount * (1 - Σ outgoingPct/100)   [net after refact out]
+   * - Plus:        Σ allocation.amount where target=X       [refact received]
+   * The two branches are additive — in practice an expense is rarely both
+   * (the service already blocks bearer=target in validateAllocationTargets).
+   */
+  private expenseContributionForCdc(
+    exp: {
+      totalAmount: any;
+      bearerId: string;
+      allocations: Array<{ targetId: string; percentage: number; amount: any }>;
+    },
+    X: string,
+  ): number {
+    let contribution = 0;
+    if (exp.bearerId === X) {
+      const totalOutPct = exp.allocations.reduce((s, a) => s + Number(a.percentage), 0);
+      contribution += Number(exp.totalAmount) * Math.max(0, (100 - totalOutPct) / 100);
+    }
+    for (const a of exp.allocations) {
+      if (a.targetId === X) contribution += Number(a.amount);
+    }
+    return contribution;
+  }
+
+  /**
+   * Expenses list shown in the "Voir les dépenses" dialog. For a non-CdC
+   * budget, uses the classic scope filter. For a CdC budget, returns every
+   * expense that touches the CdC (as bearer or as allocation target).
+   */
+  private async listMatchingExpenses(tenantId: string, budget: any) {
+    const select = {
+      id: true,
+      label: true,
+      type: true,
+      frequency: true,
+      totalAmount: true,
+      currency: true,
+      dateIncurred: true,
+      dateStart: true,
+      dateEnd: true,
+      bearer: { select: { id: true, name: true, code: true } },
+      site: { select: { id: true, name: true, code: true } },
+    };
+    if (budget.billingEntityId) {
+      const X = budget.billingEntityId;
+      const where: any = {
+        tenantId,
+        dateIncurred: { gte: budget.startDate, lte: budget.endDate },
+        OR: [
+          { bearerId: X },
+          { allocations: { some: { targetId: X } } },
+        ],
+      };
+      if (budget.delegationId) where.delegationId = budget.delegationId;
+      if (budget.siteId) where.siteId = budget.siteId;
+      if (budget.expenseType) where.type = budget.expenseType;
+      return this.prisma.expense.findMany({
+        where,
+        select,
+        orderBy: { dateIncurred: 'desc' },
+      });
+    }
+    return this.prisma.expense.findMany({
+      where: this.buildExpenseWhere(budget),
+      select,
+      orderBy: { dateIncurred: 'desc' },
+    });
+  }
+
+  /** Shared helper: months a recurring expense overlaps with the budget window. */
+  private monthsForRecurring(
+    exp: { dateStart: Date | null; dateEnd: Date | null },
+    budgetStart: Date,
+    budgetEnd: Date,
+  ): number {
+    const effectiveStart =
+      exp.dateStart && exp.dateStart > budgetStart ? exp.dateStart : budgetStart;
+    const effectiveEnd =
+      exp.dateEnd && exp.dateEnd < budgetEnd ? exp.dateEnd : budgetEnd;
+    if (effectiveStart > effectiveEnd) return 0;
+    return this.monthsBetween(effectiveStart, effectiveEnd);
+  }
+
+  /** Per-month fraction of the totalAmount for a given frequency. */
+  private frequencyFactor(freq: string): number {
+    if (freq === 'MONTHLY') return 1;
+    if (freq === 'QUARTERLY') return 1 / 3;
+    if (freq === 'YEARLY') return 1 / 12;
+    return 0;
+  }
+
+  /**
    * After an expense create/update/delete, re-check each budget that matches
    * the expense and emit a threshold-crossing UserNotification when relevant.
    * Fire-and-forget — caller doesn't wait on it.
@@ -259,8 +396,17 @@ export class BudgetsService {
     siteId?: string | null;
     type?: string | null;
     bearerId?: string | null;
+    allocationTargetIds?: string[];
     dateIncurred: Date;
   }) {
+    // CdC budget candidates: the bearer's CdC budget AND any allocation
+    // target's CdC budget (since their incoming refact counts too since D1
+    // bugfix 2026-04-21).
+    const affectedCdcIds = [
+      ...(expense.bearerId ? [expense.bearerId] : []),
+      ...(expense.allocationTargetIds ?? []),
+    ];
+
     const candidateBudgets = await this.prisma.budget.findMany({
       where: {
         tenantId,
@@ -274,9 +420,14 @@ export class BudgetsService {
         AND: [
           { OR: [{ siteId: null }, { siteId: expense.siteId ?? undefined }] },
           { OR: [{ expenseType: null }, { expenseType: expense.type ?? undefined }] },
-          // Phase 6.7 (D1): CdC-scoped budgets only fire when the expense's
-          // bearer matches. Budgets without a billingEntityId match every bearer.
-          { OR: [{ billingEntityId: null }, { billingEntityId: expense.bearerId ?? undefined }] },
+          {
+            OR: [
+              { billingEntityId: null },
+              ...(affectedCdcIds.length > 0
+                ? [{ billingEntityId: { in: affectedCdcIds } }]
+                : []),
+            ],
+          },
         ],
       },
       include: { delegation: true },

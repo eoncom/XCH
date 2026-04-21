@@ -34,6 +34,7 @@ export class ExpensesService {
     siteId?: string | null;
     type?: string | null;
     bearerId?: string | null;
+    allocationTargetIds?: string[];
     dateIncurred: Date;
   }) {
     // Intentionally not awaited — don't block the HTTP response on alerting.
@@ -117,6 +118,7 @@ export class ExpensesService {
       siteId: expense.siteId,
       type: expense.type,
       bearerId: expense.bearerId,
+      allocationTargetIds: (expense as any).allocations?.map((a: any) => a.targetId) ?? [],
       dateIncurred: expense.dateIncurred,
     });
 
@@ -287,6 +289,7 @@ export class ExpensesService {
       siteId: updated.siteId,
       type: updated.type,
       bearerId: updated.bearerId,
+      allocationTargetIds: (updated as any).allocations?.map((a: any) => a.targetId) ?? [],
       dateIncurred: updated.dateIncurred,
     });
 
