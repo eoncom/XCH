@@ -239,17 +239,19 @@ function NewExpensePage() {
         </CardContent>
       </Card>
 
-      {/* Section: Scope organisationnel */}
+      {/* Section: Scope organisationnel — la délégation est REQUISE
+          (Expense.delegationId @IsNotEmpty côté back). Le site reste optionnel. */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            Rattachement organisationnel <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            Rattachement organisationnel <span className="text-red-500">*</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <ScopeSelector value={scope} onChange={setScope} label="" />
           <p className="text-xs text-muted-foreground mt-2">
-            Sans rattachement, la depense est globale (tenant-wide).
+            Une dépense est toujours rattachée à une délégation. Le site est optionnel
+            si la dépense concerne toute la délégation.
           </p>
         </CardContent>
       </Card>

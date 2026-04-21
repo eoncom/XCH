@@ -262,7 +262,7 @@ function EditExpensePage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            Rattachement organisationnel <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
+            Rattachement organisationnel <span className="text-red-500">*</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
