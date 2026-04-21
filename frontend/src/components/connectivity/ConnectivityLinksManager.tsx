@@ -415,7 +415,10 @@ function ConnectivityLinkDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl">
+      {/* max-h + flex-col + scrollable body keep the footer (Enregistrer /
+          Annuler) visible when the form grows — e.g. when the user types a
+          monthlyPrice and the GenerateExpenseToggle section appears. */}
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{editing ? 'Modifier le lien' : 'Nouveau lien de connectivité'}</DialogTitle>
           <DialogDescription>
@@ -423,7 +426,7 @@ function ConnectivityLinkDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
+        <div className="grid gap-4 py-2 overflow-y-auto flex-1 pr-1">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Rôle *</Label>
