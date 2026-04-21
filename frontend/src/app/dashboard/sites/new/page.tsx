@@ -40,7 +40,7 @@ import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
 import { organizationApi } from '@/lib/api/organization';
 import { ArrowLeft, Plus, Trash2, ChevronRight, ChevronLeft, Check, MapPin, UserPlus, FolderOpen, Globe, FileText, Shield, Search, Users, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
-import type { Contact, ContactType, ContactCategory, ConnectivityLink } from '@/types';
+import type { Contact, ContactType, ContactCategory } from '@/types';
 import { toast } from 'sonner';
 
 // Business rule (phase 6 fix): a site must have either a street address OR

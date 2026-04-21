@@ -6,6 +6,9 @@ import Link from 'next/link';
 import { Activity, Loader2, Filter, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { auditApi, type AuditEntry, type AuditQueryParams } from '@/lib/api/audit';
 import { AccessGate } from '@/components/AccessGate';
 
@@ -90,58 +93,57 @@ function AuditLogPageInner() {
       <Card>
         <CardContent className="pt-6">
           <div className="grid gap-3 md:grid-cols-5">
-            <div>
-              <label htmlFor="audit-entity" className="text-xs font-medium">Entité</label>
-              <input
+            <div className="space-y-1">
+              <Label htmlFor="audit-entity" className="text-xs font-medium">Entité</Label>
+              <Input
                 id="audit-entity"
                 value={filters.entity || ''}
                 onChange={(e) => setFilters({ ...filters, entity: e.target.value })}
                 placeholder="Asset, Site, Task..."
-                className="mt-1 block w-full border rounded-md px-3 py-2 text-sm bg-background"
               />
             </div>
-            <div>
-              <label htmlFor="audit-entity-id" className="text-xs font-medium">Entity ID</label>
-              <input
+            <div className="space-y-1">
+              <Label htmlFor="audit-entity-id" className="text-xs font-medium">Entity ID</Label>
+              <Input
                 id="audit-entity-id"
                 value={filters.entityId || ''}
                 onChange={(e) => setFilters({ ...filters, entityId: e.target.value })}
                 placeholder="clxxxxxxxx"
-                className="mt-1 block w-full border rounded-md px-3 py-2 text-sm bg-background"
               />
             </div>
-            <div>
-              <label htmlFor="audit-action" className="text-xs font-medium">Action</label>
-              <select
-                id="audit-action"
-                value={filters.action || ''}
-                onChange={(e) => setFilters({ ...filters, action: (e.target.value || undefined) as any })}
-                className="mt-1 block w-full border rounded-md px-3 py-2 text-sm bg-background"
+            <div className="space-y-1">
+              <Label htmlFor="audit-action" className="text-xs font-medium">Action</Label>
+              <Select
+                value={filters.action || '__all'}
+                onValueChange={(v) => setFilters({ ...filters, action: (v === '__all' ? undefined : v) as any })}
               >
-                <option value="">Toutes</option>
-                <option value="CREATE">Créer</option>
-                <option value="UPDATE">Modifier</option>
-                <option value="DELETE">Supprimer</option>
-              </select>
+                <SelectTrigger id="audit-action">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all">Toutes</SelectItem>
+                  <SelectItem value="CREATE">Créer</SelectItem>
+                  <SelectItem value="UPDATE">Modifier</SelectItem>
+                  <SelectItem value="DELETE">Supprimer</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <label htmlFor="audit-from" className="text-xs font-medium">Depuis</label>
-              <input
+            <div className="space-y-1">
+              <Label htmlFor="audit-from" className="text-xs font-medium">Depuis</Label>
+              <Input
                 id="audit-from"
                 type="date"
                 value={filters.from ? filters.from.slice(0, 10) : ''}
                 onChange={(e) => setFilters({ ...filters, from: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-                className="mt-1 block w-full border rounded-md px-3 py-2 text-sm bg-background"
               />
             </div>
-            <div>
-              <label htmlFor="audit-to" className="text-xs font-medium">Jusqu&apos;au</label>
-              <input
+            <div className="space-y-1">
+              <Label htmlFor="audit-to" className="text-xs font-medium">Jusqu&apos;au</Label>
+              <Input
                 id="audit-to"
                 type="date"
                 value={filters.to ? filters.to.slice(0, 10) : ''}
                 onChange={(e) => setFilters({ ...filters, to: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-                className="mt-1 block w-full border rounded-md px-3 py-2 text-sm bg-background"
               />
             </div>
           </div>

@@ -213,8 +213,8 @@ function UsersPageInner() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="MANAGE">Administrateur</SelectItem>
-                      <SelectItem value="WRITE">Écriture</SelectItem>
-                      <SelectItem value="READ">Lecture</SelectItem>
+                      <SelectItem value="WRITE">Éditeur</SelectItem>
+                      <SelectItem value="READ">Lecteur</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

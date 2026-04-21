@@ -5828,3 +5828,24 @@ fix(forms): phase 6.6 pilot-feedback batch — 4 bugs
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-21
+
+**Date:** 2026-04-21 11:44:21
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix(connectivity): dialog scrollable so Enregistrer stays visible
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
