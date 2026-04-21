@@ -138,6 +138,32 @@ function BudgetsPage() {
     return flat;
   }, [budgets]);
 
+  // D5 — for each budget, the sum of its children's `spent`. Recursive so a
+  // 3-level hierarchy totals correctly. The parent card uses this to show
+  // "dont Xk€ issu des sous-budgets" next to its own total spent.
+  const childrenSpentById = useMemo(() => {
+    const map = new Map<string, number>();
+    const childrenOf = new Map<string, Budget[]>();
+    for (const b of budgets) {
+      if (!b.parentId) continue;
+      if (!childrenOf.has(b.parentId)) childrenOf.set(b.parentId, []);
+      childrenOf.get(b.parentId)!.push(b);
+    }
+    const sumForNode = (id: string): number => {
+      if (map.has(id)) return map.get(id)!;
+      const kids = childrenOf.get(id) ?? [];
+      let total = 0;
+      for (const k of kids) {
+        const own = statuses[k.id]?.spent ?? 0;
+        total += own + sumForNode(k.id);
+      }
+      map.set(id, total);
+      return total;
+    };
+    for (const b of budgets) sumForNode(b.id);
+    return map;
+  }, [budgets, statuses]);
+
   useEffect(() => {
     if (budgets.length === 0) return;
     const loadStatuses = async () => {
@@ -514,6 +540,23 @@ function BudgetsPage() {
                             : ''
                       }
                     />
+                    {/* D5 — when a budget has children, break down the spent
+                        into "own direct expenses" vs "from sub-budgets". */}
+                    {(budget._count?.children ?? 0) > 0 && status && (() => {
+                      const fromKids = childrenSpentById.get(budget.id) ?? 0;
+                      if (fromKids <= 0) return null;
+                      const ownDirect = Math.max(0, status.spent - fromKids);
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          dont {formatCurrency(fromKids, budget.currency)} depuis les sous-budgets
+                          {ownDirect > 0 && (
+                            <>
+                              {' '}· {formatCurrency(ownDirect, budget.currency)} en direct
+                            </>
+                          )}
+                        </p>
+                      );
+                    })()}
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>{budget.startDate.split('T')[0]}</span>
                       <span>{budget.endDate.split('T')[0]}</span>

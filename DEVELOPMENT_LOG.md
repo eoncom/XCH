@@ -5912,3 +5912,24 @@ fix(costs): expense form — Rattachement organisationnel is required, not optio
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-21
+
+**Date:** 2026-04-21 16:10:47
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 3
+
+**Commit message:**
+```
+feat(costs): D1 — budgets scoped to a Centre de coût (BillingEntity)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

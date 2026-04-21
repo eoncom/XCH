@@ -380,11 +380,36 @@ function NewExpensePage() {
             Ajouter une ligne
           </Button>
 
-          {totalPercentage < 100 && totalPercentage > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {100 - totalPercentage}% non refacturé reste à la charge du porteur
-            </p>
-          )}
+          {/* D3 — always surface "who nets what" so the user sees the
+              bearer's real remainder at a glance. */}
+          {(() => {
+            const bearerPct = Math.max(0, 100 - totalPercentage);
+            const bearerAmount = (amount || 0) * (bearerPct / 100);
+            const selectedBearer = entities.find((e) => e.id === bearerId);
+            const bearerName = selectedBearer ? `${selectedBearer.code} — ${selectedBearer.name}` : 'Le porteur';
+            if (totalPercentage > 100) return null; // already surfaced by red progress bar
+            return (
+              <div
+                className={`rounded-md border px-3 py-2 text-sm flex items-center justify-between ${
+                  totalPercentage === 0
+                    ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200'
+                    : totalPercentage === 100
+                      ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950/30 dark:text-green-200'
+                      : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'
+                }`}
+              >
+                <span>
+                  <span className="font-semibold">{bearerName}</span>{' '}
+                  {totalPercentage === 100
+                    ? 'ne supporte rien (100% refacturé).'
+                    : `supporte ${bearerPct}% de cette dépense.`}
+                </span>
+                <span className="font-semibold tabular-nums">
+                  {formatCurrency(bearerAmount, currency)}
+                </span>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 

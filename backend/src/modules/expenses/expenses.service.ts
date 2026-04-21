@@ -49,6 +49,17 @@ export class ExpensesService {
     });
     if (!bearer) throw new NotFoundException('Bearer billing entity not found');
 
+    // D4 — reconcile siteId with the linked asset (if any):
+    // - Asset's site must match the expense site when both are set.
+    // - When siteId is left empty and the asset has a site, auto-inherit it.
+    const effectiveSiteId = await this.reconcileAssetSiteOrFail(
+      tenantId,
+      dto.assetId,
+      dto.siteId,
+    );
+    // Use the reconciled value for the rest of the create flow.
+    dto = { ...dto, siteId: effectiveSiteId ?? undefined };
+
     // Validate delegation/site coherence (R1) — delegationId is mandatory for expenses (R2)
     await validateDelegationSiteCoherence(this.prisma as any, dto.delegationId, dto.siteId);
 
@@ -203,6 +214,19 @@ export class ExpensesService {
         where: { id: dto.bearerId, tenantId },
       });
       if (!bearer) throw new NotFoundException('Bearer billing entity not found');
+    }
+
+    // D4 — reconcile asset/site on update as well. Use dto values when
+    // provided, fall back to existing values.
+    const assetIdAfter = 'assetId' in dto ? dto.assetId : (expense as any).assetId;
+    const siteIdBefore = 'siteId' in dto ? dto.siteId : (expense as any).siteId;
+    const reconciledSiteId = await this.reconcileAssetSiteOrFail(
+      tenantId,
+      assetIdAfter,
+      siteIdBefore,
+    );
+    if (reconciledSiteId !== siteIdBefore) {
+      dto = { ...dto, siteId: reconciledSiteId ?? null };
     }
 
     // Validate delegation/site coherence if changing (R1)
@@ -669,6 +693,41 @@ export class ExpensesService {
   }
 
   // ========== VALIDATION HELPERS ==========
+
+  /**
+   * D4 — When an expense is linked to an asset, its site must match the
+   * asset's site. If the caller left siteId empty, we inherit the asset's
+   * site to avoid the 2-step save pattern ("you forgot to pick the site").
+   *
+   * Returns the reconciled siteId (or null / undefined if no reconciliation
+   * was needed). Throws BadRequest when both are set and conflict.
+   */
+  private async reconcileAssetSiteOrFail(
+    tenantId: string,
+    assetId: string | null | undefined,
+    siteId: string | null | undefined,
+  ): Promise<string | null | undefined> {
+    if (!assetId) return siteId;
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+      select: { id: true, siteId: true, name: true, serialNumber: true },
+    });
+    if (!asset) {
+      throw new NotFoundException(`Équipement "${assetId}" introuvable.`);
+    }
+    // Asset has no site (stock / en transit) — keep whatever the caller gave.
+    if (!asset.siteId) return siteId;
+    // Caller left site empty → inherit asset's site.
+    if (!siteId) return asset.siteId;
+    // Both set → must match.
+    if (siteId !== asset.siteId) {
+      const assetLabel = asset.name || asset.serialNumber || asset.id;
+      throw new BadRequestException(
+        `Incohérence : l'équipement « ${assetLabel} » est rattaché à un autre site que celui de la dépense. Corrigez l'un des deux.`,
+      );
+    }
+    return siteId;
+  }
 
   private validateAllocations(allocations: AllocationDto[]) {
     const totalPercentage = allocations.reduce((sum, a) => sum + a.percentage, 0);
