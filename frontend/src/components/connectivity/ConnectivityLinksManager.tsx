@@ -336,18 +336,15 @@ function ConnectivityLinkDialog({
   const [saving, setSaving] = useState(false);
 
   // Candidate assets for the "terminating equipment" picker: assets of this
-  // site whose type is flagged `isConnectivityCapable` on EnumLabel. The
-  // picker stays usable for super-admins with no flag set by falling back to
-  // the firewall/router/switch/5G hardcoded codes (they're the Prisma default
-  // built-ins so they will always be present).
+  // site whose AssetType is flagged `isConnectivityCapable` on EnumLabel
+  // (ROUTER / FIREWALL / BOX_5G — switches are LAN, excluded by design).
   const { getLabelsForType } = useEnumLabels('AssetType');
   const capableValues = useMemo(() => {
     const dyn = getLabelsForType('AssetType')
       .filter((item) => item.isConnectivityCapable)
       .map((item) => item.enumValue);
-    // Defensive fallback — ensures the picker isn't empty while the labels
-    // query is loading or if a tenant accidentally unflagged everything.
-    if (dyn.length === 0) return ['ROUTER', 'FIREWALL', 'BOX_5G', 'SWITCH'];
+    // Defensive fallback during initial load.
+    if (dyn.length === 0) return ['ROUTER', 'FIREWALL', 'BOX_5G'];
     return dyn;
   }, [getLabelsForType]);
 

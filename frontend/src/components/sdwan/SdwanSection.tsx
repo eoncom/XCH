@@ -86,11 +86,15 @@ export function SdwanSection({ siteId, canEdit }: Props) {
     },
   });
 
+  const [removeConfirm, setRemoveConfirm] = useState(false);
+
   const removeMutation = useMutation({
     mutationFn: () => sdwanApi.remove(siteId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sdwan', siteId] });
       queryClient.invalidateQueries({ queryKey: ['site', siteId] });
+      setRemoveConfirm(false);
+      setConfigDialog(false);
     },
   });
 
@@ -232,10 +236,36 @@ export function SdwanSection({ siteId, canEdit }: Props) {
         existing={config}
         onClose={() => setConfigDialog(false)}
         onSave={(data) => upsertMutation.mutate(data)}
-        onRemove={config ? () => removeMutation.mutate() : undefined}
+        onRemove={config ? () => setRemoveConfirm(true) : undefined}
         saving={upsertMutation.isPending}
         removing={removeMutation.isPending}
       />
+
+      <AlertDialog open={removeConfirm} onOpenChange={(v) => !v && setRemoveConfirm(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer la configuration SD-WAN ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              La configuration sera supprimée ainsi que tous les firewalls qui y sont
+              attachés ({config?.firewalls.length ?? 0}). Les équipements eux-mêmes ne
+              sont pas supprimés — seule l'attache à la config SD-WAN l'est.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removeMutation.isPending}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                removeMutation.mutate();
+              }}
+              disabled={removeMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {removeMutation.isPending ? 'Suppression...' : 'Supprimer la configuration'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AttachFirewallDialog
         open={attachDialog}
@@ -421,10 +451,16 @@ function AttachFirewallDialog({
   const [role, setRole] = useState<SdwanFirewallRole>('active');
   const [saving, setSaving] = useState(false);
 
+  // SD-WAN node candidates: types flagged `isSdwanCapable` on EnumLabel
+  // (FIREWALL primarily, ROUTER as rare exception). Box 5G is a WAN modem, not
+  // an SD-WAN node — intentionally excluded. Switches are LAN, excluded.
   const { getLabelsForType } = useEnumLabels('AssetType');
-  const connectivityCapableValues = getLabelsForType('AssetType')
-    .filter((item) => item.isConnectivityCapable)
+  const sdwanCapableValues = getLabelsForType('AssetType')
+    .filter((item) => item.isSdwanCapable)
     .map((item) => item.enumValue);
+  const capableValues = sdwanCapableValues.length > 0
+    ? sdwanCapableValues
+    : ['FIREWALL', 'ROUTER']; // defensive fallback during initial load
 
   const { data: siteAssets = [] } = useQuery({
     queryKey: ['assets', { siteId, sdwanPicker: true }],
@@ -434,12 +470,10 @@ function AttachFirewallDialog({
     enabled: open,
   });
 
-  // Keep only types declared as connectivity-capable at the tenant level, AND
-  // firewalls (the semantic primary candidate for SD-WAN termination).
   const candidates = siteAssets.filter(
     (a: any) =>
       !existingAssetIds.has(a.id) &&
-      (a.type === 'FIREWALL' || connectivityCapableValues.includes(a.type)),
+      capableValues.includes(a.type),
   );
 
   const handleSubmit = async () => {

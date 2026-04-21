@@ -11,8 +11,12 @@ export interface EnumLabelItem {
   isHidden: boolean;
   isBuiltIn: boolean;
   isActive: boolean;
-  // AssetType-only flag. True = eligible to terminate a ConnectivityLink.
+  // AssetType-only flag. True = eligible to terminate a ConnectivityLink
+  // (ROUTER / FIREWALL / BOX_5G).
   isConnectivityCapable: boolean;
+  // AssetType-only flag. True = eligible to be a SdwanFirewall node
+  // (FIREWALL primarily, ROUTER as rare exception).
+  isSdwanCapable: boolean;
 }
 
 export type EnumLabelsResponse = Record<string, EnumLabelItem[]>;
@@ -26,6 +30,7 @@ export interface UpdateEnumLabelData {
   sortOrder?: number;
   isHidden?: boolean;
   isConnectivityCapable?: boolean;
+  isSdwanCapable?: boolean;
 }
 
 export interface CreateEnumValueData {

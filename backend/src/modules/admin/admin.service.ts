@@ -4,15 +4,20 @@ import { UpdateEnumLabelDto } from './dto/update-enum-label.dto';
 import { CreateEnumValueDto } from './dto/create-enum-value.dto';
 import { PIN_TYPE_DEFAULTS } from '../../common/constants/pin-config';
 
-// Default labels for all enum types — built-in values
-// `connectivityCapable` marks AssetType rows that are eligible to terminate a
-// ConnectivityLink (router/firewall/5G box/switch). Surfaced on EnumLabel rows
-// as `isConnectivityCapable` and overridable per-tenant.
+// Default labels for all enum types — built-in values.
+//
+// Semantic flags per AssetType row:
+// - connectivityCapable: the type can terminate a ConnectivityLink (WAN
+//   termination). ROUTER + BOX_5G are the common cases, FIREWALL a rarer one.
+//   SWITCH is LAN, not eligible.
+// - sdwanCapable: the type can be an SdwanFirewall role. FIREWALL primarily,
+//   ROUTER as rare exception. Never a BOX_5G or SWITCH.
 type DefaultLabel = {
   label: string;
   color: string;
   icon?: string;
   connectivityCapable?: boolean;
+  sdwanCapable?: boolean;
 };
 
 const DEFAULT_LABELS: Record<string, Record<string, DefaultLabel>> = {
@@ -20,9 +25,9 @@ const DEFAULT_LABELS: Record<string, Record<string, DefaultLabel>> = {
     PRINTER:      { label: 'Imprimante',          color: '#a855f7' },
     IPAD:         { label: 'iPad',                 color: '#0ea5e9' },
     TABLET:       { label: 'Tablette',             color: '#06b6d4' },
-    SWITCH:       { label: 'Switch',               color: '#3b82f6', connectivityCapable: true },
-    FIREWALL:     { label: 'Pare-feu',             color: '#ef4444', connectivityCapable: true },
-    ROUTER:       { label: 'Routeur',              color: '#6366f1', connectivityCapable: true },
+    SWITCH:       { label: 'Switch',               color: '#3b82f6' },
+    FIREWALL:     { label: 'Pare-feu',             color: '#ef4444', connectivityCapable: true, sdwanCapable: true },
+    ROUTER:       { label: 'Routeur',              color: '#6366f1', connectivityCapable: true, sdwanCapable: true },
     WIFI_AP:      { label: 'Point d\'accès WiFi',  color: '#10b981' },
     TEAMS_ROOM:   { label: 'Teams Room',           color: '#7c3aed' },
     WEBCAM:       { label: 'Webcam',               color: '#14b8a6' },
@@ -85,8 +90,9 @@ export class AdminService {
           isHidden: db?.isHidden ?? false,
           isBuiltIn: true,
           isActive: db?.isActive ?? true,
-          // DB override > built-in default. Only AssetType rows carry this today.
+          // DB override > built-in default. AssetType-only flags.
           isConnectivityCapable: db?.isConnectivityCapable ?? def.connectivityCapable ?? false,
+          isSdwanCapable: db?.isSdwanCapable ?? def.sdwanCapable ?? false,
         };
       });
 
@@ -105,6 +111,7 @@ export class AdminService {
             isBuiltIn: db.isBuiltIn,
             isActive: db.isActive,
             isConnectivityCapable: db.isConnectivityCapable ?? false,
+            isSdwanCapable: db.isSdwanCapable ?? false,
           });
         }
       }
@@ -121,12 +128,13 @@ export class AdminService {
    * Update or create a custom label for a specific enum value.
    */
   async updateEnumLabel(tenantId: string, dto: UpdateEnumLabelDto) {
-    // Default connectivityCapable: fall back to the built-in default when the row
-    // doesn't yet exist in DB, so upserting a non-connectivity field on a
-    // built-in connectivity asset type (e.g. ROUTER) doesn't silently drop the
-    // flag on the first write.
-    const defaultCapable =
+    // When creating the DB row for the first time, preserve the built-in
+    // default flags so editing just a label doesn't silently strip semantic
+    // flags off a built-in type (e.g. ROUTER losing connectivityCapable).
+    const defaultConn =
       DEFAULT_LABELS[dto.enumType]?.[dto.enumValue]?.connectivityCapable ?? false;
+    const defaultSdwan =
+      DEFAULT_LABELS[dto.enumType]?.[dto.enumValue]?.sdwanCapable ?? false;
 
     return this.prisma.enumLabel.upsert({
       where: {
@@ -147,7 +155,8 @@ export class AdminService {
         isHidden: dto.isHidden ?? false,
         isBuiltIn: false,
         isActive: true,
-        isConnectivityCapable: dto.isConnectivityCapable ?? defaultCapable,
+        isConnectivityCapable: dto.isConnectivityCapable ?? defaultConn,
+        isSdwanCapable: dto.isSdwanCapable ?? defaultSdwan,
       },
       update: {
         label: dto.label,
@@ -157,6 +166,9 @@ export class AdminService {
         isHidden: dto.isHidden,
         ...(dto.isConnectivityCapable !== undefined
           ? { isConnectivityCapable: dto.isConnectivityCapable }
+          : {}),
+        ...(dto.isSdwanCapable !== undefined
+          ? { isSdwanCapable: dto.isSdwanCapable }
           : {}),
       },
     });

@@ -864,6 +864,7 @@ export class SeedService {
       { name: 'SFR Business', typeId: telecom.id, email: 'pro@sfr.fr', phone: '1023', company: 'SFR', role: 'Opérateur fibre', notes: 'Liaisons fibre Saclay' },
       { name: 'Bouygues Telecom Entreprises', typeId: telecom.id, email: 'pro@bouyguestelecom.fr', phone: '1064', company: 'Bouygues Telecom', role: 'Opérateur mobile & fibre', notes: 'Liaisons 4G/5G backup. Contrat Bouygues Entreprises multi-sites.' },
       { name: 'Convergence', typeId: internet.id, email: 'support@convergence-groupe.com', phone: '+33 1 55 17 00 00', company: 'Convergence', role: 'Opérateur télécom & réseau', notes: 'Liaisons 4G backup sites Vélizy et Massy. Support 24/7.' },
+      { name: 'Free Pro', typeId: internet.id, email: 'support-pro@free.fr', phone: '3244', company: 'Free Pro', role: 'Opérateur fibre entreprise', notes: 'Liaison FTTH principale site Massy.' },
       { name: 'Fortinet France', typeId: securite.id, email: 'support-fr@fortinet.com', phone: '+33 1 72 52 40 00', company: 'Fortinet', role: 'Support SD-WAN, Switches, WiFi & Sécurité', notes: 'Contrat FortiCare Premium sur tous les FortiGate, FortiSwitch et FortiAP. TAC 24/7.' },
       { name: 'Canon France', typeId: maintenance.id, email: 'support@canon.fr', phone: '01 70 48 05 00', company: 'Canon', role: 'Support imprimantes', notes: 'Contrat maintenance imagePRESS C5800 sur tous les sites. Intervention J+1.' },
       { name: 'Yealink France', typeId: reseau.id, email: 'support-fr@yealink.com', phone: '+33 1 84 88 40 00', company: 'Yealink', role: 'Support Teams Room', notes: 'Support technique sur MeetingBoard et MeetingBar' },
@@ -1107,28 +1108,33 @@ export class SeedService {
       monthlyPrice?: number;
       contractRef?: string;
     }> = [
+      // Providers below MUST match an existing PROVIDER contact's `name`
+      // verbatim — the ConnectivityLinksManager Combobox filters by contact
+      // name. Any mismatch here will make the provider field look empty in
+      // the UI (placeholder). If you add a new provider, add the matching
+      // contact in createContacts first.
       // La Défense — Tour Alto (grand site, fibre dédiée + 4G/5G backup)
-      { siteCode: 'DEF-01', role: 'PRIMARY', provider: 'Orange Business', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 1000, monthlyPrice: 890, contractRef: 'FTTO-DEF-001' },
-      { siteCode: 'DEF-01', role: 'BACKUP', provider: 'Bouygues Telecom', type: '4G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 59, contractRef: '4G-DEF-001' },
+      { siteCode: 'DEF-01', role: 'PRIMARY', provider: 'Orange Business Services', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 1000, monthlyPrice: 890, contractRef: 'FTTO-DEF-001' },
+      { siteCode: 'DEF-01', role: 'BACKUP', provider: 'Bouygues Telecom Entreprises', type: '4G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 59, contractRef: '4G-DEF-001' },
       // Saclay — Campus Sciences
       { siteCode: 'SAC-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 620, contractRef: 'FTTH-SAC-001' },
-      { siteCode: 'SAC-01', role: 'BACKUP', provider: 'Bouygues Telecom', type: '5G', bandwidthDown: 200, bandwidthUp: 40, monthlyPrice: 49, contractRef: '5G-SAC-001' },
+      { siteCode: 'SAC-01', role: 'BACKUP', provider: 'Bouygues Telecom Entreprises', type: '5G', bandwidthDown: 200, bandwidthUp: 40, monthlyPrice: 49, contractRef: '5G-SAC-001' },
       // Vélizy — Immeuble Omega
-      { siteCode: 'VEL-01', role: 'PRIMARY', provider: 'Bouygues Telecom', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 420, contractRef: 'FTTH-VEL-001' },
+      { siteCode: 'VEL-01', role: 'PRIMARY', provider: 'Bouygues Telecom Entreprises', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 420, contractRef: 'FTTH-VEL-001' },
       { siteCode: 'VEL-01', role: 'BACKUP', provider: 'Convergence', type: '4G', bandwidthDown: 150, bandwidthUp: 30, monthlyPrice: 39, contractRef: '4G-VEL-001' },
       // Saint-Cloud — Résidence Parc
-      { siteCode: 'STC-01', role: 'PRIMARY', provider: 'Orange', type: 'FTTH', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 45, contractRef: 'FTTH-STC-001' },
-      { siteCode: 'STC-01', role: 'BACKUP', provider: 'Bouygues Telecom', type: '4G', bandwidthDown: 100, bandwidthUp: 20, monthlyPrice: 29, contractRef: '4G-STC-001' },
+      { siteCode: 'STC-01', role: 'PRIMARY', provider: 'Orange Business Services', type: 'FTTH', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 45, contractRef: 'FTTH-STC-001' },
+      { siteCode: 'STC-01', role: 'BACKUP', provider: 'Bouygues Telecom Entreprises', type: '4G', bandwidthDown: 100, bandwidthUp: 20, monthlyPrice: 29, contractRef: '4G-STC-001' },
       // Massy — Pôle Atlantis
       { siteCode: 'MAS-01', role: 'PRIMARY', provider: 'Free Pro', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 600, monthlyPrice: 69, contractRef: 'FTTH-MAS-001' },
       { siteCode: 'MAS-01', role: 'BACKUP', provider: 'Convergence', type: '4G', bandwidthDown: 100, bandwidthUp: 20, monthlyPrice: 29, contractRef: '4G-MAS-001' },
       // Boulogne — Showroom Marcel (petit site, 5G seule)
-      { siteCode: 'BOU-01', role: 'PRIMARY', provider: 'Bouygues Telecom', type: '5G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 79, contractRef: '5G-BOU-001' },
+      { siteCode: 'BOU-01', role: 'PRIMARY', provider: 'Bouygues Telecom Entreprises', type: '5G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 79, contractRef: '5G-BOU-001' },
       // Lyon (si présent) — Presqu'île
       { siteCode: 'LYO-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 780, contractRef: 'FTTH-LYO-001' },
-      { siteCode: 'LYO-01', role: 'BACKUP', provider: 'Orange', type: '4G', bandwidthDown: 150, bandwidthUp: 30, monthlyPrice: 35, contractRef: '4G-LYO-001' },
+      { siteCode: 'LYO-01', role: 'BACKUP', provider: 'Orange Business Services', type: '4G', bandwidthDown: 150, bandwidthUp: 30, monthlyPrice: 35, contractRef: '4G-LYO-001' },
       // Marseille (si présent) — Joliette
-      { siteCode: 'MRS-01', role: 'PRIMARY', provider: 'Orange Business', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 640, contractRef: 'FTTH-MRS-001' },
+      { siteCode: 'MRS-01', role: 'PRIMARY', provider: 'Orange Business Services', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 640, contractRef: 'FTTH-MRS-001' },
     ];
 
     let count = 0;
@@ -1185,7 +1191,7 @@ export class SeedService {
     }> = [
       {
         siteCode: 'DEF-01',
-        provider: 'Fortinet SD-WAN',
+        provider: 'Fortinet France',
         firewalls: [
           { serial: 'FGT100F-DEF-001', role: 'active' },
           { serial: 'FGT100F-DEF-002', role: 'passive' },
@@ -1194,23 +1200,23 @@ export class SeedService {
       },
       {
         siteCode: 'SAC-01',
-        provider: 'Fortinet SD-WAN',
+        provider: 'Fortinet France',
         firewalls: [{ serial: 'FGT80F-SAC-001', role: 'active' }],
         notes: 'Fortinet autonome',
       },
       {
         siteCode: 'VEL-01',
-        provider: 'Fortinet SD-WAN',
+        provider: 'Fortinet France',
         firewalls: [{ serial: 'FGT80F-VEL-001', role: 'active' }],
       },
       {
         siteCode: 'STC-01',
-        provider: 'Fortinet SD-WAN',
+        provider: 'Fortinet France',
         firewalls: [{ serial: 'FGT60F-STC-001', role: 'active' }],
       },
       {
         siteCode: 'MAS-01',
-        provider: 'Fortinet SD-WAN',
+        provider: 'Fortinet France',
         firewalls: [{ serial: 'FGT60F-MAS-001', role: 'active' }],
       },
     ];

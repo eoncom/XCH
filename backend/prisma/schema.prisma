@@ -1038,11 +1038,16 @@ model EnumLabel {
   isBuiltIn Boolean @default(false) // true = valeur système non-supprimable
   isActive  Boolean @default(true)  // false = désactivée (pas proposée dans les selects)
 
-  // Per-row semantic flags. Only meaningful for certain (enumType, enumValue)
-  // pairs — e.g. `isConnectivityCapable` applies to AssetType rows for
-  // ROUTER / FIREWALL / BOX_5G / SWITCH etc. Used by the ConnectivityLink
-  // asset picker to restrict the candidate list.
+  // Per-row semantic flags — meaningful on AssetType rows only.
+  //
+  // - isConnectivityCapable: the type can terminate a ConnectivityLink (WAN
+  //   termination point : ROUTER / FIREWALL / BOX_5G). Switches are LAN, never
+  //   WAN — stay false.
+  // - isSdwanCapable: the type can run as a node of a SdwanConfig (FIREWALL
+  //   primarily, ROUTER in rare setups). Box 5G is a WAN modem, not an SD-WAN
+  //   node — stays false.
   isConnectivityCapable Boolean @default(false)
+  isSdwanCapable        Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

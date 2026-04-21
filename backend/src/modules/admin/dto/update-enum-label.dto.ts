@@ -40,9 +40,18 @@ export class UpdateEnumLabelDto {
   @ApiPropertyOptional({
     example: false,
     description:
-      'AssetType-only flag. True = this asset type is eligible to terminate a ConnectivityLink.',
+      'AssetType-only flag. True = this asset type is eligible to terminate a ConnectivityLink (ROUTER / FIREWALL / BOX_5G).',
   })
   @IsBoolean()
   @IsOptional()
   isConnectivityCapable?: boolean;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'AssetType-only flag. True = this asset type can be attached to a SdwanConfig as a firewall node (FIREWALL primarily, ROUTER as rare exception).',
+  })
+  @IsBoolean()
+  @IsOptional()
+  isSdwanCapable?: boolean;
 }

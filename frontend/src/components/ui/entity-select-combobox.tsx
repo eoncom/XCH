@@ -89,12 +89,7 @@ export function EntitySelectCombobox<T = unknown>({
     [options, value],
   );
 
-  // If the current value doesn't match any option (e.g. legacy free-text data
-  // stored before this field became a Combobox), show the raw value so the
-  // trigger isn't misleadingly empty. The user can still pick a new value
-  // from the list.
-  const triggerLabel = selected ? selected.label : value ? value : placeholder;
-  const hasLegacyValue = !!value && !selected;
+  const triggerLabel = selected ? selected.label : placeholder;
 
   return (
     <Popover
@@ -115,16 +110,11 @@ export function EntitySelectCombobox<T = unknown>({
           disabled={disabled}
           className={cn(
             'w-full justify-between font-normal',
-            !selected && !value && 'text-muted-foreground',
+            !selected && 'text-muted-foreground',
             className,
           )}
         >
-          <span className="truncate text-left">
-            {triggerLabel}
-            {hasLegacyValue && (
-              <span className="ml-1 text-xs text-muted-foreground italic">(saisi manuellement)</span>
-            )}
-          </span>
+          <span className="truncate text-left">{triggerLabel}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" aria-hidden />
         </Button>
       </PopoverTrigger>
