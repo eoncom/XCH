@@ -45,6 +45,28 @@ export class ExpensesController {
     return this.expensesService.reportByBearer(req.user.tenantId, { dateFrom, dateTo });
   }
 
+  @Get('reports/by-month')
+  @RequireRead()
+  @ApiOperation({ summary: 'Report: monthly spending evolution (feeds dashboard chart)' })
+  @ApiQuery({ name: 'dateFrom', required: false })
+  @ApiQuery({ name: 'dateTo', required: false })
+  @ApiQuery({ name: 'delegationId', required: false })
+  @ApiQuery({ name: 'expenseType', required: false })
+  reportByMonth(
+    @Query('dateFrom') dateFrom: string,
+    @Query('dateTo') dateTo: string,
+    @Query('delegationId') delegationId: string | undefined,
+    @Query('expenseType') expenseType: string | undefined,
+    @Request() req: AuthRequest,
+  ) {
+    return this.expensesService.reportByMonth(req.user.tenantId, {
+      dateFrom,
+      dateTo,
+      delegationId,
+      expenseType,
+    });
+  }
+
   @Get('reports/by-target')
   @RequireRead()
   @ApiOperation({ summary: 'Report: total by target' })

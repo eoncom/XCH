@@ -5849,3 +5849,24 @@ fix(connectivity): dialog scrollable so Enregistrer stays visible
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-21
+
+**Date:** 2026-04-21 12:52:41
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 7
+- Frontend files modified: 7
+
+**Commit message:**
+```
+fix(a11y+labels): phase 6 P2 residuals
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

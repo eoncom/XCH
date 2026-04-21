@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
 import { BudgetsService } from './budgets.service';
 import { BudgetsController } from './budgets.controller';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
+  // BudgetsService uses UserNotificationService (threshold alerts).
+  imports: [NotificationsModule],
   controllers: [BudgetsController],
   providers: [BudgetsService],
   exports: [BudgetsService],

@@ -1222,11 +1222,31 @@ model Budget {
   amount       Decimal      @db.Decimal(12, 2)
   currency     String       @default("EUR")
   notes        String?      @db.Text
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+
+  // Sub-budget hierarchy (top-down model):
+  // - Parent budget fixes the total envelope.
+  // - Children sub-divide that envelope (Σ(children.amount) must not exceed parent.amount,
+  //   validated at service level; remaining = "non-alloué").
+  // - Parent period must wrap children periods.
+  // onDelete Restrict: deleting a parent with children is refused — move or
+  // delete children first, keeps the accounting trail intact.
+  parentId String?
+  parent   Budget?  @relation("BudgetHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children Budget[] @relation("BudgetHierarchy")
+
+  // Alert threshold (percentage). When Σ(spent for this budget) crosses this
+  // percentage of `amount`, a UserNotification is emitted to the budget owner
+  // (delegation managers + super-admins). alertsEnabled = false disables it
+  // entirely even if the threshold value stays set.
+  alertsEnabled     Boolean @default(true)
+  alertThresholdPct Int     @default(80) // 1..100
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId, startDate, endDate])
   @@index([tenantId, delegationId])
+  @@index([parentId])
   @@map("budgets")
 }
 

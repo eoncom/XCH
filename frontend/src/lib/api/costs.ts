@@ -185,4 +185,15 @@ export const expensesApi = {
     const query = qs.toString();
     return apiClient.get<TargetReport[]>(`/api/expenses/reports/by-target${query ? `?${query}` : ''}`);
   },
+  reportByMonth: (params?: { dateFrom?: string; dateTo?: string; delegationId?: string; expenseType?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params?.dateTo) qs.set('dateTo', params.dateTo);
+    if (params?.delegationId) qs.set('delegationId', params.delegationId);
+    if (params?.expenseType) qs.set('expenseType', params.expenseType);
+    const query = qs.toString();
+    return apiClient.get<Array<{ month: string; total: number; count: number }>>(
+      `/api/expenses/reports/by-month${query ? `?${query}` : ''}`,
+    );
+  },
 };

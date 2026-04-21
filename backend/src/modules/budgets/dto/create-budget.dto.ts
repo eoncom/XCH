@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsDateString, IsEnum, Min } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsDateString, IsEnum, Min, Max, IsInt, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BudgetPeriod } from '@prisma/client';
 
@@ -34,6 +34,18 @@ export class CreateBudgetDto {
 
   @ApiPropertyOptional() @IsString() @IsOptional()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Parent budget id (sub-budget hierarchy, top-down)' })
+  @IsString() @IsOptional()
+  parentId?: string | null;
+
+  @ApiPropertyOptional({ default: true })
+  @IsBoolean() @IsOptional()
+  alertsEnabled?: boolean;
+
+  @ApiPropertyOptional({ default: 80, minimum: 1, maximum: 100 })
+  @IsInt() @IsOptional() @Min(1) @Max(100)
+  alertThresholdPct?: number;
 }
 
 export class UpdateBudgetDto {
@@ -67,6 +79,18 @@ export class UpdateBudgetDto {
 
   @ApiPropertyOptional() @IsString() @IsOptional()
   notes?: string;
+
+  @ApiPropertyOptional()
+  @IsString() @IsOptional()
+  parentId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsBoolean() @IsOptional()
+  alertsEnabled?: boolean;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100 })
+  @IsInt() @IsOptional() @Min(1) @Max(100)
+  alertThresholdPct?: number;
 }
 
 export class FilterBudgetDto {

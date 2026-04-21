@@ -24,10 +24,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, Receipt, Building2, TrendingUp, DollarSign, Trash2, ExternalLink } from 'lucide-react';
+import { Plus, Search, Receipt, Building2, TrendingUp, DollarSign, Trash2, ExternalLink, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useMemo, useEffect } from 'react';
 import { formatCurrency } from '@/lib/currency';
+import { saveAs } from 'file-saver';
+import { CostsEvolutionChart } from '@/components/costs/CostsEvolutionChart';
+import { BearerSummaryCard } from '@/components/costs/BearerSummaryCard';
 
 const EXPENSE_TYPE_LABELS: Record<string, string> = {
   EQUIPMENT: 'Équipement',
@@ -116,6 +119,45 @@ export default function CostsPage() {
     return acc;
   }, {} as Record<string, number>);
 
+  const handleExportCsv = async () => {
+    try {
+      // Full filtered set (not just the current page) so the CSV matches
+      // the user's filter context, not an arbitrary pagination slice.
+      const all = await expensesApi.getAll({
+        type: filterType || undefined,
+        bearerId: filterBearerId || undefined,
+        search: search || undefined,
+        pageSize: 1000,
+      });
+      const rows: string[][] = [
+        ['Date', 'Label', 'Type', 'Frequence', 'Montant', 'Devise', 'Porteur (code)', 'Porteur (nom)', 'Delegation', 'Reference', 'Facture'],
+        ...all.map((e: any) => [
+          (e.dateIncurred || '').split('T')[0],
+          e.label || '',
+          e.type || '',
+          e.frequency || '',
+          String(e.totalAmount ?? ''),
+          e.currency || 'EUR',
+          e.bearer?.code || '',
+          e.bearer?.name || '',
+          e.delegation?.name || '',
+          e.externalRef || '',
+          e.invoiceRef || '',
+        ]),
+      ];
+      const csv = rows
+        .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+        .join('\r\n');
+      // BOM UTF-8 for Excel correct display of accents
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+      const filename = `xch-depenses-${new Date().toISOString().slice(0, 10)}.csv`;
+      saveAs(blob, filename);
+    } catch (err: any) {
+      // eslint-disable-next-line no-alert
+      alert(`Erreur export : ${err?.message ?? 'inconnue'}`);
+    }
+  };
+
   if (isLoading) return <div className="text-center">Chargement...</div>;
 
   return (
@@ -126,6 +168,10 @@ export default function CostsPage() {
           <p className="text-muted-foreground">Suivi des dépenses et répartition des coûts</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExportCsv}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
           <Button variant="outline" asChild>
             <Link href="/dashboard/costs/entities">
               <Building2 className="mr-2 h-4 w-4" />
@@ -194,6 +240,14 @@ export default function CostsPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Monthly evolution + top bearers */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="md:col-span-2">
+          <CostsEvolutionChart />
+        </div>
+        <BearerSummaryCard />
       </div>
 
       {/* Filters */}

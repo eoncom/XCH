@@ -19,9 +19,28 @@ export interface Budget {
   amount: number;
   currency: string;
   notes: string | null;
+  parentId: string | null;
+  alertsEnabled: boolean;
+  alertThresholdPct: number;
   createdAt: string;
   updatedAt: string;
   delegation?: { id: string; name: string; code: string } | null;
+  site?: { id: string; name: string; code: string } | null;
+  parent?: { id: string; label: string; amount: number } | null;
+  _count?: { children: number };
+}
+
+export interface BudgetExpenseSummary {
+  id: string;
+  label: string;
+  type: string;
+  frequency: string;
+  totalAmount: number;
+  currency: string;
+  dateIncurred: string;
+  dateStart: string | null;
+  dateEnd: string | null;
+  bearer?: { id: string; name: string; code: string };
   site?: { id: string; name: string; code: string } | null;
 }
 
@@ -32,6 +51,8 @@ export interface BudgetStatus {
   remaining: number;
   progressPct: number;
   overBudget: boolean;
+  thresholdReached: boolean;
+  expenses: BudgetExpenseSummary[];
 }
 
 export interface CreateBudgetData {
@@ -45,6 +66,9 @@ export interface CreateBudgetData {
   amount: number;
   currency?: string;
   notes?: string;
+  parentId?: string | null;
+  alertsEnabled?: boolean;
+  alertThresholdPct?: number;
 }
 
 export interface BudgetFilters {

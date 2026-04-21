@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateExpenseDto, UpdateExpenseDto, AllocationDto } from './dto/create-expense.dto';
 import { FilterExpenseDto } from './dto/filter-expense.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { validateDelegationSiteCoherence } from '../../common/utils/delegation-site-validation.util';
+import { BudgetsService } from '../budgets/budgets.service';
 
 const EXPENSE_INCLUDE: any = {
   bearer: { select: { id: true, name: true, code: true, type: true } },
@@ -15,7 +16,30 @@ const EXPENSE_INCLUDE: any = {
 
 @Injectable()
 export class ExpensesService {
-  constructor(private prisma: PrismaClient) {}
+  private readonly logger = new Logger(ExpensesService.name);
+
+  constructor(
+    private prisma: PrismaClient,
+    @Inject(forwardRef(() => BudgetsService))
+    private readonly budgets: BudgetsService,
+  ) {}
+
+  /**
+   * Fire-and-forget: after a mutation on an expense, re-evaluate every budget
+   * it matches and emit a threshold-crossing notification if needed. Wrapped
+   * in try/catch so an alert failure never breaks the expense mutation.
+   */
+  private triggerBudgetThresholdCheck(tenantId: string, expense: {
+    delegationId?: string | null;
+    siteId?: string | null;
+    type?: string | null;
+    dateIncurred: Date;
+  }) {
+    // Intentionally not awaited — don't block the HTTP response on alerting.
+    this.budgets
+      .checkThresholdsForExpense(tenantId, expense)
+      .catch((err) => this.logger.warn(`Budget threshold check failed: ${err?.message}`));
+  }
 
   async create(tenantId: string, dto: CreateExpenseDto, createdBy: string) {
     // Validate bearer
@@ -40,7 +64,7 @@ export class ExpensesService {
 
     const { allocations, ...rest } = dto;
 
-    return this.prisma.expense.create({
+    const expense = await this.prisma.expense.create({
       data: {
         tenantId,
         label: rest.label,
@@ -75,6 +99,15 @@ export class ExpensesService {
       } as any,
       include: EXPENSE_INCLUDE,
     });
+
+    this.triggerBudgetThresholdCheck(tenantId, {
+      delegationId: expense.delegationId,
+      siteId: expense.siteId,
+      type: expense.type,
+      dateIncurred: expense.dateIncurred,
+    });
+
+    return expense;
   }
 
   async findAll(tenantId: string, filters: FilterExpenseDto = {}) {
@@ -173,13 +206,14 @@ export class ExpensesService {
     if ('siteId' in dto && dto.siteId === null) data.siteId = null;
 
     // If allocations provided, replace them
+    let updated: any;
     if (allocations !== undefined) {
       this.validateAllocations(allocations);
       await this.validateAllocationTargets(tenantId, allocations);
 
       const totalAmount = dto.totalAmount || expense.totalAmount;
 
-      return this.prisma.$transaction(async (tx) => {
+      updated = await this.prisma.$transaction(async (tx) => {
         await tx.costAllocation.deleteMany({ where: { expenseId: id } });
 
         return tx.expense.update({
@@ -198,13 +232,22 @@ export class ExpensesService {
           include: EXPENSE_INCLUDE,
         });
       });
+    } else {
+      updated = await this.prisma.expense.update({
+        where: { id },
+        data,
+        include: EXPENSE_INCLUDE,
+      });
     }
 
-    return this.prisma.expense.update({
-      where: { id },
-      data,
-      include: EXPENSE_INCLUDE,
+    this.triggerBudgetThresholdCheck(tenantId, {
+      delegationId: updated.delegationId,
+      siteId: updated.siteId,
+      type: updated.type,
+      dateIncurred: updated.dateIncurred,
     });
+
+    return updated;
   }
 
   async remove(tenantId: string, id: string) {
@@ -305,6 +348,97 @@ export class ExpensesService {
     }
 
     return Array.from(targetMap.values()).sort((a, b) => b.totalImputed - a.totalImputed);
+  }
+
+  /**
+   * Monthly spending evolution — returns totals per YYYY-MM for a date range.
+   * Feeds the dashboard chart on /dashboard/costs. Includes ONE_TIME expenses
+   * plus expanded MONTHLY/QUARTERLY/YEARLY recurring over their effective
+   * window (same logic as BudgetsService.getStatus).
+   */
+  async reportByMonth(
+    tenantId: string,
+    filters?: { dateFrom?: string; dateTo?: string; delegationId?: string; expenseType?: string },
+  ) {
+    const where: any = { tenantId };
+    if (filters?.dateFrom || filters?.dateTo) {
+      where.dateIncurred = {};
+      if (filters.dateFrom) where.dateIncurred.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) where.dateIncurred.lte = new Date(filters.dateTo);
+    }
+    if (filters?.delegationId) where.delegationId = filters.delegationId;
+    if (filters?.expenseType) where.type = filters.expenseType;
+
+    const expenses = await this.prisma.expense.findMany({
+      where,
+      select: {
+        totalAmount: true,
+        frequency: true,
+        dateIncurred: true,
+        dateStart: true,
+        dateEnd: true,
+        type: true,
+        currency: true,
+      },
+    });
+
+    const monthKey = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const bucket = new Map<string, { month: string; total: number; count: number }>();
+
+    // Helper to add an amount to a month bucket
+    const add = (key: string, amount: number) => {
+      if (!bucket.has(key)) bucket.set(key, { month: key, total: 0, count: 0 });
+      const b = bucket.get(key)!;
+      b.total += amount;
+      b.count += 1;
+    };
+
+    const windowStart = filters?.dateFrom ? new Date(filters.dateFrom) : null;
+    const windowEnd = filters?.dateTo ? new Date(filters.dateTo) : null;
+
+    for (const exp of expenses) {
+      if (exp.frequency === 'ONE_TIME') {
+        add(monthKey(exp.dateIncurred), Number(exp.totalAmount));
+        continue;
+      }
+
+      // Expand recurring expenses across their effective window, clipped to
+      // the report window.
+      const effStart =
+        exp.dateStart && (!windowStart || exp.dateStart > windowStart) ? exp.dateStart : windowStart ?? exp.dateIncurred;
+      const effEnd =
+        exp.dateEnd && (!windowEnd || exp.dateEnd < windowEnd) ? exp.dateEnd : windowEnd ?? new Date();
+      if (effStart > effEnd) continue;
+
+      const monthsInPeriod = this.monthsBetweenInclusive(effStart, effEnd);
+      const perMonth =
+        exp.frequency === 'MONTHLY'
+          ? Number(exp.totalAmount)
+          : exp.frequency === 'QUARTERLY'
+            ? Number(exp.totalAmount) / 3
+            : exp.frequency === 'YEARLY'
+              ? Number(exp.totalAmount) / 12
+              : 0;
+
+      const cursor = new Date(effStart.getFullYear(), effStart.getMonth(), 1);
+      for (let i = 0; i < monthsInPeriod; i++) {
+        add(monthKey(cursor), perMonth);
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+    }
+
+    return Array.from(bucket.values())
+      .map((b) => ({ ...b, total: Math.round(b.total * 100) / 100 }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  private monthsBetweenInclusive(start: Date, end: Date): number {
+    const months =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      (end.getMonth() - start.getMonth()) +
+      1;
+    return Math.max(0, months);
   }
 
   async reportChargeback(tenantId: string, filters?: { dateFrom?: string; dateTo?: string }) {
