@@ -329,45 +329,66 @@ export class BudgetsService {
    * Expenses list shown in the "Voir les dépenses" dialog. For a non-CdC
    * budget, uses the classic scope filter. For a CdC budget, returns every
    * expense that touches the CdC (as bearer or as allocation target).
+   *
+   * Each row carries a `contribution` field — the real amount this budget
+   * counts for the expense, matching the `spent` aggregate exactly:
+   *   - Non-CdC budget: contribution = raw totalAmount × recurring factor.
+   *   - CdC budget: contribution = bearer net part + incoming refact received
+   *     by the CdC, × recurring factor. So the table sum reconciles with
+   *     the card's spent value (no more "10 000 € shown when only 5 000 €
+   *     actually hit this budget").
    */
   private async listMatchingExpenses(tenantId: string, budget: any) {
-    const select = {
-      id: true,
-      label: true,
-      type: true,
-      frequency: true,
-      totalAmount: true,
-      currency: true,
-      dateIncurred: true,
-      dateStart: true,
-      dateEnd: true,
-      bearer: { select: { id: true, name: true, code: true } },
-      site: { select: { id: true, name: true, code: true } },
-    };
-    if (budget.billingEntityId) {
-      const X = budget.billingEntityId;
-      const where: any = {
-        tenantId,
-        dateIncurred: { gte: budget.startDate, lte: budget.endDate },
-        OR: [
-          { bearerId: X },
-          { allocations: { some: { targetId: X } } },
-        ],
-      };
-      // No delegationId filter here — same reasoning as computeCdcSpent:
-      // cross-delegation refacturation must remain visible.
-      if (budget.siteId) where.siteId = budget.siteId;
-      if (budget.expenseType) where.type = budget.expenseType;
-      return this.prisma.expense.findMany({
-        where,
-        select,
-        orderBy: { dateIncurred: 'desc' },
-      });
-    }
-    return this.prisma.expense.findMany({
-      where: this.buildExpenseWhere(budget),
-      select,
+    const isCdc = !!budget.billingEntityId;
+    const where: any = isCdc
+      ? {
+          tenantId,
+          dateIncurred: { gte: budget.startDate, lte: budget.endDate },
+          OR: [
+            { bearerId: budget.billingEntityId },
+            { allocations: { some: { targetId: budget.billingEntityId } } },
+          ],
+          ...(budget.siteId ? { siteId: budget.siteId } : {}),
+          ...(budget.expenseType ? { type: budget.expenseType } : {}),
+        }
+      : this.buildExpenseWhere(budget);
+
+    const raws = await this.prisma.expense.findMany({
+      where,
+      select: {
+        id: true,
+        label: true,
+        type: true,
+        frequency: true,
+        totalAmount: true,
+        currency: true,
+        dateIncurred: true,
+        dateStart: true,
+        dateEnd: true,
+        bearerId: true,
+        bearer: { select: { id: true, name: true, code: true } },
+        site: { select: { id: true, name: true, code: true } },
+        allocations: { select: { targetId: true, percentage: true, amount: true } },
+      },
       orderBy: { dateIncurred: 'desc' },
+    });
+
+    return raws.map((e) => {
+      let base: number;
+      if (isCdc) {
+        base = this.expenseContributionForCdc(e as any, budget.billingEntityId);
+      } else {
+        base = Number(e.totalAmount);
+      }
+      let contribution = base;
+      if (e.frequency !== 'ONE_TIME') {
+        const months = this.monthsForRecurring(e, budget.startDate, budget.endDate);
+        contribution = base * this.frequencyFactor(e.frequency) * months;
+      }
+      // Strip internal bookkeeping fields from the response so the public
+      // shape stays predictable — keep only what the UI renders.
+      const { allocations: _a, bearerId: _b, ...rest } = e as any;
+      return { ...rest, contribution: Math.round(contribution * 100) / 100 };
     });
   }
 

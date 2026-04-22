@@ -5975,3 +5975,24 @@ fix(costs): cross-delegation refact visible in CdC budgets; Expense form forbids
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-22
+
+**Date:** 2026-04-22 11:53:43
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix(costs): budget statuses now refresh when an expense is created/updated/deleted
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

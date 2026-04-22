@@ -37,7 +37,14 @@ export interface BudgetExpenseSummary {
   label: string;
   type: string;
   frequency: string;
+  /** Raw invoice amount on the expense (reference only). */
   totalAmount: number;
+  /**
+   * Actual amount this budget counts for this expense — already includes
+   * recurring expansion and CdC bearer-net / incoming-refact math. Sum of
+   * `contribution` across the list equals the budget's `spent`.
+   */
+  contribution: number;
   currency: string;
   dateIncurred: string;
   dateStart: string | null;

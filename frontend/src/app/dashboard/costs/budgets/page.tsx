@@ -943,47 +943,59 @@ function BudgetExpensesTable({
             <TableHead>Type</TableHead>
             <TableHead>Fréquence</TableHead>
             <TableHead>Porteur</TableHead>
-            <TableHead className="text-right">Montant</TableHead>
+            <TableHead className="text-right">Part dans ce budget</TableHead>
+            <TableHead className="text-right">Montant total</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {status.expenses.map((e) => (
-            <TableRow key={e.id}>
-              <TableCell className="text-xs whitespace-nowrap">
-                {e.dateIncurred.split('T')[0]}
-              </TableCell>
-              <TableCell className="font-medium">
-                <Link href={`/dashboard/costs/${e.id}/edit`} className="hover:underline">
-                  {e.label}
-                </Link>
-                {e.site && (
-                  <div className="text-xs text-muted-foreground">{e.site.name}</div>
-                )}
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline" className="text-xs">
-                  {EXPENSE_TYPE_LABELS[e.type] ?? e.type}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary" className="text-xs">
-                  {FREQ_LABELS[e.frequency] ?? e.frequency}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-xs">
-                {e.bearer ? (
-                  <span>
-                    {e.bearer.code} — {e.bearer.name}
-                  </span>
-                ) : (
-                  '—'
-                )}
-              </TableCell>
-              <TableCell className="text-right font-medium">
-                {formatCurrency(e.totalAmount, e.currency)}
-              </TableCell>
-            </TableRow>
-          ))}
+          {status.expenses.map((e) => {
+            const isPartial = Math.abs(e.contribution - e.totalAmount) > 0.01;
+            return (
+              <TableRow key={e.id}>
+                <TableCell className="text-xs whitespace-nowrap">
+                  {e.dateIncurred.split('T')[0]}
+                </TableCell>
+                <TableCell className="font-medium">
+                  <Link href={`/dashboard/costs/${e.id}/edit`} className="hover:underline">
+                    {e.label}
+                  </Link>
+                  {e.site && (
+                    <div className="text-xs text-muted-foreground">{e.site.name}</div>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="text-xs">
+                    {EXPENSE_TYPE_LABELS[e.type] ?? e.type}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary" className="text-xs">
+                    {FREQ_LABELS[e.frequency] ?? e.frequency}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs">
+                  {e.bearer ? (
+                    <span>
+                      {e.bearer.code} — {e.bearer.name}
+                    </span>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">
+                  {formatCurrency(e.contribution, e.currency)}
+                </TableCell>
+                <TableCell
+                  className={
+                    'text-right tabular-nums ' +
+                    (isPartial ? 'text-muted-foreground' : 'font-medium')
+                  }
+                >
+                  {formatCurrency(e.totalAmount, e.currency)}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>
