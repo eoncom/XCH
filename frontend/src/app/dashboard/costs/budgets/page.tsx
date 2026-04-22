@@ -164,8 +164,22 @@ function BudgetsPage() {
     return map;
   }, [budgets, statuses]);
 
+  // Recompute statuses whenever the budgets query resolves (initial load,
+  // a mutation invalidation, a delegation switch, or any external change
+  // that refetches `['budgets']`). Keying on `updatedAt` ensures that even
+  // when the list length is stable but an expense changed the picture
+  // elsewhere, a full refetch triggered by `queryClient.invalidateQueries`
+  // still re-pulls each status.
+  const budgetsFingerprint = useMemo(
+    () => budgets.map((b) => `${b.id}:${b.updatedAt}`).join('|'),
+    [budgets],
+  );
   useEffect(() => {
-    if (budgets.length === 0) return;
+    if (budgets.length === 0) {
+      setStatuses({});
+      return;
+    }
+    let cancelled = false;
     const loadStatuses = async () => {
       const results: Record<string, BudgetStatus> = {};
       await Promise.all(
@@ -177,10 +191,14 @@ function BudgetsPage() {
           }
         }),
       );
-      setStatuses(results);
+      if (!cancelled) setStatuses(results);
     };
     loadStatuses();
-  }, [budgets.length]);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [budgetsFingerprint]);
 
   const defaultFormData = (): CreateBudgetData => ({
     label: '',

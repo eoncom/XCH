@@ -130,6 +130,11 @@ function EditExpensePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['expense', expenseId] });
+      // An expense update changes budget status (bearer, allocations,
+      // delegation, site, type, amount or date may all shift it).
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses-by-month'] });
+      queryClient.invalidateQueries({ queryKey: ['report-by-bearer'] });
       router.push('/dashboard/costs');
     },
   });

@@ -101,6 +101,11 @@ function NewExpensePage() {
     mutationFn: (data: CreateExpenseData) => expensesApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      // A new expense directly impacts every budget's computed status
+      // (delegation-level, CdC as bearer, CdC as allocation target).
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses-by-month'] });
+      queryClient.invalidateQueries({ queryKey: ['report-by-bearer'] });
       router.push('/dashboard/costs');
     },
   });

@@ -109,7 +109,13 @@ function CostsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => expensesApi.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      // Deleting an expense may free budget allowance and change dashboards.
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses-by-month'] });
+      queryClient.invalidateQueries({ queryKey: ['report-by-bearer'] });
+    },
   });
 
   const filtered = useMemo(() => {
