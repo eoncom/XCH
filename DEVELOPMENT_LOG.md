@@ -5933,3 +5933,24 @@ feat(costs): D1 — budgets scoped to a Centre de coût (BillingEntity)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-22
+
+**Date:** 2026-04-22 10:17:41
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix(costs): bugs reported on pilot 2026-04-21
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

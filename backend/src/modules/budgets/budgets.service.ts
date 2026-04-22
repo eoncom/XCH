@@ -258,8 +258,14 @@ export class BudgetsService {
         { allocations: { some: { targetId: X } } },
       ],
     };
-    // A CdC budget still honours optional delegation/site/type filters.
-    if (budget.delegationId) where.delegationId = budget.delegationId;
+    // IMPORTANT (bug fix 2026-04-22): a CdC budget intentionally does NOT
+    // filter on `budget.delegationId` here. Otherwise a refacturation from
+    // a CdC of delegation A to a CdC of delegation B would be invisible in
+    // the B-side budget because the expense lives under delegation A.
+    // The budget's own delegationId is kept purely for display/ownership,
+    // not for filtering which expenses hit the envelope.
+    // Site and expenseType stay as secondary narrowing filters (they
+    // describe the expense itself, not a cross-delegation flow).
     if (budget.siteId) where.siteId = budget.siteId;
     if (budget.expenseType) where.type = budget.expenseType;
 
@@ -348,7 +354,8 @@ export class BudgetsService {
           { allocations: { some: { targetId: X } } },
         ],
       };
-      if (budget.delegationId) where.delegationId = budget.delegationId;
+      // No delegationId filter here — same reasoning as computeCdcSpent:
+      // cross-delegation refacturation must remain visible.
       if (budget.siteId) where.siteId = budget.siteId;
       if (budget.expenseType) where.type = budget.expenseType;
       return this.prisma.expense.findMany({
@@ -399,39 +406,55 @@ export class BudgetsService {
     allocationTargetIds?: string[];
     dateIncurred: Date;
   }) {
-    // CdC budget candidates: the bearer's CdC budget AND any allocation
-    // target's CdC budget (since their incoming refact counts too since D1
-    // bugfix 2026-04-21).
     const affectedCdcIds = [
       ...(expense.bearerId ? [expense.bearerId] : []),
       ...(expense.allocationTargetIds ?? []),
     ];
 
-    const candidateBudgets = await this.prisma.budget.findMany({
-      where: {
-        tenantId,
-        alertsEnabled: true,
-        startDate: { lte: expense.dateIncurred },
-        endDate: { gte: expense.dateIncurred },
-        OR: [
-          { delegationId: null },
-          { delegationId: expense.delegationId ?? undefined },
-        ],
-        AND: [
-          { OR: [{ siteId: null }, { siteId: expense.siteId ?? undefined }] },
-          { OR: [{ expenseType: null }, { expenseType: expense.type ?? undefined }] },
-          {
-            OR: [
-              { billingEntityId: null },
-              ...(affectedCdcIds.length > 0
-                ? [{ billingEntityId: { in: affectedCdcIds } }]
-                : []),
-            ],
-          },
-        ],
-      },
-      include: { delegation: true },
-    });
+    // Candidate budgets split in two independent queries:
+    // (1) Non-CdC budgets: classic delegation/site/type matching against
+    //     the expense — delegation filter applies.
+    // (2) CdC-scoped budgets: any budget pointing at one of the affected
+    //     CdCs, regardless of the expense's delegation. Otherwise a refact
+    //     flow A→B would never trigger the B-side budget alert because
+    //     B lives under another delegation. Same rule as computeCdcSpent.
+    const [nonCdcCandidates, cdcCandidates] = await Promise.all([
+      this.prisma.budget.findMany({
+        where: {
+          tenantId,
+          alertsEnabled: true,
+          billingEntityId: null,
+          startDate: { lte: expense.dateIncurred },
+          endDate: { gte: expense.dateIncurred },
+          OR: [
+            { delegationId: null },
+            { delegationId: expense.delegationId ?? undefined },
+          ],
+          AND: [
+            { OR: [{ siteId: null }, { siteId: expense.siteId ?? undefined }] },
+            { OR: [{ expenseType: null }, { expenseType: expense.type ?? undefined }] },
+          ],
+        },
+        include: { delegation: true },
+      }),
+      affectedCdcIds.length > 0
+        ? this.prisma.budget.findMany({
+            where: {
+              tenantId,
+              alertsEnabled: true,
+              billingEntityId: { in: affectedCdcIds },
+              startDate: { lte: expense.dateIncurred },
+              endDate: { gte: expense.dateIncurred },
+              AND: [
+                { OR: [{ siteId: null }, { siteId: expense.siteId ?? undefined }] },
+                { OR: [{ expenseType: null }, { expenseType: expense.type ?? undefined }] },
+              ],
+            },
+            include: { delegation: true },
+          })
+        : Promise.resolve([] as any[]),
+    ]);
+    const candidateBudgets = [...nonCdcCandidates, ...cdcCandidates];
 
     for (const b of candidateBudgets) {
       try {

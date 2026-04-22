@@ -248,7 +248,7 @@ function NewExpensePage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ScopeSelector value={scope} onChange={setScope} label="" />
+          <ScopeSelector value={scope} onChange={setScope} label="" allowGlobal={false} />
           <p className="text-xs text-muted-foreground mt-2">
             Une dépense est toujours rattachée à une délégation. Le site est optionnel
             si la dépense concerne toute la délégation.

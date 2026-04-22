@@ -266,7 +266,7 @@ function EditExpensePage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ScopeSelector value={scope} onChange={setScope} label="" />
+          <ScopeSelector value={scope} onChange={setScope} label="" allowGlobal={false} />
         </CardContent>
       </Card>
 

@@ -32,6 +32,13 @@ interface ScopeSelectorProps {
   showSiteSelector?: boolean;
   disabled?: boolean;
   className?: string;
+  /**
+   * Offer the "Global (toutes délégations)" option (super-admin only).
+   * Default: true for backwards compat. Must be set to FALSE on pickers
+   * whose target model requires a delegation (e.g. Expense.delegationId
+   * is @IsNotEmpty — picking global used to save a null and 400-out).
+   */
+  allowGlobal?: boolean;
 }
 
 /**
@@ -45,6 +52,7 @@ export function ScopeSelector({
   showSiteSelector = true,
   disabled = false,
   className = '',
+  allowGlobal = true,
 }: ScopeSelectorProps) {
   const { delegations, isSuperAdmin } = useDelegation();
 
@@ -89,7 +97,7 @@ export function ScopeSelector({
             <SelectValue placeholder="Sélectionner une délégation..." />
           </SelectTrigger>
           <SelectContent>
-            {isSuperAdmin && (
+            {isSuperAdmin && allowGlobal && (
               <SelectItem value="_global">Global (toutes délégations)</SelectItem>
             )}
             {delegationOptions.map((del) => (
