@@ -2,12 +2,40 @@
 
 **À utiliser tel quel en ouverture de session** pour reprendre le sujet monitoring là où on l'a laissé. Ce prompt présuppose que la session lit d'abord sa mémoire MCP (entités XCH), `PROJECT_STATUS.md`, `CHANGELOG.md` et `AUTH_MODEL.md` — rien à recharger manuellement.
 
+## MISES À JOUR 2026-04-24 (après phases 6.5 → 6.7)
+
+Depuis la rédaction initiale (phase 6.6), le contexte a évolué :
+
+1. **Numéro ADR** : utiliser **`ADR-014`** (et non « 012 bis »). ADR-013 est déjà pris par « Dette JSON résiduelle post-phase 6.6 » (`docs/decisions/adr-013-residual-json-debt.md`) — c'est lui qui trace `NotificationConfig` et `Asset.networkInfo` comme dettes JSON restantes. Le monitoring natif passe **avant** la refacto d'`Asset.networkInfo` (décision mémoire `feedback_monitoring_session_scope.md`) car il écrit sur `asset.networkInfo.monitorName/monitorStatus/lastHealthCheck`.
+
+2. **`targetType` étendu** : la liste `'asset'|'link'|'site'` reste la cible v1. Optionnel : `'sdwan'` pour monitorer la config SD-WAN elle-même — mais en pratique le statut SD-WAN se déduit déjà des firewalls attachés (cf. `SdwanConfig` + `SdwanFirewall` en phase 6.6, lire `backend/src/modules/sdwan/sdwan.service.ts`). **Recommandation : rester sur 3 target types, laisser SD-WAN s'hydrater via ses firewalls (asset targetType).** Documenter ce choix dans l'ADR.
+
+3. **Legacy fields conservés** : `ConnectivityLink.monitorName/status` (phase 6.5) et `SdwanConfig.monitorName/status` (phase 6.6) restent comme chemin **optionnel** pour les providers externes (Uptime Kuma, Gatus) — zéro breaking change. Le `MonitorCheck` natif écrit sur un **second chemin parallèle**, et l'agrégation `HealthAggregationService` priorise le natif si présent, sinon retombe sur l'externe.
+
+4. **Pattern d'accès standardisé** (depuis phase 6.7) :
+   - Tous les controllers utilisent `@RequireWrite()` ou `@RequireManage()` + helper `scopeOrFail(req, filterDelegationId)` qui vérifie que la délégation est dans le scope managé.
+   - `PermissionService.getManagedDelegationIds(tenantId, userId)` retourne `null` pour super-admin (accès total) ou `string[]` managés.
+   - **Reco pour MonitorCheck** : `@RequireWrite()` sur CRUD (c'est opérationnel, pas admin), + `scopeOrFail` qui vérifie que `targetId.delegationId ∈ scope` avant d'écrire.
+
+5. **Discipline build prod** : **toujours** `docker compose build --no-cache backend frontend` après un code change (observé 2026-04-22 : un fix n'apparaissait pas dans `/app/dist/main.js` sans `--no-cache`). Cf. mémoire `project_deploy_workflow.md`.
+
+6. **Credentials tests** :
+   - `admin@demo.fr` → password **`Demo1234`** (super-admin, setup wizard)
+   - Tous les autres `@demo.fr` (manager, multi, technicien, viewer) → password **`demo123`** (bcrypt dans `createUsers()` ligne ~401 du seed)
+   - URL pilote publique : **`https://xch.eoncom.io`** (pas l'IP directe)
+
+7. **Pattern export CSV** : si la session ajoute une page d'historique/dashboard monitoring, suivre le pattern existant de `/costs/new` / `/costs/budgets` / `/costs/reports` : bouton `<Download />` + UTF-8 BOM + `;` délimiteur pour Excel fr-FR.
+
+Le reste du prompt (9 lots, BullMQ worker, ICMP via `ping` + fallback TCP, architecture 2-container) **est inchangé et applicable tel quel**.
+
+---
+
 ---
 
 ## Prompt à copier/coller
 
 ```
-Reprise : implémentation du module monitoring natif XCH (ADR-012 bis).
+Reprise : implémentation du module monitoring natif XCH (ADR-014).
 
 PRINCIPE DIRECTEUR XCH (règle projet énoncée par l'utilisateur le
 2026-04-20, s'applique à toutes les sessions) :
@@ -62,7 +90,7 @@ Dans les sessions précédentes on a :
 
 OBJECTIFS DE LA SESSION
 -----------------------
-Écrire l'ADR-012 bis puis implémenter en 9 lots (~10h) :
+Écrire l'ADR-014 puis implémenter en 9 lots (~10h) :
 
 Lot 1 — Schema :
   - Nouveau modèle Prisma `MonitorCheck` (id, tenantId, targetType:
@@ -181,9 +209,9 @@ DÉCISIONS DÉJÀ PRISES (ne pas redébattre sauf si je le demande)
 
 AVANT DE CODER
 --------------
-1. Lire `docs/decisions/adr-012-gatus-bidirectional.md` rapidement pour
-   le contexte abandonné (nouveau scope, nouveau nom : ADR-012 bis ou
-   ADR-013 selon numérotation disponible).
+1. Lire `docs/decisions/adr-012-gatus-bidirectional.md` (contexte
+   abandonné). Nouveau numéro imposé : **ADR-014** — ADR-013 est déjà
+   pris par « Dette JSON résiduelle post-phase 6.6 » (`adr-013-residual-json-debt.md`).
 2. Lire `backend/src/modules/integrations/interfaces/integration-provider.
    interface.ts` — la MonitoringProvider interface existante. Le
    module natif peut soit l'implémenter aussi (elegant), soit
@@ -221,7 +249,7 @@ Scope v1 du champ `target` sur MonitorCheck : simple string suffisante
 méthode, headers pour HTTP) ? Recommandation : simple string +
 kind-specific parsing. Peut évoluer si besoin réel émerge.
 
-Fin du prompt. Réponds par "OK, je rédige l'ADR-012 bis" et on démarre.
+Fin du prompt. Réponds par "OK, je rédige l'ADR-014" et on démarre.
 ```
 
 ---
