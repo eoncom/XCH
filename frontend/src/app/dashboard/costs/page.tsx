@@ -320,7 +320,7 @@ function CostsPage() {
               {filtered.map((expense) => (
                 <TableRow key={expense.id}>
                   <TableCell className="font-medium">
-                    <Link href={`/dashboard/costs/${expense.id}/edit`} className="hover:underline">
+                    <Link href={`/dashboard/costs/${expense.id}`} className="hover:underline">
                       {expense.label}
                     </Link>
                     {(expense.vendorContact || expense.vendor) && (

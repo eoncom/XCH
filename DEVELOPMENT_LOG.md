@@ -5996,3 +5996,24 @@ fix(costs): budget statuses now refresh when an expense is created/updated/delet
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-23
+
+**Date:** 2026-04-23 23:47:09
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 4
+
+**Commit message:**
+```
+fix(costs): budget expenses list shows the real part this budget counts
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

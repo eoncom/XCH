@@ -53,7 +53,9 @@ import {
   ChevronRight,
   Eye,
   Wallet2,
+  Download,
 } from 'lucide-react';
+import { saveAs } from 'file-saver';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/currency';
@@ -327,6 +329,53 @@ function BudgetsPage() {
     }
   };
 
+  const exportBudgetsCsv = () => {
+    const rows: string[][] = [
+      [
+        'Label',
+        'Période',
+        'Début',
+        'Fin',
+        'Délégation',
+        'Site',
+        'Centre de coût',
+        'Type',
+        'Montant',
+        'Dépensé',
+        'Restant',
+        'Progression (%)',
+        'Seuil alerte (%)',
+        'Alertes activées',
+        'Sous-budget de',
+      ],
+      ...budgets.map((b) => {
+        const s = statuses[b.id];
+        return [
+          b.label,
+          b.period === 'YEAR' ? 'Annuel' : 'Mensuel',
+          b.startDate.split('T')[0],
+          b.endDate.split('T')[0],
+          b.delegation?.name ?? '',
+          b.site?.name ?? '',
+          b.billingEntity ? `${b.billingEntity.code} — ${b.billingEntity.name}` : '',
+          b.expenseType ?? '',
+          String(b.amount),
+          s ? String(s.spent) : '',
+          s ? String(s.remaining) : '',
+          s ? String(s.progressPct) : '',
+          String(b.alertThresholdPct),
+          b.alertsEnabled ? 'Oui' : 'Non',
+          b.parent?.label ?? '',
+        ];
+      }),
+    ];
+    const csv = rows
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
+      .join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    saveAs(blob, `xch-budgets-${new Date().toISOString().slice(0, 10)}.csv`);
+  };
+
   const overBudgetCount = Object.values(statuses).filter((s) => s.overBudget).length;
   const thresholdCount = Object.values(statuses).filter((s) => s.thresholdReached && !s.overBudget).length;
   const totalBudgeted = Object.values(statuses).reduce((sum, s) => sum + s.budgeted, 0);
@@ -348,17 +397,23 @@ function BudgetsPage() {
             </p>
           </div>
         </div>
-        {canWrite && (
-          <Button
-            onClick={() => {
-              resetForm();
-              setShowForm(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Nouveau budget
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={exportBudgetsCsv}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
           </Button>
-        )}
+          {canWrite && (
+            <Button
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Nouveau budget
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Summary cards */}
@@ -956,7 +1011,7 @@ function BudgetExpensesTable({
                   {e.dateIncurred.split('T')[0]}
                 </TableCell>
                 <TableCell className="font-medium">
-                  <Link href={`/dashboard/costs/${e.id}/edit`} className="hover:underline">
+                  <Link href={`/dashboard/costs/${e.id}`} className="hover:underline">
                     {e.label}
                   </Link>
                   {e.site && (

@@ -45,9 +45,10 @@ export class ExpensesController {
   @ApiOperation({ summary: 'Create an expense with optional allocations' })
   async create(@Body() dto: CreateExpenseDto, @Request() req: AuthRequest) {
     // Guard against cross-delegation writes: ensure the expense's delegationId
-    // is in the user's managed scope (super-admin bypasses).
-    await this.scopeOrFail(req, dto.delegationId);
-    return this.expensesService.create(req.user.tenantId, dto, req.user.userId);
+    // is in the user's managed scope (super-admin bypasses). Threads the
+    // scope to the service so allocation targets are also scope-checked (D2).
+    const scope = await this.scopeOrFail(req, dto.delegationId);
+    return this.expensesService.create(req.user.tenantId, dto, req.user.userId, scope);
   }
 
   @Get()
@@ -198,9 +199,9 @@ export class ExpensesController {
   @ApiOperation({ summary: 'Update an expense' })
   async update(@Param('id') id: string, @Body() dto: UpdateExpenseDto, @Request() req: AuthRequest) {
     const existing = await this.expensesService.findOne(req.user.tenantId, id);
-    await this.scopeOrFail(req, (existing as any).delegationId);
+    const scope = await this.scopeOrFail(req, (existing as any).delegationId);
     if (dto.delegationId) await this.scopeOrFail(req, dto.delegationId);
-    return this.expensesService.update(req.user.tenantId, id, dto);
+    return this.expensesService.update(req.user.tenantId, id, dto, scope);
   }
 
   @Delete(':id')

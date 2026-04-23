@@ -43,7 +43,12 @@ export class ExpensesService {
       .catch((err) => this.logger.warn(`Budget threshold check failed: ${err?.message}`));
   }
 
-  async create(tenantId: string, dto: CreateExpenseDto, createdBy: string) {
+  async create(
+    tenantId: string,
+    dto: CreateExpenseDto,
+    createdBy: string,
+    scopeDelegationIds: string[] | null = null,
+  ) {
     // Validate bearer
     const bearer = await this.prisma.billingEntity.findFirst({
       where: { id: dto.bearerId, tenantId },
@@ -69,10 +74,10 @@ export class ExpensesService {
       await this.validateVendorContact(tenantId, dto.vendorId);
     }
 
-    // Validate allocations
+    // Validate allocations (including D2 scope check on targets)
     if (dto.allocations?.length) {
       this.validateAllocations(dto.allocations);
-      await this.validateAllocationTargets(tenantId, dto.allocations);
+      await this.validateAllocationTargets(tenantId, dto.allocations, scopeDelegationIds);
     }
 
     const { allocations, ...rest } = dto;
@@ -205,7 +210,12 @@ export class ExpensesService {
     return expense;
   }
 
-  async update(tenantId: string, id: string, dto: UpdateExpenseDto) {
+  async update(
+    tenantId: string,
+    id: string,
+    dto: UpdateExpenseDto,
+    scopeDelegationIds: string[] | null = null,
+  ) {
     const expense = await this.prisma.expense.findFirst({
       where: { id, tenantId },
     });
@@ -249,11 +259,11 @@ export class ExpensesService {
     if (dto.vendorId === null) data.vendorId = null;
     if ('siteId' in dto && dto.siteId === null) data.siteId = null;
 
-    // If allocations provided, replace them
+    // If allocations provided, replace them (D2 scope check included)
     let updated: any;
     if (allocations !== undefined) {
       this.validateAllocations(allocations);
-      await this.validateAllocationTargets(tenantId, allocations);
+      await this.validateAllocationTargets(tenantId, allocations, scopeDelegationIds);
 
       const totalAmount = dto.totalAmount || expense.totalAmount;
 
@@ -739,12 +749,29 @@ export class ExpensesService {
     }
   }
 
-  private async validateAllocationTargets(tenantId: string, allocations: AllocationDto[]) {
+  /**
+   * D2 — When `scopeDelegationIds` is not null (non super-admin), every
+   * allocation target must be reachable by the user: either a BillingEntity
+   * of one of their managed delegations, or a global one (delegationId=null).
+   * Otherwise a manager could route refacturations toward CdCs they can't
+   * even see in the UI.
+   */
+  private async validateAllocationTargets(
+    tenantId: string,
+    allocations: AllocationDto[],
+    scopeDelegationIds: string[] | null = null,
+  ) {
     for (const alloc of allocations) {
       const target = await this.prisma.billingEntity.findFirst({
         where: { id: alloc.targetId, tenantId },
+        select: { id: true, name: true, delegationId: true },
       });
       if (!target) throw new NotFoundException(`Target billing entity ${alloc.targetId} not found`);
+      if (scopeDelegationIds !== null && target.delegationId && !scopeDelegationIds.includes(target.delegationId)) {
+        throw new BadRequestException(
+          `Centre de coût « ${target.name} » hors périmètre : refacturation interdite vers une délégation que vous ne gérez pas.`,
+        );
+      }
     }
   }
 

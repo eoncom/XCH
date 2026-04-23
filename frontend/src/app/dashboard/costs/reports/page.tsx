@@ -8,10 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { expensesApi, type BearerReport, type TargetReport } from '@/lib/api/costs';
-import { ArrowLeft, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, DollarSign, Download } from 'lucide-react';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/currency';
 import { AccessGate } from '@/components/AccessGate';
+import { saveAs } from 'file-saver';
 
 export default function CostReportsPageWrapper() {
   return (
@@ -39,15 +40,65 @@ function CostReportsPage() {
   const totalBorne = bearerReport.reduce((s, r) => s + r.totalBorne, 0);
   const totalImputed = targetReport.reduce((s, r) => s + r.totalImputed, 0);
 
+  const exportBearersCsv = () => {
+    const rows: string[][] = [
+      ['Code', 'Nom', 'Type', 'Total porté', 'Refacturé sortant', 'Net porteur', 'Dépenses'],
+      ...bearerReport.map((r) => [
+        r.bearer.code,
+        r.bearer.name,
+        r.bearer.type,
+        String(r.totalBorne),
+        String(r.totalRefactured),
+        String(r.netBorne),
+        String(r.expenseCount),
+      ]),
+    ];
+    const csv = rows
+      .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
+      .join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    saveAs(blob, `xch-rapport-porteurs-${new Date().toISOString().slice(0, 10)}.csv`);
+  };
+
+  const exportTargetsCsv = () => {
+    const rows: string[][] = [
+      ['Code', 'Nom', 'Type', 'Total imputé', 'Nb allocations'],
+      ...targetReport.map((r) => [
+        r.target.code,
+        r.target.name,
+        r.target.type,
+        String(r.totalImputed),
+        String(r.allocationCount),
+      ]),
+    ];
+    const csv = rows
+      .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
+      .join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    saveAs(blob, `xch-rapport-cibles-${new Date().toISOString().slice(0, 10)}.csv`);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/dashboard/costs"><ArrowLeft className="h-5 w-5" /></Link>
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold">Rapports coûts</h1>
-          <p className="text-muted-foreground">Vue consolidée des dépenses et refacturations</p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/dashboard/costs"><ArrowLeft className="h-5 w-5" /></Link>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Rapports coûts</h1>
+            <p className="text-muted-foreground">Vue consolidée des dépenses et refacturations</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={exportBearersCsv}>
+            <Download className="mr-2 h-4 w-4" />
+            CSV porteurs
+          </Button>
+          <Button variant="outline" onClick={exportTargetsCsv}>
+            <Download className="mr-2 h-4 w-4" />
+            CSV cibles
+          </Button>
         </div>
       </div>
 
