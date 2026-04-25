@@ -786,82 +786,62 @@ database system is ready to accept connections
 
 ---
 
-## Statistiques globales
+## Snapshot historique (janvier 2026, Phase MVP)
 
-**Sessions totales :** 9
-**Durée totale développement :** ~30.5h
-**Commits Git :** 5+
-**Fichiers créés/modifiés :** ~300+
-**Lignes code :** ~14500+
-**Lignes documentation :** ~25000+
+> **Note 2026-04-23** : ce bloc etait un snapshot fige a l'achevement du MVP.
+> Pour l'etat reel et a jour, consulter `docs/status/PROJECT_STATUS.md` (source
+> de verite, mise a jour automatique sur chaque commit). Etat courant : v1.4.0
+> (2026-04-18), MVP Production-Ready 100%, 27 modules backend / 261 endpoints,
+> 18 sections frontend / 53 pages, 32 modeles Prisma, 10 ADRs, deploy 100%
+> (xch.eoncom.io en pilote), tests E2E 15% (2/57), CI/CD 50%.
 
-**Progression :**
+**Phases MVP (cloturees) :**
 ```
 Phase 1 (Archi)      : ✅ 100% (2025-12-29)
 Phase 2 (Backend)    : ✅ 100% (2025-12-31)
 Phase 3 (Frontend)   : ✅ 100% (2026-01-01)
 Phase 4 (Livraison)  : ✅ 100% (2026-01-01)
-Phase 5 (Deploy)     : ⏳  40% (fix init.sql débloqué)
+Phase 5 (Deploy)     : ✅ 100% (2026-04, pilote xch.eoncom.io)
 ```
+
+Post-MVP : v1.1.x (notifications, pagination), v1.2.0 (delegation-first ADR-009),
+v1.3.0 (couts avances + consumption + search + audit), v1.4.0 (audit phase 4-5
++ feature Apparence ADR-010 + seed demo enrichi).
 
 ---
 
-## Notes importantes
+## Notes importantes (historiques)
 
-### Problèmes récurrents identifiés
+### Problèmes récurrents résolus
 
 1. **Base de données PostgreSQL** ✅ RÉSOLU (2026-01-03)
    - Erreur historique : `xch_db` vs `xch_dev`
-   - Fichier concerné : `docker/postgres/init.sql`
-   - Impact : Bloquait déploiement production
-   - Correction effectuée : Toutes occurrences remplacées (lignes 18 et 21)
+   - Convention en vigueur : DB s'appelle `xch_dev` (jamais `xch_db`)
 
 2. **Ports Docker**
-   - Conflits potentiels en production
-   - Solution : Variables d'environnement personnalisables
+   - Variables d'environnement personnalisables
    - Documentation : `docs/installation/DOCKER_PORTS.md`
 
 3. **Tests automatisés**
-   - Actuellement : Seulement tests manuels
-   - Post-MVP : Ajouter Playwright (E2E) + Vitest (unitaires)
+   - 57 tests E2E Playwright ecrits (2/57 passent — Known Issue SSR/CSR cookies)
+   - Tests unitaires backend/frontend toujours hors scope MVP
 
-### Bonnes pratiques établies
+### Bonnes pratiques etablies
 
 1. **Documentation**
    - Source de vérité unique : `docs/status/PROJECT_STATUS.md`
    - Navigation centralisée : `docs/00-INDEX.md`
-   - Script vérification : `scripts/check-docs.sh`
+   - Auto-update PROJECT_STATUS + DEVELOPMENT_LOG via hook de commit
 
 2. **Développement**
    - TypeScript strict (backend + frontend)
-   - Validation inputs complète
-   - Error handling robuste
+   - Modele autorisation v2 delegation-first (Casbin retire)
+   - Validation inputs complète + decorateurs `@Require*` fail-closed
 
 3. **Git**
    - Commits conventionnels (feat, fix, docs, etc.)
    - Branches protégées (main)
-   - Pull requests obligatoires
-
----
-
-## Prochaines sessions prévues
-
-### Session à venir : Tests déploiement complet serveur
-
-**Objectif :**
-- Lancer backend (NestJS) sur serveur Ubuntu
-- Lancer frontend (Next.js) sur serveur Ubuntu
-- Tester connectivité backend ↔ frontend
-- Valider fonctionnalités critiques (auth, QR codes, upload fichiers)
-- Vérifier performance production
-
-**Pré-requis :**
-- ✅ PostgreSQL opérationnel (init.sql corrigé)
-- ✅ Docker + Docker Compose installés
-- ✅ Variables environnement configurées
-- Ports ouverts : 3000 (backend), 3001 (frontend), 5432 (postgres)
-
-**Durée estimée :** 2-3h
+   - 2 repos : XCH (dev) + XCH-deploy (prod)
 
 ---
 

@@ -1,6 +1,6 @@
 # XCH - Gestion IT pour Chantiers Temporaires
 
-**Version :** 1.1.1 | **Derniere mise a jour :** 2026-04-06
+**Version :** 1.4.0 | **Derniere mise a jour :** 2026-04-23
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
@@ -8,7 +8,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue)](https://www.postgresql.org/)
 
-> Application web full-stack de gestion IT pour chantiers temporaires — mono-delegation
+> Application web full-stack de gestion IT pour chantiers temporaires — modele delegation-first (multi-delegations)
 
 ---
 
@@ -35,29 +35,34 @@
 - **Contacts** — referentiel par site avec categories (prestataire, client, interne)
 - **Couts** — suivi depenses par site avec entites de facturation
 
-### Notifications (v1.1.1)
+### Notifications
 - **Email SMTP** — envoi configurable (Nodemailer), templates HTML
 - **Microsoft Teams** — webhooks Incoming avec Adaptive Cards
-- **Configuration multi-scope** — heritage tenant > division > delegation avec override
-- **7 types d'evenements** — tache assignee, changement statut, asset critique, alerte monitoring, invitation utilisateur, etc.
-- **Page configuration UI** — onglets canaux/evenements/logs, test de canal integre
+- **Configuration scopee delegation** — config par delegation avec sentinel `global` super admin (ADR-009)
+- **Inbox in-app** — cloche header + badge unread, polling 60s, page `/dashboard/notifications`
+- **Crons quotidiens** — warranty <= 30j et tasks due <= 2j (8h/8h05)
+- **Page configuration UI** — onglets canaux/evenements/journal, test de canal integre
 
-### Gestion utilisateurs (v1.1.1)
-- **Suppression utilisateur** — depuis la liste (icone corbeille) ou la page d'edition (bouton rouge), avec dialog de confirmation
-- **Portees d'acces enrichies** — noms des divisions/delegations/sites visibles (ex: "Sud-Ouest > Toulouse")
-- **Creation dual-mode** — creation directe (mot de passe) ou invitation par email (avec fallback lien si SMTP indisponible)
+### Gestion utilisateurs et delegations (v1.2+)
+- **Modele delegation-first (ADR-009)** — `UserDelegation.right` (MANAGE/WRITE/READ) + `User.isSuperAdmin` + `AccessOverride` ALLOW/DENY par site
+- **Suppression utilisateur** — liste ou page d'edition, dialog de confirmation
+- **Portees d'acces** — multi-delegations par utilisateur, role local (rightLabel: Administrateur/Editeur/Lecteur)
+- **Creation dual-mode** — directe (mot de passe) ou invitation par email (fallback lien si SMTP indisponible)
+- **AccessGate frontend** — guards page-level fail-closed sur `/users`, `/admin/audit`, `/sites/[id]/edit`
 
 ### Integrations externes
 - **NetBox** (READ-ONLY) — mapping sites/devices, enrichissement donnees
 - **Gatus / Uptime Kuma** — sante services, alertes, dashboard monitoring
 - **Import CSV assets** — endpoint multipart, headers FR/EN, validation ligne par ligne, rapport erreurs
 
-### Securite & Permissions
-- **Auth hybride** : locale (email/password) + OIDC (Microsoft Entra ID, Keycloak)
-- **RBAC** : 4 roles (Admin, Manager, Technicien, Viewer) via Casbin
+### Securite & Permissions (modele v2 delegation-first, ADR-009)
+- **Auth hybride** : locale (email/password) + OIDC (Microsoft Entra ID, Keycloak) avec mapping groupes -> DelegationRight
+- **Autorisation** : `UserDelegation.right` (MANAGE/WRITE/READ) + `AccessOverride` ALLOW/DENY par site (Casbin retire en v1.3)
+- **Decorateurs fail-closed** : `@RequireRead/@RequireWrite/@RequireManage` + `@SkipDelegation`
 - **Invitation email** : token 72h, page `/invite` pour definir mot de passe
 - **Mot de passe oublie** : token 1h, flux complet forgot/reset
-- **Audit trail** complet : sites, assets, tasks, racks (create/update/delete/mount/unmount)
+- **Audit trail** complet : sites, assets, tasks, racks (create/update/delete/mount/unmount), viewer super admin (`/admin/audit`)
+- **Throttle** : `XchThrottlerGuard` (429 FR), account lockout 5 echecs -> 14 min
 
 ### Pagination serveur (v1.1.0)
 - Tous les endpoints de liste sont pagines (page, pageSize, total, totalPages)
@@ -82,9 +87,8 @@
 ### Backend
 - **NestJS 10** (Node.js + TypeScript)
 - **PostgreSQL 15** + **PostGIS** (geospatialisation)
-- **Prisma** (ORM type-safe, migrations)
-- **Redis** (cache + sessions)
-- **Casbin** (RBAC/ABAC policy-based)
+- **Prisma 5.22** (ORM type-safe)
+- **Redis 7** (cache + sessions + throttle)
 - **Passport.js** (auth locale + OIDC)
 - **Nodemailer** (emails SMTP)
 
@@ -116,10 +120,10 @@ cd xch
 cd backend
 docker compose up -d   # PostgreSQL, Redis, MinIO
 
-# 3. Backend : installer + migrer + seeder
+# 3. Backend : installer + appliquer le schema
 npm install
-npx prisma migrate dev
-npx prisma db seed
+npx prisma db push --accept-data-loss
+# Seed/demo data : assistant de configuration au 1er login (POST /api/setup/initialize)
 
 # 4. Frontend : installer + generer icones PWA
 cd ../frontend
@@ -139,9 +143,14 @@ cd frontend && npm run dev
 - Backend API : http://localhost:3000/api
 - Swagger : http://localhost:3000/api (documentation auto)
 
-**Compte admin par defaut** :
-- Email : `admin@xch.local`
-- Mot de passe : `admin123`
+**Premier login** : assistant de configuration (super admin via `/setup`).
+
+**Comptes demo (apres seed via setup wizard avec `loadDemoData:true`)** :
+- `admin@demo.fr` / `Demo1234` — super admin
+- `manager@demo.fr` / `demo123` — MANAGE sur IDF Ouest + Lyon + Marseille
+- `technicien@demo.fr` / `demo123` — WRITE sur IDF
+- `viewer@demo.fr` / `demo123` — READ sur IDF
+- `multi@demo.fr` / `demo123` — multi-delegation (MANAGE IDF+Lyon, READ Marseille)
 
 ---
 
@@ -179,11 +188,11 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ```bash
 # Sur la machine de build (avec Internet)
-bash scripts/package-release.sh v1.1.1
+bash scripts/package-release.sh v1.4.0
 
 # Transferer l'archive, puis sur le serveur cible
-tar xzf xch-v1.1.1-full.tar.gz
-cd xch-release-v1.1.1
+tar xzf xch-v1.4.0-full.tar.gz
+cd xch-release-v1.4.0
 bash scripts/install-airgap.sh /opt/xch
 ```
 
@@ -250,8 +259,8 @@ bash rollback.sh    # Interactif, avec option restauration DB
 cd backend
 npm run start:dev            # Hot-reload developpement
 npm run build                # Build production
-npx prisma migrate dev       # Migrations DB
-npx prisma db seed           # Seed data
+npx prisma db push           # Appliquer le schema (pas de migrations versionnees, decision projet)
+# Seed/demo data : POST /api/setup/initialize avec loadDemoData=true (super admin requis)
 npx prisma studio            # GUI DB (http://localhost:5555)
 
 # Frontend
@@ -273,27 +282,21 @@ npm run test:e2e:chromium    # Chromium uniquement
 
 ```
 xch/
-├── backend/                 # API NestJS
+├── backend/                 # API NestJS (27 modules, 261 endpoints)
 │   ├── src/
-│   │   ├── modules/         # 10 modules metier
-│   │   │   ├── auth/        # JWT + OIDC + invitation + reset password
-│   │   │   ├── users/       # CRUD + suppression + scopes
-│   │   │   ├── sites/       # Chantiers + PostGIS
-│   │   │   ├── assets/      # Equipements + QR + import CSV
-│   │   │   ├── racks/       # Baies 4U-42U
-│   │   │   ├── tasks/       # Taches + Kanban
-│   │   │   ├── floor-plans/ # Plans + pins + heatmap WiFi
-│   │   │   ├── contacts/    # Contacts par site
-│   │   │   ├── expenses/    # Couts + entites facturation
-│   │   │   ├── integrations/# NetBox + monitoring
-│   │   │   ├── notifications/ # Email + Teams
-│   │   │   └── audit/       # Logs d'audit
+│   │   ├── modules/         # auth, users, user-delegations, access-overrides,
+│   │   │                    # organization, tenants, sites,
+│   │   │                    # assets, asset-models, racks, tasks, floor-plans,
+│   │   │                    # contacts, contact-types,
+│   │   │                    # billing-entities, expenses, budgets, consumption,
+│   │   │                    # integrations, connectivity,
+│   │   │                    # notifications, audit, search,
+│   │   │                    # admin, backup, seed, setup
 │   │   ├── common/          # Guards, filters, interceptors, decorators
 │   │   └── main.ts
 │   ├── prisma/
-│   │   ├── schema.prisma    # Schema DB (~20 modeles)
-│   │   └── migrations/
-│   └── docker-entrypoint.sh # Prisma migrate deploy + start
+│   │   └── schema.prisma    # Schema DB (32 modeles + 17 enums)
+│   └── docker-entrypoint.sh # prisma generate + db push + start
 ├── frontend/                # App Next.js 15
 │   ├── src/
 │   │   ├── app/dashboard/   # Pages (App Router)
@@ -329,13 +332,33 @@ npm run test:e2e:report       # Ouvrir rapport
 
 ## Changelog (versions recentes)
 
+### v1.4.0 (2026-04-18) — Post audit + Apparence
+- **Audit phase 4 + 5** : 3 critiques + 7 majeurs corriges (RBAC scope `/users`, gardes frontend `AccessGate`, OIDC mapping DelegationRight, webhook monitoring `@Public`, escalation user-delegations)
+- **Feature Apparence (ADR-010)** : tenant defaults + user override avec verrou admin (`AppearanceProvider`)
+- **Settings dans Personnel** : visible a tout utilisateur authentifie (Profil/Securite/Apparence/Notifications)
+- **Labels FR centralises** : `rightLabel()`, `healthLabel()`, `siteStatusLabel()`
+- **Seed demo enrichi** : 3 delegations, 8 sites, 6 users `@demo.fr`, AccessOverride ALLOW+DENY, Budget+Expense+CostAllocation, ConnectivityLink, UserNotification, AuditLog
+- **Cleanup phase 5** : `AuthProvider` retire (-1 model, -1 enum), 2 endpoints providers-legacy retires, +1 `GET /notifications/config/:delegationId`
+
+### v1.3.0 (2026-04-16) — Costs avances + Consumption + Search + Audit
+- Enums dynamiques (`AssetType/AssetStatus/PinType` -> `String` via `EnumLabel`)
+- Nouveaux modeles : `AssetModel`, `Budget`, `ConnectivityLink`, `UserNotification`
+- 6 nouveaux modules backend : `asset-models`, `budgets`, `connectivity`, `consumption`, `search`, `audit`
+- Projection mensuelle (eclatement MONTHLY/QUARTERLY/YEARLY) + endpoint `/api/expenses/projection`
+- Frontend : `/dashboard/costs/budgets`, `/dashboard/consumption`, `/dashboard/notifications`, `/dashboard/admin/audit`, `GlobalSearch` (Cmd+K), `NotificationInbox`
+- Notifications in-app + crons quotidiens (warranty + tasks due)
+- Import CSV assets dry-run (`/api/assets/import/preview`)
+
+### v1.2.0 (2026-04-08) — Delegation-first (ADR-009) + Repartition des couts
+- Refactoring autorisation : suppression hierarchy 4 niveaux, modele `UserDelegation` source de verite
+- `User.isSuperAdmin` + `AccessOverride` ALLOW/DENY par site
+- Header `X-Delegation-Id` obligatoire sur requetes operationnelles
+- `BillingEntity` + `Expense` + `CostAllocation` (refacturation, chargeback, rapports)
+
 ### v1.1.1 (2026-04-06)
 - Systeme de notifications (Email SMTP + Microsoft Teams webhooks)
-- Configuration multi-scope avec heritage
 - Suppression utilisateur avec dialog confirmation
-- Portees d'acces enrichies (noms divisions/delegations/sites)
 - Creation utilisateur dual-mode (directe ou invitation email)
-- Corrections: double prefixe API notifications, pagination getAll(), pageSize max 100
 
 ### v1.1.0 (2026-04-05)
 - Stabilisation pre-production (6 phases)
