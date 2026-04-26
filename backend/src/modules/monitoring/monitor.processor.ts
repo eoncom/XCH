@@ -18,6 +18,7 @@ import {
 } from './monitor.scheduler';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationEventType } from '../notifications/notification-events';
+import { HealthAggregationService } from './health-aggregation.service';
 
 const TRANSIENT_ERROR_CODES = new Set([
   'ENOTFOUND',
@@ -53,6 +54,7 @@ export class MonitorProcessor {
     private readonly icmpProbe: IcmpProbe,
     private readonly health: MonitorWorkerHealthService,
     private readonly notifications: NotificationService,
+    private readonly aggregator: HealthAggregationService,
   ) {}
 
   @Process(JOB_HEARTBEAT)
@@ -198,6 +200,14 @@ export class MonitorProcessor {
         actionUrl: `/dashboard/monitoring/${check.id}`,
       })
       .catch((e) => this.logger.warn(`notification dispatch failed: ${e.message}`));
+
+    // ADR-016 — recompute Site.healthStatus in real-time on every transition.
+    // The 5-min cron HealthSyncScheduler still runs as a safety net.
+    if (effectiveSiteId) {
+      this.aggregator
+        .recomputeSite(effectiveSiteId)
+        .catch((e) => this.logger.warn(`recomputeSite(${effectiveSiteId}) failed: ${e.message}`));
+    }
   }
 }
 
