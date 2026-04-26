@@ -22,8 +22,11 @@ const DEFAULT_ROLE_MAPPING: Record<string, string> = {
 /**
  * Translate a configured role label into a DelegationRight.
  * Accepts legacy User.role values (deprecated since v1.2) for backward compat.
+ *
+ * Exported (S4 — testability): used by oidc.strategy.spec.ts. Pure function,
+ * no side effects.
  */
-function normalizeRight(value: string | undefined): DelegationRight {
+export function normalizeRight(value: string | undefined): DelegationRight {
   if (!value) return 'READ';
   const upper = value.toUpperCase();
   switch (upper) {
