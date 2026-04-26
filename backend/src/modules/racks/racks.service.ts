@@ -6,6 +6,7 @@ import { MountEquipmentDto } from './dto/mount-equipment.dto';
 import { FilterRackDto } from './dto/filter-rack.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { StorageService } from '../../common/services/storage.service';
+import { validateMagicBytesForMimetype } from '../../common/utils/upload-security';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { createId } from '@paralleldrive/cuid2';
@@ -520,6 +521,9 @@ export class RacksService {
     dto: UploadAttachmentDto,
   ) {
     await this.findOne(rackId, tenantId);
+
+    // S1-closing (ADR-016 lot M) — magic-bytes defense in depth.
+    validateMagicBytesForMimetype(file.buffer, file.mimetype);
 
     const filename = this.storageService.generateFilename(file.originalname, 'attachment');
     const folder = `attachments/${tenantId}/racks/${rackId}`;

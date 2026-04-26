@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { attachmentFileFilter } from '../../common/utils/upload-security';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -192,7 +194,15 @@ export class TasksController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  // S1-closing (ADR-016 lot M) — limits + fileFilter were missing on this
+  // endpoint, leaving it as a DoS / arbitrary upload vector.
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB, same as assets/sites/racks
+      fileFilter: attachmentFileFilter,
+    }),
+  )
   uploadAttachment(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,

@@ -5,6 +5,7 @@ import { UpdateSiteDto } from './dto/update-site.dto';
 import { FilterSiteDto } from './dto/filter-site.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { StorageService } from '../../common/services/storage.service';
+import { validateMagicBytesForMimetype } from '../../common/utils/upload-security';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { NotificationEmitter } from '../notifications/notification-emitter';
 import { MonitorReactionsService } from '../monitoring/monitor-reactions.service';
@@ -569,6 +570,9 @@ export class SitesService {
     dto: UploadAttachmentDto,
   ) {
     await this.findOne(siteId, tenantId);
+
+    // S1-closing (ADR-016 lot M) — magic-bytes defense in depth.
+    validateMagicBytesForMimetype(file.buffer, file.mimetype);
 
     const filename = this.storageService.generateFilename(file.originalname, 'attachment');
     const folder = `attachments/${tenantId}/sites/${siteId}`;

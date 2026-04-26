@@ -6,6 +6,7 @@ import { FilterTaskDto } from './dto/filter-task.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { StorageService } from '../../common/services/storage.service';
+import { validateMagicBytesForMimetype } from '../../common/utils/upload-security';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { NotificationEmitter } from '../notifications/notification-emitter';
 import { UserNotificationService } from '../notifications/user-notification.service';
@@ -552,6 +553,11 @@ export class TasksService {
   ) {
     // Verify task exists
     await this.findOne(taskId, tenantId);
+
+    // S1-closing (ADR-016 lot M) — magic-bytes defense in depth: reject
+    // renamed executables faking an allowed mimetype before they ever
+    // reach storage.
+    validateMagicBytesForMimetype(file.buffer, file.mimetype);
 
     // Generate unique filename
     const filename = this.storageService.generateFilename(file.originalname, 'attachment');
