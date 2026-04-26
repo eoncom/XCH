@@ -57,6 +57,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { WarrantyBadge, WarrantyAlertBanner } from '@/components/ui/warranty-badge';
+import { MonitorConfigSection } from '@/components/monitoring/MonitorConfigSection';
 import Link from 'next/link';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -243,6 +244,7 @@ export default function AssetDetailPage({
           </TabsTrigger>
           <TabsTrigger value="documents">Documents ({assetAttachments.length})</TabsTrigger>
           <TabsTrigger value="qr">QR Code</TabsTrigger>
+          <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
           <TabsTrigger value="history">
             Historique{movements.length > 0 && ` (${movements.length})`}
           </TabsTrigger>
@@ -909,6 +911,15 @@ export default function AssetDetailPage({
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="monitoring">
+          <MonitorConfigSection
+            targetType="asset"
+            targetId={id}
+            defaultTarget={(asset as any).networkInfo?.ip || (asset as any).networkInfo?.hostname || ''}
+            readOnly={!canUpdate('assets', asset?.siteId)}
+          />
         </TabsContent>
 
         <TabsContent value="history">

@@ -49,6 +49,7 @@ import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds } from '@/lib/warranty';
 import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import { ConnectivityLinksManager } from '@/components/connectivity/ConnectivityLinksManager';
+import { MonitorConfigSection } from '@/components/monitoring/MonitorConfigSection';
 import { SdwanSection } from '@/components/sdwan/SdwanSection';
 
 const healthStatusColors = {
@@ -1750,6 +1751,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
             {/* SD-WAN — modèle structuré (phase 6.6) */}
             <SdwanSection siteId={id} canEdit={canUpdate('sites', id)} />
+
+            {/* Monitoring natif (ADR-014) — checks ICMP/HTTP/TCP rattachés au site */}
+            <MonitorConfigSection
+              targetType="site"
+              targetId={id}
+              readOnly={!canUpdate('sites', id)}
+            />
 
             {/* Health Breakdown (live enriched) */}
             {liveHealthComponents.length > 0 && (

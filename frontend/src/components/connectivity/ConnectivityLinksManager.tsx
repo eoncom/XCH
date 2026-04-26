@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ResyncExpenseButton } from '@/components/expenses/ResyncExpenseButton';
 import { GenerateExpenseToggle, type GenerateExpensePayload } from '@/components/expenses/GenerateExpenseToggle';
+import { MonitorConfigSection } from '@/components/monitoring/MonitorConfigSection';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -265,6 +266,16 @@ export function ConnectivityLinksManager({ siteId, initialLinks = [], canEdit }:
                 {link.notes && (
                   <p className="text-xs text-muted-foreground pt-1 border-t">{link.notes}</p>
                 )}
+                {/* Monitoring natif (ADR-014) — pre-rempli avec publicIp si dispo */}
+                <div className="pt-2 border-t">
+                  <MonitorConfigSection
+                    targetType="link"
+                    targetId={link.id}
+                    defaultTarget={link.publicIp || ''}
+                    compact
+                    readOnly={!canEdit}
+                  />
+                </div>
               </div>
             ))}
           </div>
