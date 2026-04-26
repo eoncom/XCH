@@ -37,6 +37,7 @@ import { SdwanModule } from './modules/sdwan/sdwan.module';
 import { ConsumptionModule } from './modules/consumption/consumption.module';
 import { SearchModule } from './modules/search/search.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { MonitorsApiModule } from './modules/monitoring/monitors-api.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { AuditModule } from './modules/audit/audit.module';
     ConsumptionModule,
     SearchModule,
     AuditModule,
+    MonitorsApiModule,
   ],
   providers: [
     {

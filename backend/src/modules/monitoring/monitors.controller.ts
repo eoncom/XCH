@@ -1,0 +1,103 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Request,
+  Query,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
+import { AuthRequest } from '../../types/request.interface';
+import { PermissionService } from '../../common/services/permission.service';
+import { MonitorsService } from './monitors.service';
+import {
+  CreateMonitorCheckDto,
+  UpdateMonitorCheckDto,
+  FilterMonitorCheckDto,
+  HistoryQueryDto,
+} from './dto/create-monitor-check.dto';
+
+@ApiTags('monitors')
+@Controller('monitors')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+export class MonitorsController {
+  constructor(
+    private readonly service: MonitorsService,
+    private readonly permissionService: PermissionService,
+  ) {}
+
+  @Post()
+  @RequireWrite()
+  @ApiOperation({ summary: 'Create a monitor check (ICMP / HTTP / TCP)' })
+  create(@Body() dto: CreateMonitorCheckDto, @Request() req: AuthRequest) {
+    return this.service.create(req.user.tenantId, req.user.userId, dto);
+  }
+
+  @Get()
+  @RequireRead()
+  @ApiOperation({ summary: 'List monitor checks (filter by siteId/assetId/linkId/kind/enabled)' })
+  async findAll(@Query() filters: FilterMonitorCheckDto, @Request() req: AuthRequest) {
+    const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
+      req.user.tenantId,
+      req.user.userId,
+    );
+    return this.service.findAll(req.user.tenantId, filters, accessibleSiteIds);
+  }
+
+  @Get(':id')
+  @RequireRead()
+  @ApiOperation({ summary: 'Get a monitor check' })
+  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.service.findOne(req.user.tenantId, id);
+  }
+
+  @Patch(':id')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Update a monitor check (cannot re-target — delete + recreate)' })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateMonitorCheckDto,
+    @Request() req: AuthRequest,
+  ) {
+    return this.service.update(req.user.tenantId, id, dto);
+  }
+
+  @Delete(':id')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Delete a monitor check (cascades httpConfig + results)' })
+  remove(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.service.remove(req.user.tenantId, id);
+  }
+
+  @Get(':id/history')
+  @RequireRead()
+  @ApiOperation({ summary: 'List recent results for a monitor (paginated, desc by checkedAt)' })
+  history(
+    @Param('id') id: string,
+    @Query() query: HistoryQueryDto,
+    @Request() req: AuthRequest,
+  ) {
+    return this.service.history(req.user.tenantId, id, query);
+  }
+
+  @Get(':id/summary')
+  @RequireRead()
+  @ApiOperation({ summary: 'Uptime % over 24h / 7d / 30d for a monitor' })
+  summary(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.service.summary(req.user.tenantId, id);
+  }
+
+  @Post(':id/run-now')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Enqueue an immediate probe (no retry, raw result)' })
+  runNow(@Param('id') id: string, @Request() req: AuthRequest) {
+    return this.service.runNow(req.user.tenantId, id);
+  }
+}

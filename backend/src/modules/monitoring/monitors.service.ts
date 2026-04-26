@@ -1,0 +1,357 @@
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { PrismaClient, MonitorKind, MonitorStatus, Prisma } from '@prisma/client';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
+import {
+  CreateMonitorCheckDto,
+  UpdateMonitorCheckDto,
+  FilterMonitorCheckDto,
+  HistoryQueryDto,
+} from './dto/create-monitor-check.dto';
+import { validateTarget } from './probes/target-validator';
+import { MONITOR_QUEUE, JOB_PROBE } from './monitor.scheduler';
+
+const CHECK_INCLUDE = {
+  httpConfig: true,
+  site: { select: { id: true, name: true, code: true, delegationId: true } },
+  asset: { select: { id: true, name: true, type: true, siteId: true } },
+  link: { select: { id: true, role: true, provider: true, siteId: true } },
+};
+
+@Injectable()
+export class MonitorsService {
+  constructor(
+    private prisma: PrismaClient,
+    @InjectQueue(MONITOR_QUEUE) private readonly queue: Queue,
+  ) {}
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CREATE
+  // ─────────────────────────────────────────────────────────────────────────
+  async create(tenantId: string, userId: string, dto: CreateMonitorCheckDto) {
+    this.requireExactlyOneTarget(dto);
+
+    if (dto.kind === MonitorKind.TCP && !dto.targetPort) {
+      throw new BadRequestException('TCP probes require a targetPort');
+    }
+    if (dto.kind !== MonitorKind.TCP && dto.targetPort != null) {
+      throw new BadRequestException('targetPort is only valid for kind=TCP');
+    }
+    if (dto.kind !== MonitorKind.HTTP && dto.httpConfig) {
+      throw new BadRequestException('httpConfig is only valid for kind=HTTP');
+    }
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { allowInternalMonitorTargets: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const validation = validateTarget(dto.target, dto.kind, tenant.allowInternalMonitorTargets);
+    if (!validation.ok) {
+      throw new BadRequestException(`Invalid target: ${validation.reason}`);
+    }
+
+    // Verify the parent entity exists and belongs to the tenant.
+    await this.assertParentTenantOwnership(tenantId, dto);
+
+    // Insert check + (optional) http config in a single transaction.
+    const created = await this.prisma.$transaction(async (tx) => {
+      const check = await tx.monitorCheck.create({
+        data: {
+          tenantId,
+          siteId: dto.siteId ?? null,
+          assetId: dto.assetId ?? null,
+          linkId: dto.linkId ?? null,
+          kind: dto.kind,
+          target: dto.target,
+          targetPort: dto.targetPort ?? null,
+          intervalSec: dto.intervalSec ?? 300,
+          enabled: dto.enabled ?? true,
+          createdById: userId,
+          // First probe runs at next scheduler tick (≤ 30s).
+          nextCheckAt: new Date(),
+        },
+      });
+      if (dto.kind === MonitorKind.HTTP && dto.httpConfig) {
+        await tx.monitorHttpConfig.create({
+          data: {
+            checkId: check.id,
+            method: dto.httpConfig.method,
+            expectedStatus: dto.httpConfig.expectedStatus,
+            expectedBodyContains: dto.httpConfig.expectedBodyContains,
+            followRedirects: dto.httpConfig.followRedirects,
+            timeoutMs: dto.httpConfig.timeoutMs,
+          },
+        });
+      }
+      return check;
+    });
+
+    return this.findOne(tenantId, created.id);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // READ
+  // ─────────────────────────────────────────────────────────────────────────
+  async findAll(
+    tenantId: string,
+    filters: FilterMonitorCheckDto,
+    accessibleSiteIds: string[] | null,
+  ) {
+    const where: Prisma.MonitorCheckWhereInput = { tenantId };
+    if (filters.siteId) where.siteId = filters.siteId;
+    if (filters.assetId) where.assetId = filters.assetId;
+    if (filters.linkId) where.linkId = filters.linkId;
+    if (filters.kind) where.kind = filters.kind;
+    if (filters.enabled !== undefined) where.enabled = filters.enabled;
+
+    if (accessibleSiteIds !== null) {
+      // Restrict to checks whose effective site is in accessibleSiteIds.
+      // Effective site = direct siteId, OR asset.siteId, OR link.siteId.
+      if (accessibleSiteIds.length === 0) return [];
+      where.OR = [
+        { siteId: { in: accessibleSiteIds } },
+        { asset: { siteId: { in: accessibleSiteIds } } },
+        { link: { siteId: { in: accessibleSiteIds } } },
+      ];
+    }
+
+    return this.prisma.monitorCheck.findMany({
+      where,
+      include: CHECK_INCLUDE,
+      orderBy: [{ enabled: 'desc' }, { lastCheckedAt: 'desc' }],
+    });
+  }
+
+  async findOne(tenantId: string, id: string) {
+    const check = await this.prisma.monitorCheck.findFirst({
+      where: { id, tenantId },
+      include: CHECK_INCLUDE,
+    });
+    if (!check) throw new NotFoundException('Monitor check not found');
+    return check;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // UPDATE
+  // ─────────────────────────────────────────────────────────────────────────
+  async update(tenantId: string, id: string, dto: UpdateMonitorCheckDto) {
+    const existing = await this.prisma.monitorCheck.findFirst({
+      where: { id, tenantId },
+      include: { httpConfig: true },
+    });
+    if (!existing) throw new NotFoundException('Monitor check not found');
+
+    // Don't allow re-targeting (changing siteId/assetId/linkId) — would break
+    // history continuity. To re-target, the user deletes and recreates.
+    if (
+      (dto.siteId && dto.siteId !== existing.siteId) ||
+      (dto.assetId && dto.assetId !== existing.assetId) ||
+      (dto.linkId && dto.linkId !== existing.linkId)
+    ) {
+      throw new BadRequestException(
+        'Cannot re-target an existing monitor check (delete + recreate instead)',
+      );
+    }
+
+    const newKind = dto.kind ?? existing.kind;
+    const newTarget = dto.target ?? existing.target;
+    const newPort = dto.targetPort !== undefined ? dto.targetPort : existing.targetPort;
+
+    if (newKind === MonitorKind.TCP && !newPort) {
+      throw new BadRequestException('TCP probes require a targetPort');
+    }
+    if (newKind !== MonitorKind.TCP && newPort != null) {
+      throw new BadRequestException('targetPort is only valid for kind=TCP');
+    }
+
+    if (dto.target || dto.kind) {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { allowInternalMonitorTargets: true },
+      });
+      const validation = validateTarget(newTarget, newKind, tenant!.allowInternalMonitorTargets);
+      if (!validation.ok) {
+        throw new BadRequestException(`Invalid target: ${validation.reason}`);
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.monitorCheck.update({
+        where: { id },
+        data: {
+          kind: dto.kind,
+          target: dto.target,
+          targetPort: dto.targetPort,
+          intervalSec: dto.intervalSec,
+          enabled: dto.enabled,
+        },
+      });
+
+      // Handle httpConfig upsert/delete based on new kind.
+      if (newKind === MonitorKind.HTTP && dto.httpConfig) {
+        await tx.monitorHttpConfig.upsert({
+          where: { checkId: id },
+          create: {
+            checkId: id,
+            method: dto.httpConfig.method,
+            expectedStatus: dto.httpConfig.expectedStatus,
+            expectedBodyContains: dto.httpConfig.expectedBodyContains,
+            followRedirects: dto.httpConfig.followRedirects,
+            timeoutMs: dto.httpConfig.timeoutMs,
+          },
+          update: {
+            method: dto.httpConfig.method,
+            expectedStatus: dto.httpConfig.expectedStatus,
+            expectedBodyContains: dto.httpConfig.expectedBodyContains,
+            followRedirects: dto.httpConfig.followRedirects,
+            timeoutMs: dto.httpConfig.timeoutMs,
+          },
+        });
+      } else if (newKind !== MonitorKind.HTTP && existing.httpConfig) {
+        await tx.monitorHttpConfig.delete({ where: { checkId: id } });
+      }
+    });
+
+    return this.findOne(tenantId, id);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // DELETE
+  // ─────────────────────────────────────────────────────────────────────────
+  async remove(tenantId: string, id: string) {
+    const existing = await this.prisma.monitorCheck.findFirst({
+      where: { id, tenantId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Monitor check not found');
+    // Cascade deletes httpConfig and results via Prisma onDelete: Cascade.
+    await this.prisma.monitorCheck.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // HISTORY
+  // ─────────────────────────────────────────────────────────────────────────
+  async history(tenantId: string, id: string, query: HistoryQueryDto) {
+    await this.assertCheckTenantOwnership(tenantId, id);
+    const limit = query.limit ?? 50;
+    const offset = query.offset ?? 0;
+    const where: Prisma.MonitorResultWhereInput = { checkId: id };
+    if (query.status && Object.values(MonitorStatus).includes(query.status as MonitorStatus)) {
+      where.status = query.status as MonitorStatus;
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.monitorResult.findMany({
+        where,
+        orderBy: { checkedAt: 'desc' },
+        skip: offset,
+        take: limit,
+      }),
+      this.prisma.monitorResult.count({ where }),
+    ]);
+    return { items, total, limit, offset };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SUMMARY (uptime % over rolling windows)
+  // ─────────────────────────────────────────────────────────────────────────
+  async summary(tenantId: string, id: string) {
+    await this.assertCheckTenantOwnership(tenantId, id);
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{ window: string; total: bigint; up: bigint }>
+    >(Prisma.sql`
+      SELECT '24h'  AS window,
+             COUNT(*)::bigint AS total,
+             COUNT(*) FILTER (WHERE status = 'UP')::bigint AS up
+        FROM "monitor_results"
+       WHERE "checkId" = ${id}
+         AND "checkedAt" > now() - interval '24 hours'
+      UNION ALL
+      SELECT '7d'   AS window,
+             COUNT(*)::bigint, COUNT(*) FILTER (WHERE status = 'UP')::bigint
+        FROM "monitor_results"
+       WHERE "checkId" = ${id}
+         AND "checkedAt" > now() - interval '7 days'
+      UNION ALL
+      SELECT '30d'  AS window,
+             COUNT(*)::bigint, COUNT(*) FILTER (WHERE status = 'UP')::bigint
+        FROM "monitor_results"
+       WHERE "checkId" = ${id}
+         AND "checkedAt" > now() - interval '30 days'
+    `);
+
+    const out: Record<string, { total: number; up: number; uptime: number | null }> = {};
+    for (const r of rows) {
+      const total = Number(r.total);
+      const up = Number(r.up);
+      out[r.window] = {
+        total,
+        up,
+        uptime: total === 0 ? null : Math.round((up / total) * 10000) / 100,
+      };
+    }
+    return out;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RUN NOW (immediate enqueue)
+  // ─────────────────────────────────────────────────────────────────────────
+  async runNow(tenantId: string, id: string) {
+    await this.assertCheckTenantOwnership(tenantId, id);
+    await this.queue.add(
+      JOB_PROBE,
+      { checkId: id },
+      {
+        removeOnComplete: true,
+        removeOnFail: 10,
+        attempts: 1, // No retry on manual run-now — we want the raw result.
+      },
+    );
+    return { enqueued: true };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Internal helpers
+  // ─────────────────────────────────────────────────────────────────────────
+  private requireExactlyOneTarget(dto: CreateMonitorCheckDto) {
+    const set = [dto.siteId, dto.assetId, dto.linkId].filter(Boolean).length;
+    if (set !== 1) {
+      throw new BadRequestException(
+        'Exactly one of siteId / assetId / linkId must be provided',
+      );
+    }
+  }
+
+  private async assertParentTenantOwnership(tenantId: string, dto: CreateMonitorCheckDto) {
+    if (dto.siteId) {
+      const site = await this.prisma.site.findFirst({
+        where: { id: dto.siteId, tenantId },
+        select: { id: true },
+      });
+      if (!site) throw new NotFoundException('Parent site not found');
+    } else if (dto.assetId) {
+      const asset = await this.prisma.asset.findFirst({
+        where: { id: dto.assetId, tenantId },
+        select: { id: true },
+      });
+      if (!asset) throw new NotFoundException('Parent asset not found');
+    } else if (dto.linkId) {
+      const link = await this.prisma.connectivityLink.findFirst({
+        where: { id: dto.linkId, tenantId },
+        select: { id: true },
+      });
+      if (!link) throw new NotFoundException('Parent connectivity link not found');
+    }
+  }
+
+  private async assertCheckTenantOwnership(tenantId: string, id: string) {
+    const exists = await this.prisma.monitorCheck.findFirst({
+      where: { id, tenantId },
+      select: { id: true },
+    });
+    if (!exists) throw new NotFoundException('Monitor check not found');
+  }
+}
