@@ -111,9 +111,47 @@ services:
     restart: unless-stopped
     # Startup handled by docker-entrypoint.sh:
     #   1. prisma generate
-    #   2. prisma migrate deploy
+    #   2. prisma db push + post-push.sql (CHECK constraints)
     #   3. node dist/main
     # Demo data is loaded via Setup Wizard (POST /api/setup/initialize)
+
+  # Backend Worker (NestJS — ADR-014 native monitoring probes)
+  # Same image as `backend`, different role: consumes BullMQ `monitor-check`
+  # queue and runs ICMP/HTTP/TCP probes. No HTTP, no port exposed.
+  backend-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: xch-backend-worker
+    env_file:
+      - ./backend/.env
+    environment:
+      XCH_MODE: worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    cap_add:
+      # Required for raw ICMP sockets. Falls back to TCP:80 if absent — see
+      # IcmpProbe self-test at boot.
+      - NET_RAW
+    healthcheck:
+      # File-touch healthcheck (ADR-014 §6) — verifies BOTH the scheduler
+      # (touched every 30s) AND the BullMQ consumer (touched every 60s via
+      # the worker-heartbeat self-ping job).
+      test:
+        - "CMD-SHELL"
+        - "[ $$(($$(date +%s) - $$(stat -c %Y /tmp/xch-worker-alive))) -lt 60 ] && [ $$(($$(date +%s) - $$(stat -c %Y /tmp/xch-worker-consumer-alive))) -lt 120 ]"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - xch-network
+    restart: unless-stopped
 
   # Frontend (Next.js)
   frontend:

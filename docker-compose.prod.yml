@@ -161,6 +161,52 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # ── Backend Worker (NestJS — ADR-014 native monitoring probes) ────────────
+  # Reuses the same image as `backend` (already built above).  Consumes the
+  # BullMQ `monitor-check` queue and runs ICMP/HTTP/TCP probes.  No HTTP,
+  # no port exposed.  Scale horizontally with `--scale backend-worker=N`
+  # if check volume grows past ~10k.
+  backend-worker:
+    image: xch-backend:v1.1.1
+    container_name: xch-backend-worker
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      XCH_MODE: worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    cap_add:
+      # Required for raw ICMP sockets. Falls back to TCP:80 if absent — see
+      # IcmpProbe self-test at boot.
+      - NET_RAW
+    healthcheck:
+      # File-touch (ADR-014 §6) — checks scheduler AND BullMQ consumer.
+      test:
+        - "CMD-SHELL"
+        - "[ $$(($$(date +%s) - $$(stat -c %Y /tmp/xch-worker-alive))) -lt 60 ] && [ $$(($$(date +%s) - $$(stat -c %Y /tmp/xch-worker-consumer-alive))) -lt 120 ]"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - xch-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # ── Frontend (Next.js) ────────────────────────────────────────────────────
   frontend:
     build:
