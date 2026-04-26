@@ -21,7 +21,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "db:push": "prisma db push --accept-data-loss",
+    "db:sync": "prisma db push --accept-data-loss && prisma db execute --file ./prisma/post-push.sql --schema ./prisma/schema.prisma"
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.1",
