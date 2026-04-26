@@ -35,12 +35,15 @@ model Tenant {
   // Configuration (JSON)
   config Json? @db.JsonB
 
-  // Native monitoring (ADR-014) — when true, MonitorCheck targets in RFC1918
-  // private ranges (10/8, 172.16/12, 192.168/16) are accepted at CRUD/probe-time.
-  // Loopback (127/8, ::1) and link-local (169.254/16) remain blocked regardless.
-  // Default false for safety on multi-tenant cloud deployments; pre-enabled by
-  // the seed for the on-prem pilot tenant (chantiers = LAN partout).
-  allowInternalMonitorTargets Boolean @default(false)
+  // SSRF policy (ADR-016, was ADR-014.allowInternalMonitorTargets) — when true,
+  // any operator-supplied URL/host (monitor probes, Teams webhook, future
+  // integrations) targeting RFC1918 private ranges (10/8, 172.16/12,
+  // 192.168/16) and IPv6 unique-local is accepted at CRUD AND probe-time.
+  // Loopback (127/8, ::1), link-local (169.254/16), multicast and 0/8 remain
+  // blocked regardless. Default false for safety on multi-tenant cloud
+  // deployments; pre-enabled by the seed for the on-prem pilot tenant
+  // (chantiers = LAN partout).
+  allowInternalNetworkTargets Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

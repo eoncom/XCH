@@ -1,13 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import axios, { AxiosInstance } from 'axios';
-import * as http from 'http';
-import * as https from 'https';
 import * as net from 'net';
 import { URL } from 'url';
 import { MonitorStatus, MonitorHttpConfig, HttpMethod } from '@prisma/client';
 import { ProbeResult } from './probe.types';
-import { makeSafeLookup } from './safe-lookup';
-import { isPrivateOrLoopback } from './target-validator';
+import { isPrivateOrLoopback, makeSafeAxios } from '../../../common/security/network';
 
 const DEFAULT_TIMEOUT_MS = 5000;
 
@@ -53,22 +49,9 @@ export class HttpProbe {
     const followRedirects = config?.followRedirects ?? true;
     const timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-    const lookup = makeSafeLookup(allowInternal) as any;
-    const httpAgent = new http.Agent({ lookup, keepAlive: false });
-    const httpsAgent = new https.Agent({ lookup, keepAlive: false });
-
-    const client: AxiosInstance = axios.create({
-      timeout: timeoutMs,
-      maxRedirects: followRedirects ? 5 : 0,
-      // We treat any HTTP status as a resolved response — UP/DOWN is decided
-      // below by comparing to expectedStatus, not by axios throwing.
-      validateStatus: () => true,
-      httpAgent,
-      httpsAgent,
-      // Prevent axios from buffering huge bodies into memory if a target
-      // sends MBs of HTML — 1 MB is enough for any sane health endpoint.
-      maxContentLength: 1024 * 1024,
-      maxBodyLength: 1024 * 1024,
+    const { client, cleanup } = makeSafeAxios(allowInternal, {
+      timeoutMs,
+      followRedirects,
     });
 
     const start = Date.now();
@@ -109,8 +92,7 @@ export class HttpProbe {
         error: `${code}: ${msg}`,
       };
     } finally {
-      httpAgent.destroy();
-      httpsAgent.destroy();
+      cleanup();
     }
   }
 }

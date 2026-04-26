@@ -43,11 +43,11 @@ export class MonitorsService {
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { allowInternalMonitorTargets: true },
+      select: { allowInternalNetworkTargets: true },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    const validation = validateTarget(dto.target, dto.kind, tenant.allowInternalMonitorTargets);
+    const validation = validateTarget(dto.target, dto.kind, tenant.allowInternalNetworkTargets);
     if (!validation.ok) {
       throw new BadRequestException(`Invalid target: ${validation.reason}`);
     }
@@ -169,9 +169,9 @@ export class MonitorsService {
     if (dto.target || dto.kind) {
       const tenant = await this.prisma.tenant.findUnique({
         where: { id: tenantId },
-        select: { allowInternalMonitorTargets: true },
+        select: { allowInternalNetworkTargets: true },
       });
-      const validation = validateTarget(newTarget, newKind, tenant!.allowInternalMonitorTargets);
+      const validation = validateTarget(newTarget, newKind, tenant!.allowInternalNetworkTargets);
       if (!validation.ok) {
         throw new BadRequestException(`Invalid target: ${validation.reason}`);
       }

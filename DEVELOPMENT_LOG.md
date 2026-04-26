@@ -6186,3 +6186,24 @@ feat(monitoring): S2 lot 9 — seed démo + reset coverage MonitorCheck
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-26
+
+**Date:** 2026-04-26 18:56:59
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 16
+- Frontend files modified: 0
+
+**Commit message:**
+```
+fix(monitoring): polish UX retours utilisateur (a/b/c/d + bonus site-level)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

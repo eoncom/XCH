@@ -1,5 +1,6 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { validateUrl } from '../../common/security/network';
 import {
   NotificationChannel,
   NotificationChannelsConfig,
@@ -52,6 +53,18 @@ export class NotificationConfigService {
    * Save notification config for a delegation (or global).
    */
   async saveConfig(tenantId: string, delegationId: string | null, data: { channels: any; events: any }) {
+    // ADR-016 — SSRF defense: reject Teams webhook URLs targeting LAN /
+    // loopback BEFORE persisting. Avoids storing a malicious URL that would
+    // be sent to repeatedly afterwards. Teams webhooks are always public
+    // (*.webhook.office.com), so allowInternal=false is the safe default.
+    const teamsUrl = data?.channels?.teams?.webhookUrl;
+    if (teamsUrl) {
+      const validation = validateUrl(teamsUrl, false);
+      if (!validation.ok) {
+        throw new BadRequestException(`Teams webhook URL rejected: ${validation.reason}`);
+      }
+    }
+
     // Find existing config
     const existing = await this.prisma.notificationConfig.findFirst({
       where: { tenantId, delegationId },

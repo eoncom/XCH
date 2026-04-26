@@ -2,8 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as net from 'net';
 import { MonitorStatus } from '@prisma/client';
 import { ProbeResult } from './probe.types';
-import { makeSafeLookup } from './safe-lookup';
-import { isPrivateOrLoopback } from './target-validator';
+import { isPrivateOrLoopback, makeSafeLookup } from '../../../common/security/network';
 
 const DEFAULT_TIMEOUT_MS = 5000;
 

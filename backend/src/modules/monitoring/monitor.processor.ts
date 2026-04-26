@@ -67,7 +67,7 @@ export class MonitorProcessor {
       where: { id: checkId },
       include: {
         httpConfig: true,
-        tenant: { select: { allowInternalMonitorTargets: true } },
+        tenant: { select: { allowInternalNetworkTargets: true } },
         // Loaded so we can resolve the effective siteId for notification routing.
         asset: { select: { siteId: true } },
         link: { select: { siteId: true } },
@@ -83,7 +83,7 @@ export class MonitorProcessor {
       return;
     }
 
-    const allowInternal = check.tenant.allowInternalMonitorTargets;
+    const allowInternal = check.tenant.allowInternalNetworkTargets;
     const result = await this.dispatchProbe(check, allowInternal);
 
     // Selective retry: if the error is transient AND we have attempts left,

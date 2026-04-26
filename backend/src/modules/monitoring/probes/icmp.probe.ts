@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as ping from 'ping';
 import { MonitorStatus } from '@prisma/client';
 import { ProbeResult } from './probe.types';
-import { isPrivateOrLoopback } from './target-validator';
+import { isPrivateOrLoopback } from '../../../common/security/network';
 import { TcpProbe } from './tcp.probe';
 
 const DEFAULT_TIMEOUT_SEC = 5;

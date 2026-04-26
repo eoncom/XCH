@@ -1434,9 +1434,9 @@ export class SeedService {
   private async enableInternalMonitorTargets(tenantId: string) {
     await this.prisma.tenant.update({
       where: { id: tenantId },
-      data: { allowInternalMonitorTargets: true },
+      data: { allowInternalNetworkTargets: true },
     });
-    this.logger.log('Tenant: allowInternalMonitorTargets = true (pilot LAN monitors)');
+    this.logger.log('Tenant: allowInternalNetworkTargets = true (pilot LAN monitors)');
   }
 
   /**

@@ -1,18 +1,19 @@
 import { lookup as defaultLookup, LookupOneOptions } from 'dns';
-import { isPrivateOrLoopback } from './target-validator';
+import { isPrivateOrLoopback } from './private-ip';
 
 /**
- * DNS-rebinding-proof lookup hook (ADR-014 §6 / §8).
+ * DNS-rebinding-proof lookup hook (ADR-016).
  *
  * Returned function is signature-compatible with Node's `dns.lookup` and can
- * be passed to `http.Agent({ lookup })`, `axios` HTTP agents, and
+ * be passed to `http.Agent({ lookup })`, axios HTTP agents, and
  * `net.createConnection({ lookup })`. It intercepts the moment Node turns a
  * hostname into an IP, validates the IP against the same allowlist used at
  * CRUD time, and aborts the connection BEFORE the socket opens if the IP is
- * forbidden. Node still handles SNI / Host header naturally.
+ * forbidden. Node still handles SNI / Host header naturally because we only
+ * intercept name resolution.
  *
- * Loopback (127/8, ::1) and link-local (169.254/16) are blocked regardless of
- * the `allowInternal` flag — see `target-validator.ts`.
+ * Loopback (127/8, ::1), link-local (169.254/16), multicast and 0/8 are
+ * blocked regardless of the `allowInternal` flag — see `private-ip.ts`.
  */
 export function makeSafeLookup(allowInternal: boolean) {
   return function safeLookup(

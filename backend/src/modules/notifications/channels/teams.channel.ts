@@ -2,11 +2,18 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { INotificationChannel } from './channel.interface';
 import { NotificationPayload, ChannelConfig } from '../notification-events';
+import { validateUrl, makeSafeAxios } from '../../../common/security/network';
 
 /**
  * MS Teams Webhook Channel.
  * Uses Incoming Webhook connector — no OAuth/App Registration needed.
  * Sends Adaptive Cards for rich formatting.
+ *
+ * Security (ADR-016) : the operator-supplied webhookUrl is validated against
+ * the SSRF allowlist BEFORE every send/test (allowInternal=false — Teams
+ * webhooks always target *.webhook.office.com, never LAN). The actual POST
+ * goes through `makeSafeAxios` so the resolved IP is re-checked at connect
+ * time via the safe-lookup hook — defeats DNS rebinding.
  */
 @Injectable()
 export class TeamsChannel implements INotificationChannel {
@@ -21,24 +28,14 @@ export class TeamsChannel implements INotificationChannel {
       return { success: false, error: 'No Teams webhook URL configured' };
     }
 
-    try {
-      const card = this.buildAdaptiveCard(payload);
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(card),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Teams webhook returned ${response.status}: ${text}`);
-      }
-
-      return { success: true };
-    } catch (err: any) {
-      this.logger.error(`Failed to send Teams notification`, err);
-      return { success: false, error: err.message };
+    const validation = validateUrl(webhookUrl, false);
+    if (!validation.ok) {
+      this.logger.warn(`Teams webhook URL rejected: ${validation.reason}`);
+      return { success: false, error: `Webhook URL rejected: ${validation.reason}` };
     }
+
+    const card = this.buildAdaptiveCard(payload);
+    return this.postCard(webhookUrl, card);
   }
 
   async test(config: ChannelConfig): Promise<{ success: boolean; error?: string }> {
@@ -47,61 +44,61 @@ export class TeamsChannel implements INotificationChannel {
       return { success: false, error: 'No Teams webhook URL configured' };
     }
 
-    try {
-      const card = {
-        type: 'message',
-        attachments: [
-          {
-            contentType: 'application/vnd.microsoft.card.adaptive',
-            content: {
-              $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-              type: 'AdaptiveCard',
-              version: '1.4',
-              body: [
-                {
-                  type: 'TextBlock',
-                  text: '✅ Test de notification XCH',
-                  weight: 'bolder',
-                  size: 'large',
-                  color: 'good',
-                },
-                {
-                  type: 'TextBlock',
-                  text: 'La configuration du webhook Teams est fonctionnelle.',
-                  wrap: true,
-                },
-              ],
-            },
+    const validation = validateUrl(webhookUrl, false);
+    if (!validation.ok) {
+      return { success: false, error: `Webhook URL rejected: ${validation.reason}` };
+    }
+
+    const card = {
+      type: 'message',
+      attachments: [
+        {
+          contentType: 'application/vnd.microsoft.card.adaptive',
+          content: {
+            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+            type: 'AdaptiveCard',
+            version: '1.4',
+            body: [
+              {
+                type: 'TextBlock',
+                text: '✅ Test de notification XCH',
+                weight: 'bolder',
+                size: 'large',
+                color: 'good',
+              },
+              {
+                type: 'TextBlock',
+                text: 'La configuration du webhook Teams est fonctionnelle.',
+                wrap: true,
+              },
+            ],
           },
-        ],
-      };
+        },
+      ],
+    };
 
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
+    return this.postCard(webhookUrl, card);
+  }
+
+  private async postCard(webhookUrl: string, card: any): Promise<{ success: boolean; error?: string }> {
+    const { client, cleanup } = makeSafeAxios(false, { timeoutMs: 10000 });
+    try {
+      const res = await client.post(webhookUrl, card, {
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(card),
       });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Teams webhook returned ${response.status}: ${text}`);
-      }
-
-      return { success: true };
+      if (res.status >= 200 && res.status < 300) return { success: true };
+      const body = typeof res.data === 'string' ? res.data : JSON.stringify(res.data ?? '');
+      return { success: false, error: `Teams webhook returned ${res.status}: ${body}` };
     } catch (err: any) {
+      this.logger.error(`Failed to send Teams notification: ${err.message}`);
       return { success: false, error: err.message };
+    } finally {
+      cleanup();
     }
   }
 
   private buildAdaptiveCard(payload: NotificationPayload): any {
     const frontendUrl = this.config.get('FRONTEND_URL', 'http://localhost:3001');
-    const categoryColors: Record<string, string> = {
-      tasks: 'accent',
-      sites: 'warning',
-      assets: 'attention',
-      monitoring: 'attention',
-      auth: 'good',
-    };
 
     const actions: any[] = [];
     if (payload.actionUrl) {
