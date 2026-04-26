@@ -2,8 +2,8 @@ import { IsString, IsOptional, IsObject, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ConfigIntegrationDto {
-  @ApiProperty({ enum: ['netbox', 'uptime_kuma'] })
-  @IsEnum(['netbox', 'uptime_kuma'])
+  @ApiProperty({ enum: ['netbox'] })
+  @IsEnum(['netbox'])
   provider: string;
 
   @ApiProperty()

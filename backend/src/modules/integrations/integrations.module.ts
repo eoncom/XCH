@@ -1,29 +1,20 @@
 import { Module } from '@nestjs/common';
 import { IntegrationsService } from './integrations.service';
 import { IntegrationsController } from './integrations.controller';
-import { MonitoringWebhookController } from './controllers/monitoring-webhook.controller';
-import { MonitoringWebhookService } from './services/monitoring-webhook.service';
 import { DatabaseModule } from '../../config/database.module';
 import { NetBoxProviderService } from './providers/netbox.provider';
-import { UptimeKumaProviderService } from './providers/uptime-kuma.provider';
-import { GatusProviderService } from './providers/gatus.provider';
-import { MonitoringProviderFactory } from './providers/monitoring-provider.factory';
-import { HealthAggregationService } from './health-aggregation.service';
-import { HealthSyncScheduler } from './health-sync.scheduler';
 import { IntegrationMappingModule } from './mapping/integration-mapping.module';
+
+/**
+ * Integrations module — NetBox today (asset / site sync).
+ * Monitoring providers (Gatus / Uptime Kuma) and the webhook controller
+ * were removed in ADR-016. Native monitoring lives in modules/monitoring/
+ * and owns its data end-to-end.
+ */
 @Module({
   imports: [DatabaseModule, IntegrationMappingModule],
-  controllers: [IntegrationsController, MonitoringWebhookController],
-  providers: [
-    IntegrationsService,
-    MonitoringWebhookService,
-    NetBoxProviderService,
-    UptimeKumaProviderService,
-    GatusProviderService,
-    MonitoringProviderFactory,
-    HealthAggregationService,
-    HealthSyncScheduler,
-  ],
-  exports: [IntegrationsService, HealthAggregationService, MonitoringProviderFactory, IntegrationMappingModule],
+  controllers: [IntegrationsController],
+  providers: [IntegrationsService, NetBoxProviderService],
+  exports: [IntegrationsService, IntegrationMappingModule],
 })
 export class IntegrationsModule {}
