@@ -18,11 +18,6 @@ export class UpsertSdwanConfigDto {
   @IsString()
   provider?: string | null;
 
-  @ApiPropertyOptional({ description: 'Uptime Kuma monitor name for the overlay as a whole' })
-  @IsOptional()
-  @IsString()
-  monitorName?: string | null;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

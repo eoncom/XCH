@@ -8,10 +8,8 @@ export enum NotificationEventType {
   TASK_STATUS_CHANGED = 'TASK_STATUS_CHANGED',
   SITE_STATUS_CHANGED = 'SITE_STATUS_CHANGED',
   ASSET_CRITICAL = 'ASSET_CRITICAL',
-  // Legacy (kept for Gatus / Uptime Kuma READ-only webhooks)
-  MONITORING_ALERT = 'MONITORING_ALERT',
-  // Native monitoring (ADR-014) — distinct from MONITORING_ALERT so each
-  // can be configured independently per delegation.
+  // Native monitoring (ADR-014 + ADR-016 — sole monitoring source after
+  // Gatus/Kuma removal).
   MONITOR_DOWN = 'MONITOR_DOWN',
   MONITOR_UP = 'MONITOR_UP',
   USER_INVITED = 'USER_INVITED',
@@ -54,12 +52,6 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventType, NotificationEven
     description: 'Notification quand un asset critique passe hors service',
     defaultChannels: [NotificationChannel.EMAIL, NotificationChannel.TEAMS],
     category: 'assets',
-  },
-  [NotificationEventType.MONITORING_ALERT]: {
-    label: 'Alerte monitoring (legacy Gatus/Kuma)',
-    description: 'Webhook entrant des providers READ-only (Gatus, Uptime Kuma)',
-    defaultChannels: [NotificationChannel.EMAIL, NotificationChannel.TEAMS],
-    category: 'monitoring',
   },
   [NotificationEventType.MONITOR_DOWN]: {
     label: 'Monitor en panne',

@@ -47,7 +47,8 @@ import Link from 'next/link';
 import type { Site, Asset, Rack, Task, FloorPlan, User as UserType } from '@/types';
 import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds } from '@/lib/warranty';
-import { useLiveMonitors } from '@/hooks/useLiveMonitors';
+// useLiveMonitors removed in ADR-016 — health breakdown is read directly
+// from site.metadata.healthBreakdown (written by HealthAggregationService).
 import { ConnectivityLinksManager } from '@/components/connectivity/ConnectivityLinksManager';
 import { SdwanSection } from '@/components/sdwan/SdwanSection';
 
@@ -1103,7 +1104,6 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const [assetStatusFilter, setAssetStatusFilter] = useState<string>('all');
   const warrantyThresholds = useWarrantyThresholds();
   const { canUpdate, canDelete } = usePermissions();
-  const { statusMap: monitorStatusMap, providerStatus: kumaStatus } = useLiveMonitors();
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -1145,20 +1145,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   });
   const assets: Asset[] = siteAssetsResponse?.data ?? [];
 
-  // Enrich health breakdown components with live monitor data
+  // Health breakdown — written by HealthAggregationService (ADR-016).
+  // Components reference per-entity aggregated MonitorCheck.lastStatus.
   const liveHealthComponents = useMemo(() => {
     const hb = site?.metadata?.healthBreakdown;
     if (!hb?.components?.length) return [];
-    return hb.components
-      // Filter out components without monitoring (no monitorName + unknown status)
-      .filter((comp: any) => comp.monitorName || (comp.status !== 'unknown'))
-      .map((comp: any) => {
-        if (comp.monitorName && monitorStatusMap[comp.monitorName] !== undefined) {
-          return { ...comp, status: monitorStatusMap[comp.monitorName] };
-        }
-        return comp;
-      });
-  }, [site?.metadata?.healthBreakdown, monitorStatusMap]);
+    return hb.components.filter((comp: any) => comp.status !== 'unknown');
+  }, [site?.metadata?.healthBreakdown]);
 
   // Load site racks
   const { data: racks = [] } = useQuery({
@@ -1471,25 +1464,15 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               const ws = getWarrantyStatus(a.warrantyEnd, warrantyThresholds);
               return ws === 'expired' || ws === 'expiring_critical' || ws === 'expiring_warning';
             });
-            // Monitoring info from assets (live status)
-            const monitoredAssets = assets.filter(a => (a.networkInfo as any)?.monitorName);
-            const liveDownAssets = monitoredAssets.filter(a => {
-              const mn = (a.networkInfo as any)?.monitorName;
-              const liveStatus = mn && monitorStatusMap[mn] !== undefined ? monitorStatusMap[mn] : (a.networkInfo as any)?.monitorStatus;
-              return liveStatus === 'down';
-            });
-            const liveUpAssets = monitoredAssets.length - liveDownAssets.length;
+            // ADR-016 — monitoring component count derives from
+            // healthBreakdown.components (assets with MonitorChecks contribute
+            // a 'asset' component, links a 'link' component). Worry only about
+            // whether we have anything to show.
+            const hasAnyMonitoring = liveHealthComponents.length > 0;
 
-            // Check if monitoring is actually configured for this site
-            const connectivity = site.connectivity as any;
-            const hasLinkMonitors = connectivity?.links?.some((l: any) => l.monitorName);
-            const hasSdwanMonitor = connectivity?.sdwan?.monitorName;
-            const hasAnyMonitoring = hasLinkMonitors || hasSdwanMonitor || monitoredAssets.length > 0;
-
-            const hasHealthData = liveHealthComponents.length > 0 || warrantyAlerts.length > 0 || hasAnyMonitoring;
+            const hasHealthData = liveHealthComponents.length > 0 || warrantyAlerts.length > 0;
             if (!hasHealthData && hs === 'UNKNOWN') return null;
-            // If healthStatus is stored but no monitoring is configured, don't show stale data
-            if (!hasAnyMonitoring && warrantyAlerts.length === 0 && liveHealthComponents.length === 0) return null;
+            if (!hasHealthData) return null;
 
             const borderColor = hs === 'CRITICAL' ? 'border-l-red-500' :
                                 hs === 'WARNING' ? 'border-l-amber-500' :
@@ -1549,32 +1532,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
-                  {/* Monitoring summary (live) */}
-                  {monitoredAssets.length > 0 && (
-                    <div className="flex items-center gap-3 text-sm">
-                      <Network className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Monitoring :</span>
-                      <span className="flex items-center gap-1">
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
-                        {liveUpAssets} UP
-                      </span>
-                      {liveDownAssets.length > 0 && (
-                        <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                          {liveDownAssets.length} DOWN
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {monitoredAssets.length === 0 && liveHealthComponents.length === 0 && kumaStatus !== 'connected' && (
-                    <p className="text-xs text-muted-foreground">
-                      {kumaStatus === 'not_configured'
-                        ? 'Monitoring non configuré. Configurez le monitoring dans Paramètres > Intégrations.'
-                        : kumaStatus === 'error'
-                        ? 'Erreur de connexion au monitoring.'
-                        : 'Aucun équipement monitoré.'}
-                    </p>
-                  )}
+                  {/* ADR-016 — per-asset live UP/DOWN summary intentionally
+                      removed here. Lot I will replace it with a summary fed
+                      by the native MonitorCheck data via /api/monitors. */}
 
                   {/* Warranty alerts — clickable banner */}
                   {warrantyAlerts.length > 0 && (

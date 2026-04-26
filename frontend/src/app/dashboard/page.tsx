@@ -6,7 +6,9 @@ import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
-import { useLiveMonitors } from '@/hooks/useLiveMonitors';
+// useLiveMonitors removed in ADR-016 — Site.healthStatus is now updated
+// in real-time by HealthAggregationService and surfaced via the existing
+// criticalHealthSites / warningHealthSites buckets.
 import { Badge } from '@/components/ui/badge';
 import { MapPin, Package, Server, CheckSquare, MapIcon, AlertTriangle, Clock, Ban, ArrowRight, ShieldAlert, Activity, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -56,9 +58,6 @@ export default function DashboardPage() {
     queryKey: ['tasks'],
     queryFn: () => tasksApi.getAll(),
   });
-
-  // Fetch Uptime Kuma monitors (non-blocking, silent failure)
-  const { monitors } = useLiveMonitors();
 
   // Calculate stats from real data
   const stats: DashboardStats = useMemo(() => {
@@ -139,10 +138,12 @@ export default function DashboardPage() {
     const warrantyWarning = assets.filter((a: Asset) => getWarrantyStatus(a.warrantyEnd, warrantyThresholds) === 'expiring_warning');
     const warrantyTotal = warrantyExpired.length + warrantyCritical.length + warrantyWarning.length;
 
-    // Monitoring/health alerts
+    // Monitoring/health alerts — Site.healthStatus is updated in real-time
+    // by HealthAggregationService (ADR-016). The downMonitorCount per-site
+    // metric was removed with the legacy useLiveMonitors hook; the
+    // healthIssue flag below already covers the same signal end-to-end.
     const criticalHealthSites = sites.filter((s: Site) => s.healthStatus === 'CRITICAL');
     const warningHealthSites = sites.filter((s: Site) => s.healthStatus === 'WARNING');
-    const downMonitors = monitors.filter((m) => m.status === 'down');
 
     // Group alerts by site for "sites en souffrance"
     const siteAlertMap = new Map<string, { blocked: Task[]; urgent: Task[]; overdue: Task[]; broken: Asset[]; warrantyExpired: Asset[]; warrantyCritical: Asset[]; warrantyWarning: Asset[]; downMonitorCount: number; healthIssue: boolean }>();
@@ -165,35 +166,6 @@ export default function DashboardPage() {
     // Include sites with CRITICAL/WARNING health status
     criticalHealthSites.forEach((s: Site) => { ensureSite(s.id); siteAlertMap.get(s.id)!.healthIssue = true; });
     warningHealthSites.forEach((s: Site) => { ensureSite(s.id); siteAlertMap.get(s.id)!.healthIssue = true; });
-
-    // Match DOWN monitors to sites via assets' monitorName
-    if (downMonitors.length > 0) {
-      const downMonitorNames = new Set(downMonitors.map(m => m.name));
-      assets.forEach((a: Asset) => {
-        const mn = (a.networkInfo as any)?.monitorName;
-        if (mn && downMonitorNames.has(mn) && a.siteId) {
-          ensureSite(a.siteId);
-          siteAlertMap.get(a.siteId)!.downMonitorCount++;
-        }
-      });
-      // Also check site connectivity links for DOWN monitors
-      sites.forEach((s: Site) => {
-        const connectivity = s.connectivity as any;
-        const links = connectivity?.links || connectivity?.v2?.links || [];
-        links.forEach((link: any) => {
-          if (link.monitorName && downMonitorNames.has(link.monitorName)) {
-            ensureSite(s.id);
-            siteAlertMap.get(s.id)!.downMonitorCount++;
-          }
-        });
-        // SD-WAN monitor
-        const sdwan = connectivity?.sdwan || connectivity?.v2?.sdwan;
-        if (sdwan?.monitorName && downMonitorNames.has(sdwan.monitorName)) {
-          ensureSite(s.id);
-          siteAlertMap.get(s.id)!.downMonitorCount++;
-        }
-      });
-    }
 
     // Sort sites by severity (health issue first, then total alert count)
     const sitesWithAlerts = Array.from(siteAlertMap.entries())

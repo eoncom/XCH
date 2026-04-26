@@ -54,13 +54,11 @@ export class SdwanService {
         siteId,
         enabled: dto.enabled ?? true,
         provider: dto.provider ?? null,
-        monitorName: dto.monitorName ?? null,
         notes: dto.notes ?? null,
       },
       update: {
         ...(dto.enabled !== undefined ? { enabled: dto.enabled } : {}),
         ...(dto.provider !== undefined ? { provider: dto.provider } : {}),
-        ...(dto.monitorName !== undefined ? { monitorName: dto.monitorName } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
       },
       include: CONFIG_INCLUDE,

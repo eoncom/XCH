@@ -1312,10 +1312,8 @@ model ConnectivityLink {
   assetId String?
   asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
 
-  // Monitoring — phase 6.5: moved from Site.connectivity.links[i].monitorName
-  // and .status when the legacy JSON was dropped.
-  monitorName String?
-  status      String? // 'up' | 'down' | 'unknown'
+  // ConnectivityLink.monitorName + status removed in ADR-016 — superseded by
+  // the FK MonitorCheck[] (read MonitorCheck.lastStatus via the relation).
 
   // Linked recurring expense (optional)
   expenseId String?
@@ -1352,8 +1350,8 @@ model SdwanConfig {
 
   enabled     Boolean @default(true)
   provider    String? // "Fortinet SD-WAN", "Cisco Meraki", "VeloCloud", ...
-  monitorName String? // External monitor key (Uptime Kuma) for the overlay as a whole
-  status      String? // 'up' | 'down' | 'degraded' | 'unknown' — cached by health aggregation
+  // SdwanConfig.monitorName + status removed in ADR-016 — overlay status is
+  // derived from the attached firewalls' MonitorChecks (HealthAggregationService).
   notes       String? @db.Text
 
   createdAt DateTime @default(now())

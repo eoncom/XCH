@@ -27,7 +27,6 @@ import { getWarrantyStatus, useWarrantyThresholds, type WarrantyStatus } from '@
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
 import { usePermissions } from '@/hooks/usePermissions';
-import { useLiveMonitors } from '@/hooks/useLiveMonitors';
 import Link from 'next/link';
 import { assetTypeLabels, assetStatusLabels, assetStatusColors } from '@/lib/asset-labels';
 import type { Asset, AssetType, AssetStatus } from '@/types';
@@ -38,14 +37,12 @@ export default function AssetsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [warrantyFilter, setWarrantyFilter] = useState<string>('all');
-  const [monitorFilter, setMonitorFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [sortField, setSortField] = useState<string>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const warrantyThresholds = useWarrantyThresholds();
-  const { statusMap } = useLiveMonitors();
   const { canCreate, canUpdate } = usePermissions();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -89,15 +86,7 @@ export default function AssetsPage() {
   const meta = response?.meta;
 
   // Reset page and selection when filters change
-  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [search, statusFilter, typeFilter, siteFilter, warrantyFilter, monitorFilter]);
-
-  // Resolve live monitoring status: live data takes priority over cached DB value
-  const getLiveStatus = (asset: Asset): 'up' | 'down' | 'unknown' | undefined => {
-    const mn = (asset.networkInfo as any)?.monitorName;
-    if (!mn) return undefined;
-    if (statusMap[mn] !== undefined) return statusMap[mn];
-    return (asset.networkInfo as any)?.monitorStatus;
-  };
+  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [search, statusFilter, typeFilter, siteFilter, warrantyFilter]);
 
   const filteredAssets = assets.filter((asset) => {
     const searchLower = search.toLowerCase();
@@ -126,15 +115,8 @@ export default function AssetsPage() {
         if (status !== 'none') return false;
       }
     }
-    // Monitoring filter (uses live status)
-    if (monitorFilter !== 'all') {
-      const net = asset.networkInfo as any;
-      const liveStatus = getLiveStatus(asset);
-      if (monitorFilter === 'up' && liveStatus !== 'up') return false;
-      if (monitorFilter === 'down' && liveStatus !== 'down') return false;
-      if (monitorFilter === 'monitored' && !net?.monitorName) return false;
-      if (monitorFilter === 'not_monitored' && net?.monitorName) return false;
-    }
+    // ADR-016: monitor filter on the assets page is removed — the dedicated
+    // /dashboard/monitoring page lists native monitors with rich filtering.
     return matchesSearch;
   });
 
@@ -193,10 +175,6 @@ export default function AssetsPage() {
         case 'warranty':
           valA = a.warrantyEnd || '';
           valB = b.warrantyEnd || '';
-          break;
-        case 'monitoring':
-          valA = getLiveStatus(a) || 'zzz';
-          valB = getLiveStatus(b) || 'zzz';
           break;
       }
       const cmp = String(valA).localeCompare(String(valB), 'fr', { numeric: true });
@@ -282,7 +260,7 @@ export default function AssetsPage() {
             {(() => {
               const serverTotal = meta?.total ?? assets.length;
               const clientFiltered = filteredAssets.length;
-              const showBoth = clientFiltered !== assets.length && (warrantyFilter !== 'all' || monitorFilter !== 'all');
+              const showBoth = clientFiltered !== assets.length && warrantyFilter !== 'all';
               return showBoth ? `${clientFiltered} visibles / ${serverTotal} au total` : serverTotal;
             })()}
             )
@@ -381,18 +359,6 @@ export default function AssetsPage() {
           </SelectContent>
         </Select>
 
-        <Select value={monitorFilter} onValueChange={setMonitorFilter}>
-          <SelectTrigger>
-            <SelectValue placeholder="Monitoring" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tout monitoring</SelectItem>
-            <SelectItem value="up">🟢 En ligne (UP)</SelectItem>
-            <SelectItem value="down">🔴 Hors ligne (DOWN)</SelectItem>
-            <SelectItem value="monitored">📡 Supervisé</SelectItem>
-            <SelectItem value="not_monitored">— Non supervisé</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       {/* Assets List/Grid */}
@@ -431,15 +397,11 @@ export default function AssetsPage() {
                   <TableHead className="hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort('warranty')}>
                     <span className="inline-flex items-center">Garantie<SortIcon field="warranty" /></span>
                   </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('monitoring')}>
-                    <span className="inline-flex items-center">Monitoring<SortIcon field="monitoring" /></span>
-                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sortedAssets?.map((asset) => {
-                  const liveStatus = getLiveStatus(asset);
                   return (
                     <TableRow key={asset.id} className={selectedIds.has(asset.id) ? 'bg-muted/50' : ''}>
                       {canUpdate('assets') && (
@@ -477,17 +439,6 @@ export default function AssetsPage() {
                       <TableCell className="hidden lg:table-cell">
                         <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
                       </TableCell>
-                      <TableCell>
-                        {(asset.networkInfo as any)?.monitorName ? (
-                          <span className="inline-flex items-center gap-1 text-xs" title={(asset.networkInfo as any)?.monitorName}>
-                            <span className={`inline-block w-2 h-2 rounded-full ${
-                              liveStatus === 'up' ? 'bg-green-500' :
-                              liveStatus === 'down' ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
-                            }`} />
-                            {liveStatus === 'up' ? 'UP' : liveStatus === 'down' ? 'DOWN' : '?'}
-                          </span>
-                        ) : <span className="text-muted-foreground text-xs">—</span>}
-                      </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" asChild>
                           <Link href={`/dashboard/assets/${asset.id}`}>Voir</Link>
@@ -503,7 +454,6 @@ export default function AssetsPage() {
       ) : (
         <div data-testid="assets-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredAssets?.map((asset) => {
-            const liveStatus = getLiveStatus(asset);
             return (
               <Card
                 key={asset.id}
@@ -538,24 +488,6 @@ export default function AssetsPage() {
                           {assetStatusLabels[asset.status]}
                         </Badge>
                         <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
-                        {(asset.networkInfo as any)?.monitorName && (
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                              liveStatus === 'up'
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                : liveStatus === 'down'
-                                ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                            }`}
-                            title={`Monitoring: ${(asset.networkInfo as any)?.monitorName}`}
-                          >
-                            <span className={`inline-block w-1.5 h-1.5 rounded-full ${
-                              liveStatus === 'up' ? 'bg-green-500' :
-                              liveStatus === 'down' ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
-                            }`} />
-                            {liveStatus === 'up' ? 'UP' : liveStatus === 'down' ? 'DOWN' : '?'}
-                          </span>
-                        )}
                       </div>
                     </div>
                   </CardHeader>
@@ -594,7 +526,7 @@ export default function AssetsPage() {
         <EmptyState
           icon={Package}
           title="Aucun équipement trouvé"
-          description={search || statusFilter !== 'all' || typeFilter !== 'all' || siteFilter !== 'all' || warrantyFilter !== 'all' || monitorFilter !== 'all'
+          description={search || statusFilter !== 'all' || typeFilter !== 'all' || siteFilter !== 'all' || warrantyFilter !== 'all'
             ? 'Essayez de modifier vos filtres de recherche'
             : undefined}
         />

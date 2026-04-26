@@ -287,8 +287,8 @@ export class SitesService {
         provider: l.provider,
         ref: l.contractRef || l.publicIp,
         bandwidth: l.bandwidthDown ? `${l.bandwidthDown}${l.bandwidthUp ? `/${l.bandwidthUp}` : ''} Mbps` : undefined,
-        monitorName: l.monitorName,
-        status: l.status,
+        // monitorName + status removed in ADR-016 — read MonitorCheck.lastStatus
+        // via the link.monitorChecks relation instead.
       })),
       cutProcedure: site.cutProcedure,
     };

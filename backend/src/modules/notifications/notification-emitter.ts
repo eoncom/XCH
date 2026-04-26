@@ -124,32 +124,9 @@ export class NotificationEmitter {
     });
   }
 
-  // ──────────────── Monitoring events ────────────────
-
-  async monitoringAlert(params: {
-    tenantId: string;
-    site: { id: string; name: string };
-    oldHealth: string;
-    newHealth: string;
-  }) {
-    await this.notificationService.dispatch({
-      tenantId: params.tenantId,
-      eventType: NotificationEventType.MONITORING_ALERT,
-      scopeContext: { siteId: params.site.id },
-      entity: { type: 'site', id: params.site.id, name: params.site.name },
-      title: `🔴 Alerte monitoring : ${params.site.name}`,
-      bodyHtml: `<p>Le health status du site <strong>${params.site.name}</strong> est passé de <code>${params.oldHealth}</code> à <code>${params.newHealth}</code>.</p>`,
-      bodyText: `Alerte monitoring : ${params.site.name} — ${params.oldHealth} → ${params.newHealth}`,
-      actionUrl: `/dashboard/sites/${params.site.id}`,
-      metadata: {
-        details: {
-          'Site': params.site.name,
-          'Ancien état': params.oldHealth,
-          'Nouvel état': params.newHealth,
-        },
-      },
-    });
-  }
+  // Monitoring events — MONITOR_DOWN / MONITOR_UP are dispatched directly
+  // by the worker's MonitorProcessor (ADR-014 §7). The legacy
+  // monitoringAlert(MONITORING_ALERT) helper was removed in ADR-016.
 
   // ──────────────── Auth events ────────────────
 

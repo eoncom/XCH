@@ -517,36 +517,11 @@ export default function AssetDetailPage({
             );
           })()}
 
-          {/* Monitoring Status — conditional */}
+          {/* ADR-016 — legacy networkInfo.monitorName "Monitoring" card removed.
+              Real-time monitoring lives under the dedicated Monitoring tab
+              (MonitorConfigSection). */}
           {(() => {
-            const net = asset.networkInfo as any;
-            if (!net?.monitorName) return null;
-            const statusColor = net.monitorStatus === 'up' ? 'bg-green-500' : net.monitorStatus === 'down' ? 'bg-red-500' : 'bg-gray-400';
-            const statusLabel = net.monitorStatus === 'up' ? 'En ligne' : net.monitorStatus === 'down' ? 'Hors service' : 'Inconnu';
-            return (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ShieldAlert className="h-5 w-5" />
-                    Monitoring
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-3">
-                    <span className={`inline-block w-3 h-3 rounded-full ${statusColor}`} />
-                    <div>
-                      <p className="font-medium">{statusLabel}</p>
-                      <p className="text-sm text-muted-foreground">Sonde : {net.monitorName}</p>
-                    </div>
-                  </div>
-                  {net.lastHealthCheck && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Dernière vérification : {new Date(net.lastHealthCheck).toLocaleString('fr-FR')}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            );
+            return null as any;
           })()}
 
           {/* Admin Links — conditional */}
