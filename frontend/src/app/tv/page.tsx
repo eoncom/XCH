@@ -32,7 +32,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { sitesApi } from '@/lib/api/sites';
-import { useLiveMonitors } from '@/hooks/useLiveMonitors';
+// useLiveMonitors removed in ADR-016 — native monitoring is always
+// available (no provider connectivity to display).
 import { healthStatusLabels, healthStatusColors, monitorStatusLabels } from '@/lib/status-labels';
 import dynamic from 'next/dynamic';
 import type { Site } from '@/types';
@@ -103,7 +104,8 @@ export default function TVDashboardPage() {
     refetchInterval: refreshInterval * 1000,
   });
 
-  const { providerStatus } = useLiveMonitors();
+  // ADR-016 — native monitoring is always available (worker container).
+  const providerStatus = 'connected' as const;
 
   // Toggle fullscreen
   const toggleFullscreen = useCallback(() => {

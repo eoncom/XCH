@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { tasksApi } from '@/lib/api/tasks';
-import { useLiveMonitors } from '@/hooks/useLiveMonitors';
+import { monitorsApi } from '@/lib/api/monitors';
 import {
   ArrowLeft, ArrowRight, WifiOff, Activity, Ban, AlertTriangle, Clock,
   Package, ShieldAlert, CheckCircle2, MapPin, Filter,
@@ -38,16 +38,38 @@ export default function AlertsPage() {
   const { data: sites = [] } = useQuery({ queryKey: ['sites'], queryFn: sitesApi.getAll });
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: () => assetsApi.getAll() });
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks'], queryFn: () => tasksApi.getAll() });
-  const { monitors } = useLiveMonitors();
+  const { data: monitors = [] } = useQuery({
+    queryKey: ['monitors', 'all'],
+    queryFn: () => monitorsApi.getAll(),
+    refetchInterval: 30_000,
+  });
 
   const warrantyThresholds = useWarrantyThresholds();
 
-  // v1.4 — Alert computation delegated to the shared computeAlerts() so the count
-  // matches the Dashboard widget and the /tv dashboard exactly. Everything below
-  // this useMemo block is presentation-only (filters, grouping by site, rendering).
+  // ADR-016 — flatten native monitors → NativeDownMonitor for computeAlerts.
+  const downMonitors = useMemo(
+    () =>
+      monitors
+        .filter((m) => m.enabled && m.lastStatus === 'DOWN')
+        .map((m) => ({
+          id: m.id,
+          displayName:
+            m.asset?.name ??
+            (m.link ? `Lien ${m.link.role.toLowerCase()} ${m.link.provider}` : null) ??
+            m.site?.name ??
+            m.target,
+          target: m.target,
+          siteId: m.siteId ?? m.asset?.siteId ?? m.link?.siteId ?? null,
+          siteName: m.site?.name ?? m.asset?.site?.name ?? m.link?.site?.name ?? null,
+          assetName: m.asset?.name ?? null,
+          linkProvider: m.link?.provider ?? null,
+        })),
+    [monitors],
+  );
+
   const alertData = useMemo(() => {
-    return computeAlerts({ sites, assets, tasks, monitors, warrantyThresholds });
-  }, [sites, assets, tasks, monitors, warrantyThresholds]);
+    return computeAlerts({ sites, assets, tasks, downMonitors, warrantyThresholds });
+  }, [sites, assets, tasks, downMonitors, warrantyThresholds]);
 
   // Filtered items
   const filtered = filter === 'all' ? alertData.items : alertData.items.filter(i => i.category === filter);

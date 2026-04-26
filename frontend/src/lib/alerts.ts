@@ -39,31 +39,35 @@ export interface AlertItem {
   badgeColor: string;
 }
 
-export interface MonitorSummary {
-  id: string;
-  name: string;
-  status: 'up' | 'down' | 'degraded' | 'unknown';
-}
-
 export interface AlertsBucket {
   items: AlertItem[];
   counts: Record<AlertCategory, number>;
   total: number;
 }
 
+export interface NativeDownMonitor {
+  id: string;
+  displayName: string;
+  target: string;
+  siteId: string | null;
+  siteName: string | null;
+  assetName: string | null;
+  linkProvider: string | null;
+}
+
 export interface ComputeAlertsInput {
   sites: Site[];
   assets: Asset[];
   tasks: Task[];
-  monitors: MonitorSummary[];
+  /** Native monitors currently DOWN (already filtered + flattened by caller). */
+  downMonitors: NativeDownMonitor[];
   warrantyThresholds: WarrantyThresholds;
 }
 
 export function computeAlerts(input: ComputeAlertsInput): AlertsBucket {
-  const { sites, assets, tasks, monitors, warrantyThresholds } = input;
+  const { sites, assets, tasks, downMonitors, warrantyThresholds } = input;
   const now = new Date();
 
-  const downMonitors = monitors.filter((m) => m.status === 'down');
   const criticalSites = sites.filter((s) => s.healthStatus === 'CRITICAL');
   const warningSites = sites.filter((s) => s.healthStatus === 'WARNING');
 
@@ -87,44 +91,26 @@ export function computeAlerts(input: ComputeAlertsInput): AlertsBucket {
     (a) => getWarrantyStatus(a.warrantyEnd, warrantyThresholds) === 'expiring_warning',
   );
 
-  const monitorToSite = new Map<string, Site>();
-  const monitorToAsset = new Map<string, Asset>();
-  assets.forEach((a) => {
-    const mn = (a.networkInfo as any)?.monitorName;
-    if (mn) {
-      monitorToAsset.set(mn, a);
-      if (a.siteId) {
-        const site = sites.find((s) => s.id === a.siteId);
-        if (site) monitorToSite.set(mn, site);
-      }
-    }
-  });
-  sites.forEach((s) => {
-    const connectivity = (s as any).connectivity as any;
-    const links = connectivity?.links || connectivity?.v2?.links || [];
-    links.forEach((link: any) => {
-      if (link.monitorName) monitorToSite.set(link.monitorName, s);
-    });
-    const sdwan = connectivity?.sdwan || connectivity?.v2?.sdwan;
-    if (sdwan?.monitorName) monitorToSite.set(sdwan.monitorName, s);
-  });
-
   const items: AlertItem[] = [];
 
+  // ADR-016 — native monitors already carry their entity context via
+  // FK relations (siteId / assetId / linkId). No more monitorName mapping.
   downMonitors.forEach((m) => {
-    const site = monitorToSite.get(m.name);
-    const asset = monitorToAsset.get(m.name);
     items.push({
       id: `monitor-${m.id}`,
       category: 'monitoring',
       severity: 'critical',
-      title: m.name,
-      subtitle: asset ? `Équipement: ${asset.name || asset.manufacturer || ''}` : 'Lien / Connectivité',
-      siteName: site?.name,
-      siteId: site?.id,
-      link: '/dashboard/monitoring',
+      title: m.displayName,
+      subtitle: m.assetName
+        ? `Équipement: ${m.assetName}`
+        : m.linkProvider
+        ? `Lien : ${m.linkProvider}`
+        : 'Surveillance',
+      siteName: m.siteName ?? undefined,
+      siteId: m.siteId ?? undefined,
+      link: `/dashboard/monitoring/${m.id}`,
       iconKey: 'WifiOff',
-      badgeLabel: 'DOWN',
+      badgeLabel: 'Indisponible',
       badgeColor: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900 dark:text-red-200',
     });
   });

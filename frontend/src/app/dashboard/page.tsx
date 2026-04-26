@@ -6,6 +6,7 @@ import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
 import { tasksApi } from '@/lib/api/tasks';
+import { monitorsApi } from '@/lib/api/monitors';
 // useLiveMonitors removed in ADR-016 — Site.healthStatus is now updated
 // in real-time by HealthAggregationService and surfaced via the existing
 // criticalHealthSites / warningHealthSites buckets.
@@ -57,6 +58,12 @@ export default function DashboardPage() {
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => tasksApi.getAll(),
+  });
+
+  const { data: nativeMonitors = [] } = useQuery({
+    queryKey: ['monitors', 'all'],
+    queryFn: () => monitorsApi.getAll(),
+    refetchInterval: 30_000,
   });
 
   // Calculate stats from real data
@@ -178,9 +185,23 @@ export default function DashboardPage() {
       .filter(s => s.total > 0)
       .sort((a, b) => b.total - a.total);
 
-    // v1.4: totalAlerts uses the shared computeAlerts() so the Dashboard widget
-    // count matches /alerts and /tv exactly (with the same dedup rules).
-    const summary = computeAlerts({ sites, assets, tasks, monitors, warrantyThresholds });
+    // ADR-016: native monitors flattened to NativeDownMonitor for computeAlerts.
+    const downMonitors = nativeMonitors
+      .filter((m) => m.enabled && m.lastStatus === 'DOWN')
+      .map((m) => ({
+        id: m.id,
+        displayName:
+          m.asset?.name ??
+          (m.link ? `Lien ${m.link.role.toLowerCase()} ${m.link.provider}` : null) ??
+          m.site?.name ??
+          m.target,
+        target: m.target,
+        siteId: m.siteId ?? m.asset?.siteId ?? m.link?.siteId ?? null,
+        siteName: m.site?.name ?? m.asset?.site?.name ?? m.link?.site?.name ?? null,
+        assetName: m.asset?.name ?? null,
+        linkProvider: m.link?.provider ?? null,
+      }));
+    const summary = computeAlerts({ sites, assets, tasks, downMonitors, warrantyThresholds });
 
     return {
       blockedTasks,
@@ -197,7 +218,7 @@ export default function DashboardPage() {
       totalAlerts: summary.total,
       sitesWithAlerts,
     };
-  }, [tasks, assets, sites, monitors, warrantyThresholds]);
+  }, [tasks, assets, sites, nativeMonitors, warrantyThresholds]);
 
   const isLoading = sitesLoading || assetsLoading || racksLoading || tasksLoading;
   const router = useRouter();
