@@ -31,11 +31,16 @@ export class SeedService {
     // v1.4 post-audit enrichments (ADR-010 + phase 4 demo coverage)
     await this.createAccessOverrides(tenantId, users, sites);
     await this.createDemoBudgetsAndExpenses(tenantId, delegations, sites, users);
-    await this.createConnectivityLinksForDemo(tenantId, sites, assets);
+    const links = await this.createConnectivityLinksForDemo(tenantId, sites, assets);
     await this.createSdwanConfigsForDemo(tenantId, sites, assets);
     await this.createDemoUserNotifications(tenantId, users, tasks, sites);
     await this.seedDemoAuditLogEntries(tenantId, users, sites, assets);
     await this.applyTechnicianCustomAppearance(tenantId);
+
+    // ADR-014 — pilot tenant runs on-prem (LAN), allow RFC1918 monitors.
+    // Loopback & link-local stay blocked even with this flag (target-validator).
+    await this.enableInternalMonitorTargets(tenantId);
+    await this.createMonitorChecksForDemo(tenantId, sites, links);
 
     this.logger.log(`Demo data loaded successfully`);
 
@@ -80,6 +85,11 @@ export class SeedService {
       await this.prisma.rack.deleteMany({ where: { tenantId } });
       // v1.3+/v1.4 tables — wipe before deleting parents
       await this.prisma.userNotification.deleteMany({ where: { tenantId } });
+      // ADR-014 native monitoring — results cascade from checks but wipe
+      // explicitly for self-documenting reset order.
+      await this.prisma.monitorResult.deleteMany({ where: { check: { tenantId } } });
+      await this.prisma.monitorHttpConfig.deleteMany({ where: { check: { tenantId } } });
+      await this.prisma.monitorCheck.deleteMany({ where: { tenantId } });
       await this.prisma.connectivityLink.deleteMany({ where: { tenantId } });
       // SD-WAN (phase 6.6) — firewalls cascade from assets/configs but wipe
       // explicitly for self-documenting reset order.
@@ -1115,7 +1125,8 @@ export class SeedService {
    * now the canonical place where connectivity data lives (the legacy
    * Site.connectivity JSON column was dropped).
    */
-  private async createConnectivityLinksForDemo(tenantId: string, sites: any[], assets: any[]) {
+  private async createConnectivityLinksForDemo(tenantId: string, sites: any[], assets: any[]): Promise<any[]> {
+    const created: any[] = [];
     // Which piece of on-site equipment actually terminates the PRIMARY link.
     // Empty/missing asset → link stays asset-less (fine, the FK is nullable).
     const primaryAssetBySite: Record<string, string /* serialNumber */ | undefined> = {
@@ -1186,7 +1197,7 @@ export class SeedService {
         }
       }
 
-      await this.prisma.connectivityLink.create({
+      const link = await this.prisma.connectivityLink.create({
         data: {
           tenantId,
           siteId: site.id,
@@ -1201,10 +1212,12 @@ export class SeedService {
           assetId,
         },
       });
+      created.push(link);
       count++;
     }
 
     this.logger.log(`ConnectivityLinks seeded (${count} rows)`);
+    return created;
   }
 
   /**
@@ -1406,5 +1419,94 @@ export class SeedService {
       },
     });
     this.logger.log('Technicien demo user: custom appearance applied (dark + compact)');
+  }
+
+  /**
+   * ADR-014 — pre-enable RFC1918 monitoring for the on-prem pilot tenant.
+   * Loopback (127/8, ::1) and link-local (169.254/16) remain blocked by
+   * target-validator regardless of this flag.
+   */
+  private async enableInternalMonitorTargets(tenantId: string) {
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { allowInternalMonitorTargets: true },
+    });
+    this.logger.log('Tenant: allowInternalMonitorTargets = true (pilot LAN monitors)');
+  }
+
+  /**
+   * ADR-014 — three demo monitor checks so the pilot has visible data
+   * within the first scheduler tick (≤ 30s):
+   *  - Site DEF-01 → ICMP ping 1.1.1.1 (Cloudflare DNS, public, always UP).
+   *  - Site DEF-01 PRIMARY link → HTTP GET https://example.com/ (RFC2606,
+   *    always 200, perfect smoke target).
+   *  - Site SAC-01 → TCP github.com:443 (validates HTTPS reachability).
+   */
+  private async createMonitorChecksForDemo(
+    tenantId: string,
+    sites: any[],
+    links: any[],
+  ) {
+    const def = sites.find((s) => s.code === 'DEF-01');
+    const sac = sites.find((s) => s.code === 'SAC-01');
+    const defPrimary = def
+      ? links.find((l) => l.siteId === def.id && l.role === 'PRIMARY')
+      : undefined;
+
+    const seeds: Array<any> = [];
+    if (def) {
+      seeds.push({
+        tenantId,
+        siteId: def.id,
+        kind: 'ICMP',
+        target: '1.1.1.1',
+        intervalSec: 300,
+        enabled: true,
+        nextCheckAt: new Date(),
+      });
+    }
+    if (defPrimary) {
+      seeds.push({
+        tenantId,
+        linkId: defPrimary.id,
+        kind: 'HTTP',
+        target: 'https://example.com/',
+        intervalSec: 300,
+        enabled: true,
+        nextCheckAt: new Date(),
+      });
+    }
+    if (sac) {
+      seeds.push({
+        tenantId,
+        siteId: sac.id,
+        kind: 'TCP',
+        target: 'github.com',
+        targetPort: 443,
+        intervalSec: 300,
+        enabled: true,
+        nextCheckAt: new Date(),
+      });
+    }
+
+    let httpConfigsCreated = 0;
+    for (const data of seeds) {
+      const check = await this.prisma.monitorCheck.create({ data });
+      if (data.kind === 'HTTP') {
+        await this.prisma.monitorHttpConfig.create({
+          data: {
+            checkId: check.id,
+            method: 'GET',
+            expectedStatus: 200,
+            followRedirects: true,
+            timeoutMs: 5000,
+          },
+        });
+        httpConfigsCreated++;
+      }
+    }
+    this.logger.log(
+      `MonitorChecks seeded: ${seeds.length} (incl. ${httpConfigsCreated} HTTP configs)`,
+    );
   }
 }
