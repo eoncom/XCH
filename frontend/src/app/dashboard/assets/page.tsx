@@ -17,6 +17,9 @@ import {
 import { ExportMenu } from '@/components/ui/export-menu';
 import { CardSkeleton } from '@/components/ui/skeleton';
 import { assetsApi } from '@/lib/api/assets';
+import { monitorsApi, MonitorStatus } from '@/lib/api/monitors';
+import { organizationApi } from '@/lib/api/organization';
+import { sitesApi } from '@/lib/api/sites';
 import { SiteFilterSelect } from '@/components/ui/grouped-site-selector';
 import { exportAssets } from '@/lib/export-utils';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
@@ -36,6 +39,7 @@ export default function AssetsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
+  const [delegationFilter, setDelegationFilter] = useState<string>('all');
   const [warrantyFilter, setWarrantyFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [page, setPage] = useState(1);
@@ -85,8 +89,68 @@ export default function AssetsPage() {
   const assets = response?.data ?? [];
   const meta = response?.meta;
 
+  // ADR-016 — fetch delegations for the filter dropdown.
+  const { data: delegationsList = [] } = useQuery({
+    queryKey: ['delegations', 'for-filter'],
+    queryFn: () => organizationApi.getDelegations(false),
+  });
+
+  // ADR-016 — fetch sites to map siteId → delegationId for the cascade
+  // filter (selecting a delegation narrows the site list to that delegation
+  // AND filters assets server-side via the resolved siteIds).
+  const { data: sitesData } = useQuery({
+    queryKey: ['sites', 'for-filter'],
+    queryFn: () => sitesApi.getAll({ pageSize: 200 } as any),
+  });
+  const sitesList = useMemo(() => {
+    const arr = (sitesData as any)?.data ?? sitesData ?? [];
+    return Array.isArray(arr) ? arr : [];
+  }, [sitesData]);
+
+  const delegationSiteIds = useMemo(() => {
+    if (delegationFilter === 'all') return null;
+    return new Set(
+      sitesList
+        .filter((s: any) => s.delegationId === delegationFilter)
+        .map((s: any) => s.id),
+    );
+  }, [delegationFilter, sitesList]);
+
+  // ADR-016 — fetch all monitor checks once + index by assetId for the
+  // status pill column. Only counts enabled checks; takes the worst case
+  // (DOWN > UP > UNKNOWN) when an asset has multiple checks.
+  const { data: monitors = [] } = useQuery({
+    queryKey: ['monitors', 'all'],
+    queryFn: () => monitorsApi.getAll(),
+    refetchInterval: 30_000,
+  });
+  const assetMonitorStatus = useMemo(() => {
+    const map = new Map<string, { status: MonitorStatus; count: number }>();
+    for (const m of monitors) {
+      if (!m.enabled || !m.assetId) continue;
+      const cur = map.get(m.assetId);
+      const incoming = m.lastStatus;
+      if (!cur) {
+        map.set(m.assetId, { status: incoming, count: 1 });
+      } else {
+        // Worst case wins: DOWN > UNKNOWN > UP.
+        const next =
+          cur.status === 'DOWN' || incoming === 'DOWN'
+            ? 'DOWN'
+            : cur.status === 'UNKNOWN' || incoming === 'UNKNOWN'
+            ? 'UNKNOWN'
+            : 'UP';
+        map.set(m.assetId, { status: next, count: cur.count + 1 });
+      }
+    }
+    return map;
+  }, [monitors]);
+
   // Reset page and selection when filters change
-  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [search, statusFilter, typeFilter, siteFilter, warrantyFilter]);
+  useEffect(() => {
+    setPage(1);
+    setSelectedIds(new Set());
+  }, [search, statusFilter, typeFilter, siteFilter, delegationFilter, warrantyFilter]);
 
   const filteredAssets = assets.filter((asset) => {
     const searchLower = search.toLowerCase();
@@ -115,8 +179,19 @@ export default function AssetsPage() {
         if (status !== 'none') return false;
       }
     }
-    // ADR-016: monitor filter on the assets page is removed — the dedicated
-    // /dashboard/monitoring page lists native monitors with rich filtering.
+    // ADR-016 — délégation filter (client-side) : asset.delegationId
+    // direct, ou via asset.siteId → siteToDelegation map.
+    if (delegationFilter !== 'all') {
+      const ownDeleg = (asset as any).delegationId;
+      if (ownDeleg) {
+        if (ownDeleg !== delegationFilter) return false;
+      } else if (asset.siteId) {
+        // Inherit from site if asset has no own delegationId
+        if (!delegationSiteIds || !delegationSiteIds.has(asset.siteId)) return false;
+      } else {
+        return false;
+      }
+    }
     return matchesSearch;
   });
 
@@ -342,6 +417,22 @@ export default function AssetsPage() {
           </SelectContent>
         </Select>
 
+        <Select value={delegationFilter} onValueChange={setDelegationFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Délégation" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes délégations</SelectItem>
+            {(delegationsList ?? [])
+              .filter((d: any) => d.isActive)
+              .map((d: any) => (
+                <SelectItem key={d.id} value={d.id}>
+                  {d.name}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+
         <SiteFilterSelect value={siteFilter} onValueChange={setSiteFilter} />
 
         <Select value={warrantyFilter} onValueChange={setWarrantyFilter}>
@@ -397,6 +488,7 @@ export default function AssetsPage() {
                   <TableHead className="hidden lg:table-cell cursor-pointer select-none" onClick={() => toggleSort('warranty')}>
                     <span className="inline-flex items-center">Garantie<SortIcon field="warranty" /></span>
                   </TableHead>
+                  <TableHead className="hidden lg:table-cell">Surveillance</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -438,6 +530,9 @@ export default function AssetsPage() {
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">
                         <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <MonitorPill state={assetMonitorStatus.get(asset.id)} />
                       </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" asChild>
@@ -488,6 +583,7 @@ export default function AssetsPage() {
                           {assetStatusLabels[asset.status]}
                         </Badge>
                         <WarrantyBadge warrantyEnd={asset.warrantyEnd} />
+                        <MonitorPill state={assetMonitorStatus.get(asset.id)} />
                       </div>
                     </div>
                   </CardHeader>
@@ -580,5 +676,44 @@ export default function AssetsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Pill compact affichant le statut agrégé des MonitorChecks d'un asset
+ * (ADR-016). Worst-case wins : DOWN > UNKNOWN > UP. Pas de pill si 0 check.
+ */
+function MonitorPill({ state }: { state: { status: MonitorStatus; count: number } | undefined }) {
+  if (!state) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const label =
+    state.status === 'UP'
+      ? 'Disponible'
+      : state.status === 'DOWN'
+      ? 'Indisponible'
+      : 'En attente';
+  const className =
+    state.status === 'UP'
+      ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300'
+      : state.status === 'DOWN'
+      ? 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300'
+      : 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300';
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${className}`}
+      title={`${state.count} surveillance${state.count > 1 ? 's' : ''}`}
+    >
+      <span
+        className={`inline-block w-1.5 h-1.5 rounded-full ${
+          state.status === 'UP'
+            ? 'bg-green-500'
+            : state.status === 'DOWN'
+            ? 'bg-red-500 animate-pulse'
+            : 'bg-amber-400'
+        }`}
+      />
+      {label}
+    </span>
   );
 }

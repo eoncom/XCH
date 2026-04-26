@@ -6417,3 +6417,24 @@ fix(monitoring): ADR-016 lot D follow-up — useLiveMonitors leftover dans alert
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-26
+
+**Date:** 2026-04-26 22:51:38
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix(monitoring): retours UX session ADR-016 (6 bugs/améliorations)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

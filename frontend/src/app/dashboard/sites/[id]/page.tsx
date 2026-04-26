@@ -1128,6 +1128,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const { data: site, isLoading } = useQuery<Site>({
     queryKey: ['site', id],
     queryFn: () => sitesApi.getById(id),
+    // ADR-016 follow-up — refetch every 30s so Site.healthStatus +
+    // metadata.healthBreakdown stay in sync with the worker without F5.
+    refetchInterval: 30_000,
   });
 
   // Load assets linked to this site.

@@ -119,20 +119,35 @@ export class MonitorsService {
     accessibleSiteIds: string[] | null,
   ) {
     const where: Prisma.MonitorCheckWhereInput = { tenantId };
-    if (filters.siteId) where.siteId = filters.siteId;
     if (filters.assetId) where.assetId = filters.assetId;
     if (filters.linkId) where.linkId = filters.linkId;
     if (filters.kind) where.kind = filters.kind;
     if (filters.enabled !== undefined) where.enabled = filters.enabled;
 
+    // ADR-016 follow-up — `?siteId=X` is inclusive: catches checks attached
+    // directly to the site, AND via an asset on that site, AND via a link
+    // on that site (the "Surveillance" tab on a site detail page would
+    // otherwise miss most of its monitors).
+    const siteFilter = filters.siteId;
+
+    // Combine site filter and access scoping: both contribute the same
+    // OR-on-effective-site shape. Intersect with the user's accessible scope.
+    let effectiveSiteIds: string[] | null = null;
     if (accessibleSiteIds !== null) {
-      // Restrict to checks whose effective site is in accessibleSiteIds.
-      // Effective site = direct siteId, OR asset.siteId, OR link.siteId.
       if (accessibleSiteIds.length === 0) return [];
+      effectiveSiteIds = siteFilter
+        ? accessibleSiteIds.filter((id) => id === siteFilter)
+        : accessibleSiteIds;
+      if (effectiveSiteIds.length === 0) return [];
+    } else if (siteFilter) {
+      effectiveSiteIds = [siteFilter];
+    }
+
+    if (effectiveSiteIds !== null) {
       where.OR = [
-        { siteId: { in: accessibleSiteIds } },
-        { asset: { siteId: { in: accessibleSiteIds } } },
-        { link: { siteId: { in: accessibleSiteIds } } },
+        { siteId: { in: effectiveSiteIds } },
+        { asset: { siteId: { in: effectiveSiteIds } } },
+        { link: { siteId: { in: effectiveSiteIds } } },
       ];
     }
 
