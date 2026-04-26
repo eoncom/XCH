@@ -157,10 +157,17 @@ set_env() {
 }
 
 healthcheck() {
+    # Backend XCH n'a pas encore de /api/health global (TODO post-S1).
+    # On considère que le serveur est UP si une requête arrive à toucher
+    # un handler (n'importe quel HTTP code, même 4xx). Connection refused
+    # ou timeout = down.
     local url="$1" timeout="${2:-60}"
     local elapsed=0
     while [ $elapsed -lt $timeout ]; do
-        if curl -fsS -o /dev/null -m 3 "$url"; then
+        local code
+        code="$(curl -s -o /dev/null -w '%{http_code}' -m 3 "$url" 2>/dev/null || echo '000')"
+        # 000 = connect failed / timeout, sinon serveur a répondu
+        if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
             return 0
         fi
         sleep 2
@@ -268,8 +275,9 @@ phase_a() {
         echo "  [dry-run] docker compose up -d --no-deps --force-recreate minio backend gatus"
     fi
 
-    echo -e "\n${BLUE}6. Healthcheck /api/health${NC}"
-    local HEALTH_URL="http://localhost:3002/api/health"
+    echo -e "\n${BLUE}6. Healthcheck backend (any HTTP code)${NC}"
+    # Tape /api/auth/login en GET — renvoie 404 ou 405 si serveur up, 000 si down
+    local HEALTH_URL="http://localhost:3002/api/auth/login"
     if [ "$DRY_RUN" = false ]; then
         echo -n "  attente "
         if healthcheck "$HEALTH_URL" 90; then
