@@ -16,6 +16,8 @@ import {
   JOB_PROBE,
   JOB_HEARTBEAT,
 } from './monitor.scheduler';
+import { NotificationService } from '../notifications/notification.service';
+import { NotificationEventType } from '../notifications/notification-events';
 
 const TRANSIENT_ERROR_CODES = new Set([
   'ENOTFOUND',
@@ -50,6 +52,7 @@ export class MonitorProcessor {
     private readonly httpProbe: HttpProbe,
     private readonly icmpProbe: IcmpProbe,
     private readonly health: MonitorWorkerHealthService,
+    private readonly notifications: NotificationService,
   ) {}
 
   @Process(JOB_HEARTBEAT)
@@ -62,7 +65,13 @@ export class MonitorProcessor {
     const { checkId } = job.data;
     const check = await this.prisma.monitorCheck.findUnique({
       where: { id: checkId },
-      include: { httpConfig: true, tenant: { select: { allowInternalMonitorTargets: true } } },
+      include: {
+        httpConfig: true,
+        tenant: { select: { allowInternalMonitorTargets: true } },
+        // Loaded so we can resolve the effective siteId for notification routing.
+        asset: { select: { siteId: true } },
+        link: { select: { siteId: true } },
+      },
     });
 
     if (!check) {
@@ -86,7 +95,7 @@ export class MonitorProcessor {
       throw new Error(result.error || 'transient');
     }
 
-    await this.persistResult(check.id, check.lastStatus, result);
+    await this.persistResult(check, result);
   }
 
   @OnQueueFailed()
@@ -117,15 +126,25 @@ export class MonitorProcessor {
   }
 
   private async persistResult(
-    checkId: string,
-    previousStatus: MonitorStatus,
+    check: {
+      id: string;
+      tenantId: string;
+      kind: MonitorKind;
+      target: string;
+      targetPort: number | null;
+      siteId: string | null;
+      asset: { siteId: string | null } | null;
+      link: { siteId: string } | null;
+      lastStatus: MonitorStatus;
+    },
     result: ProbeResult,
   ): Promise<void> {
+    const previousStatus = check.lastStatus;
     const now = new Date();
     await this.prisma.$transaction([
       this.prisma.monitorResult.create({
         data: {
-          checkId,
+          checkId: check.id,
           status: result.status,
           responseMs: result.responseMs,
           error: result.error,
@@ -133,7 +152,7 @@ export class MonitorProcessor {
         },
       }),
       this.prisma.monitorCheck.update({
-        where: { id: checkId },
+        where: { id: check.id },
         data: {
           lastCheckedAt: now,
           lastStatus: result.status,
@@ -141,14 +160,54 @@ export class MonitorProcessor {
       }),
     ]);
 
-    // Status transition detection — notification dispatch added in lot 8.
-    if (previousStatus !== result.status && previousStatus !== MonitorStatus.UNKNOWN) {
-      this.logger.log(
-        `check ${checkId} transition ${previousStatus} → ${result.status}` +
-          (result.error ? ` (${result.error})` : ''),
-      );
+    if (previousStatus === result.status || previousStatus === MonitorStatus.UNKNOWN) {
+      // No transition (or first probe ever) — nothing to alert on.
+      return;
     }
+
+    this.logger.log(
+      `check ${check.id} transition ${previousStatus} → ${result.status}` +
+        (result.error ? ` (${result.error})` : ''),
+    );
+
+    // Dispatch notification on UP↔DOWN transition. The router resolves the
+    // delegation from siteId and applies the inherited config (ADR-009).
+    const isDown = result.status === MonitorStatus.DOWN;
+    const eventType = isDown ? NotificationEventType.MONITOR_DOWN : NotificationEventType.MONITOR_UP;
+    const targetDisplay = check.targetPort ? `${check.target}:${check.targetPort}` : check.target;
+    const effectiveSiteId =
+      check.siteId ?? check.asset?.siteId ?? check.link?.siteId ?? undefined;
+
+    const title = isDown
+      ? `Monitor DOWN — ${targetDisplay}`
+      : `Monitor rétabli — ${targetDisplay}`;
+    const reason = result.error ? `\n\nRaison : ${result.error}` : '';
+    const bodyText = `Le monitor ${check.kind} sur "${targetDisplay}" est passé ${previousStatus} → ${result.status}.${reason}`;
+    const bodyHtml = `<p>Le monitor <strong>${check.kind}</strong> sur <code>${escapeHtml(targetDisplay)}</code> est passé <strong>${previousStatus} → ${result.status}</strong>.</p>${result.error ? `<p>Raison : <code>${escapeHtml(result.error)}</code></p>` : ''}`;
+
+    // Fire-and-forget — NotificationService never throws (graceful degradation).
+    this.notifications
+      .dispatch({
+        tenantId: check.tenantId,
+        eventType,
+        scopeContext: { siteId: effectiveSiteId },
+        entity: { type: 'monitor', id: check.id, name: targetDisplay },
+        title,
+        bodyHtml,
+        bodyText,
+        actionUrl: `/dashboard/monitoring/${check.id}`,
+      })
+      .catch((e) => this.logger.warn(`notification dispatch failed: ${e.message}`));
   }
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function isTransientError(result: ProbeResult): boolean {
