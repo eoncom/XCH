@@ -437,23 +437,23 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Monitoring micro-bar */}
-            {monitors.length > 0 && (
+            {/* Surveillance micro-bar (ADR-016 — native monitors) */}
+            {nativeMonitors.length > 0 && (
               <div className="flex items-center gap-3 mt-3 pt-2 border-t text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  {monitors.filter(m => m.status === 'up').length} UP
+                  {nativeMonitors.filter((m) => m.enabled && m.lastStatus === 'UP').length} disponibles
                 </span>
-                {monitors.filter(m => m.status === 'down').length > 0 && (
+                {nativeMonitors.filter((m) => m.enabled && m.lastStatus === 'DOWN').length > 0 && (
                   <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                    {monitors.filter(m => m.status === 'down').length} DOWN
+                    {nativeMonitors.filter((m) => m.enabled && m.lastStatus === 'DOWN').length} indisponibles
                   </span>
                 )}
-                {monitors.filter(m => m.status === 'unknown').length > 0 && (
+                {nativeMonitors.filter((m) => m.enabled && m.lastStatus === 'UNKNOWN').length > 0 && (
                   <span className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-                    {monitors.filter(m => m.status === 'unknown').length} inconnu{monitors.filter(m => m.status === 'unknown').length > 1 ? 's' : ''}
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    {nativeMonitors.filter((m) => m.enabled && m.lastStatus === 'UNKNOWN').length} en attente
                   </span>
                 )}
               </div>

@@ -12,24 +12,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
   Activity,
@@ -46,9 +29,8 @@ import {
   monitorsApi,
   MonitorCheck,
   MonitorKind,
-  CreateMonitorCheckData,
-  UpdateMonitorCheckData,
 } from '@/lib/api/monitors';
+import { MonitorDialog } from './MonitorDialog';
 
 type TargetType = 'site' | 'asset' | 'link';
 
@@ -70,13 +52,6 @@ const KIND_ICONS: Record<MonitorKind, typeof Wifi> = {
   HTTP: Globe,
   TCP: Network,
 };
-
-const INTERVAL_PRESETS = [
-  { label: '1 min', value: 60 },
-  { label: '5 min', value: 300 },
-  { label: '15 min', value: 900 },
-  { label: '1 h', value: 3600 },
-];
 
 export function MonitorConfigSection({
   targetType,
@@ -261,12 +236,20 @@ export function MonitorConfigSection({
         )}
       </CardContent>
 
-      {dialogMode.mode !== 'closed' && (
+      {dialogMode.mode === 'create' && (
         <MonitorDialog
+          mode="create"
           targetType={targetType}
           targetId={targetId}
           defaultTarget={defaultTarget}
-          editing={dialogMode.mode === 'edit' ? dialogMode.check : null}
+          onClose={() => setDialogMode({ mode: 'closed' })}
+          onSaved={invalidate}
+        />
+      )}
+      {dialogMode.mode === 'edit' && (
+        <MonitorDialog
+          mode="edit"
+          editing={dialogMode.check}
           onClose={() => setDialogMode({ mode: 'closed' })}
           onSaved={invalidate}
         />
@@ -285,200 +268,8 @@ function StatusBadge({ status }: { status: MonitorCheck['lastStatus'] }) {
   return <Badge variant="secondary">—</Badge>;
 }
 
-interface MonitorDialogProps {
-  targetType: TargetType;
-  targetId: string;
-  defaultTarget?: string;
-  editing: MonitorCheck | null;
-  onClose: () => void;
-  onSaved: () => void;
-}
-
-function MonitorDialog({
-  targetType,
-  targetId,
-  defaultTarget,
-  editing,
-  onClose,
-  onSaved,
-}: MonitorDialogProps) {
-  const isEdit = editing !== null;
-  const [kind, setKind] = useState<MonitorKind>(editing?.kind ?? 'ICMP');
-  const [target, setTarget] = useState(editing?.target ?? defaultTarget ?? '');
-  const [targetPort, setTargetPort] = useState<string>(
-    editing?.targetPort != null ? String(editing.targetPort) : '80',
-  );
-  const [intervalSec, setIntervalSec] = useState<number>(editing?.intervalSec ?? 300);
-  const [expectedStatus, setExpectedStatus] = useState<string>(
-    editing?.httpConfig?.expectedStatus != null ? String(editing.httpConfig.expectedStatus) : '200',
-  );
-
-  const createMutation = useMutation({
-    mutationFn: (data: CreateMonitorCheckData) => monitorsApi.create(data),
-    onSuccess: () => {
-      toast.success('Monitor créé');
-      onSaved();
-      onClose();
-    },
-    onError: (err: any) =>
-      toast.error(err?.data?.message || err.message || 'Échec de la création'),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateMonitorCheckData }) =>
-      monitorsApi.update(id, data),
-    onSuccess: () => {
-      toast.success('Monitor mis à jour');
-      onSaved();
-      onClose();
-    },
-    onError: (err: any) =>
-      toast.error(err?.data?.message || err.message || 'Échec de la mise à jour'),
-  });
-
-  const submit = () => {
-    if (!target.trim()) {
-      toast.error('Cible obligatoire');
-      return;
-    }
-    let port: number | undefined;
-    if (kind === 'TCP') {
-      port = Number(targetPort);
-      if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        toast.error('Port TCP invalide (1-65535)');
-        return;
-      }
-    }
-    const expectedStatusNum = kind === 'HTTP'
-      ? (Number.isInteger(Number(expectedStatus)) ? Number(expectedStatus) : 200)
-      : undefined;
-
-    if (isEdit) {
-      const data: UpdateMonitorCheckData = {
-        kind,
-        target: target.trim(),
-        intervalSec,
-        targetPort: port ?? null as any,
-      };
-      if (kind === 'HTTP') {
-        data.httpConfig = { expectedStatus: expectedStatusNum };
-      }
-      updateMutation.mutate({ id: editing!.id, data });
-    } else {
-      const payload: CreateMonitorCheckData = {
-        kind,
-        target: target.trim(),
-        intervalSec,
-        siteId: targetType === 'site' ? targetId : undefined,
-        assetId: targetType === 'asset' ? targetId : undefined,
-        linkId: targetType === 'link' ? targetId : undefined,
-      };
-      if (port != null) payload.targetPort = port;
-      if (kind === 'HTTP') payload.httpConfig = { expectedStatus: expectedStatusNum };
-      createMutation.mutate(payload);
-    }
-  };
-
-  const pending = createMutation.isPending || updateMutation.isPending;
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{isEdit ? 'Modifier le monitor' : 'Nouveau monitor'}</DialogTitle>
-          <DialogDescription>
-            Surveillance active de l'objet — choisissez le type de sonde adapté.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <Label>Type de probe</Label>
-            <Select value={kind} onValueChange={(v) => setKind(v as MonitorKind)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ICMP">ICMP (ping)</SelectItem>
-                <SelectItem value="HTTP">HTTP / HTTPS</SelectItem>
-                <SelectItem value="TCP">TCP (port)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>
-              Cible{' '}
-              <span className="text-xs text-muted-foreground">
-                ({kind === 'HTTP' ? 'URL complète' : 'host ou IP'})
-              </span>
-            </Label>
-            <Input
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              placeholder={
-                kind === 'HTTP' ? 'https://example.com/health' : 'example.com'
-              }
-            />
-          </div>
-
-          {kind === 'TCP' && (
-            <div>
-              <Label>Port TCP</Label>
-              <Input
-                type="number"
-                min={1}
-                max={65535}
-                value={targetPort}
-                onChange={(e) => setTargetPort(e.target.value)}
-              />
-            </div>
-          )}
-
-          {kind === 'HTTP' && (
-            <div>
-              <Label>Code HTTP attendu</Label>
-              <Input
-                type="number"
-                min={100}
-                max={599}
-                value={expectedStatus}
-                onChange={(e) => setExpectedStatus(e.target.value)}
-              />
-            </div>
-          )}
-
-          <div>
-            <Label>Intervalle</Label>
-            <Select
-              value={String(intervalSec)}
-              onValueChange={(v) => setIntervalSec(Number(v))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {INTERVAL_PRESETS.map((p) => (
-                  <SelectItem key={p.value} value={String(p.value)}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Annuler
-          </Button>
-          <Button onClick={submit} disabled={pending}>
-            {pending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-            {isEdit ? 'Enregistrer' : 'Créer'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// MonitorDialog extracted to ./MonitorDialog.tsx (ADR-016 follow-up) so it
+// can be reused by the central /dashboard/monitoring/[id] detail page.
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers

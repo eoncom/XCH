@@ -6396,3 +6396,24 @@ fix(security): ADR-016 lot M — S1 closing residue (Multer Tasks + magic-bytes 
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-26
+
+**Date:** 2026-04-26 21:33:53
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 6
+
+**Commit message:**
+```
+fix(monitoring): ADR-016 lot D follow-up — useLiveMonitors leftover dans alerts/tv/dashboard
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

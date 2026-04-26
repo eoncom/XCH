@@ -21,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Activity, Globe, Network, Wifi, Search, Loader2, ListFilter, ChevronRight } from 'lucide-react';
 import { sitesApi } from '@/lib/api/sites';
+import { organizationApi } from '@/lib/api/organization';
 import { monitorsApi, MonitorCheck, MonitorKind, MonitorStatus } from '@/lib/api/monitors';
 
 const KIND_ICONS: Record<MonitorKind, typeof Wifi> = {
@@ -63,6 +64,7 @@ export function NativeMonitorsList({ siteId, defaultGroupBy = 'site' }: Props) {
   const [statusFilter, setStatusFilter] = useState<'all' | MonitorStatus>('all');
   const [kindFilter, setKindFilter] = useState<'all' | MonitorKind>('all');
   const [siteFilter, setSiteFilter] = useState<string>(siteId ?? 'all');
+  const [delegationFilter, setDelegationFilter] = useState<string>('all');
 
   // Hydrate persisted preferences (skip when caller pinned a siteId).
   useEffect(() => {
@@ -92,7 +94,27 @@ export function NativeMonitorsList({ siteId, defaultGroupBy = 'site' }: Props) {
     enabled: !siteId, // only fetch when we need the dropdown
   });
 
+  const { data: delegations } = useQuery({
+    queryKey: ['delegations', 'for-filter'],
+    queryFn: () => organizationApi.getDelegations(false),
+    enabled: !siteId,
+  });
+
   const list: MonitorCheck[] = data ?? [];
+
+  const sitesList = useMemo(() => {
+    const arr = (sites as any)?.data ?? sites ?? [];
+    return Array.isArray(arr) ? arr : [];
+  }, [sites]);
+
+  // Map siteId → delegationId for the Délégation filter (sites carry it).
+  const siteToDelegation = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of sitesList) {
+      if (s.id && s.delegationId) m.set(s.id, s.delegationId);
+    }
+    return m;
+  }, [sitesList]);
 
   const filtered = useMemo(() => {
     return list.filter((c) => {
@@ -101,6 +123,11 @@ export function NativeMonitorsList({ siteId, defaultGroupBy = 'site' }: Props) {
       if (!siteId && siteFilter !== 'all') {
         const cSite = effectiveSiteId(c);
         if (cSite !== siteFilter) return false;
+      }
+      if (!siteId && delegationFilter !== 'all') {
+        const cSite = effectiveSiteId(c);
+        const cDeleg = cSite ? siteToDelegation.get(cSite) : undefined;
+        if (cDeleg !== delegationFilter) return false;
       }
       if (search) {
         const needle = search.toLowerCase();
@@ -120,7 +147,7 @@ export function NativeMonitorsList({ siteId, defaultGroupBy = 'site' }: Props) {
       }
       return true;
     });
-  }, [list, search, statusFilter, kindFilter, siteFilter, siteId]);
+  }, [list, search, statusFilter, kindFilter, siteFilter, delegationFilter, siteToDelegation, siteId]);
 
   const counts = useMemo(() => {
     const c = { total: filtered.length, up: 0, down: 0, unknown: 0, disabled: 0 };
@@ -133,10 +160,7 @@ export function NativeMonitorsList({ siteId, defaultGroupBy = 'site' }: Props) {
     return c;
   }, [filtered]);
 
-  const sitesList = useMemo(() => {
-    const arr = (sites as any)?.data ?? sites ?? [];
-    return Array.isArray(arr) ? arr : [];
-  }, [sites]);
+  const delegationsList = (delegations ?? []).filter((d) => d.isActive);
 
   return (
     <Card>
@@ -180,19 +204,36 @@ export function NativeMonitorsList({ siteId, defaultGroupBy = 'site' }: Props) {
             />
           </div>
           {!siteId && (
-            <Select value={siteFilter} onValueChange={setSiteFilter}>
-              <SelectTrigger className="w-[180px] h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous les sites</SelectItem>
-                {sitesList.map((s: any) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <>
+              <Select value={delegationFilter} onValueChange={setDelegationFilter}>
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes délégations</SelectItem>
+                  {delegationsList.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={siteFilter} onValueChange={setSiteFilter}>
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les sites</SelectItem>
+                  {sitesList
+                    .filter((s: any) => delegationFilter === 'all' || s.delegationId === delegationFilter)
+                    .map((s: any) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </>
           )}
           <Select value={kindFilter} onValueChange={(v) => setKindFilter(v as any)}>
             <SelectTrigger className="w-[140px] h-9">

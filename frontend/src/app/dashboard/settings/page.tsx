@@ -925,7 +925,7 @@ function SsoConfigSection() {
 
 function SecurityTabContent() {
   const { user, checkSession } = useAuthStore();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, isSuperAdmin } = usePermissions();
 
   // Personal 2FA state
   const [totpEnabled, setTotpEnabled] = useState(user?.totpEnabled || false);
