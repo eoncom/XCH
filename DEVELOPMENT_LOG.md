@@ -6039,3 +6039,24 @@ fix(scripts): healthcheck rotate-secrets accepte tout HTTP <500
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-26
+
+**Date:** 2026-04-26 09:12:33
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 0
+
+**Commit message:**
+```
+fix(security): S1 follow-up — webhook auth + OOM caps + throttle granulaire
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

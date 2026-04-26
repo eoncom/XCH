@@ -25,11 +25,19 @@ services:
   redis:
     image: redis:7-alpine
     container_name: xch-redis
-    command: redis-server --appendonly yes
+    # S1 hardening 2026-04-26 — auth conditionnelle :
+    #   - Si REDIS_PASSWORD est défini (.env), démarre avec --requirepass
+    #   - Sinon (dev rapide sans .env), démarre sans auth (compat ascendante)
+    # Pour la prod, REDIS_PASSWORD doit ÊTRE défini (généré par
+    # scripts/rotate-secrets.sh --phase b). Le dev recommandé : pose aussi
+    # un REDIS_PASSWORD pour matcher la prod.
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command: ["sh", "-c", "if [ -n \"$$REDIS_PASSWORD\" ]; then exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes; else exec redis-server --appendonly yes; fi"]
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping; else redis-cli ping; fi"]
       interval: 10s
       timeout: 5s
       retries: 5

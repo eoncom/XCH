@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { StorageService } from '../../common/services/storage.service';
+import { validateMagicBytes } from '../../common/utils/upload-security';
 import * as archiver from 'archiver';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require('adm-zip');
@@ -134,6 +135,11 @@ export class BackupService {
     userId?: string,
   ): Promise<{ message: string; siteId: string; counts: Record<string, number> }> {
     this.logger.log('Starting site restore...');
+
+    // S1 hardening 2026-04-26 — vérif magic-bytes avant unzip pour bloquer
+    // un upload .zip qui contiendrait en fait un autre format (defense
+    // in depth ; backupFileFilter check déjà mimetype + extension).
+    validateMagicBytes(zipBuffer, ['zip']);
 
     const zip = new AdmZip(zipBuffer);
     const entries = zip.getEntries();
@@ -515,6 +521,9 @@ export class BackupService {
     userId?: string,
   ): Promise<{ message: string; counts: Record<string, number>; siteIds: string[] }> {
     this.logger.log('Starting full restore...');
+
+    // S1 hardening 2026-04-26 — vérif magic-bytes (cf. restoreSiteBackup).
+    validateMagicBytes(zipBuffer, ['zip']);
 
     const zip = new AdmZip(zipBuffer);
     const entries = zip.getEntries();
