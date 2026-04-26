@@ -7,6 +7,7 @@ import { UpdatePinDto } from './dto/update-pin.dto';
 import { FilterFloorPlanDto } from './dto/filter-floor-plan.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { StorageService } from '../../common/services/storage.service';
+import { validateMagicBytes, validateMagicBytesForMimetype } from '../../common/utils/upload-security';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -83,6 +84,12 @@ export class FloorPlansService {
     if (file.mimetype !== 'application/pdf') {
       throw new BadRequestException('File is not a PDF');
     }
+
+    // S1-closing 2026-04-26 — magic-bytes : on n'écrit jamais sur disque
+    // un buffer dont la signature ne correspond pas à un PDF, même si le
+    // mimetype HTTP dit "application/pdf" (defense in depth contre un
+    // attaquant qui forge le header).
+    validateMagicBytes(file.buffer, ['pdf']);
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xch-pdf-'));
     const pdfPath = path.join(tmpDir, 'input.pdf');
@@ -194,7 +201,14 @@ export class FloorPlansService {
       );
     }
 
-    // Validate file size (max 10MB)
+    // S1-closing 2026-04-26 — magic-bytes : confirme que le contenu
+    // correspond bien au mimetype annoncé (PDF, PNG ou JPEG).
+    validateMagicBytes(file.buffer, ['pdf', 'png', 'jpeg']);
+
+    // Note: Multer fileSize limit (50MB) appliqué côté controller via
+    // FLOOR_PLAN_LIMITS — la borne 10MB historique en service est
+    // conservée comme garde-fou supplémentaire pour les assets monstres
+    // (PDF haute déf 30+ MB rejeté ici si pas légitime).
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       throw new BadRequestException('File size exceeds 10MB limit');

@@ -6060,3 +6060,24 @@ fix(security): S1 follow-up — webhook auth + OOM caps + throttle granulaire
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-26
+
+**Date:** 2026-04-26 09:39:20
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 0
+
+**Commit message:**
+```
+fix(security): S1-B — Redis auth + magic-bytes ZIP avant unzip
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

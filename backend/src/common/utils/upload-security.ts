@@ -106,6 +106,105 @@ export function attachmentFileFilter(
 }
 
 /**
+ * Multer file filter for CSV imports (text/csv only).
+ * Used by /api/assets/import* endpoints.
+ */
+export function csvFileFilter(
+  _req: Request,
+  file: { mimetype: string; originalname: string; [key: string]: any },
+  callback: (error: Error | null, acceptFile: boolean) => void,
+) {
+  const allowed = [
+    'text/csv',
+    'application/csv',
+    'text/plain',           // some clients send CSV as text/plain
+    'application/vnd.ms-excel', // others send as ms-excel for .csv
+  ];
+  if (!allowed.includes(file.mimetype)) {
+    return callback(
+      new BadRequestException(
+        `Type de fichier non autorisé pour l'import CSV: ${file.mimetype}. Seuls les .csv sont acceptés.`,
+      ),
+      false,
+    );
+  }
+  const ext = '.' + (file.originalname.split('.').pop() || '').toLowerCase();
+  if (ext !== '.csv' && ext !== '.txt') {
+    return callback(
+      new BadRequestException(
+        `Extension de fichier invalide: ${ext}. Seuls les .csv sont acceptés.`,
+      ),
+      false,
+    );
+  }
+  callback(null, true);
+}
+
+/**
+ * Multer file filter for floor plan uploads (PDF, PNG, JPEG only).
+ * Used by /api/floor-plans/* upload endpoints.
+ */
+export function floorPlanFileFilter(
+  _req: Request,
+  file: { mimetype: string; originalname: string; [key: string]: any },
+  callback: (error: Error | null, acceptFile: boolean) => void,
+) {
+  const allowed = [
+    'application/pdf',
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+  ];
+  if (!allowed.includes(file.mimetype)) {
+    return callback(
+      new BadRequestException(
+        `Type de fichier non autorisé pour un plan d'étage: ${file.mimetype}. ` +
+        `Types acceptés : PDF, PNG, JPEG.`,
+      ),
+      false,
+    );
+  }
+  const ext = '.' + (file.originalname.split('.').pop() || '').toLowerCase();
+  if (!['.pdf', '.png', '.jpg', '.jpeg'].includes(ext)) {
+    return callback(
+      new BadRequestException(
+        `Extension de fichier invalide: ${ext}. Seuls les .pdf, .png, .jpg, .jpeg sont acceptés.`,
+      ),
+      false,
+    );
+  }
+  callback(null, true);
+}
+
+/**
+ * Multer file filter for PDF-only inputs (e.g. inspect-pdf endpoint).
+ */
+export function pdfOnlyFileFilter(
+  _req: Request,
+  file: { mimetype: string; originalname: string; [key: string]: any },
+  callback: (error: Error | null, acceptFile: boolean) => void,
+) {
+  if (file.mimetype !== 'application/pdf') {
+    return callback(
+      new BadRequestException(
+        `Type de fichier non autorisé: ${file.mimetype}. Seul le PDF est accepté ici.`,
+      ),
+      false,
+    );
+  }
+  const ext = '.' + (file.originalname.split('.').pop() || '').toLowerCase();
+  if (ext !== '.pdf') {
+    return callback(
+      new BadRequestException(
+        `Extension de fichier invalide: ${ext}. Seul le .pdf est accepté ici.`,
+      ),
+      false,
+    );
+  }
+  callback(null, true);
+}
+
+/**
  * Multer file filter for backup restore (ZIP files only).
  */
 export function backupFileFilter(
@@ -190,6 +289,42 @@ export function validateMagicBytes(buffer: Buffer, allowedKinds: MagicKind[]): v
       `Possible tentative d'upload d'un fichier déguisé.`,
     );
   }
+}
+
+/**
+ * Mapping mimetype → magic-byte kinds attendus. Couvre les types courants
+ * uploadés par XCH. Un mimetype absent de cette table fait un no-op (les
+ * formats text-based comme CSV/TXT n'ont pas de magic bytes fiables, et
+ * certains formats Office legacy (D0 CF 11 E0) ne sont pas couverts par
+ * notre helper inline — la validation tombe alors sur fileFilter mimetype +
+ * extension uniquement).
+ */
+const MIMETYPE_TO_KINDS: Record<string, MagicKind[]> = {
+  'application/pdf': ['pdf'],
+  'image/png': ['png'],
+  'image/jpeg': ['jpeg'],
+  'image/jpg': ['jpeg'],
+  'image/gif': ['gif'],
+  'image/webp': ['webp'],
+  'application/zip': ['zip'],
+  'application/x-zip-compressed': ['zip'],
+  // Office moderne (.docx/.xlsx/.pptx) = conteneur ZIP, donc PK\x03\x04
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['zip'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['zip'],
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['zip'],
+};
+
+/**
+ * Variante de `validateMagicBytes` qui dérive les kinds attendus depuis le
+ * mimetype HTTP. Pratique pour les routes "polymorphes" (asset attachment
+ * accepte PDF, image, doc Office). Silencieux si le mimetype n'est pas mappé
+ * (= laisse passer ; le fileFilter mimetype + extension a déjà fait son
+ * travail en amont).
+ */
+export function validateMagicBytesForMimetype(buffer: Buffer, mimetype: string): void {
+  const kinds = MIMETYPE_TO_KINDS[mimetype];
+  if (!kinds) return;
+  validateMagicBytes(buffer, kinds);
 }
 
 /**

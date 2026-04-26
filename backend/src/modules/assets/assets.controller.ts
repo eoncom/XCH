@@ -1,6 +1,13 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { csvFileFilter, attachmentFileFilter } from '../../common/utils/upload-security';
+
+// S1-closing 2026-04-26 — Multer fileSize limits par catégorie d'upload.
+// Les FileInterceptor sans `limits` acceptent par défaut N'IMPORTE QUELLE
+// taille, ce qui ouvre un DoS trivial (upload de 10 GB blocque la RAM).
+const CSV_IMPORT_LIMITS = { fileSize: 10 * 1024 * 1024 };       // 10 MB
+const ATTACHMENT_LIMITS = { fileSize: 25 * 1024 * 1024 };       // 25 MB
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
@@ -59,7 +66,7 @@ export class AssetsController {
       required: ['file'],
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: CSV_IMPORT_LIMITS, fileFilter: csvFileFilter }))
   async importCsv(
     @UploadedFile() file: Express.Multer.File,
     @Body('siteId') siteId: string,
@@ -96,7 +103,7 @@ export class AssetsController {
       required: ['file'],
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: CSV_IMPORT_LIMITS, fileFilter: csvFileFilter }))
   async importPreview(
     @UploadedFile() file: Express.Multer.File,
     @Body('siteId') siteId: string,
@@ -130,7 +137,7 @@ export class AssetsController {
       required: ['file'],
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: CSV_IMPORT_LIMITS, fileFilter: csvFileFilter }))
   async importCommit(
     @UploadedFile() file: Express.Multer.File,
     @Body('siteId') siteId: string,
@@ -298,7 +305,7 @@ export class AssetsController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: ATTACHMENT_LIMITS, fileFilter: attachmentFileFilter }))
   uploadAttachment(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,

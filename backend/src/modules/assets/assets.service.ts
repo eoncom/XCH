@@ -10,6 +10,7 @@ import { ImportResultDto } from './dto/import-asset.dto';
 import { QRCodeService } from '../../common/services/qrcode.service';
 import { ConfigService } from '@nestjs/config';
 import { StorageService } from '../../common/services/storage.service';
+import { validateMagicBytesForMimetype } from '../../common/utils/upload-security';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { NotificationEmitter } from '../notifications/notification-emitter';
 import { createId } from '@paralleldrive/cuid2';
@@ -1177,6 +1178,13 @@ export class AssetsService {
   ) {
     // Verify asset exists
     await this.findOne(assetId, tenantId);
+
+    // S1-closing 2026-04-26 — magic-bytes : pour les mimetypes connus
+    // (PDF, image, ZIP, Office moderne) on valide la signature du buffer
+    // avant de pousser sur MinIO. Pour les types text-based (csv/txt) ou
+    // Office legacy non couverts, le helper est silencieux et on retombe
+    // sur le check mimetype + extension du attachmentFileFilter.
+    validateMagicBytesForMimetype(file.buffer, file.mimetype);
 
     // Generate unique filename
     const filename = this.storageService.generateFilename(file.originalname, 'attachment');

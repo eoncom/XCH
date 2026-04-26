@@ -16,7 +16,14 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { floorPlanFileFilter, pdfOnlyFileFilter } from '../../common/utils/upload-security';
 import { FloorPlansService } from './floor-plans.service';
+
+// S1-closing 2026-04-26 — Multer fileSize limit pour les uploads de plans
+// d'étage. Les PDF haute résolution + grands PNG peuvent atteindre 30-40 MB
+// légitimement (plans CAD exportés). 50 MB couvre largement les cas réels
+// sans laisser ouvert un DoS upload géant.
+const FLOOR_PLAN_LIMITS = { fileSize: 50 * 1024 * 1024 };       // 50 MB
 import { CreateFloorPlanDto } from './dto/create-floor-plan.dto';
 import { UpdateFloorPlanDto } from './dto/update-floor-plan.dto';
 import { CreatePinDto } from './dto/create-pin.dto';
@@ -53,7 +60,7 @@ export class FloorPlansController {
       required: ['file'],
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: FLOOR_PLAN_LIMITS, fileFilter: pdfOnlyFileFilter }))
   async inspectPdf(
     @UploadedFile() file: Express.Multer.File,
   ) {
@@ -84,7 +91,7 @@ export class FloorPlansController {
       required: ['siteId', 'name'],
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: FLOOR_PLAN_LIMITS, fileFilter: floorPlanFileFilter }))
   async create(
     @Request() req: AuthRequest,
     @Body() createFloorPlanDto: CreateFloorPlanDto,
@@ -127,7 +134,7 @@ export class FloorPlansController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: FLOOR_PLAN_LIMITS, fileFilter: floorPlanFileFilter }))
   async uploadFile(
     @Param('id') id: string,
     @Request() req: AuthRequest,
@@ -249,7 +256,7 @@ export class FloorPlansController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: FLOOR_PLAN_LIMITS, fileFilter: floorPlanFileFilter }))
   async createNewVersion(
     @Param('id') id: string,
     @Request() req: AuthRequest,
