@@ -32,8 +32,21 @@ export interface MonitorCheck {
   updatedAt: string;
   httpConfig: MonitorHttpConfig | null;
   site?: { id: string; name: string; code: string; delegationId: string } | null;
-  asset?: { id: string; name: string | null; type: string; siteId: string | null } | null;
-  link?: { id: string; role: string; provider: string; siteId: string } | null;
+  asset?: {
+    id: string;
+    name: string | null;
+    type: string;
+    siteId: string | null;
+    site?: { id: string; name: string; code: string } | null;
+  } | null;
+  link?: {
+    id: string;
+    role: string;
+    provider: string;
+    type?: string | null;
+    siteId: string;
+    site?: { id: string; name: string; code: string } | null;
+  } | null;
 }
 
 export interface MonitorResult {

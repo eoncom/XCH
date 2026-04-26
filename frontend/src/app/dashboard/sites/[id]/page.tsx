@@ -51,6 +51,7 @@ import { getWarrantyStatus, useWarrantyThresholds } from '@/lib/warranty';
 // from site.metadata.healthBreakdown (written by HealthAggregationService).
 import { ConnectivityLinksManager } from '@/components/connectivity/ConnectivityLinksManager';
 import { MonitorsAutoDisabledBanner } from '@/components/monitoring/MonitorsAutoDisabledBanner';
+import { NativeMonitorsList } from '@/components/monitoring/NativeMonitorsList';
 import { SdwanSection } from '@/components/sdwan/SdwanSection';
 
 const healthStatusColors = {
@@ -1354,6 +1355,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           <TabsTrigger value="tasks">Tâches ({tasks.length})</TabsTrigger>
           <TabsTrigger value="plans">Plans ({latestFloorPlans.length})</TabsTrigger>
           <TabsTrigger value="documents">Documents ({siteAttachments.length})</TabsTrigger>
+          <TabsTrigger value="monitoring">
+            <Activity className="mr-1 h-3 w-3" />
+            Surveillance
+          </TabsTrigger>
           <TabsTrigger value="access">
             <Lock className="mr-1 h-3 w-3" />
             Accès
@@ -2166,6 +2171,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ============================== */}
+        {/* TAB: SURVEILLANCE              */}
+        {/* ============================== */}
+        <TabsContent value="monitoring">
+          <NativeMonitorsList siteId={id} defaultGroupBy="none" />
         </TabsContent>
 
         {/* ============================== */}

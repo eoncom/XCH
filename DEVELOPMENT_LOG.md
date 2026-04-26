@@ -6333,3 +6333,24 @@ feat(monitoring): ADR-016 lot G — auto-disable on Asset/Site status change + b
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-26
+
+**Date:** 2026-04-26 19:32:01
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 3
+
+**Commit message:**
+```
+feat(monitoring): ADR-016 lot H — auto-sync MonitorCheck.target sur changement IP/hostname/publicIp
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

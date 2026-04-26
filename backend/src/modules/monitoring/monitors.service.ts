@@ -11,11 +11,30 @@ import {
 import { validateTarget } from './probes/target-validator';
 import { MONITOR_QUEUE, JOB_PROBE } from './monitor.scheduler';
 
+// Includes the parent's site too — needed by the UI to group / display
+// "Site Tour Alto" even when the check is rattaché to an asset or a link.
 const CHECK_INCLUDE = {
   httpConfig: true,
   site: { select: { id: true, name: true, code: true, delegationId: true } },
-  asset: { select: { id: true, name: true, type: true, siteId: true } },
-  link: { select: { id: true, role: true, provider: true, siteId: true } },
+  asset: {
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      siteId: true,
+      site: { select: { id: true, name: true, code: true } },
+    },
+  },
+  link: {
+    select: {
+      id: true,
+      role: true,
+      provider: true,
+      type: true,
+      siteId: true,
+      site: { select: { id: true, name: true, code: true } },
+    },
+  },
 };
 
 @Injectable()
