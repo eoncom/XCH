@@ -36,6 +36,7 @@ import {
   Plus,
   Trash2,
   Play,
+  Pencil,
   Globe,
   Network,
   Wifi,
@@ -46,6 +47,7 @@ import {
   MonitorCheck,
   MonitorKind,
   CreateMonitorCheckData,
+  UpdateMonitorCheckData,
 } from '@/lib/api/monitors';
 
 type TargetType = 'site' | 'asset' | 'link';
@@ -84,7 +86,11 @@ export function MonitorConfigSection({
   readOnly = false,
 }: Props) {
   const queryClient = useQueryClient();
-  const [showCreate, setShowCreate] = useState(false);
+  const [dialogMode, setDialogMode] = useState<
+    | { mode: 'closed' }
+    | { mode: 'create' }
+    | { mode: 'edit'; check: MonitorCheck }
+  >({ mode: 'closed' });
 
   const queryKey = ['monitors', targetType, targetId];
   const { data: checks, isLoading } = useQuery({
@@ -142,7 +148,7 @@ export function MonitorConfigSection({
             </CardDescription>
           </div>
           {!readOnly && (
-            <Button size="sm" onClick={() => setShowCreate(true)} disabled={isLoading}>
+            <Button size="sm" onClick={() => setDialogMode({ mode: 'create' })} disabled={isLoading}>
               <Plus className="mr-1 h-4 w-4" />
               Ajouter
             </Button>
@@ -161,7 +167,7 @@ export function MonitorConfigSection({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowCreate(true)}
+            onClick={() => setDialogMode({ mode: 'create' })}
             className="w-full"
           >
             <Plus className="mr-1 h-4 w-4" />
@@ -207,6 +213,14 @@ export function MonitorConfigSection({
                   >
                     <Play className="h-4 w-4" />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDialogMode({ mode: 'edit', check })}
+                    title="Modifier"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                 </>
               )}
               <Link
@@ -238,7 +252,7 @@ export function MonitorConfigSection({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowCreate(true)}
+            onClick={() => setDialogMode({ mode: 'create' })}
             className="w-full"
           >
             <Plus className="mr-1 h-4 w-4" />
@@ -247,13 +261,14 @@ export function MonitorConfigSection({
         )}
       </CardContent>
 
-      {showCreate && (
-        <CreateMonitorDialog
+      {dialogMode.mode !== 'closed' && (
+        <MonitorDialog
           targetType={targetType}
           targetId={targetId}
           defaultTarget={defaultTarget}
-          onClose={() => setShowCreate(false)}
-          onCreated={invalidate}
+          editing={dialogMode.mode === 'edit' ? dialogMode.check : null}
+          onClose={() => setDialogMode({ mode: 'closed' })}
+          onSaved={invalidate}
         />
       )}
     </Card>
@@ -270,36 +285,55 @@ function StatusBadge({ status }: { status: MonitorCheck['lastStatus'] }) {
   return <Badge variant="secondary">—</Badge>;
 }
 
-interface CreateDialogProps {
+interface MonitorDialogProps {
   targetType: TargetType;
   targetId: string;
   defaultTarget?: string;
+  editing: MonitorCheck | null;
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
 }
 
-function CreateMonitorDialog({
+function MonitorDialog({
   targetType,
   targetId,
   defaultTarget,
+  editing,
   onClose,
-  onCreated,
-}: CreateDialogProps) {
-  const [kind, setKind] = useState<MonitorKind>('ICMP');
-  const [target, setTarget] = useState(defaultTarget ?? '');
-  const [targetPort, setTargetPort] = useState<string>('80');
-  const [intervalSec, setIntervalSec] = useState<number>(300);
-  const [expectedStatus, setExpectedStatus] = useState<string>('200');
+  onSaved,
+}: MonitorDialogProps) {
+  const isEdit = editing !== null;
+  const [kind, setKind] = useState<MonitorKind>(editing?.kind ?? 'ICMP');
+  const [target, setTarget] = useState(editing?.target ?? defaultTarget ?? '');
+  const [targetPort, setTargetPort] = useState<string>(
+    editing?.targetPort != null ? String(editing.targetPort) : '80',
+  );
+  const [intervalSec, setIntervalSec] = useState<number>(editing?.intervalSec ?? 300);
+  const [expectedStatus, setExpectedStatus] = useState<string>(
+    editing?.httpConfig?.expectedStatus != null ? String(editing.httpConfig.expectedStatus) : '200',
+  );
 
   const createMutation = useMutation({
     mutationFn: (data: CreateMonitorCheckData) => monitorsApi.create(data),
     onSuccess: () => {
       toast.success('Monitor créé');
-      onCreated();
+      onSaved();
       onClose();
     },
     onError: (err: any) =>
       toast.error(err?.data?.message || err.message || 'Échec de la création'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateMonitorCheckData }) =>
+      monitorsApi.update(id, data),
+    onSuccess: () => {
+      toast.success('Monitor mis à jour');
+      onSaved();
+      onClose();
+    },
+    onError: (err: any) =>
+      toast.error(err?.data?.message || err.message || 'Échec de la mise à jour'),
   });
 
   const submit = () => {
@@ -307,36 +341,53 @@ function CreateMonitorDialog({
       toast.error('Cible obligatoire');
       return;
     }
-    const payload: CreateMonitorCheckData = {
-      kind,
-      target: target.trim(),
-      intervalSec,
-      siteId: targetType === 'site' ? targetId : undefined,
-      assetId: targetType === 'asset' ? targetId : undefined,
-      linkId: targetType === 'link' ? targetId : undefined,
-    };
+    let port: number | undefined;
     if (kind === 'TCP') {
-      const p = Number(targetPort);
-      if (!Number.isInteger(p) || p < 1 || p > 65535) {
+      port = Number(targetPort);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
         toast.error('Port TCP invalide (1-65535)');
         return;
       }
-      payload.targetPort = p;
     }
-    if (kind === 'HTTP') {
-      const s = Number(expectedStatus);
-      payload.httpConfig = { expectedStatus: Number.isInteger(s) ? s : 200 };
+    const expectedStatusNum = kind === 'HTTP'
+      ? (Number.isInteger(Number(expectedStatus)) ? Number(expectedStatus) : 200)
+      : undefined;
+
+    if (isEdit) {
+      const data: UpdateMonitorCheckData = {
+        kind,
+        target: target.trim(),
+        intervalSec,
+        targetPort: port ?? null as any,
+      };
+      if (kind === 'HTTP') {
+        data.httpConfig = { expectedStatus: expectedStatusNum };
+      }
+      updateMutation.mutate({ id: editing!.id, data });
+    } else {
+      const payload: CreateMonitorCheckData = {
+        kind,
+        target: target.trim(),
+        intervalSec,
+        siteId: targetType === 'site' ? targetId : undefined,
+        assetId: targetType === 'asset' ? targetId : undefined,
+        linkId: targetType === 'link' ? targetId : undefined,
+      };
+      if (port != null) payload.targetPort = port;
+      if (kind === 'HTTP') payload.httpConfig = { expectedStatus: expectedStatusNum };
+      createMutation.mutate(payload);
     }
-    createMutation.mutate(payload);
   };
+
+  const pending = createMutation.isPending || updateMutation.isPending;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nouveau monitor</DialogTitle>
+          <DialogTitle>{isEdit ? 'Modifier le monitor' : 'Nouveau monitor'}</DialogTitle>
           <DialogDescription>
-            Probe ICMP / HTTP / TCP exécutée par le worker XCH (ADR-014).
+            Surveillance active de l'objet — choisissez le type de sonde adapté.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -419,11 +470,9 @@ function CreateMonitorDialog({
           <Button variant="outline" onClick={onClose}>
             Annuler
           </Button>
-          <Button onClick={submit} disabled={createMutation.isPending}>
-            {createMutation.isPending ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-            ) : null}
-            Créer
+          <Button onClick={submit} disabled={pending}>
+            {pending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            {isEdit ? 'Enregistrer' : 'Créer'}
           </Button>
         </DialogFooter>
       </DialogContent>

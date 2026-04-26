@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { useState, useMemo } from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { Site, Asset } from '@/types';
+import { NativeMonitorsList } from '@/components/monitoring/NativeMonitorsList';
 
 // Map asset types to icons for visual grouping
 const typeIcons: Record<string, any> = {
@@ -292,6 +293,9 @@ export default function MonitoringOverviewPage() {
           </Button>
         </div>
       </div>
+
+      {/* Native monitor list (XCH worker probes) */}
+      <NativeMonitorsList />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

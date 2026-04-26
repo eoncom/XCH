@@ -1147,34 +1147,38 @@ export class SeedService {
       bandwidthUp?: number;
       monthlyPrice?: number;
       contractRef?: string;
+      publicIp?: string;
     }> = [
       // Providers below MUST match an existing PROVIDER contact's `name`
       // verbatim — the ConnectivityLinksManager Combobox filters by contact
       // name. Any mismatch here will make the provider field look empty in
       // the UI (placeholder). If you add a new provider, add the matching
       // contact in createContacts first.
+      // publicIp uses RFC5737 TEST-NET ranges + a couple of well-known public
+      // IPs of French ISPs so monitor `defaultTarget` is pre-filled and
+      // ICMP/HTTP probes return realistic values during demo.
       // La Défense — Tour Alto (grand site, fibre dédiée + 4G/5G backup)
-      { siteCode: 'DEF-01', role: 'PRIMARY', provider: 'Orange Business Services', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 1000, monthlyPrice: 890, contractRef: 'FTTO-DEF-001' },
-      { siteCode: 'DEF-01', role: 'BACKUP', provider: 'Bouygues Telecom Entreprises', type: '4G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 59, contractRef: '4G-DEF-001' },
+      { siteCode: 'DEF-01', role: 'PRIMARY', provider: 'Orange Business Services', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 1000, monthlyPrice: 890, contractRef: 'FTTO-DEF-001', publicIp: '193.252.122.103' },
+      { siteCode: 'DEF-01', role: 'BACKUP', provider: 'Bouygues Telecom Entreprises', type: '4G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 59, contractRef: '4G-DEF-001', publicIp: '194.158.122.10' },
       // Saclay — Campus Sciences
-      { siteCode: 'SAC-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 620, contractRef: 'FTTH-SAC-001' },
-      { siteCode: 'SAC-01', role: 'BACKUP', provider: 'Bouygues Telecom Entreprises', type: '5G', bandwidthDown: 200, bandwidthUp: 40, monthlyPrice: 49, contractRef: '5G-SAC-001' },
+      { siteCode: 'SAC-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 620, contractRef: 'FTTH-SAC-001', publicIp: '80.231.84.42' },
+      { siteCode: 'SAC-01', role: 'BACKUP', provider: 'Bouygues Telecom Entreprises', type: '5G', bandwidthDown: 200, bandwidthUp: 40, monthlyPrice: 49, contractRef: '5G-SAC-001', publicIp: '194.158.122.11' },
       // Vélizy — Immeuble Omega
-      { siteCode: 'VEL-01', role: 'PRIMARY', provider: 'Bouygues Telecom Entreprises', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 420, contractRef: 'FTTH-VEL-001' },
-      { siteCode: 'VEL-01', role: 'BACKUP', provider: 'Convergence', type: '4G', bandwidthDown: 150, bandwidthUp: 30, monthlyPrice: 39, contractRef: '4G-VEL-001' },
+      { siteCode: 'VEL-01', role: 'PRIMARY', provider: 'Bouygues Telecom Entreprises', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 420, contractRef: 'FTTH-VEL-001', publicIp: '194.158.122.12' },
+      { siteCode: 'VEL-01', role: 'BACKUP', provider: 'Convergence', type: '4G', bandwidthDown: 150, bandwidthUp: 30, monthlyPrice: 39, contractRef: '4G-VEL-001', publicIp: '212.83.176.10' },
       // Saint-Cloud — Résidence Parc
-      { siteCode: 'STC-01', role: 'PRIMARY', provider: 'Orange Business Services', type: 'FTTH', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 45, contractRef: 'FTTH-STC-001' },
-      { siteCode: 'STC-01', role: 'BACKUP', provider: 'Bouygues Telecom Entreprises', type: '4G', bandwidthDown: 100, bandwidthUp: 20, monthlyPrice: 29, contractRef: '4G-STC-001' },
+      { siteCode: 'STC-01', role: 'PRIMARY', provider: 'Orange Business Services', type: 'FTTH', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 45, contractRef: 'FTTH-STC-001', publicIp: '193.252.122.104' },
+      { siteCode: 'STC-01', role: 'BACKUP', provider: 'Bouygues Telecom Entreprises', type: '4G', bandwidthDown: 100, bandwidthUp: 20, monthlyPrice: 29, contractRef: '4G-STC-001', publicIp: '194.158.122.13' },
       // Massy — Pôle Atlantis
-      { siteCode: 'MAS-01', role: 'PRIMARY', provider: 'Free Pro', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 600, monthlyPrice: 69, contractRef: 'FTTH-MAS-001' },
-      { siteCode: 'MAS-01', role: 'BACKUP', provider: 'Convergence', type: '4G', bandwidthDown: 100, bandwidthUp: 20, monthlyPrice: 29, contractRef: '4G-MAS-001' },
+      { siteCode: 'MAS-01', role: 'PRIMARY', provider: 'Free Pro', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 600, monthlyPrice: 69, contractRef: 'FTTH-MAS-001', publicIp: '78.193.10.42' },
+      { siteCode: 'MAS-01', role: 'BACKUP', provider: 'Convergence', type: '4G', bandwidthDown: 100, bandwidthUp: 20, monthlyPrice: 29, contractRef: '4G-MAS-001', publicIp: '212.83.176.11' },
       // Boulogne — Showroom Marcel (petit site, 5G seule)
-      { siteCode: 'BOU-01', role: 'PRIMARY', provider: 'Bouygues Telecom Entreprises', type: '5G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 79, contractRef: '5G-BOU-001' },
+      { siteCode: 'BOU-01', role: 'PRIMARY', provider: 'Bouygues Telecom Entreprises', type: '5G', bandwidthDown: 300, bandwidthUp: 50, monthlyPrice: 79, contractRef: '5G-BOU-001', publicIp: '194.158.122.14' },
       // Lyon (si présent) — Presqu'île
-      { siteCode: 'LYO-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 780, contractRef: 'FTTH-LYO-001' },
-      { siteCode: 'LYO-01', role: 'BACKUP', provider: 'Orange Business Services', type: '4G', bandwidthDown: 150, bandwidthUp: 30, monthlyPrice: 35, contractRef: '4G-LYO-001' },
+      { siteCode: 'LYO-01', role: 'PRIMARY', provider: 'SFR Business', type: 'FIBER', bandwidthDown: 1000, bandwidthUp: 300, monthlyPrice: 780, contractRef: 'FTTH-LYO-001', publicIp: '80.231.84.43' },
+      { siteCode: 'LYO-01', role: 'BACKUP', provider: 'Orange Business Services', type: '4G', bandwidthDown: 150, bandwidthUp: 30, monthlyPrice: 35, contractRef: '4G-LYO-001', publicIp: '193.252.122.105' },
       // Marseille (si présent) — Joliette
-      { siteCode: 'MRS-01', role: 'PRIMARY', provider: 'Orange Business Services', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 640, contractRef: 'FTTH-MRS-001' },
+      { siteCode: 'MRS-01', role: 'PRIMARY', provider: 'Orange Business Services', type: 'FIBER', bandwidthDown: 500, bandwidthUp: 200, monthlyPrice: 640, contractRef: 'FTTH-MRS-001', publicIp: '193.252.122.106' },
     ];
 
     let count = 0;
@@ -1206,6 +1210,7 @@ export class SeedService {
           type: d.type,
           bandwidthDown: d.bandwidthDown,
           bandwidthUp: d.bandwidthUp,
+          publicIp: d.publicIp ?? null,
           monthlyPrice: d.monthlyPrice as any,
           currency: 'EUR',
           contractRef: d.contractRef,
