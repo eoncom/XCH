@@ -1949,12 +1949,9 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState('Europe/Paris');
   const [language, setLanguage] = useState('Français');
 
-  // Integration state
+  // Integration state (NetBox only — ADR-016 dropped Gatus/Kuma)
   const [netboxUrl, setNetboxUrl] = useState('');
   const [netboxToken, setNetboxToken] = useState('');
-  const [monitoringType, setMonitoringType] = useState('');
-  const [kumaUrl, setKumaUrl] = useState('');
-  const [kumaToken, setKumaToken] = useState('');
   const [isTesting, setIsTesting] = useState<string | null>(null);
   const [isSavingIntegration, setIsSavingIntegration] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ provider: string; success: boolean; message: string } | null>(null);
@@ -2023,13 +2020,6 @@ export default function SettingsPage() {
         const config = await integrationsApi.getConfig();
         if (config.netbox?.url) setNetboxUrl(config.netbox.url);
         if (config.netbox?.tokenSet) setNetboxToken(config.netbox.tokenHint);
-        // Load monitoring config (new format first, then legacy)
-        if (config.monitoring?.type) setMonitoringType(config.monitoring.type);
-        else if (config.uptimeKuma?.url) setMonitoringType('uptime_kuma');
-        if (config.monitoring?.url || config.uptimeKuma?.url) setKumaUrl(config.monitoring?.url || config.uptimeKuma?.url || '');
-        if (config.monitoring?.passwordSet || config.monitoring?.apiKeySet || config.uptimeKuma?.passwordSet) {
-          setKumaToken(config.monitoring?.apiKeyHint || config.monitoring?.passwordHint || config.uptimeKuma?.passwordHint || '');
-        }
       } catch (error) {
         // Integration config may not exist yet, ignore
         console.debug('No integration config found');
@@ -2236,14 +2226,7 @@ export default function SettingsPage() {
     setIsTesting(integration);
     setTestResult(null);
     try {
-      let provider: string;
-      if (integration === 'NetBox') {
-        provider = 'netbox';
-      } else {
-        // Use the selected monitoring provider type, or fallback to 'monitoring'
-        provider = monitoringType || 'monitoring';
-      }
-      const result = await integrationsApi.testConnection(provider as any);
+      const result = await integrationsApi.testConnection('netbox');
       setTestResult({ provider: integration, success: result.success, message: result.message });
       if (result.success) {
         toast.success(`${integration} : ${result.message}`);
@@ -2259,38 +2242,19 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveIntegration = async (provider: 'netbox' | 'monitoring') => {
+  const handleSaveIntegration = async (provider: 'netbox') => {
     setIsSavingIntegration(provider);
     try {
-      const data: Record<string, any> = {};
-      if (provider === 'netbox') {
-        data.netbox = {
+      const data: Record<string, any> = {
+        netbox: {
           url: netboxUrl,
           // Only send token if it doesn't look like a masked value
           token: netboxToken.startsWith('****') ? '' : netboxToken,
-        };
-      } else {
-        data.monitoring = {
-          type: monitoringType,
-          url: kumaUrl,
-          // API key / password
-          ...(monitoringType === 'gatus'
-            ? { apiKey: kumaToken.startsWith('****') ? '' : kumaToken }
-            : { password: kumaToken.startsWith('****') ? '' : kumaToken }),
-        };
-      }
+        },
+      };
       const result = await integrationsApi.saveConfig(data);
-      // Update local state with masked values from server
-      if (provider === 'netbox') {
-        if (result.netbox?.tokenSet) setNetboxToken(result.netbox.tokenHint);
-      } else {
-        if (result.monitoring?.url) setKumaUrl(result.monitoring.url);
-        if (result.monitoring?.apiKeySet) setKumaToken(result.monitoring.apiKeyHint);
-        else if (result.monitoring?.passwordSet) setKumaToken(result.monitoring.passwordHint);
-      }
-      const providerLabel = provider === 'netbox' ? 'NetBox'
-        : monitoringType === 'gatus' ? 'Gatus' : 'Uptime Kuma';
-      toast.success(`Configuration ${providerLabel} enregistrée`);
+      if (result.netbox?.tokenSet) setNetboxToken(result.netbox.tokenHint);
+      toast.success('Configuration NetBox enregistrée');
     } catch (error: any) {
       toast.error(`Erreur : ${error?.message || 'Impossible de sauvegarder'}`);
     } finally {

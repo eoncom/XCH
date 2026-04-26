@@ -6249,3 +6249,24 @@ feat(monitoring): ADR-016 lot B — port HealthAggregationService dans modules/m
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-26
+
+**Date:** 2026-04-26 19:08:49
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 7
+
+**Commit message:**
+```
+feat(monitoring): ADR-016 lot C — suppression backend Gatus/Kuma + ENV cleanup
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
