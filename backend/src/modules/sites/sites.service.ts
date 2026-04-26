@@ -7,6 +7,7 @@ import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfac
 import { StorageService } from '../../common/services/storage.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { NotificationEmitter } from '../notifications/notification-emitter';
+import { MonitorReactionsService } from '../monitoring/monitor-reactions.service';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { createId } from '@paralleldrive/cuid2';
 
@@ -19,6 +20,7 @@ export class SitesService {
     private storageService: StorageService,
     private auditLogService: AuditLogService,
     private notificationEmitter: NotificationEmitter,
+    private monitorReactions: MonitorReactionsService,
   ) {}
 
   async create(tenantId: string, createSiteDto: CreateSiteDto, userId?: string) {
@@ -388,7 +390,20 @@ export class SitesService {
       }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
     }
 
-    return updated;
+    // ADR-016 — auto-disable monitor checks when the site moves to CLOSED
+    // (cascade through siteId direct + asset.siteId + link.siteId).
+    let disabledMonitorCount = 0;
+    if (before && updateSiteDto.status && updateSiteDto.status !== before.status) {
+      const r = await this.monitorReactions
+        .onSiteStatusChange(tenantId, id, before.status, updateSiteDto.status, userId)
+        .catch((e) => {
+          this.logger.warn(`monitor auto-disable failed for site ${id}: ${e.message}`);
+          return { disabledCount: 0 };
+        });
+      disabledMonitorCount = r.disabledCount;
+    }
+
+    return { ...updated, disabledMonitorCount };
   }
 
   async remove(id: string, tenantId: string, userId?: string) {

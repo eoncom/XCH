@@ -50,6 +50,7 @@ import { getWarrantyStatus, useWarrantyThresholds } from '@/lib/warranty';
 // useLiveMonitors removed in ADR-016 — health breakdown is read directly
 // from site.metadata.healthBreakdown (written by HealthAggregationService).
 import { ConnectivityLinksManager } from '@/components/connectivity/ConnectivityLinksManager';
+import { MonitorsAutoDisabledBanner } from '@/components/monitoring/MonitorsAutoDisabledBanner';
 import { SdwanSection } from '@/components/sdwan/SdwanSection';
 
 const healthStatusColors = {
@@ -1335,6 +1336,8 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           )}
         </div>
       </div>
+
+      <MonitorsAutoDisabledBanner entityType="site" entityId={id} />
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

@@ -13,6 +13,7 @@ import { StorageService } from '../../common/services/storage.service';
 import { validateMagicBytesForMimetype } from '../../common/utils/upload-security';
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { NotificationEmitter } from '../notifications/notification-emitter';
+import { MonitorReactionsService } from '../monitoring/monitor-reactions.service';
 import { createId } from '@paralleldrive/cuid2';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
@@ -28,6 +29,7 @@ export class AssetsService {
     private storageService: StorageService,
     private auditLogService: AuditLogService,
     private notificationEmitter: NotificationEmitter,
+    private monitorReactions: MonitorReactionsService,
   ) {}
 
   /**
@@ -410,7 +412,20 @@ export class AssetsService {
       }).catch((e) => this.logger.warn(`Notification failed: ${e.message}`));
     }
 
-    return asset;
+    // ADR-016 — auto-disable monitor checks when the asset leaves IN_SERVICE.
+    // Returns the count so the response includes it (frontend toasts it).
+    let disabledMonitorCount = 0;
+    if (updateAssetDto.status && updateAssetDto.status !== currentAsset.status) {
+      const r = await this.monitorReactions
+        .onAssetStatusChange(tenantId, id, currentAsset.status, updateAssetDto.status, userId)
+        .catch((e) => {
+          this.logger.warn(`monitor auto-disable failed for asset ${id}: ${e.message}`);
+          return { disabledCount: 0 };
+        });
+      disabledMonitorCount = r.disabledCount;
+    }
+
+    return { ...asset, disabledMonitorCount };
   }
 
   async batchUpdate(tenantId: string, dto: BatchUpdateAssetsDto) {

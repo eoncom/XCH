@@ -16,6 +16,7 @@ import { RequireWrite, RequireRead } from '../../common/decorators/require-right
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
 import { MonitorsService } from './monitors.service';
+import { MonitorReactionsService } from './monitor-reactions.service';
 import {
   CreateMonitorCheckDto,
   UpdateMonitorCheckDto,
@@ -31,6 +32,7 @@ export class MonitorsController {
   constructor(
     private readonly service: MonitorsService,
     private readonly permissionService: PermissionService,
+    private readonly reactions: MonitorReactionsService,
   ) {}
 
   @Post()
@@ -99,5 +101,42 @@ export class MonitorsController {
   @ApiOperation({ summary: 'Enqueue an immediate probe (no retry, raw result)' })
   runNow(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.service.runNow(req.user.tenantId, id);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Auto-disable banner endpoints (ADR-016 §E)
+  // ─────────────────────────────────────────────────────────────────────
+
+  @Get('auto-disabled/status')
+  @RequireRead()
+  @ApiOperation({ summary: 'Banner state for an asset/site (count of auto-disabled monitors + ack flag)' })
+  getAutoDisabledStatus(
+    @Query('entityType') entityType: 'asset' | 'site',
+    @Query('entityId') entityId: string,
+    @Request() req: AuthRequest,
+  ) {
+    return this.reactions.getAutoDisabledStatus(req.user.tenantId, entityType, entityId);
+  }
+
+  @Post('auto-disabled/bulk-enable')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Re-enable all auto-disabled monitors of an entity (asset|site)' })
+  bulkEnable(
+    @Body() body: { entityType: 'asset' | 'site'; entityId: string },
+    @Request() req: AuthRequest,
+  ) {
+    return this.reactions.bulkEnable(req.user.tenantId, body.entityType, body.entityId, req.user.userId);
+  }
+
+  @Post('auto-disabled/ack')
+  @RequireWrite()
+  @ApiOperation({ summary: 'Dismiss the auto-disable banner without re-enabling' })
+  ackBanner(
+    @Body() body: { entityType: 'asset' | 'site'; entityId: string },
+    @Request() req: AuthRequest,
+  ) {
+    return this.reactions
+      .ackBanner(req.user.tenantId, body.entityType, body.entityId, req.user.userId)
+      .then(() => ({ acknowledged: true }));
   }
 }

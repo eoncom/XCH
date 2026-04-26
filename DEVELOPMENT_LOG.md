@@ -6291,3 +6291,24 @@ feat(monitoring): ADR-016 lot D — suppression frontend Gatus/Kuma
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-26
+
+**Date:** 2026-04-26 19:26:25
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 7
+- Frontend files modified: 3
+
+**Commit message:**
+```
+feat(monitoring): ADR-016 lot F — real-time Site.healthStatus update depuis MonitorProcessor
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

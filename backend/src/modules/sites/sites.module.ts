@@ -3,9 +3,11 @@ import { SitesService } from './sites.service';
 import { SitesController } from './sites.controller';
 import { StorageService } from '../../common/services/storage.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { MonitorsApiModule } from '../monitoring/monitors-api.module';
 
 @Module({
-  imports: [],
+  // ADR-016 — SitesService.update calls MonitorReactionsService.onSiteStatusChange
+  imports: [MonitorsApiModule],
   controllers: [SitesController],
   providers: [SitesService, StorageService, AuditLogService],
   exports: [SitesService],

@@ -58,6 +58,7 @@ import {
 } from 'lucide-react';
 import { WarrantyBadge, WarrantyAlertBanner } from '@/components/ui/warranty-badge';
 import { MonitorConfigSection } from '@/components/monitoring/MonitorConfigSection';
+import { MonitorsAutoDisabledBanner } from '@/components/monitoring/MonitorsAutoDisabledBanner';
 import Link from 'next/link';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -234,6 +235,7 @@ export default function AssetDetailPage({
 
       {/* Warranty Alert Banner */}
       <WarrantyAlertBanner warrantyEnd={asset.warrantyEnd} />
+      <MonitorsAutoDisabledBanner entityType="asset" entityId={id} />
 
       {/* Tabs */}
       <Tabs defaultValue="info" className="w-full">

@@ -5,6 +5,7 @@ import { MonitorsService } from './monitors.service';
 import { MonitorPurgeService } from './monitor-purge.service';
 import { HealthAggregationService } from './health-aggregation.service';
 import { HealthSyncScheduler } from './health-sync.scheduler';
+import { MonitorReactionsService } from './monitor-reactions.service';
 import { MONITOR_QUEUE } from './monitor.scheduler';
 
 /**
@@ -21,7 +22,13 @@ import { MONITOR_QUEUE } from './monitor.scheduler';
 @Module({
   imports: [BullModule.registerQueue({ name: MONITOR_QUEUE })],
   controllers: [MonitorsController],
-  providers: [MonitorsService, MonitorPurgeService, HealthAggregationService, HealthSyncScheduler],
-  exports: [MonitorsService, HealthAggregationService],
+  providers: [
+    MonitorsService,
+    MonitorPurgeService,
+    HealthAggregationService,
+    HealthSyncScheduler,
+    MonitorReactionsService,
+  ],
+  exports: [MonitorsService, HealthAggregationService, MonitorReactionsService],
 })
 export class MonitorsApiModule {}
