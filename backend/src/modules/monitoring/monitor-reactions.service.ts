@@ -1,10 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { validateHost } from '../../common/security/network';
 
 const ACTIONS = {
   AUTO_DISABLED: 'MONITOR_AUTO_DISABLED',
   AUTO_DISABLED_ACK: 'MONITOR_AUTO_DISABLED_ACK',
   BULK_ENABLED: 'MONITOR_BULK_ENABLED',
+  TARGET_AUTO_SYNCED: 'MONITOR_TARGET_AUTO_SYNCED',
+  TARGET_SYNC_BLOCKED: 'MONITOR_TARGET_SYNC_BLOCKED',
 } as const;
 
 const ASSET_ACTIVE = new Set(['IN_SERVICE']);
@@ -234,6 +237,105 @@ export class MonitorReactionsService {
     // Always ack so the banner disappears even if 0 were re-enabled.
     await this.ackBanner(tenantId, entityType, entityId, userId);
     return { count: result.count };
+  }
+
+  /**
+   * Auto-sync MonitorCheck.target on entity address change (ADR-016 §E.3).
+   *
+   * Strict criterion : `target == oldHost`. If the user typed a custom
+   * target (different from oldHost), it stays untouched — respects intent
+   * by construction.
+   *
+   * Defense in depth : re-runs validateHost on the NEW value before sync,
+   * so changing asset.networkInfo.ip to 127.0.0.1 cannot bypass the SSRF
+   * validator via this backdoor.
+   */
+  async autoSyncTargetForAsset(
+    tenantId: string,
+    assetId: string,
+    oldHost: string | null | undefined,
+    newHost: string | null | undefined,
+    allowInternal: boolean,
+    userId?: string,
+  ): Promise<{ syncedCount: number }> {
+    return this.autoSyncTarget(
+      { tenantId, assetId },
+      'asset',
+      assetId,
+      oldHost,
+      newHost,
+      allowInternal,
+      userId,
+    );
+  }
+
+  async autoSyncTargetForLink(
+    tenantId: string,
+    linkId: string,
+    oldHost: string | null | undefined,
+    newHost: string | null | undefined,
+    allowInternal: boolean,
+    userId?: string,
+  ): Promise<{ syncedCount: number }> {
+    return this.autoSyncTarget(
+      { tenantId, linkId },
+      'connectivity_link',
+      linkId,
+      oldHost,
+      newHost,
+      allowInternal,
+      userId,
+    );
+  }
+
+  private async autoSyncTarget(
+    matchWhere: { tenantId: string } & ({ assetId: string } | { linkId: string }),
+    auditEntity: string,
+    entityId: string,
+    oldHost: string | null | undefined,
+    newHost: string | null | undefined,
+    allowInternal: boolean,
+    userId?: string,
+  ): Promise<{ syncedCount: number }> {
+    if (!oldHost || !newHost || oldHost === newHost) return { syncedCount: 0 };
+
+    // Re-validate the new host against SSRF policy. If forbidden, log + skip
+    // (do NOT throw — the entity update itself is legitimate, only the sync
+    // is blocked).
+    const validation = validateHost(newHost, allowInternal);
+    if (!validation.ok) {
+      await this.writeAudit({
+        tenantId: matchWhere.tenantId,
+        userId,
+        action: ACTIONS.TARGET_SYNC_BLOCKED,
+        entityType: auditEntity,
+        entityId,
+        changes: { oldHost, newHost, reason: validation.reason },
+      });
+      this.logger.warn(
+        `monitor target sync skipped for ${auditEntity} ${entityId}: ${validation.reason}`,
+      );
+      return { syncedCount: 0 };
+    }
+
+    const result = await this.prisma.monitorCheck.updateMany({
+      where: { ...matchWhere, target: oldHost },
+      data: { target: newHost, nextCheckAt: new Date() },
+    });
+    if (result.count > 0) {
+      await this.writeAudit({
+        tenantId: matchWhere.tenantId,
+        userId,
+        action: ACTIONS.TARGET_AUTO_SYNCED,
+        entityType: auditEntity,
+        entityId,
+        changes: { oldHost, newHost, count: result.count },
+      });
+      this.logger.log(
+        `auto-synced ${result.count} monitor target(s) for ${auditEntity} ${entityId} (${oldHost} → ${newHost})`,
+      );
+    }
+    return { syncedCount: result.count };
   }
 
   private checksWhereForEntity(

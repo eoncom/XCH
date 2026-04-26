@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { MonitorReactionsService } from '../monitoring/monitor-reactions.service';
 import {
   CreateConnectivityLinkDto,
   UpdateConnectivityLinkDto,
@@ -14,7 +15,12 @@ const LINK_INCLUDE = {
 
 @Injectable()
 export class ConnectivityService {
-  constructor(private prisma: PrismaClient) {}
+  private readonly logger = new Logger(ConnectivityService.name);
+
+  constructor(
+    private prisma: PrismaClient,
+    private monitorReactions: MonitorReactionsService,
+  ) {}
 
   async create(tenantId: string, dto: CreateConnectivityLinkDto) {
     // Validate site belongs to tenant
@@ -110,6 +116,18 @@ export class ConnectivityService {
       data,
       include: LINK_INCLUDE,
     });
+
+    // ADR-016 — auto-sync MonitorCheck.target when publicIp changes.
+    if (dto.publicIp !== undefined && dto.publicIp !== existing.publicIp) {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { allowInternalNetworkTargets: true },
+      });
+      const allowInternal = tenant?.allowInternalNetworkTargets ?? false;
+      await this.monitorReactions
+        .autoSyncTargetForLink(tenantId, id, existing.publicIp, dto.publicIp, allowInternal)
+        .catch((e) => this.logger.warn(`target sync failed for link ${id}: ${e.message}`));
+    }
 
     // If an expense is linked and pricing/dates changed, sync the expense
     if (existing.expenseId && (dto.monthlyPrice !== undefined || dto.startDate !== undefined || dto.endDate !== undefined || dto.currency !== undefined)) {

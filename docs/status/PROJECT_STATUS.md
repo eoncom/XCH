@@ -1,6 +1,6 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-04-26 19:26:25 (Auto-update)
+**Dernière mise à jour :** 2026-04-26 19:28:51 (Auto-update)
 **Version actuelle :** 1.4.0
 **Statut global :** ✅ MVP Production-Ready (100%) + v1.4 — Audit phase 4 correctifs + feature Apparence + seed démo enrichi
 

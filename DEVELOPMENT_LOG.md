@@ -6312,3 +6312,24 @@ feat(monitoring): ADR-016 lot F — real-time Site.healthStatus update depuis Mo
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-26
+
+**Date:** 2026-04-26 19:28:51
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat(monitoring): ADR-016 lot G — auto-disable on Asset/Site status change + bannière persistante
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

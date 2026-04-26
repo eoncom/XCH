@@ -425,6 +425,26 @@ export class AssetsService {
       disabledMonitorCount = r.disabledCount;
     }
 
+    // ADR-016 — auto-sync MonitorCheck.target when networkInfo.ip / .hostname
+    // changes. Strict criterion: only checks where target == oldIp (or
+    // oldHostname) get rewritten; user-customized targets stay untouched.
+    if (updateAssetDto.networkInfo !== undefined) {
+      const oldNet: any = currentAsset.networkInfo ?? {};
+      const newNet: any = (asset as any).networkInfo ?? {};
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { allowInternalNetworkTargets: true },
+      });
+      const allowInternal = tenant?.allowInternalNetworkTargets ?? false;
+      // Sync IP, then hostname (separate audit lines, both run if both changed).
+      await this.monitorReactions
+        .autoSyncTargetForAsset(tenantId, id, oldNet.ip, newNet.ip, allowInternal, userId)
+        .catch((e) => this.logger.warn(`target sync (ip) failed for asset ${id}: ${e.message}`));
+      await this.monitorReactions
+        .autoSyncTargetForAsset(tenantId, id, oldNet.hostname, newNet.hostname, allowInternal, userId)
+        .catch((e) => this.logger.warn(`target sync (hostname) failed for asset ${id}: ${e.message}`));
+    }
+
     return { ...asset, disabledMonitorCount };
   }
 
