@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bull';
 import { MonitorsController } from './monitors.controller';
 import { MonitorsService } from './monitors.service';
 import { MonitorPurgeService } from './monitor-purge.service';
+import { HealthAggregationService } from './health-aggregation.service';
 import { MONITOR_QUEUE } from './monitor.scheduler';
 
 /**
@@ -19,7 +20,7 @@ import { MONITOR_QUEUE } from './monitor.scheduler';
 @Module({
   imports: [BullModule.registerQueue({ name: MONITOR_QUEUE })],
   controllers: [MonitorsController],
-  providers: [MonitorsService, MonitorPurgeService],
-  exports: [MonitorsService],
+  providers: [MonitorsService, MonitorPurgeService, HealthAggregationService],
+  exports: [MonitorsService, HealthAggregationService],
 })
 export class MonitorsApiModule {}
