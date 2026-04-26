@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
@@ -43,6 +44,9 @@ export class AssetsController {
 
   @Post('import')
   @RequireWrite()
+  // CSV import : parsing + validation + bulk insert. 5/min/user empêche
+  // le flood mais reste OK pour usage normal.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Import assets from CSV file' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -79,6 +83,7 @@ export class AssetsController {
 
   @Post('import/preview')
   @RequireWrite()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({ summary: 'Preview CSV import (dry-run): returns valid rows + invalid rows with errors' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -112,6 +117,7 @@ export class AssetsController {
 
   @Post('import/commit')
   @RequireWrite()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Commit CSV import (writes to DB) — same as /import but named for clarity' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({

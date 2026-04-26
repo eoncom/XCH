@@ -1,5 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+
+/**
+ * Hard cap for the number of sites loaded by a single summary() call.
+ * Above that, the result becomes too large to serialize and the in-memory
+ * include.assets blows up Node memory. The pilot has < 10 sites — this
+ * cap is a defense-in-depth against pathological tenants. Frontend should
+ * paginate via ?limit/offset for tenants approaching this number.
+ */
+const SUMMARY_SITE_CAP = 500;
 
 export interface ConsumptionResult {
   totalWatts: number;
@@ -113,7 +122,22 @@ export class ConsumptionService {
     return { ...result, rack };
   }
 
-  async summary(tenantId: string) {
+  async summary(
+    tenantId: string,
+    opts: { limit?: number; offset?: number } = {},
+  ) {
+    // Hard-cap : un tenant pathologique avec >500 sites bloquait le serveur
+    // (50k+ assets en mémoire via include.assets). Cap forcé même si l'user
+    // demande plus.
+    const limit = Math.min(opts.limit ?? SUMMARY_SITE_CAP, SUMMARY_SITE_CAP);
+    const offset = Math.max(opts.offset ?? 0, 0);
+
+    if (limit < 1) {
+      throw new BadRequestException('limit must be >= 1');
+    }
+
+    const totalSites = await this.prisma.site.count({ where: { tenantId } });
+
     const sites = await this.prisma.site.findMany({
       where: { tenantId },
       select: {
@@ -127,6 +151,9 @@ export class ConsumptionService {
           select: { type: true, status: true, powerConsumption: true, dutyCyclePercent: true },
         },
       },
+      orderBy: { name: 'asc' },
+      take: limit,
+      skip: offset,
     });
 
     const cfg = await this.getElectricityConfig(tenantId);
@@ -156,6 +183,16 @@ export class ConsumptionService {
         costPerKwh: cfg.costPerKwh,
       },
       sites: perSite.sort((a, b) => b.totalWatts - a.totalWatts),
+      // Les totals reflètent uniquement la page courante. Pour un tenant
+      // au-dessus du cap, le frontend doit paginer pour obtenir l'agrégat
+      // complet (ou un endpoint SQL agrégé sera ajouté plus tard).
+      meta: {
+        totalSites,
+        returned: perSite.length,
+        limit,
+        offset,
+        truncated: totalSites > offset + perSite.length,
+      },
     };
   }
 }

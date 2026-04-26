@@ -9,8 +9,15 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
+  // En prod on coupe 'debug' (verbeux et coûteux en logs/IO/disk).
+  // Le dev garde le set complet pour faciliter le debugging.
+  const isProd = process.env.NODE_ENV === 'production';
+  const logLevels: Array<'error' | 'warn' | 'log' | 'debug' | 'verbose'> = isProd
+    ? ['error', 'warn', 'log']
+    : ['error', 'warn', 'log', 'debug'];
+
   const app = await NestFactory.create(AppModule, {
-    logger: ['error', 'warn', 'log', 'debug'],
+    logger: logLevels,
   });
 
   const configService = app.get(ConfigService);

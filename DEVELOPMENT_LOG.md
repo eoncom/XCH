@@ -6018,3 +6018,24 @@ feat(scripts): rotate-secrets.sh — rotation prod 2 phases (S1-A)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-26
+
+**Date:** 2026-04-26 09:02:47
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 9
+- Frontend files modified: 0
+
+**Commit message:**
+```
+fix(scripts): healthcheck rotate-secrets accepte tout HTTP <500
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

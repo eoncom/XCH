@@ -1,5 +1,6 @@
 import { Controller, ForbiddenException, Get, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireManage, RequireRead } from '../../common/decorators/require-right.decorator';
@@ -21,6 +22,9 @@ export class AuditController {
   @Get()
   @SkipDelegation()
   @RequireManage()
+  // Vue super-admin lourde (pagination + 7 sub-fetches enrichLabels). 60/min
+  // suffit pour navigation interactive, bloque le scrape automatisé.
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @ApiOperation({ summary: 'Query tenant-wide audit log (super admin only)' })
   async query(
     @Query('entity') entity: string | undefined,

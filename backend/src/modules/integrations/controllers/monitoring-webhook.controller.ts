@@ -7,8 +7,12 @@ import {
   HttpCode,
   Logger,
   BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+  HttpException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { MonitoringWebhookService } from '../services/monitoring-webhook.service';
 import { Public } from '../../../common/decorators/public.decorator';
 import { SkipDelegation } from '../../../common/decorators/skip-delegation.decorator';
@@ -39,6 +43,9 @@ export class MonitoringWebhookController {
 
   @Post('webhook')
   @HttpCode(200)
+  // Rate-limit per source IP : 30 webhooks/min suffit pour Kuma/Gatus
+  // (intervalles standards 60-300s) et bloque le spam d'un secret dérobé.
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @ApiOperation({ summary: 'Receive webhook from monitoring provider (Kuma/Gatus)' })
   async handleWebhook(
     @Query('provider') provider: string,
@@ -60,11 +67,25 @@ export class MonitoringWebhookController {
       await this.webhookService.processWebhook(normalizedProvider, headers, payload);
       return { status: 'ok', provider: normalizedProvider };
     } catch (error: unknown) {
+      // Re-throw les erreurs d'authentification ou de validation pour que
+      // le client reçoive le bon code HTTP. Sinon un x-webhook-secret
+      // invalide retournerait 200 (rotation du secret 2026-04-26 a révélé
+      // le bug). On garde le status:error 200 uniquement pour les erreurs
+      // métier non-critiques (parser ne reconnaît pas le payload, etc.).
+      if (
+        error instanceof ForbiddenException ||
+        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Webhook processing failed: ${errorMessage}`);
 
-      // Return 200 to avoid retries from the monitoring tool,
-      // but include error info for debugging
+      // Erreur 5xx interne : on retourne 200 pour éviter que Kuma/Gatus
+      // boucle en retry (ils ne savent rien réparer côté XCH), mais on
+      // expose l'erreur dans le body pour le debugging.
       return {
         status: 'error',
         provider: normalizedProvider,

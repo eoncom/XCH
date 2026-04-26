@@ -452,6 +452,18 @@ export class ExpensesService {
         : { in: scopeDelegationIds };
     }
 
+    // Cap dur : la projection éclate les récurrentes en tranches mensuelles.
+    // Au-delà de 10k expenses chargées, le calcul + la sérialisation deviennent
+    // un risque CPU/mémoire. Aucun cas pilote n'approche ce volume mais le cap
+    // protège contre un tenant pathologique ou un bug d'absence de filtre date.
+    const PROJECTION_EXPENSE_CAP = 10_000;
+    const expenseCount = await this.prisma.expense.count({ where });
+    if (expenseCount > PROJECTION_EXPENSE_CAP) {
+      throw new BadRequestException(
+        `Trop de dépenses dans la fenêtre de projection (${expenseCount} > ${PROJECTION_EXPENSE_CAP}). Affinez les filtres dateFrom/dateTo/delegationId.`,
+      );
+    }
+
     const expenses = await this.prisma.expense.findMany({
       where,
       select: {
@@ -463,6 +475,7 @@ export class ExpensesService {
         type: true,
         currency: true,
       },
+      take: PROJECTION_EXPENSE_CAP,
     });
 
     const monthKey = (d: Date) =>

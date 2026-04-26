@@ -385,11 +385,14 @@ phase_b() {
     else
         if [ "$DRY_RUN" = false ]; then
             # Insère 'command' + 'environment' après la ligne 'image: redis:...'
-            python3 - <<'PY' "$COMPOSE_FILE" || python - <<'PY' "$COMPOSE_FILE"
+            # via un script python temporaire (heredoc unique pour éviter
+            # le double-heredoc qui fait planter le parseur bash).
+            local PYSCRIPT
+            PYSCRIPT="$(mktemp /tmp/xch-redis-patch.XXXXXX.py)"
+            cat > "$PYSCRIPT" <<'PY'
 import sys, re
 fn = sys.argv[1]
 with open(fn) as f: src = f.read()
-# Trouver le bloc redis: et insérer command + environment après image
 pattern = re.compile(r'(^  redis:\n(?:    [^\n]*\n)*?    image:[^\n]*\n)', re.M)
 def repl(m):
     block = m.group(1)
@@ -400,6 +403,12 @@ if new == src:
     sys.exit(1)
 with open(fn, 'w') as f: f.write(new)
 PY
+            python3 "$PYSCRIPT" "$COMPOSE_FILE" || {
+                echo -e "  ${RED}✗${NC} patch python3 échoué"
+                rm -f "$PYSCRIPT"
+                return 1
+            }
+            rm -f "$PYSCRIPT"
             echo -e "  ${GREEN}✓${NC} docker-compose.yml mis à jour"
         else
             echo "  [dry-run] insertion 'command:' + 'environment:' au service redis"

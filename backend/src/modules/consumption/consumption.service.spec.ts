@@ -20,7 +20,7 @@ describe('ConsumptionService', () => {
   beforeEach(() => {
     prisma = {
       tenant: { findUnique: jest.fn() },
-      site: { findFirst: jest.fn(), findMany: jest.fn() },
+      site: { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn() },
       rack: { findFirst: jest.fn() },
       asset: { findMany: jest.fn() },
     } as unknown as jest.Mocked<PrismaClient>;
@@ -209,6 +209,7 @@ describe('ConsumptionService', () => {
       (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
         config: { electricity: { costPerKwh: 0.2, currency: 'EUR' } },
       });
+      (prisma.site.count as jest.Mock).mockResolvedValue(2);
       (prisma.site.findMany as jest.Mock).mockResolvedValue([
         {
           id: 's-small',
@@ -248,6 +249,40 @@ describe('ConsumptionService', () => {
       expect(result.totals.totalWatts).toBe(250);
       expect(result.totals.kWhMonth).toBe(180);
       expect(result.totals.costMonth).toBe(36);
+      // Pagination meta (S1 hardening — cap 500 sites + truncated flag)
+      expect(result.meta.totalSites).toBe(2);
+      expect(result.meta.returned).toBe(2);
+      expect(result.meta.truncated).toBe(false);
+    });
+
+    it('honors limit + offset with truncated flag when totalSites > returned', async () => {
+      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ config: {} });
+      (prisma.site.count as jest.Mock).mockResolvedValue(150);
+      (prisma.site.findMany as jest.Mock).mockResolvedValue([
+        { id: 's1', name: 'Site 1', code: 'A', assets: [] },
+      ]);
+
+      const result = await service.summary('t1', { limit: 1, offset: 0 });
+
+      expect(result.meta.totalSites).toBe(150);
+      expect(result.meta.returned).toBe(1);
+      expect(result.meta.limit).toBe(1);
+      expect(result.meta.truncated).toBe(true);
+      // Vérifie que findMany a bien reçu take + skip
+      expect((prisma.site.findMany as jest.Mock).mock.calls[0][0]).toMatchObject({
+        take: 1,
+        skip: 0,
+      });
+    });
+
+    it('caps limit to SUMMARY_SITE_CAP (500) even if a higher value is requested', async () => {
+      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ config: {} });
+      (prisma.site.count as jest.Mock).mockResolvedValue(10);
+      (prisma.site.findMany as jest.Mock).mockResolvedValue([]);
+
+      await service.summary('t1', { limit: 10000 });
+
+      expect((prisma.site.findMany as jest.Mock).mock.calls[0][0].take).toBe(500);
     });
   });
 });

@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, Res, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { ExpensesService } from './expenses.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
 import { FilterExpenseDto } from './dto/filter-expense.dto';
@@ -128,6 +129,9 @@ export class ExpensesController {
 
   @Get('projection')
   @RequireManage()
+  // Lourde : findMany + cap 10000 + expansion des récurrentes en mois.
+  // 10/min/user largement suffisant pour un dashboard interactif.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({ summary: 'Project expenses over a date range (monthly breakdown)' })
   @ApiQuery({ name: 'from', required: true, description: 'Start month YYYY-MM' })
   @ApiQuery({ name: 'to', required: true, description: 'End month YYYY-MM' })

@@ -1,5 +1,6 @@
 import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { SearchService } from './search.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireRead } from '../../common/decorators/require-right.decorator';
@@ -14,6 +15,9 @@ export class SearchController {
 
   @Get()
   @RequireRead()
+  // 5 requêtes parallèles findMany à chaque appel — limite à 30/min/user
+  // pour éviter qu'un client trop bavard tape la DB en boucle.
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @ApiOperation({ summary: 'Global search across assets, sites, racks, tasks, contacts' })
   search(
     @Query('q') q: string,
