@@ -162,10 +162,14 @@ Services :
 
 ### Monitoring
 
-**Gatus**
-- Dashboard monitoring integre
-- Webhooks alertes
-- Sante composite SD-WAN
+**Surveillance native XCH (ADR-014 + ADR-016)**
+- Worker NestJS dédié partageant l'image backend (`node dist/main --worker`)
+- Sondes ICMP / HTTP / TCP (CAP_NET_RAW pour ICMP réel, fallback TCP:80)
+- BullMQ + scheduler @Cron 30s, retry exponentiel sur erreurs transitoires
+- HealthAggregationService recompute Site.healthStatus en temps réel sur transition
+- Notifications MONITOR_DOWN / MONITOR_UP via NotificationConfigService (héritage délégation)
+- SSRF defense en profondeur : validateUrl/validateHost + safe-lookup DNS hook
+- Gatus + Uptime Kuma retirés (zéro dépendance externe)
 
 ---
 
@@ -187,7 +191,7 @@ Services :
 | Notifications | Nodemailer + Teams webhooks |
 | QR | qrcode + @zxing/browser |
 | PDF | Puppeteer |
-| Monitoring | Gatus |
+| Surveillance | Worker XCH natif (BullMQ + ICMP/HTTP/TCP) |
 | Reverse proxy | Nginx / Nginx Proxy Manager |
 | CI/CD | GitHub Actions |
 | Deploiement | Docker Compose |

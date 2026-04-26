@@ -50,9 +50,12 @@
 - **Creation dual-mode** — directe (mot de passe) ou invitation par email (fallback lien si SMTP indisponible)
 - **AccessGate frontend** — guards page-level fail-closed sur `/users`, `/admin/audit`, `/sites/[id]/edit`
 
-### Integrations externes
+### Surveillance & Integrations
+- **Surveillance native (ADR-014 + ADR-016)** — sondes ICMP / HTTP / TCP exécutées
+  par un worker XCH dédié (BullMQ + scheduler 30s + retry exponentiel + cap_add NET_RAW
+  pour l'ICMP réel). Site.healthStatus mis à jour en temps réel sur transition.
+  Aucune dépendance externe (Gatus / Uptime Kuma retirés).
 - **NetBox** (READ-ONLY) — mapping sites/devices, enrichissement donnees
-- **Gatus / Uptime Kuma** — sante services, alertes, dashboard monitoring
 - **Import CSV assets** — endpoint multipart, headers FR/EN, validation ligne par ligne, rapport erreurs
 
 ### Securite & Permissions (modele v2 delegation-first, ADR-009)
@@ -375,7 +378,7 @@ npm run test:e2e:report       # Ouvrir rapport
 ### v1.0.0-rc1 (2026-03-15)
 - Export PDF plans Wi-Fi 4 quadrants
 - Heatmap Wi-Fi (modele FSPL Friis)
-- Monitoring Gatus + alertes
+- Monitoring Gatus + alertes (remplacé par la surveillance native ADR-016)
 - Sauvegarde / Restauration completes
 - Docker production optimise
 - Scripts deploiement (package-release, install-airgap, backup/restore)

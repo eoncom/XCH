@@ -233,34 +233,8 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # ── Gatus (Health Monitoring) ──────────────────────────────────────────────
-  gatus:
-    image: twinproduction/gatus:latest
-    container_name: xch-gatus
-    environment:
-      GATUS_WEBHOOK_SECRET: ${GATUS_WEBHOOK_SECRET:-changeme}
-    volumes:
-      - ./gatus/config.yaml:/config/config.yaml:ro
-      - gatus_data:/data
-    ports:
-      - "${GATUS_PORT:-8080}:8080"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-    networks:
-      - xch-network
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+  # ADR-016 — Gatus container removed. Native monitoring (xch-backend-worker)
+  # owns all probes + alerts now. GATUS_WEBHOOK_SECRET env var no longer needed.
 
   # ── Nginx Reverse Proxy ────────────────────────────────────────────────────
   nginx:
@@ -295,8 +269,6 @@ volumes:
   redis_data:
     driver: local
   minio_data:
-    driver: local
-  gatus_data:
     driver: local
 
 networks:

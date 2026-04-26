@@ -168,23 +168,8 @@ services:
       - xch-network
     restart: unless-stopped
 
-  # Gatus (Monitoring / Health Dashboard)
-  gatus:
-    image: twinproduction/gatus:latest
-    container_name: xch-gatus
-    volumes:
-      - ./gatus/config.yaml:/config/config.yaml:ro
-      - gatus_data:/data
-    ports:
-      - "${GATUS_PORT:-8080}:8080"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-    networks:
-      - xch-network
-    restart: unless-stopped
+  # ADR-016 — Gatus container removed. Native monitoring (xch-backend-worker)
+  # owns all probes + alerts now.
 
   # Nginx Reverse Proxy (single entry point)
   # Uses Docker profile: only starts with --profile proxy or COMPOSE_PROFILES=proxy
@@ -213,8 +198,6 @@ volumes:
   redis_data:
     driver: local
   minio_data:
-    driver: local
-  gatus_data:
     driver: local
 
 networks:
