@@ -1,7 +1,7 @@
-# Prompt — finalisation v1.6 (S5 + UX globale + S6/S7)
+# Prompt — finalisation v1.6 (S5 + S6/S7 → tag v1.6.0)
 
 Reprise après les sessions monitoring natif (ADR-014 + ADR-016) et S1
-sécurité (ADR-015). On termine le plan v1.6 du projet.
+sécurité (ADR-015). On termine la dette technique vers le tag **v1.6.0**.
 
 PRINCIPE DIRECTEUR XCH (règle projet, énoncée 2026-04-20, applicable à
 toutes les sessions) :
@@ -21,178 +21,224 @@ Plan v2 / vers v1.6 :
 - ✅ S2 — monitoring natif ([ADR-014](../decisions/adr-014-native-monitoring.md))
   + suppression Gatus/Kuma + UX produit
   ([ADR-016](../decisions/adr-016-monitoring-unification.md))
-- ⏳ **S5** — migrations Prisma versionnées (PRÉREQUIS bloquant pour S6/S7)
-- ⏳ **UX globale** — tournée audit jargon / vocabulaire / hiérarchie sur
-  toutes les pages (page /notifications dans menu, empty states, etc.)
-- ⏳ **S6/S7** — refacto JSON résiduel ([ADR-013](../decisions/adr-013-residual-json-debt.md))
+- ⏳ **CETTE SESSION : S5 puis S6/S7** (enchaînés, un seul rebuild final).
+- 🔮 Session suivante (séparée) — UX/UI globale (jargon, vocabulaire,
+  page `/notifications` dans menu, hiérarchie, empty states, etc.).
+  Prompt dédié à rédiger en clôture de cette session.
 
-Une fois S5 + S6/S7 livrés → tag **v1.6.0**.
+Tag actuel : `v1.5.0`. À la fin de cette session : tag **v1.6.0**.
 
-Tag actuel : `v1.5.0`. Les commits sur `main` depuis ce tag sont
-v1.6-en-cours.
+---
 
-Ordre recommandé pour cette session
------------------------------------
+## Plan de la session — S5 puis S6/S7 enchaînés (~6-8h)
 
-**Tu choisis UNE des 3 options ci-dessous selon le temps dispo et l'envie :**
+S5 doit tourner AVANT S6/S7 pour qu'on ait une infra de migrations
+versionnées propre quand on va dropper / renommer les colonnes JSON.
 
-### Option A — S5 Prisma migrations (~3-4h, technique pur, débloque S6/S7)
+### Phase 1 — S5 : migrations Prisma versionnées (~3-4h)
 
-Aujourd'hui le déploiement utilise `prisma db push --accept-data-loss`
-dans `backend/docker-entrypoint.sh`. C'est OK en dev éphémère mais :
-
+**Pourquoi** : aujourd'hui le déploiement utilise
+`prisma db push --accept-data-loss` dans
+`backend/docker-entrypoint.sh`. Conséquences :
 - Aucune historisation des changements de schéma → impossible de rollback.
 - Aucune CHECK constraint native (les ajouts vivent dans
   `backend/prisma/post-push.sql`, pas dans le `schema.prisma` versionné).
 - Les drops de colonnes (ADR-013, ADR-016) tournent en dev silencieusement,
-  on perd la trace.
-- S6/S7 devraient tourner en migrations propres pour que les renames /
+  on perd la trace d'une bonne partie de l'évolution schéma.
+- S6/S7 doivent tourner en migrations propres pour que les renames /
   drops soient revertibles.
 
 **Cible** :
-- Convertir le projet en `prisma migrate` versionné.
-- Initialiser la baseline avec une migration `0_init` qui reflète l'état
-  schéma courant.
-- Migrer les CHECK constraints de `post-push.sql` dans une migration
-  ad-hoc (ou un fichier de migration manuelle).
-- Adapter `docker-entrypoint.sh` :
-  `prisma migrate deploy` au lieu de `prisma db push`.
-- Adapter le worker entrypoint (skip migrate, attendre l'API comme avant).
-- Documenter le workflow dev :
-  `npm run prisma:migrate -- --name <description>` pour créer une
-  migration locale, commit le dossier généré.
-- Mettre à jour `package.json` scripts (`db:push` retiré ou marqué dev-only).
-- ADR-017 : documente le passage `db push` → `migrate deploy`, le pattern
-  de migration manuelle pour les CHECK + extensions PostGIS, et la
-  procédure de rollback.
+1. Convertir le projet en `prisma migrate` versionné.
+2. Migration baseline `0_init` qui reflète l'état schéma courant
+   (snapshot du `schema.prisma` à `main`).
+3. Migration `1_post_push_constraints` qui contient les 3 CHECK de
+   `backend/prisma/post-push.sql` (target_exclusive,
+   tcp_port_required, interval_bounds) — l'extension `postgis` va aussi
+   dans une migration manuelle (CREATE EXTENSION IF NOT EXISTS postgis
+   AVANT les colonnes geometry).
+4. Adapter `backend/docker-entrypoint.sh` :
+   - API : `prisma migrate deploy` au lieu de `prisma db push --accept-data-loss`.
+   - Worker : skip migrations comme avant (XCH_MODE=worker → exec node directement).
+5. Adapter `backend/package.json` :
+   - `db:push` retiré ou marqué dev-only avec warning.
+   - Nouveau `db:migrate:dev` (`prisma migrate dev --name <description>`).
+   - `db:migrate:deploy` (`prisma migrate deploy`) — utilisé par l'entrypoint.
+6. Procédure dev pour créer une migration locale documentée dans le
+   README ou `docs/installation/INSTALL_DEV.md`.
+7. Supprimer `backend/prisma/post-push.sql` une fois les CHECK migrés.
+8. ADR-017 : documente le passage `db push` → `migrate deploy`,
+   pattern de migration manuelle pour CHECK + extensions PostGIS,
+   procédure de rollback.
+
+**Stratégie de baseline en prod** : la base xch-deploy contient les
+données démo seedées. Deux choix :
+- **Reset complet** (`prisma migrate reset` puis `migrate deploy` puis
+  reseed) — plus propre, données dev éphémères, autorisé par règle
+  projet "données courantes = démo".
+- **Baseline as-applied** (`prisma migrate resolve --applied 0_init`
+  pour marquer la baseline comme déjà appliquée sans la rejouer).
+
+**Recommandation** : reset complet en prod. Plus simple, plus propre,
+zéro risque de divergence schéma. Le seed démo recharge tout en 30s.
 
 **Pièges connus** :
-- L'extension `postgis` (utilisée par `Site.coordinates Unsupported(...)`)
-  ne se gère pas via Prisma migrations natif → doit rester dans une
-  migration manuelle qui fait `CREATE EXTENSION IF NOT EXISTS postgis`
-  AVANT la création des colonnes geometry.
+- Extension `postgis` (utilisée par `Site.coordinates Unsupported(...)`)
+  ne se gère pas via Prisma migrations natif → migration manuelle qui
+  fait `CREATE EXTENSION IF NOT EXISTS postgis` AVANT la création des
+  colonnes geometry. Ordre : extension d'abord, puis tables.
 - Le seed démo dépend de la base reset — vérifier que reset+migrate+seed
-  fonctionne en boucle.
-- En prod xch-deploy, la base contient déjà les données démo. Soit on
-  reset (autorisé, dev) soit on baseline avec
-  `prisma migrate resolve --applied 0_init` pour marquer comme déjà
-  appliquée et continuer en migrations normales pour la suite. Privilégier
-  le reset (plus propre, données dev).
+  fonctionne en boucle (idempotence du seed déjà acquise via `upsert`).
+- `prisma migrate dev` veut écrire un fichier `.sql` dans
+  `prisma/migrations/<timestamp>_<name>/migration.sql`. Vérifier que le
+  dossier est commité (`.gitignore` ne doit PAS l'exclure).
+- Le worker ne doit pas tenter `migrate deploy` (concurrence avec l'API)
+  → garder le check `XCH_MODE=worker` dans l'entrypoint.
 
-**Charge estimée** : 3-4h dont 1h ADR + 30min smoke prod.
+**Charge S5** : 3-4h dont 30 min ADR + 30 min smoke prod.
 
-### Option B — UX globale tournée pro (~6-8h, UI pure)
+### Phase 2 — S6/S7 : refacto JSON résiduel (~3-4h)
 
-Items remontés par le pilote (sessions précédentes) à terminer :
+**Pourquoi** : la dette JSON identifiée dans
+[ADR-013](../decisions/adr-013-residual-json-debt.md) reste partielle
+même après les drops déjà faits (ConnectivityLink.{monitorName, status}
++ SdwanConfig.{monitorName, status} en ADR-016 lot E). Les colonnes
+restantes ne sont plus queryables, ne sont pas type-safe, et invalident
+les contraintes Prisma.
 
-1. **Page `/dashboard/notifications`** dans le menu principal. Aujourd'hui
-   accès uniquement via la cloche en haut à droite (vue limitée, pas de
-   filtres). Une page dédiée avec :
-   - Liste paginée des `UserNotification` (déjà en table Prisma, ADR-009).
-   - Filtres par event type / canal / lu/non-lu / date.
-   - Bouton "Tout marquer comme lu".
-   - Gestion bulk (ack plusieurs en une fois).
-   - Empty state correct.
+**Cibles à traiter dans CETTE session** (priorisées par impact) :
 
-2. **Audit jargon technique partout dans l'UI** au-delà du monitoring :
-   - "ASSET" / "SITE" / "DELEGATION" en majuscules dans des labels →
-     vocabulaire métier.
-   - Statuts code (`ACTIVE`, `OUT_OF_SERVICE`, …) → labels métier
-     (déjà partiellement fait via `assetStatusLabels`, à étendre).
-   - Boutons "Save" / "Delete" → "Enregistrer" / "Supprimer".
-   - Toasts d'erreur souvent obscurs (renvoyer le `error.message` brut
-     côté frontend).
+#### 1. `Asset.networkInfo` (ip, mac, hostname, vlan, port → scalaires)
 
-3. **Cohérence générale** :
-   - Vocabulaire UP / DOWN remplacé partout par "Disponible / Indisponible"
-     (déjà fait pour le monitoring, à propager partout).
-   - Save / Delete / Cancel → uniformiser la couleur et la position des
-     boutons de confirmation.
-   - Loading states → skeleton plutôt que spinners centrés sur fond blanc.
+Aujourd'hui `Asset.networkInfo: Json?` héberge un blob libre
+`{ip, mac, hostname, vlan, port, adminLinks}`. Les 5 premiers sont des
+champs scalaires stables, queryables, et déjà utilisés par le monitoring
+auto-sync (ADR-016 lot H). `adminLinks` est une liste libre `[{label,url}]`
+acceptable en JSON (ADR-013 acceptait ce JSON-list).
 
-4. **Empty states** : audit page par page, beaucoup affichent des tables
-   vides au lieu d'un empty state cliquable (ex : "Vous n'avez pas
-   encore de monitor — Configurez-en depuis la fiche d'un équipement").
+**Migration** :
+- Ajouter `Asset.ip String?`, `Asset.mac String?`, `Asset.hostname String?`,
+  `Asset.vlan String?`, `Asset.port String?`.
+- Garder `Asset.adminLinks Json?` (list libre).
+- Supprimer `Asset.networkInfo`.
+- Migration de données : copier `networkInfo.{ip,mac,hostname,vlan,port}`
+  vers les colonnes scalaires AVANT le drop (en prod xch-deploy ce sont
+  des données démo donc reset+reseed suffit, mais le seed doit produire
+  les nouveaux champs).
+- Adapter `backend/src/modules/seed/seed.service.ts` (35+ entrées
+  d'assets avec networkInfo) pour générer les colonnes scalaires.
+- Adapter `assets.service.ts` (auto-sync IP en ADR-016 lot H) pour
+  lire `Asset.ip` au lieu de `Asset.networkInfo.ip`.
+- Adapter le frontend (assets/[id]/page.tsx, assets/page.tsx,
+  MonitorConfigSection.tsx defaultTarget).
 
-5. **Hiérarchie visuelle** sur les pages détail :
-   - Asset detail : trop de tabs au même niveau, pas de hiérarchie. Tab
-     "Monitoring" mélangée avec Tab "QR Code" — signaler par groupage.
-   - Site detail : 9 onglets, certains rarement utilisés. Évaluer un
-     "Plus" dropdown pour les onglets secondaires.
+**Gain** : index possible sur `Asset.ip`, queryable en filtre, `Tenant.allowInternalNetworkTargets`
+peut s'appliquer côté DB en CHECK constraint si on veut.
 
-6. **Mobile / responsive** : le projet vise iPad/laptop (pas mobile,
-   confirmé 2026-04-26), mais quelques pages débordent en < 1024px.
-   Audit léger.
+#### 2. `Tenant.config` split (branding + appearance + SSO)
 
-**Charge estimée** : 6-8h selon profondeur (pourrait s'étaler sur 2
-sessions dédiées à 3-4h chacune).
+Aujourd'hui `Tenant.config Json?` héberge `{appearance, branding, sso, …}`.
+Trois sous-objets stables, indépendants, dont SSO contient des secrets.
 
-### Option C — S6/S7 refacto JSON résiduel (~3-4h, NÉCESSITE S5 fait avant)
+**Migration** :
+- Nouvelle table `TenantBranding` 1:1 avec `Tenant` (logoUrl, primaryColor,
+  secondaryColor, accentColor, organizationName, securityReminders Json?).
+- Nouvelle table `TenantAppearance` 1:1 avec Tenant (theme, primaryColor,
+  density, allowUserOverride).
+- Nouvelle table `TenantSsoConfig` 1:1 avec Tenant (provider, clientId,
+  clientSecret encrypted, callbackUrl, …) — secrets en colonnes scalaires
+  encrypted-at-rest si possible (sinon clair pour dev).
+- Migration de données depuis `Tenant.config` JSON.
+- Drop `Tenant.config`.
+- `User.appearancePreference: Json?` → 3 colonnes scalaires
+  `appearanceTheme`, `appearancePrimaryColor`, `appearanceDensity`.
 
-Si tu fais cette option, S5 doit avoir tourné d'abord (sinon on ne peut
-pas dropper proprement les colonnes JSON existantes).
+**Gain** : type-safety, secrets SSO ne sont plus dans un blob qui
+trafique partout, branding queryable.
 
-Cibles ([ADR-013](../decisions/adr-013-residual-json-debt.md)) :
+#### 3. `Site.healthBreakdown` cache (extraction depuis `Site.metadata`)
 
-1. **`Site.metadata.healthBreakdown`** — JSON dénormalisé écrit par
-   l'aggregator. Utile pour l'affichage rapide mais pas indispensable
-   structurellement. Soit on le garde (cache lecture, c'est défendable)
-   et on l'extrait dans une table cache `SiteHealthBreakdown` (1:1 avec
-   Site, columns nommées), soit on le calcule à la demande côté API.
-   **Recommandation** : extraire en table `SiteHealthSnapshot` avec un
-   champ `componentsJson Json` pour les détails granulaires (tolérable
-   car structure variable) + colonnes scalaires `overall`,
-   `linksUp`, `linksDown`, `assetsDown`, `sdwanState`, `timestamp`. Donne
-   des index queryables sans perdre la flexibilité.
+`Site.metadata Json?` contient aujourd'hui `{ healthBreakdown }` écrit
+par `HealthAggregationService.recomputeSite()`. Le breakdown est un
+tableau de composants — structure stable.
 
-2. **`Site.contacts: Json?`** — array de contacts inline. Doit migrer
-   vers la table `Contact` existante avec un FK `siteId`. Aujourd'hui
-   `Contact.siteId` existe déjà (relation `contactsOnSite`), donc
-   migration = lire le JSON, créer les `Contact` rows manquants, dropper
-   la colonne JSON. Audit par site requis pour ne rien perdre.
+**Migration** :
+- Nouvelle table `SiteHealthSnapshot` 1:1 avec Site
+  (overall HealthStatus, linksUp Int, linksDown Int, assetsDown Int,
+  sdwanState String?, computedAt DateTime).
+- Détails granulaires (components[]) restent en JSON column
+  `componentsJson Json?` sur cette même table — variabilité de structure
+  acceptable.
+- Adapter `recomputeSite()` pour écrire dans la table dédiée.
+- Adapter le frontend (`liveHealthComponents` dans sites/[id]/page.tsx).
+- `Site.metadata` reste pour `serverInfo` (smbPath, sharepointUrl, …) qui
+  est aussi un blob mais hors scope (ADR-013 l'avait classé "low priority,
+  rare access").
 
-3. **`Site.accessNotes: Json?`** — `{ schedules, badges, procedures, safety }`.
-   Soit table `SiteAccessNote` 1:1 avec colonnes scalaires, soit garder
-   en JSON (4 sous-objets stables, faible variabilité). **Recommandation** :
-   garder en JSON (stable, peu de queries dessus).
+**Gain** : query "sites avec ≥1 asset DOWN dans les 24h" devient
+trivial en SQL au lieu de scanner du JSON.
 
-4. **`Site.emplacements: Json?`** — `[{ type, url, description }]`.
-   Migrer en table `SiteDocumentEmplacement` avec FK siteId. Aujourd'hui
-   c'est consultable mais pas queryable.
+#### 4 (optionnel selon temps restant). `Site.contacts` → table `Contact`
 
-5. **`Tenant.config: Json?`** — config branding/appearance/SSO. Zone
-   sensible (SSO secrets, branding tokens). **Recommandation** : split
-   en 3 tables `TenantBranding`, `TenantAppearance`, `TenantSsoConfig`
-   1:1. ADR-010 a déjà préparé `Tenant.allowInternalNetworkTargets` en
-   colonne scalaire — continuer le pattern.
+`Site.contacts: Json?` array de `{name, phone, email, role, isPrimary}`.
+La table `Contact` existe déjà avec FK siteId (`contactsOnSite`).
 
-6. **`User.appearancePreference: Json?`** — `{theme,primaryColor,density}`.
-   Stable, faible variabilité. **Recommandation** : 3 colonnes scalaires
-   `appearanceTheme`, `appearancePrimaryColor`, `appearanceDensity`.
+**Migration** :
+- Pour chaque site, lire `Site.contacts`, créer les `Contact` rows
+  manquants (idempotent par déduplication name+email), drop la colonne
+  JSON.
+- Adapter le frontend (Site detail "Contacts en grille de 3" lit
+  `site.contacts` actuellement).
 
-7. **`Asset.networkInfo: Json?`** — `{ip, mac, hostname, vlan, port}` +
-   adminLinks libres. Le ip/hostname sont déjà queryables via le
-   monitor target (auto-sync ADR-016). **Recommandation** : extraire
-   `ip`, `mac`, `hostname`, `vlan`, `port` en colonnes scalaires sur
-   Asset ; garder `adminLinks: Json?` pour la flexibilité (ADR-013
-   acceptait ce JSON-list).
+**Gain** : contacts queryables (recherche globale), réutilisables entre
+sites, même cycle de vie que les autres contacts.
 
-**Charge estimée** : 3-4h pour 4-5 des 7 cibles bien choisies. Pas
-besoin de tout faire d'un coup — choisis ce qui apporte le plus de
-queryabilité / type-safety.
+#### NON-cibles (gardés en JSON volontairement)
 
-ADR-018 (ou prolongement ADR-013) à rédiger pour documenter les choix
+- `Site.accessNotes Json?` (`{schedules, badges, procedures, safety}`) —
+  4 sous-objets stables, faible variabilité, jamais queryés. **OK en JSON**.
+- `Site.emplacements Json?` `[{type,url,description}]` — list libre,
+  pas de query métier dessus. **OK en JSON**.
+- `Asset.adminLinks Json?` (à confirmer post-split networkInfo) — list
+  libre. **OK en JSON**.
+- `VendorCatalog.content Json` — payload uploadé brut, by-design opaque.
+  **OK en JSON**.
+- `MonitorHttpConfig.expectedBodyContains` — déjà un champ String? (pas
+  un JSON), zéro action.
+
+ADR-018 (ou prolongement ADR-013) à rédiger pour graver les choix
 JSON conservés vs. extraits.
+
+**Charge S6/S7** : 3-4h pour les 3 cibles principales (Asset.networkInfo,
+Tenant.config split, Site.healthBreakdown). Le 4 (Site.contacts) si le
+temps le permet, sinon en suivi.
 
 ---
 
-Reste secondaire (hors session)
--------------------------------
+## Tag v1.6.0 et clôture
 
-- **Tests monitoring complémentaires** (lot continu) : `http.probe.spec`,
-  `icmp.probe.spec`, `monitor.processor.spec`,
-  `health-aggregation.spec`, `monitor-reactions.spec`,
-  `safe-lookup.spec`, `safe-http.spec`. À glisser au fil des sessions.
+À la fin de la session, après :
+1. S5 livré (migrations Prisma versionnées, post-push.sql supprimé).
+2. S6/S7 livrés (au moins 3 des 4 cibles JSON).
+3. Smoke tests prod OK (reset+reseed+migrate+probes vertes).
+4. Documentation à jour (README, INSTALL_DEV, ADR-017, ADR-018).
+
+Poser le tag :
+```
+git tag -a v1.6.0 -m "v1.6.0 — Prisma migrations + JSON debt cleanup"
+git push origin v1.6.0
+```
+
+Mettre à jour `package.json` (backend + frontend) à 1.6.0.
+Mettre à jour `MEMORY.md` "Versioning" pour refléter v1.6.0.
+
+---
+
+## Reste secondaire (hors session, à glisser au fil de l'eau)
+
+- **Tests monitoring complémentaires** (continu) : `http.probe.spec`,
+  `icmp.probe.spec`, `monitor.processor.spec`, `health-aggregation.spec`,
+  `monitor-reactions.spec`, `safe-lookup.spec`, `safe-http.spec`.
 - **Sécurité — chip ouverte** : rotation du PAT GitHub trouvé en clair
   dans `/opt/xch-dev/XCH/.git/config` sur xch-deploy
   (cf. `mcp__ccd_session__spawn_task` du 2026-04-26). 30 min en autonome.
@@ -200,34 +246,38 @@ Reste secondaire (hors session)
   auto-disable, auto-sync IP, UX produit nouvellement livrés à
   observer en usage chantier réel. Corriger ce qui sort.
 
-Workflow recommandé
--------------------
+---
 
-1. ADR avant de coder (sauf option B qui n'est pas une décision archi).
-2. Commits atomiques par sous-item.
-3. Push `main` au fil de l'eau.
-4. **Un seul rebuild backend + frontend à la fin.**
-5. Smoke tests post-deploy + rapport.
+## Workflow de session
 
-Contraintes
------------
+1. **ADR-017** d'abord (S5 design). Validation utilisateur courte (15 min).
+2. S5 implémentation par étapes : migration baseline → CHECK migrée →
+   entrypoint → tests prod (reset complet + smoke).
+3. **ADR-018** ensuite (S6/S7 design des 3-4 cibles). Validation
+   utilisateur courte.
+4. S6/S7 implémentation cible par cible, commits atomiques.
+5. **Un seul rebuild backend + frontend à la fin**, suivi du reset+reseed
+   + smoke complet.
+6. Tag v1.6.0 + update version + push tag.
+7. Rapport final + prompt suivant (UX/UI globale en session séparée).
 
-- Aucune dette technique — les drops doivent être propres, pas de
-  `// TODO` ou de hacks.
-- L'app reste `production-ready` au fil de l'eau (pas de feature flag
-  ni de migration partielle non terminée).
-- En option A, `prisma migrate reset` côté dev autorisé. La prod
-  xch-deploy est dev en pratique → reset autorisé, baseline depuis le
-  schéma courant ne pose pas de problème.
-- Cible utilisateurs : laptop / iPad / tablette (PAS mobile-first
-  téléphone, validé 2026-04-26).
+## Contraintes
 
-Avant de coder
---------------
+- Aucune dette technique — les drops doivent être propres.
+- L'app reste production-ready au fil de l'eau (pas de feature flag
+  ni migration partielle non terminée).
+- En prod xch-deploy, reset complet autorisé (données démo).
+- Cible utilisateurs : laptop / iPad / tablette.
 
-1. Confirmer choix Option A / B / C.
-2. Lire l'ADR pertinent (013 / 015 / 016) pour le contexte.
-3. Lire `MEMORY.md` pour les règles projet (sources de vérité, deploy
-   workflow, accès prod, etc.).
+## Avant de coder
 
-Réponds par "OK, option <X>" et on démarre.
+1. Lire [ADR-013 (résiduel JSON)](../decisions/adr-013-residual-json-debt.md)
+   pour comprendre les arbitrages JSON déjà actés.
+2. Lire `MEMORY.md` (sources de vérité, deploy workflow, accès prod,
+   versioning).
+3. Lire `backend/prisma/post-push.sql` pour comprendre les CHECK à
+   migrer en S5.
+4. Confirmer que la base xch-deploy est en mode "données démo
+   réinitialisables" (vrai par défaut, juste re-vérifier).
+
+Réponds par "OK, je rédige ADR-017" et on démarre par S5.
