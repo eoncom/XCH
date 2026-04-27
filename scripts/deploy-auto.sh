@@ -120,34 +120,32 @@ echo ""
 echo -e "${BLUE}🗄️  Step 4/6 - Database Sync${NC}"
 echo "----------------------------------------"
 
-echo "   Options de synchronisation:"
-echo "   1) db push (rapide, dev)"
-echo "   2) migrate deploy (production, safe)"
-echo "   3) reset + seed (complet, DESTRUCTIF)"
-echo "   4) skip (garder DB actuelle)"
+echo "   Options de synchronisation (ADR-017 — db push retiré) :"
+echo "   1) migrate deploy (standard — applique les migrations versionnées)"
+echo "   2) reset + seed (DESTRUCTIF — reset complet + seed démo)"
+echo "   3) skip (garder DB actuelle)"
 echo ""
 
 if [[ -n "$AUTO_DEPLOY_DB_ACTION" ]]; then
     DB_ACTION="$AUTO_DEPLOY_DB_ACTION"
+    # Compat ascendante : l'ancien mode "push" bascule sur "migrate" avec warning.
+    if [[ "$DB_ACTION" == "push" ]]; then
+        echo -e "${YELLOW}   ⚠️  AUTO_DEPLOY_DB_ACTION=push est déprécié (ADR-017) — fallback sur 'migrate'${NC}"
+        DB_ACTION="migrate"
+    fi
     echo -e "${BLUE}   Mode automatique: $DB_ACTION${NC}"
 else
-    read -p "   Choisir [1-4]: " -n 1 -r DB_CHOICE
+    read -p "   Choisir [1-3]: " -n 1 -r DB_CHOICE
     echo ""
     case $DB_CHOICE in
-        1) DB_ACTION="push" ;;
-        2) DB_ACTION="migrate" ;;
-        3) DB_ACTION="reset" ;;
-        4) DB_ACTION="skip" ;;
+        1) DB_ACTION="migrate" ;;
+        2) DB_ACTION="reset" ;;
+        3) DB_ACTION="skip" ;;
         *) DB_ACTION="skip" ;;
     esac
 fi
 
 case $DB_ACTION in
-    "push")
-        echo "   Exécution: prisma db push..."
-        npx prisma db push --accept-data-loss
-        echo -e "${GREEN}   ✅ Database schema synchronisé${NC}"
-        ;;
     "migrate")
         echo "   Exécution: prisma migrate deploy..."
         npx prisma migrate deploy

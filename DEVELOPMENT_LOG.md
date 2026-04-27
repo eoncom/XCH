@@ -6438,3 +6438,75 @@ fix(monitoring): retours UX session ADR-016 (6 bugs/améliorations)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## 2026-04-27 — Session S5 : Migrations Prisma versionnées (Plan v2)
+
+**Durée :** ~2h (en cours, smoke + deploy + commit restants)
+**Status :** ⏳ En cours
+**Worktree :** `claude/focused-poincare-10b9ef`
+**ADR :** [ADR-017](docs/decisions/adr-017-prisma-versioned-migrations.md) — *Migrations Prisma versionnées (`migrate deploy`) — fin de `db push`*
+
+**Contexte :**
+Avant d'enchaîner S6/S7 (refacto JSON résiduel), bascule l'infra de schéma de
+`prisma db push --accept-data-loss` vers `prisma migrate deploy` avec migrations
+versionnées. Sans ça, les drops/renames JSON de S6/S7 seraient intraçables et
+non-revertibles, en violation du principe directeur XCH.
+
+**Actions principales :**
+
+1. **ADR-017 rédigé et validé** par le user (5 décisions A→E : baseline `0_init`, migration `1_post_push_constraints`, entrypoint `migrate deploy`, reset complet sur xch-deploy, workflow dev `db:migrate:*`).
+
+2. **Génération du baseline `0_init/migration.sql`** via `npx --package=prisma@5.8.0 prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > /tmp/diff.out` (1374 lignes, `CREATE EXTENSION IF NOT EXISTS "postgis"` automatique grâce à `previewFeatures = ["postgresqlExtensions"]`). Pin `prisma@5.8.0` indispensable car `npx prisma` sans pin attrape Prisma 7.8.0 (qui a renommé `--to-schema-datamodel` en `--to-schema`).
+
+3. **Création de `1_post_push_constraints/migration.sql`** avec les 3 CHECK ADR-014 (`monitor_checks_target_exclusive`, `monitor_checks_tcp_port_required`, `monitor_checks_interval_bounds`).
+
+4. **Création de `migration_lock.toml`** (provider postgresql, requis par Prisma).
+
+5. **Suppression de `backend/prisma/post-push.sql`** — les CHECK vivent désormais dans la migration `1`.
+
+6. **Modification de `backend/docker-entrypoint.sh`** : `prisma db push --accept-data-loss` + `prisma db execute --file post-push.sql` retirés, remplacés par `prisma migrate deploy`. Worker continue de skipper les migrations.
+
+7. **Mise à jour de `backend/package.json`** : `db:push` et `db:sync` supprimés, ajout de `db:migrate:dev`, `db:migrate:deploy`, `db:migrate:reset` (renommage des anciens `prisma:migrate*`).
+
+8. **Patch de `scripts/deploy-auto.sh`** : menu Step 4 simplifié de 4 options à 3 (suppression de `db push`), fallback `AUTO_DEPLOY_DB_ACTION=push` → `migrate` avec warning ADR-017.
+
+9. **Nettoyage de `scripts/check-deploy-parity.sh`** : check #6 passe de placeholder « post-S5 » à check actif (échoue si `backend/prisma/migrations/` absent ou vide).
+
+10. **Mise à jour des commentaires dans `schema.prisma`** : 2 mentions `post-push.sql` remplacées par `migration 1_post_push_constraints`.
+
+11. **Mémoire MCP mise à jour** : nouvelle entité `ADR_017_PRISMA_MIGRATIONS`, observations ajoutées à `DEPLOY_WORKFLOW` et `XCH`, relations créées.
+
+**Reste à faire avant clôture S5 :**
+- Smoke test local (reset complet + migrate deploy + seed + login + monitoring).
+- Déploiement xch-deploy : `git pull` + `docker-compose down` + `prisma migrate reset --force --skip-seed` + `docker-compose up -d` + `db seed` + smoke complet (probes vertes, login admin@demo.fr, dashboard monitoring).
+- Commit atomique S5.
+- Enchaînement immédiat sur ADR-018 / S6+S7 (refacto JSON résiduel).
+
+**Fichiers modifiés (estimation) :**
+- Ajoutés : `backend/prisma/migrations/migration_lock.toml`, `backend/prisma/migrations/0_init/migration.sql`, `backend/prisma/migrations/1_post_push_constraints/migration.sql`, `docs/decisions/adr-017-prisma-versioned-migrations.md`
+- Modifiés : `backend/docker-entrypoint.sh`, `backend/package.json`, `backend/prisma/schema.prisma` (2 commentaires), `scripts/deploy-auto.sh`, `scripts/check-deploy-parity.sh`, `docs/status/PROJECT_STATUS.md` (header + table plan v2)
+- Supprimés : `backend/prisma/post-push.sql`
+
+
+---
+
+## Session Auto-Update - 2026-04-27
+
+**Date:** 2026-04-27 22:13:36
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 8
+- Frontend files modified: 0
+
+**Commit message:**
+```
+docs(prompts): focus next-session v1.6 sur S5 + S6/S7 enchaînés
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

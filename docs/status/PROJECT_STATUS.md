@@ -1,8 +1,24 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-04-26 22:51:38 (Auto-update)
-**Version actuelle :** 1.4.0
-**Statut global :** ✅ MVP Production-Ready (100%) + v1.4 — Audit phase 4 correctifs + feature Apparence + seed démo enrichi
+**Dernière mise à jour :** 2026-04-27 22:13:36 (Auto-update)
+**Version actuelle :** 1.5.0 (taguée), v1.6 en préparation
+**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 en cours d'exécution
+
+## 🚦 Plan v2 vers v1.6 (sessions S0 → S11)
+
+| Session | Description | Statut |
+|---|---|---|
+| S0 | Bump version 1.3.0 → 1.5.0 + script parité repos | ✅ Terminée (`eaa8880`, `7201bfa`) |
+| S1 | Sécurité hardening (rotation secrets, Redis auth, Multer, magic-bytes) | ✅ Terminée — [ADR-015](../decisions/adr-015-s1-security-hardening.md) (`2f1da73`, `30913c2`, `c2b8ca9`, lot M dans ADR-016) |
+| S4 | Tests Jest critical paths (PermissionGuard, Throttler, Consumption, Webhook) | ✅ Terminée (`0118c8b`) — 80 tests verts |
+| S2 | Monitoring natif (probes ICMP/HTTP/TCP, suppression Gatus/Kuma, UX produit) | ✅ Terminée — [ADR-014](../decisions/adr-014-native-monitoring.md) + [ADR-016](../decisions/adr-016-monitoring-unification.md) |
+| **S5** | **Migrations Prisma versionnées (`migrate deploy`)** | **⏳ En cours 2026-04-27 — [ADR-017](../decisions/adr-017-prisma-versioned-migrations.md) implémentée, smoke + deploy à valider** |
+| S6/S7 | Refacto JSON résiduel (Asset.networkInfo, Tenant.config split, Site.healthBreakdown) | ⏳ À démarrer après S5 — ADR-018 à rédiger |
+| S8-S11 | UX/UI globale, E2E refondu, hardening tail | 🔮 Plus tard |
+
+**Tag cible :** v1.6.0 après S5 + S6/S7 livrés et validés sur xch-deploy.
+
+## 🆕 v1.4.0 (2026-04-18) — Post audit + Apparence
 
 ## 🆕 v1.4.0 (2026-04-18) — Post audit + Apparence
 

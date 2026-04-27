@@ -13,7 +13,8 @@
 #   1. L'arbre de travail XCH est propre (pas de modifs non commitées).
 #   2. Le HEAD courant correspond à un tag (release) — sauf en mode standard.
 #   3. Le dernier tag XCH existe aussi dans XCH-deploy (sinon → drift).
-#   4. (Post-S5) Aucune migration Prisma pending non appliquée par migrate deploy.
+#   4. Présence du dossier backend/prisma/migrations/ avec au moins une migration
+#      versionnée (ADR-017 — db push retiré).
 #
 #   À appeler depuis un hook pre-push, depuis CI, ou manuellement avant
 #   un déploiement sur le serveur xch-deploy.
@@ -160,17 +161,19 @@ if [ "$STRICT" = true ] && [ -n "$DEV_LATEST_TAG" ] && [ -n "$DEPLOY_LATEST_TAG"
     fi
 fi
 
-# ── 6. Migrations Prisma pending (placeholder, activé post-S5) ──────────────
+# ── 6. Migrations Prisma versionnées (ADR-017) ──────────────────────────────
+echo -n "6. Migrations Prisma … "
 if [ -d "backend/prisma/migrations" ]; then
-    echo -n "6. Migrations Prisma … "
-    PENDING_MIGRATIONS="$(find backend/prisma/migrations -maxdepth 1 -mindepth 1 -type d | wc -l)"
-    if [ "$PENDING_MIGRATIONS" -gt 0 ]; then
-        echo -e "${GREEN}OK${NC} ($PENDING_MIGRATIONS migration(s) versionnée(s) présentes)"
+    MIGRATION_COUNT="$(find backend/prisma/migrations -maxdepth 1 -mindepth 1 -type d | wc -l)"
+    if [ "$MIGRATION_COUNT" -gt 0 ]; then
+        echo -e "${GREEN}OK${NC} ($MIGRATION_COUNT migration(s) versionnée(s))"
     else
-        echo -e "${YELLOW}vide${NC} (S5 pas encore exécutée — migrations versionnées à venir)"
+        echo -e "${RED}vide${NC} (dossier migrations sans contenu — incohérent)"
+        EXIT_CODE=1
     fi
 else
-    echo "6. Migrations Prisma : ${YELLOW}dossier absent${NC} (S5 pas encore exécutée — db push --accept-data-loss en place)"
+    echo -e "${RED}KO${NC} (dossier backend/prisma/migrations manquant — schema non versionné)"
+    EXIT_CODE=1
 fi
 
 echo

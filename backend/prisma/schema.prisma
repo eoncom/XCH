@@ -1469,7 +1469,7 @@ model UserNotification {
 // Native probes (ICMP/HTTP/TCP) executed by the dedicated worker container.
 // Polymorphic targets via separate FKs (siteId/assetId/linkId) — exactly one
 // must be non-null, enforced at app-service-layer AND by a SQL CHECK constraint
-// applied via prisma/post-push.sql (defense in depth).
+// applied via migration 1_post_push_constraints (defense in depth, ADR-017).
 // HTTP-specific config lives in MonitorHttpConfig (1:0-1) — zero JSON.
 
 enum MonitorKind {
@@ -1496,7 +1496,7 @@ model MonitorCheck {
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Polymorphic target — exactly one of siteId / assetId / linkId is non-null
-  // (enforced by app service + SQL CHECK constraint in post-push.sql).
+  // (enforced by app service + SQL CHECK constraint in migration 1_post_push_constraints).
   siteId  String?
   site    Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
   assetId String?
