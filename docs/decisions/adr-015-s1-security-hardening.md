@@ -1,8 +1,8 @@
 # ADR-015 : S1 Security Hardening — closure
 
-**Date :** 2026-04-26
-**Statut :** Accepté
-**Contexte :** Plan v2 sessions S0 + S1 (S1-A + S1-B + S1-closing)
+**Date :** 2026-04-26 (mis à jour 2026-04-27 — closing résidu intégré au lot M de [ADR-016](adr-016-monitoring-unification.md))
+**Statut :** **Clos** — toutes les vagues livrées
+**Contexte :** Plan v2 sessions S0 + S1 (S1-A + S1-B + S1-closing + S1-closing-2)
 
 > Note de numérotation : ADR-014 est réservé au monitoring natif (ADR à
 > rédiger en ouverture de la session monitoring, cf.
@@ -64,7 +64,7 @@ Cet ADR consigne :
   `backup.service.restoreFullBackup` et `restoreSiteBackup` avant
   `new AdmZip(buffer)`.
 
-### Phase closing (commit À VENIR)
+### Phase closing (commit `c2b8ca9`)
 - **Multer `fileSize` limits + `fileFilter` sur 8 routes** :
   `assets` (4 routes — 3 imports CSV 10 MB + attachment 25 MB) et
   `floor-plans` (4 routes — inspect-pdf + create + upload + new-version
@@ -85,6 +85,36 @@ Cet ADR consigne :
   passent en `${VAR:?message}` qui fait échouer compose si la variable
   n'est pas dans `.env`. POSTGRES_USER et POSTGRES_DB gardent un défaut
   lisible (ce ne sont pas des secrets).
+
+### Phase closing-2 (commit `4c3c5d0`, intégrée au lot M de [ADR-016](adr-016-monitoring-unification.md))
+
+Audit de fin de session ADR-016 a relevé 4 résidus que le `c2b8ca9`
+n'avait pas couverts. Tous fermés dans le même commit que les autres
+items de fin de session monitoring.
+
+- **Multer Tasks attachments** : la route `POST /api/tasks/:id/attachments`
+  utilisait `@UseInterceptors(FileInterceptor('file'))` NU (pas de
+  `limits`, pas de `fileFilter`). Vrai trou DoS. Ajout `memoryStorage` +
+  `limits.fileSize: 10 MB` + `attachmentFileFilter` (parité avec
+  `assets`/`sites`/`racks`).
+- **Magic-bytes manquants sur 3 services attachments** : Tasks, Sites,
+  Racks bypassaient `validateMagicBytesForMimetype` alors que Floor
+  Plans, Backup et Assets l'appelaient déjà. Ajout dans les 3 services
+  AVANT l'upload vers MinIO. Bouche le vecteur "PE/ELF renommé en
+  .png" pour les attachments rattachés à des tâches/sites/baies.
+- **Mots de passe hardcodés `XchSecure2024!` / `XchMinIO2024SecureKey!`**
+  encore présents dans `.env.example`, `backend/.env.example`,
+  `backend/.env.production` (le compose strict `:?` du closing #1
+  n'avait nettoyé que les fallbacks compose ; les fichiers `.env*`
+  exemples gardaient les valeurs en dur). Réécrits en placeholders
+  `<PASSWORD>` + commentaires expliquant `openssl rand -base64 32` /
+  `scripts/rotate-secrets.sh`. Le `backend/.env.production` (qui était
+  un fichier semi-réel committé) devient un template propre.
+- **Registre des faux positifs** : nouveau fichier
+  [`docs/security/false-positives.md`](../security/false-positives.md)
+  pour documenter au fil des audits ce qui finit en faux positif (avec
+  trancheur, date, cause racine, preuve, condition de re-évaluation).
+  Évite les retests à chaque audit. Gabarit d'entrée inclus.
 
 ## Faux positifs vérifiés (à ne pas re-soulever)
 
@@ -189,8 +219,18 @@ après lecture détaillée du code. Ils sont consignés ici pour traçabilité.
 
 ## Suivi
 
-- Commit `eaa8880` (S0) → `7201bfa` (S1-A script) → `30f62ab` (healthcheck
-  fix) → `0118c8b` (S4 tests) → `2f1da73` (S1-A code) → `30913c2` (S1-B) →
-  S1-closing (commit en cours, sera référencé ici une fois mergé).
-- Tag `v1.5.0` posé sur `7201bfa`. v1.6.0 sera posé en clôture du plan v2
-  (S11), pas avant.
+Chaîne complète des commits S0+S1 :
+
+| Phase | Commit | Description |
+|---|---|---|
+| S0 | `eaa8880` | bump 1.3.0 → 1.5.0 + deploy parity script |
+| S1-A scripts | `7201bfa` | rotate-secrets.sh (Phase A + B, --dry-run, --yes, backups, healthcheck) |
+| Hotfix | `30f62ab` | healthcheck rotate-secrets accepte tout HTTP < 500 |
+| S4 tests | `0118c8b` | Jest unit tests on critical fail-closed + math paths |
+| S1-A code | `2f1da73` | webhook auth + OOM caps + throttle granulaire |
+| S1-B | `30913c2` | Redis auth + magic-bytes ZIP avant unzip |
+| S1-closing | `c2b8ca9` | Multer limits 7 routes + magic-bytes images + secrets compose strict |
+| S1-closing-2 | `4c3c5d0` | Multer Tasks + magic-bytes Tasks/Sites/Racks + suppression XchSecure2024 + doc faux positifs |
+
+Tag `v1.5.0` posé sur `7201bfa`. **v1.6.0** sera posé après S5 (Prisma
+migrations) + S6/S7 (refacto JSON résiduel) du plan v2.
