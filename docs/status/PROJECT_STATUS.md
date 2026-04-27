@@ -20,8 +20,6 @@
 
 ## 🆕 v1.4.0 (2026-04-18) — Post audit + Apparence
 
-## 🆕 v1.4.0 (2026-04-18) — Post audit + Apparence
-
 - **Audit phase 4 couvert** (cf. `reports/phase4-audit-correctifs.md`) : 3 critiques,
   7 majeurs et la plupart des mineurs corrigés.
 - **RBAC scope backend** : `GET /users` en `@RequireManage` avec scope union des
