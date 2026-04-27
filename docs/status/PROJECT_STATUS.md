@@ -12,8 +12,8 @@
 | S1 | Sécurité hardening (rotation secrets, Redis auth, Multer, magic-bytes) | ✅ Terminée — [ADR-015](../decisions/adr-015-s1-security-hardening.md) (`2f1da73`, `30913c2`, `c2b8ca9`, lot M dans ADR-016) |
 | S4 | Tests Jest critical paths (PermissionGuard, Throttler, Consumption, Webhook) | ✅ Terminée (`0118c8b`) — 80 tests verts |
 | S2 | Monitoring natif (probes ICMP/HTTP/TCP, suppression Gatus/Kuma, UX produit) | ✅ Terminée — [ADR-014](../decisions/adr-014-native-monitoring.md) + [ADR-016](../decisions/adr-016-monitoring-unification.md) |
-| **S5** | **Migrations Prisma versionnées (`migrate deploy`)** | **⏳ En cours 2026-04-27 — [ADR-017](../decisions/adr-017-prisma-versioned-migrations.md) implémentée, smoke + deploy à valider** |
-| S6/S7 | Refacto JSON résiduel (Asset.networkInfo, Tenant.config split, Site.healthBreakdown) | ⏳ À démarrer après S5 — ADR-018 à rédiger |
+| S5 | Migrations Prisma versionnées (`migrate deploy`) | ✅ Terminée 2026-04-27 — [ADR-017](../decisions/adr-017-prisma-versioned-migrations.md) (`7c28abb`, `edcb218`) — smoke OK xch-deploy, 3 CHECK constraints en DB, 2 migrations dans `_prisma_migrations` |
+| **S6/S7** | **Refacto JSON résiduel (Asset.networkInfo, Tenant.config split, Site.healthBreakdown)** | **⏳ À démarrer immédiatement — ADR-018 à rédiger** |
 | S8-S11 | UX/UI globale, E2E refondu, hardening tail | 🔮 Plus tard |
 
 **Tag cible :** v1.6.0 après S5 + S6/S7 livrés et validés sur xch-deploy.

@@ -6443,8 +6443,8 @@ fix(monitoring): retours UX session ADR-016 (6 bugs/améliorations)
 
 ## 2026-04-27 — Session S5 : Migrations Prisma versionnées (Plan v2)
 
-**Durée :** ~2h (en cours, smoke + deploy + commit restants)
-**Status :** ⏳ En cours
+**Durée :** ~2h30 (smoke + deploy validés sur xch-deploy)
+**Status :** ✅ Terminée — commit `7c28abb` + cleanup `edcb218` sur main
 **Worktree :** `claude/focused-poincare-10b9ef`
 **ADR :** [ADR-017](docs/decisions/adr-017-prisma-versioned-migrations.md) — *Migrations Prisma versionnées (`migrate deploy`) — fin de `db push`*
 
@@ -6478,11 +6478,20 @@ non-revertibles, en violation du principe directeur XCH.
 
 11. **Mémoire MCP mise à jour** : nouvelle entité `ADR_017_PRISMA_MIGRATIONS`, observations ajoutées à `DEPLOY_WORKFLOW` et `XCH`, relations créées.
 
-**Reste à faire avant clôture S5 :**
-- Smoke test local (reset complet + migrate deploy + seed + login + monitoring).
-- Déploiement xch-deploy : `git pull` + `docker-compose down` + `prisma migrate reset --force --skip-seed` + `docker-compose up -d` + `db seed` + smoke complet (probes vertes, login admin@demo.fr, dashboard monitoring).
-- Commit atomique S5.
-- Enchaînement immédiat sur ADR-018 / S6+S7 (refacto JSON résiduel).
+**Smoke test xch-deploy (validé 2026-04-27 22:20) :**
+
+1. `git pull origin main` sur `/opt/xch-dev/XCH` (commits `7c28abb` + `edcb218` arrivés).
+2. `mv backend/prisma/migrations backend/prisma/migrations.legacy.bak` — un dossier orphelin (`20260408175248_delegation_first`) traînait sur le serveur, déplacé hors du chemin pour laisser le pull poser le nouveau.
+3. `docker compose build backend` — Alpine apk repos étaient indispos (échec `--no-cache` sur `apk add openssl python3 make g++ poppler-utils`), retry sans `--no-cache` a fonctionné (cache des layers).
+4. `docker compose stop backend backend-worker`.
+5. `docker compose run --rm --no-deps --entrypoint sh backend -c "npx prisma migrate reset --force --skip-seed"` → applique `0_init` (1374 lignes) puis `1_post_push_constraints` (3 CHECK), generate du client.
+6. `docker compose up -d backend backend-worker` → boot OK, l'entrypoint affiche `2 migrations found in prisma/migrations` puis `No pending migrations to apply` (no-op attendu après reset). API démarre.
+7. `POST /api/setup/initialize` avec `loadDemoData=true` via curl localhost:3002 → tenant Demo + admin@demo.fr créés + démo seed (8 sites, 83 assets, 14 racks, 12 tasks, 11 contacts, 6 users).
+8. **Validations DB** : `SELECT pg_get_constraintdef` confirme les 3 CHECK sur `monitor_checks` ; `_prisma_migrations` table contient `0_init` et `1_post_push_constraints` avec `applied_steps_count=1`, `started+finished=true`.
+9. **Smoke API** : login admin@demo.fr/Demo1234 → 201, login manager@demo.fr/demo123 → 201, GET /api/sites → 200, GET /api/monitors → 200 (8 monitors seedés), worker logs `XCH Backend Worker — running. Mode: monitoring probes` healthy.
+10. **URL publique** : 502 initialement car NPM cache l'ancienne IP du backend après rebuild — fix `docker exec nginx-proxy-manager-app-1 nginx -s reload`. Public OK : `https://xch.eoncom.io/api/auth/login` → 201. **Piège ajouté à `DEPLOY_WORKFLOW` mémoire** : reload NPM systématiquement après `docker compose build backend|frontend`.
+
+**Suite immédiate :** S6/S7 — ADR-018 + refacto JSON résiduel (Asset.networkInfo split, Tenant.config split, Site.healthBreakdown extraction). Tag v1.6.0 quand S6/S7 finis.
 
 **Fichiers modifiés (estimation) :**
 - Ajoutés : `backend/prisma/migrations/migration_lock.toml`, `backend/prisma/migrations/0_init/migration.sql`, `backend/prisma/migrations/1_post_push_constraints/migration.sql`, `docs/decisions/adr-017-prisma-versioned-migrations.md`
