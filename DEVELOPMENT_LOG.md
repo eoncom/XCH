@@ -6561,3 +6561,24 @@ feat(prisma): S6 cible A — Asset.networkInfo split en scalaires + AssetAdminLi
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-28
+
+**Date:** 2026-04-28 08:56:24
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat(prisma): S6 cible B — Tenant.config split intégral en 7 tables typées
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

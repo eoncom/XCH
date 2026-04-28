@@ -375,11 +375,14 @@ export class TenantsService {
     const tenant = await this.findOne(tenantId);
     const cfg = await this.prisma.tenantAppearance.findUnique({ where: { tenantId } });
 
+    // The table stores theme/density as plain `String` (not PG enum), so we
+    // narrow them to the expected literal union for the response shape.
     return {
-      theme: cfg?.theme ?? DEFAULT_TENANT_APPEARANCE.theme,
+      theme: ((cfg?.theme as ResolvedAppearance['theme']) ?? DEFAULT_TENANT_APPEARANCE.theme),
       primaryColor:
         cfg?.primaryColor ?? tenant.primaryColor ?? DEFAULT_TENANT_APPEARANCE.primaryColor,
-      density: cfg?.density ?? DEFAULT_TENANT_APPEARANCE.density,
+      density:
+        ((cfg?.density as ResolvedAppearance['density']) ?? DEFAULT_TENANT_APPEARANCE.density),
       allowUserOverride: cfg?.allowUserOverride ?? DEFAULT_TENANT_APPEARANCE.allowUserOverride,
     };
   }

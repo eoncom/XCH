@@ -509,15 +509,14 @@ export class AuthController {
   async getSsoConfig() {
     const oidcEnabled = this.configService.get('OIDC_ENABLED') === 'true';
 
-    // Also check if there's a tenant-level SSO config
+    // ADR-018 — TenantSsoConfig (typed table) replaces tenant.config.sso.
     let tenantSsoEnabled = false;
     try {
       const tenant = await this.prisma.tenant.findFirst({
         where: { status: 'ACTIVE' },
-        select: { config: true },
+        include: { ssoConfig: true },
       });
-      const config = tenant?.config as Record<string, any> | null;
-      tenantSsoEnabled = config?.sso?.enabled === true;
+      tenantSsoEnabled = tenant?.ssoConfig?.enabled === true;
     } catch {
       // Ignore — no tenant configured yet
     }

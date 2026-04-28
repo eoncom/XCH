@@ -71,13 +71,14 @@ export class AuthService {
   }
 
   async login(user: any) {
-    // Get tenant-level security config for session timeouts
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: user.tenantId } });
-    const tenantConfig = (tenant?.config as Record<string, any>) || {};
-    const security = tenantConfig?.security || {};
-
-    const sessionTimeout = security.sessionTimeout || this.config.get('JWT_ACCESS_EXPIRATION', '15m');
-    const refreshLifetime = security.refreshTokenLifetime || this.config.get('JWT_REFRESH_EXPIRATION', '7d');
+    // ADR-018 — TenantSecurityConfig (typed) replaces tenant.config.security.
+    const securityConfig = await this.prisma.tenantSecurityConfig.findUnique({
+      where: { tenantId: user.tenantId },
+    });
+    const sessionTimeout =
+      securityConfig?.sessionTimeout || this.config.get('JWT_ACCESS_EXPIRATION', '15m');
+    const refreshLifetime =
+      securityConfig?.refreshTokenLifetime || this.config.get('JWT_REFRESH_EXPIRATION', '7d');
 
     const payload = {
       sub: user.id,
