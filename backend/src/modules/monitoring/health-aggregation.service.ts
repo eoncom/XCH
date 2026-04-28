@@ -183,16 +183,33 @@ export class HealthAggregationService {
       components,
     };
 
-    // Persist to Site.healthStatus + lastHealthCheck + metadata.healthBreakdown.
-    const existingMetadata = (site.metadata as Record<string, unknown>) ?? {};
-    await this.prisma.site.update({
-      where: { id: siteId },
-      data: {
-        healthStatus: overall,
-        lastHealthCheck: new Date(),
-        metadata: { ...existingMetadata, healthBreakdown: breakdown as any },
-      },
-    });
+    // Persist Site.healthStatus + lastHealthCheck (denormalised aggregates)
+    // and upsert the full SiteHealthSnapshot (ADR-018 — typed table replaces
+    // the former Site.metadata.healthBreakdown JSON).
+    const computedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.site.update({
+        where: { id: siteId },
+        data: {
+          healthStatus: overall,
+          lastHealthCheck: computedAt,
+        },
+      }),
+      this.prisma.siteHealthSnapshot.upsert({
+        where: { siteId },
+        create: {
+          siteId,
+          overall,
+          componentsJson: components as any,
+          computedAt,
+        },
+        update: {
+          overall,
+          componentsJson: components as any,
+          computedAt,
+        },
+      }),
+    ]);
 
     return breakdown;
   }

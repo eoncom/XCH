@@ -194,6 +194,14 @@ export class SitesService {
       ${limitClause}
     `, ...paginationParams);
 
+    // ADR-018 — bulk-load SiteHealthSnapshot for the page slice. The TV
+    // dashboard needs the components breakdown per site to count up/down.
+    const siteIds = (rawSites as any[]).map((s) => s.id);
+    const snapshots = siteIds.length
+      ? await this.prisma.siteHealthSnapshot.findMany({ where: { siteId: { in: siteIds } } })
+      : [];
+    const snapshotsBySite = new Map(snapshots.map((s) => [s.siteId, s]));
+
     // Transform org fields into nested objects
     const transformedResults = (rawSites as any[]).map(site => ({
       ...site,
@@ -204,6 +212,7 @@ export class SitesService {
         groupLabel: site.delegation_groupLabel,
         groupColor: site.delegation_groupColor,
       } : null,
+      healthSnapshot: snapshotsBySite.get(site.id) ?? null,
       delegation_name: undefined,
       delegation_code: undefined,
       delegation_groupLabel: undefined,
@@ -269,6 +278,14 @@ export class SitesService {
       orderBy: [{ role: 'asc' }, { provider: 'asc' }],
     });
 
+    // ADR-018 — health breakdown extracted from Site.metadata.healthBreakdown
+    // to a typed 1:0..1 SiteHealthSnapshot. Frontend code reading
+    // `site.metadata?.healthBreakdown.{components,timestamp}` is rewritten to
+    // read `site.healthSnapshot.{componentsJson,computedAt}`.
+    const healthSnapshot = await this.prisma.siteHealthSnapshot.findUnique({
+      where: { siteId: id },
+    });
+
     // Backward-compat computed `connectivity` object so existing frontend code
     // (FloorPlanViewer NRO pins, export-site, sites list) that reads
     // `site.connectivity.primary.provider` etc. keeps working against the
@@ -308,6 +325,7 @@ export class SitesService {
       } : null,
       connectivityLinks,
       connectivity: computedConnectivity,
+      healthSnapshot,
       _count: {
         assets: Number(site._count_assets) || 0,
         racks: Number(site._count_racks) || 0,

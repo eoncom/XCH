@@ -452,6 +452,7 @@ model Site {
   expenses          Expense[]
   contactsOnSite    Contact[]
   securityReminders TenantSecurityReminder[]
+  healthSnapshot    SiteHealthSnapshot?
   accessOverrides   AccessOverride[]
   movementsFrom     AssetMovement[]    @relation("movementFromSite")
   movementsTo       AssetMovement[]    @relation("movementToSite")
@@ -1629,6 +1630,22 @@ model UserNotification {
 // ============================================================================
 // NATIVE MONITORING (ADR-014)
 // ============================================================================
+// Aggregated health snapshot per site, recomputed by HealthAggregationService
+// on every monitor pulse. ADR-018 — replaces Site.metadata.healthBreakdown JSON.
+// `componentsJson` stays JSON because it's an ephemeral cache rewritten every
+// ~30s; normalising would mean DELETE+INSERT N rows per pulse for zero query
+// gain (cf. ADR-018 Décision E).
+model SiteHealthSnapshot {
+  siteId         String       @id
+  site           Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  overall        HealthStatus
+  componentsJson Json         @db.JsonB
+  computedAt     DateTime
+
+  @@index([overall])
+  @@map("site_health_snapshots")
+}
+
 // Native probes (ICMP/HTTP/TCP) executed by the dedicated worker container.
 // Polymorphic targets via separate FKs (siteId/assetId/linkId) — exactly one
 // must be non-null, enforced at app-service-layer AND by a SQL CHECK constraint

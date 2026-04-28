@@ -148,17 +148,24 @@ export default function TVDashboardPage() {
     }> = [];
 
     for (const site of sites) {
-      const breakdown = (site.metadata as Record<string, any>)?.healthBreakdown;
-      if (breakdown?.components?.length > 0) {
-        const downComponents = breakdown.components.filter(
-          (c: { status: string }) => c.status === 'down' || c.status === 'degraded'
+      // ADR-018 — moved from site.metadata.healthBreakdown to site.healthSnapshot.
+      const snapshot = (site as any).healthSnapshot;
+      const components = (snapshot?.componentsJson ?? []) as Array<{
+        name: string; status: string; type: string;
+      }>;
+      if (components.length > 0) {
+        const downComponents = components.filter(
+          (c) => c.status === 'down' || c.status === 'degraded'
         );
         if (downComponents.length > 0) {
           alerts.push({
             siteName: site.name,
             siteCode: site.code,
             healthStatus: site.healthStatus,
-            timestamp: breakdown.timestamp || site.lastHealthCheck?.toString() || '',
+            timestamp:
+              (snapshot?.computedAt as string | undefined) ||
+              site.lastHealthCheck?.toString() ||
+              '',
             components: downComponents.slice(0, 3),
           });
         }
@@ -177,12 +184,13 @@ export default function TVDashboardPage() {
     let totalUp = 0;
     let totalDown = 0;
     for (const site of sites) {
-      const breakdown = (site.metadata as Record<string, any>)?.healthBreakdown;
-      if (breakdown?.components) {
-        for (const comp of breakdown.components) {
-          if (comp.status === 'up') totalUp++;
-          else if (comp.status === 'down') totalDown++;
-        }
+      // ADR-018 — moved from site.metadata.healthBreakdown.
+      const components = (((site as any).healthSnapshot?.componentsJson) ?? []) as Array<{
+        status: string;
+      }>;
+      for (const comp of components) {
+        if (comp.status === 'up') totalUp++;
+        else if (comp.status === 'down') totalDown++;
       }
     }
     return { totalUp, totalDown, total: totalUp + totalDown };
@@ -370,9 +378,12 @@ export default function TVDashboardPage() {
                 const status = site.healthStatus as keyof typeof healthStatusLabels;
                 const colors = healthStatusColors[status] || healthStatusColors.UNKNOWN;
                 const label = healthStatusLabels[status] || healthStatusLabels.UNKNOWN;
-                const breakdown = (site.metadata as Record<string, any>)?.healthBreakdown;
-                const componentCount = breakdown?.components?.length || 0;
-                const upCount = breakdown?.components?.filter((c: { status: string }) => c.status === 'up').length || 0;
+                // ADR-018 — moved from site.metadata.healthBreakdown.
+                const components = (((site as any).healthSnapshot?.componentsJson) ?? []) as Array<{
+                  status: string;
+                }>;
+                const componentCount = components.length;
+                const upCount = components.filter((c) => c.status === 'up').length;
 
                 return (
                   <div

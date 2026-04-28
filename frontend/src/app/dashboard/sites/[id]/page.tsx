@@ -1152,11 +1152,12 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
   // Health breakdown — written by HealthAggregationService (ADR-016).
   // Components reference per-entity aggregated MonitorCheck.lastStatus.
+  // ADR-018 — moved from site.metadata.healthBreakdown to site.healthSnapshot.
   const liveHealthComponents = useMemo(() => {
-    const hb = site?.metadata?.healthBreakdown;
-    if (!hb?.components?.length) return [];
-    return hb.components.filter((comp: any) => comp.status !== 'unknown');
-  }, [site?.metadata?.healthBreakdown]);
+    const components = (site as any)?.healthSnapshot?.componentsJson as any[] | undefined;
+    if (!components?.length) return [];
+    return components.filter((comp: any) => comp.status !== 'unknown');
+  }, [(site as any)?.healthSnapshot?.componentsJson]);
 
   // Load site racks
   const { data: racks = [] } = useQuery({
@@ -1468,7 +1469,8 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
           {/* État de santé du site */}
           {(() => {
-            const hb = site.metadata?.healthBreakdown;
+            // ADR-018 — moved from site.metadata.healthBreakdown.
+            const snapshot = (site as any).healthSnapshot;
             const hs = site.healthStatus as string;
             // Warranty alerts for this site's assets
             const warrantyAlerts = assets.filter(a => {
@@ -1564,10 +1566,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                     </button>
                   )}
 
-                  {/* Last check timestamp */}
-                  {hb?.timestamp && (
+                  {/* Last check timestamp (ADR-018 — from healthSnapshot) */}
+                  {snapshot?.computedAt && (
                     <p className="text-xs text-muted-foreground pt-1 border-t">
-                      Dernière vérification : {new Date(hb.timestamp).toLocaleString('fr-FR')}
+                      Dernière vérification : {new Date(snapshot.computedAt).toLocaleString('fr-FR')}
                     </p>
                   )}
                 </CardContent>
@@ -1770,9 +1772,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                       </div>
                     ))}
                   </div>
-                  {site.metadata?.healthBreakdown?.timestamp && (
+                  {(site as any).healthSnapshot?.computedAt && (
                     <p className="text-xs text-muted-foreground mt-3">
-                      Dernière vérification : {new Date(site.metadata.healthBreakdown.timestamp).toLocaleString('fr-FR')}
+                      Dernière vérification : {new Date((site as any).healthSnapshot.computedAt).toLocaleString('fr-FR')}
                     </p>
                   )}
                 </CardContent>
