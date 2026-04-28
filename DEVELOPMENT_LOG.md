@@ -6667,3 +6667,24 @@ feat(prisma): S6 cible C — Site.healthBreakdown vers SiteHealthSnapshot
 - Wizard sites/[id]/edit + sites/new : le state local `contacts` n'est plus envoyé au PATCH (table Contact gère via API dédiée). UI à recâbler en session UX/UI globale.
 - `NotificationConfig.{channels, events}` (ADR-013 pt 1) : session dédiée post-v1.6 avec tests d'héritage exhaustifs.
 - Chiffrement at-rest des secrets `TenantSsoConfig.clientSecret` et `TenantIntegrationConfig.netboxToken` : ADR dédiée (KMS / pgcrypto + key rotation).
+
+---
+
+## Session Auto-Update - 2026-04-29
+
+**Date:** 2026-04-29 01:50:55
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 5
+
+**Commit message:**
+```
+chore(release): bump 1.5.0 → 1.6.0 + clôture ADR-018 (S6/S7)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

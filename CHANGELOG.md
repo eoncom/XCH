@@ -7,9 +7,129 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [Unreleased] — Audit phase 5 (correctifs AUTH_MODEL + UX Notifications)
+## [1.6.1] - 2026-04-29 — Quick wins post-v1.6 (bugs + drift doc)
 
-### Security / Fixed (P0 — élévation de privilège & endpoints cassés)
+### Fixed
+- **Budgets — double comptage parent + enfants** : la page
+  `/dashboard/costs/budgets` sommait tous les budgets pour ses cartes
+  « Total budgété » et « Total dépensé », alors que par construction
+  Σ(children.amount) ≤ parent.amount. Avec un parent 10k€ + 2 enfants
+  3k€, la carte affichait 16k€ au lieu de 10k€. Correction : ne sommer
+  que les budgets racines (`parentId === null`). Le `spent` du parent
+  capture déjà les dépenses des enfants car leur scope est inclus dans
+  le scope parent. Seed démo enrichi avec un 2e sous-budget
+  (`Budget équipement IDF`) pour illustrer le cas test.
+- **Wizard Sites — contacts non persistés** (ADR-018 cible D regression) :
+  le wizard `/sites/new` et `/sites/[id]/edit` capturait les contacts
+  ajoutés via le picker dans un state local mais ne les envoyait pas
+  côté serveur — Site.contacts ayant été migré JSON → relation 1:N en
+  ADR-018, le PATCH du site ne pouvait plus les charrier. Le wizard
+  POST/PATCH/DELETE désormais via `contactsApi` après le save du site
+  (create-then-attach pour `new`, diff create/update/delete pour
+  `edit`). `Contact.isPrimary` ajouté au DTO + types frontend (déjà
+  présent dans le schéma Prisma depuis ADR-018 D.1). Type legacy
+  `SiteContact` retiré, `Site.contactsOnSite` retypé en `Contact[]`.
+
+### Documentation
+- **PROJECT_STATUS.md** — métriques re-mesurées (29 modules, 48 modèles,
+  22 enums, 273 endpoints, 18 ADRs, ~31 200 lignes backend, ~52 200
+  lignes frontend). Bloc « Métriques réelles » daté 2026-04-29.
+- **CHANGELOG.md** — bloc `[Unreleased] — Audit phase 5` déplié
+  rétroactivement en `[1.5.0]` (tag 2026-04-26) ; ajout des sections
+  `[1.6.0]` (S2+S5+ADR-018) et `[1.6.1]` (cette session).
+- **Plan finalization v2 (post-v1.6.0)** persisté en mémoire MCP
+  (`XCH_PLAN_V2_FINALIZATION`) et dans `docs/status/PROJECT_STATUS.md` —
+  7 sessions vers v1.8.0 (chiffrement secrets at-rest, NotificationConfig
+  refacto + Worker BullMQ, perfs DB, hardening tail, UX dark canvas, E2E
+  Playwright, Sentry optionnel).
+- **Prompts archive** : `next-session-monitoring-native.md`,
+  `next-session-v1.6-finalization.md` et `next-session-forms-cleanup.md`
+  déplacés en `docs/prompts/archive/` (sessions livrées). Sauvegarde du
+  prompt de cette session dans `docs/prompts/next-session-v1.6.1-quick-wins.md`.
+- **README.md + docs/00-INDEX.md** — ADR-017 (migrations Prisma versionnées)
+  et ADR-018 (refacto JSON résiduel) ajoutés au sommaire.
+
+---
+
+## [1.6.0] - 2026-04-28 — Refacto JSON résiduel (S6/S7) + Migrations Prisma versionnées (S5) + Monitoring natif (S2)
+
+### S2 — Monitoring natif (ADR-014, ADR-016)
+- Module `monitoring` dédié : `MonitorTarget` (cible : ConnectivityLink,
+  SdwanConfig, Asset, ad-hoc) + `MonitorCheck` (résultats horodatés ICMP /
+  HTTP / TCP). Suppression complète de la dépendance Uptime Kuma / Gatus.
+- Probes natives planifiées via BullMQ + cron NestJS, statuts agrégés sur
+  les entités cibles (statut hérité du dernier `MonitorCheck`).
+- 5 endpoints `/api/monitoring/targets` + 1 endpoint `/checks/recent`.
+  L'ancien webhook bidirectionnel Gatus retiré.
+
+### S5 — Migrations Prisma versionnées (ADR-017)
+- Bascule `prisma db push --accept-data-loss` → `prisma migrate deploy`
+  pour la prod. `docker-entrypoint.sh` exécute désormais
+  `prisma generate && prisma migrate deploy` au boot.
+- Migrations `0_init` et `1_post_push_constraints` (CHECK constraints
+  ex-`post-push.sql`) versionnées. `npm run db:migrate:dev` / `migrate:reset`
+  documentés dans le README.
+- Forward-only — pas de migration revert auto. En cas de bug, créer une
+  migration corrective.
+
+### S6/S7 — Refacto JSON résiduel (ADR-018) — 4 cibles, 11 nouvelles tables
+- **Cible A — `Asset.networkInfo`** (JSON) → 4 colonnes scalaires + table
+  `AssetAdminLink` (URLs admin typées).
+- **Cible B — `Tenant.config`** (JSON sac-à-tout) → split intégral en 7
+  tables typées : `TenantFeatureFlag`, `TenantElectricityConfig`,
+  `TenantAppearance`, `TenantBranding`, `TenantSsoConfig`,
+  `TenantIntegrationConfig`, `TenantWebhookConfig`. Plus aucun
+  `tenant.config.xxx` dans le code.
+- **Cible C — `Site.healthBreakdown`** (JSON) → table 1:0..1
+  `SiteHealthSnapshot` (overall + componentsJson typé + computedAt).
+- **Cible D — `Site.contacts` / `Site.metadata.serverInfo` /
+  `Site.accessNotes` / `Site.metadata.healthBreakdown`** (JSON) → relation
+  1:N `Contact` (avec `isPrimary` promu en colonne) + 4 colonnes scalaires
+  `smbPath/sharepointUrl/gedUrl/accessRightsUrl` + table `SiteEmplacement`
+  + 4 scalaires `accessSchedules/accessBadges/accessProcedures/accessSafety`.
+  Le `Site.metadata` JSON résiduel est dropé.
+- 5 migrations Prisma versionnées au total (`0_init` →
+  `5_site_json_cleanup`). Smoke complet validé sur xch-deploy en clôture.
+- 3 enums ajoutés : `SiteEmplacementType`, `SsoMode`, `IntegrationKind`.
+- Snapshot v1.6.0 : 48 modèles Prisma, 22 enums, 273 endpoints, 29 modules
+  NestJS, 18 ADRs.
+
+### Breaking
+- Toute donnée stockée dans `Site.metadata`, `Site.contacts`,
+  `Site.healthBreakdown`, `Site.accessNotes` ou `Tenant.config` non
+  re-seedée est perdue. Comme énoncé dans `XCH_DEMO_DATA_PRINCIPLE` (pas
+  de prod sensible, pilote en cours), le reset+seed est l'opération de
+  référence sur xch-deploy.
+
+---
+
+## [1.5.0] - 2026-04-26 — Audit phase 5 (correctifs AUTH_MODEL + UX Notifications) + S0/S1/S4
+
+### S0 — Bump version + script parité repos
+- Bump `1.3.0 → 1.5.0` (les versions 1.4.x correspondaient au tag v1.4.0
+  plus correctifs phase 5 non-tagués).
+- Script `scripts/check-repos-parity.sh` : compare XCH (dev) et XCH-deploy
+  (prod) sur structure + Dockerfiles + scripts critiques.
+
+### S1 — Sécurité hardening (ADR-015)
+- **Rotation secrets** : `scripts/rotate-secrets.sh` génère et applique
+  les nouveaux JWT/MinIO/webhook/Redis ; entrées MCP `secret_audit` pour
+  snapshot avant/après.
+- **Redis auth** : `REDIS_PASSWORD` requis ; backend + workers
+  authentifiés.
+- **Multer** : limites tailles + magic-bytes signature check (anti-poly).
+- **Webhook secrets** : `x-webhook-secret` validé en service avant tout
+  side-effect ; rate-limited.
+- 80 tests Jest backend (`PermissionGuard`, `XchThrottlerGuard`,
+  Consumption, Webhook…) — S4 livrée en parallèle.
+
+### S4 — Tests Jest critical paths
+- Setup Jest backend (jest.config.js + ts-jest + pas de mocks DB selon
+  feedback session — vraie Postgres via testcontainers ou base de test).
+- 80 tests verts couvrant les chemins critiques : authz, throttle,
+  imports CSV, webhook signatures, reset password lockout.
+
+### Audit phase 5 — Security / Fixed (P0 — élévation de privilège & endpoints cassés)
 - **`notification.controller.ts`** — 8 endpoints n'avaient aucun décorateur
   `@Require*` ni `@SkipDelegation`, donc tous `403 fail-closed` pour tout
   utilisateur non super-admin. Les helpers `requireAdmin`/`requireAdminOrManager`

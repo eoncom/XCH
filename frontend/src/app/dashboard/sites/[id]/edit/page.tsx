@@ -53,7 +53,7 @@ import { contactsApi, contactTypesApi } from '@/lib/api/contacts';
 import { organizationApi } from '@/lib/api/organization';
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2, MapPin, UserPlus, FolderOpen, Globe, FileText, Shield, Search, Users, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
-import type { Site, SiteContact, Contact, ContactType, ContactCategory, Asset } from '@/types';
+import type { Site, Contact, ContactType, ContactCategory, Asset } from '@/types';
 import { toast } from 'sonner';
 
 const siteSchema = z.object({
@@ -163,11 +163,47 @@ function EditSitePage({
       : undefined,
   });
 
-  // ADR-018 cible D — site.contacts/accessNotes/metadata.serverInfo ont été
-  // dropés ; on initialise les états locaux à partir des nouveaux scalaires
-  // (le shape du formulaire reste { schedules, badges, ...} pour minimiser le
-  // diff) et on désimbrique au moment de l'envoi.
-  const [contacts, setContacts] = useState<SiteContact[]>(((site as any)?.contactsOnSite || []) as SiteContact[]);
+  // ADR-018 cible D — Site.contacts JSON a été remplacé par une relation 1:N
+  // sur la table Contact. Le wizard manipule des drafts mutables : id défini
+  // = entrée existante (PATCH/DELETE possibles), id absent = nouvelle entrée
+  // à POSTer après le save du site.
+  type WizardContact = {
+    id?: string;
+    typeId: string;
+    name: string;
+    role?: string;
+    phone?: string;
+    mobile?: string;
+    email?: string;
+    company?: string;
+    address?: string;
+    notes?: string;
+    isPrimary: boolean;
+    category?: ContactCategory;
+  };
+  const fromContact = (c: any): WizardContact => ({
+    id: c.id,
+    typeId: c.typeId,
+    name: c.name ?? '',
+    role: c.role ?? '',
+    phone: c.phone ?? '',
+    mobile: c.mobile ?? '',
+    email: c.email ?? '',
+    company: c.company ?? '',
+    address: c.address ?? '',
+    notes: c.notes ?? '',
+    isPrimary: !!c.isPrimary,
+    category: c.type?.category ?? c.category ?? undefined,
+  });
+  const [contacts, setContacts] = useState<WizardContact[]>(
+    ((site as any)?.contactsOnSite || []).map(fromContact),
+  );
+  // Snapshot of the contacts as the form was first opened — used to compute
+  // create/update/delete diffs at save time. Re-set whenever the site refetch
+  // resolves so the picker and the diff stay in sync.
+  const [initialContacts, setInitialContacts] = useState<WizardContact[]>(
+    ((site as any)?.contactsOnSite || []).map(fromContact),
+  );
   const [accessNotes, setAccessNotes] = useState({
     schedules:  (site as any)?.accessSchedules  || '',
     badges:     (site as any)?.accessBadges     || '',
@@ -205,7 +241,9 @@ function EditSitePage({
       accessRightsUrl: s.accessRightsUrl || '',
       notes:           site.notes || '',
     });
-    setContacts((s.contactsOnSite || []) as SiteContact[]);
+    const wizardContacts = ((s.contactsOnSite || []) as any[]).map(fromContact);
+    setContacts(wizardContacts);
+    setInitialContacts(wizardContacts);
   }, [site]);
 
   // Charger tous les contacts pour l'étape Contacts & Accès
@@ -226,11 +264,89 @@ function EditSitePage({
   const [contactPickerCategory, setContactPickerCategory] = useState<string>('ALL');
   const [contactPickerType, setContactPickerType] = useState<string>('ALL');
 
+  // Compare two wizard contacts on the fields the wizard can mutate. Avoids
+  // round-tripping a PATCH for entries the user only browsed past.
+  const contactsEqual = (a: WizardContact, b: WizardContact): boolean =>
+    a.typeId === b.typeId &&
+    a.name === b.name &&
+    (a.role || '') === (b.role || '') &&
+    (a.phone || '') === (b.phone || '') &&
+    (a.mobile || '') === (b.mobile || '') &&
+    (a.email || '') === (b.email || '') &&
+    (a.company || '') === (b.company || '') &&
+    (a.address || '') === (b.address || '') &&
+    (a.notes || '') === (b.notes || '') &&
+    !!a.isPrimary === !!b.isPrimary;
+
+  const syncContacts = async (effectiveDelegationId: string | null) => {
+    const initialById = new Map<string, WizardContact>(
+      initialContacts.filter((c) => c.id).map((c) => [c.id!, c]),
+    );
+    const finalIds = new Set<string>(contacts.filter((c) => c.id).map((c) => c.id!));
+
+    const toCreate = contacts.filter((c) => !c.id && c.typeId && c.name.trim());
+    const toUpdate = contacts.filter((c) => {
+      if (!c.id) return false;
+      const original = initialById.get(c.id);
+      return original ? !contactsEqual(c, original) : false;
+    });
+    const toDelete = initialContacts.filter((c) => c.id && !finalIds.has(c.id));
+
+    const ops: Promise<unknown>[] = [];
+    for (const c of toCreate) {
+      ops.push(
+        contactsApi.create({
+          typeId: c.typeId,
+          name: c.name,
+          role: c.role || undefined,
+          phone: c.phone || undefined,
+          mobile: c.mobile || undefined,
+          email: c.email || undefined,
+          company: c.company || undefined,
+          address: c.address || undefined,
+          notes: c.notes || undefined,
+          isPrimary: c.isPrimary,
+          siteId: id,
+          delegationId: effectiveDelegationId ?? undefined,
+        }),
+      );
+    }
+    for (const c of toUpdate) {
+      ops.push(
+        contactsApi.update(c.id!, {
+          typeId: c.typeId,
+          name: c.name,
+          role: c.role || undefined,
+          phone: c.phone || undefined,
+          mobile: c.mobile || undefined,
+          email: c.email || undefined,
+          company: c.company || undefined,
+          address: c.address || undefined,
+          notes: c.notes || undefined,
+          isPrimary: c.isPrimary,
+        }),
+      );
+    }
+    for (const c of toDelete) ops.push(contactsApi.delete(c.id!));
+
+    if (ops.length === 0) return { failed: 0 };
+    const results = await Promise.allSettled(ops);
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    return { failed };
+  };
+
   const updateMutation = useMutation({
     mutationFn: (data: SiteFormData) => sitesApi.update(id, data),
-    onSuccess: () => {
+    onSuccess: async (updatedSite: any) => {
+      const effectiveDelegationId =
+        updatedSite?.delegationId ?? updatedSite?.delegation?.id ?? null;
+      const { failed } = await syncContacts(effectiveDelegationId);
+      if (failed > 0) {
+        toast.error(`${failed} contact(s) n'ont pas pu être synchronisés.`);
+      }
       queryClient.invalidateQueries({ queryKey: ['site', id] });
       queryClient.invalidateQueries({ queryKey: ['sites'] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
       toast.success('Site mis à jour avec succès');
       router.push(`/dashboard/sites/${id}`);
     },
@@ -897,11 +1013,15 @@ function EditSitePage({
                                       size="sm"
                                       onClick={() => {
                                         setContacts([...contacts, {
+                                          typeId: c.typeId,
                                           name: c.name,
                                           role: c.role || c.type?.name || '',
-                                          phone: c.phone || c.mobile || '',
+                                          phone: c.phone || '',
+                                          mobile: c.mobile || '',
                                           email: c.email || '',
                                           company: c.company || '',
+                                          address: c.address || '',
+                                          notes: c.notes || '',
                                           isPrimary: false,
                                           category: c.type?.category || undefined,
                                         }]);

@@ -108,7 +108,23 @@ export default function NewSitePage() {
     },
   });
 
-  const [contacts, setContacts] = useState<Array<{name: string; role: string; phone: string; email: string; isPrimary: boolean}>>([]);
+  // Wizard contact draft — captures the picker payload + isPrimary toggle.
+  // typeId is mandatory: every contact lives under a ContactType (the
+  // create POST after the site is in place reuses the imported one).
+  type WizardContact = {
+    typeId: string;
+    name: string;
+    role?: string;
+    phone?: string;
+    mobile?: string;
+    email?: string;
+    company?: string;
+    address?: string;
+    notes?: string;
+    isPrimary: boolean;
+    category?: ContactCategory;
+  };
+  const [contacts, setContacts] = useState<WizardContact[]>([]);
   const [accessNotes, setAccessNotes] = useState({
     schedules: '',
     badges: '',
@@ -146,12 +162,46 @@ export default function NewSitePage() {
 
   const createMutation = useMutation({
     mutationFn: (data: SiteFormData) => sitesApi.create(data),
-    onSuccess: (createdSite: any) => {
+    onSuccess: async (createdSite: any) => {
       queryClient.invalidateQueries({ queryKey: ['sites'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      const siteId = createdSite?.id;
+
+      // Persist wizard contacts via the Contact API now that we have a siteId.
+      // ADR-018 cible D split Site.contacts (JSON) into a 1:N Contact relation
+      // — the wizard captures drafts in local state and POSTs them here so the
+      // round-trip create-then-refresh actually shows the contacts back.
+      if (siteId && contacts.length > 0) {
+        const delegationId = createdSite?.delegationId ?? createdSite?.delegation?.id ?? null;
+        const results = await Promise.allSettled(
+          contacts
+            .filter((c) => c.typeId && c.name.trim())
+            .map((c) =>
+              contactsApi.create({
+                typeId: c.typeId,
+                name: c.name,
+                role: c.role || undefined,
+                phone: c.phone || undefined,
+                mobile: c.mobile || undefined,
+                email: c.email || undefined,
+                company: c.company || undefined,
+                address: c.address || undefined,
+                notes: c.notes || undefined,
+                isPrimary: c.isPrimary,
+                siteId,
+                delegationId: delegationId ?? undefined,
+              }),
+            ),
+        );
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        if (failed > 0) {
+          toast.error(`${failed} contact(s) n'ont pas pu être enregistrés. Réessayez depuis l'onglet Contacts.`);
+        }
+        queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      }
+
       // Phase 6.6 — two-step UX: the site exists, now invite the user to
       // configure connectivity / SD-WAN from the Infos pratiques tab.
-      const siteId = createdSite?.id;
       if (siteId) {
         toast.success('Site créé. Ajoutez maintenant sa connectivité.', {
           action: {
@@ -178,10 +228,9 @@ export default function NewSitePage() {
       return;
     }
 
-    // ADR-018 cible D — split scalars on the wire. Contacts can no longer
-    // travel with the site PATCH; they must be created via the Contact API
-    // after the site is in place. Wizard contacts state is captured but
-    // post-create hookup is out of scope of this refactor (TODO).
+    // ADR-018 cible D — split scalars on the wire. Contacts no longer travel
+    // with the site POST; they're persisted via the Contact API in the
+    // mutation's onSuccess once we know the new siteId.
     const payload = {
       ...data,
       accessSchedules:  accessNotes.schedules  || null,
@@ -786,11 +835,15 @@ export default function NewSitePage() {
                                       size="sm"
                                       onClick={() => {
                                         setContacts([...contacts, {
+                                          typeId: c.typeId,
                                           name: c.name,
                                           role: c.role || c.type?.name || '',
-                                          phone: c.phone || c.mobile || '',
+                                          phone: c.phone || '',
+                                          mobile: c.mobile || '',
                                           email: c.email || '',
                                           company: c.company || '',
+                                          address: c.address || '',
+                                          notes: c.notes || '',
                                           isPrimary: false,
                                           category: c.type?.category || undefined,
                                         }]);

@@ -1,8 +1,8 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-04-28 19:07:47 (Auto-update)
-**Version actuelle :** 1.6.0 (taguée 2026-04-28)
-**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré
+**Dernière mise à jour :** 2026-04-29 01:50:55 (Auto-update)
+**Version actuelle :** 1.6.1 (taguée 2026-04-29)
+**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + quick wins v1.6.1
 
 ## 🚦 Plan v2 vers v1.6 (sessions S0 → S11)
 
@@ -17,6 +17,23 @@
 | S8-S11 | UX/UI globale, E2E refondu, hardening tail | 🔮 Plus tard |
 
 **Tag :** **v1.6.0** posé 2026-04-28 (Asset/Tenant/Site refactor JSON → typed Prisma, smoke complet validé sur xch-deploy).
+
+## 🚦 Plan finalization v2 vers v1.8 (post-v1.6.0)
+
+| Session | Description | ADR prévue | Tag cible | Statut |
+|---|---|---|---|---|
+| 1 | Quick wins : bug Budgets, wizard Contacts CRUD, drift doc, re-mesure métriques, persistance plan v2 | — | v1.6.1 | ✅ Livrée 2026-04-29 |
+| 2 | Chiffrement secrets at-rest (Tenant.config SSO, integrationConfig API tokens, webhook secrets, SMTP/Teams) | ADR-019 | v1.6.2 ou v1.7.0 | ⏳ À démarrer |
+| 3 | NotificationConfig refacto (Channel + Rule + Digest) + Worker générique BullMQ | ADR-020 | v1.7.0 candidat | ⏳ |
+| 4 | Performance & intégrité DB (indexes, FK CHECK, query plans sur endpoints lourds) | — | intermédiaire | ⏳ |
+| 5 | Hardening tail : CSP nonce, DTOs structurés, drift doc final | — | v1.7.0 | ⏳ |
+| 6 | UX dark canvas + erreurs réseau + tap targets (cible laptop/iPad/tablette, pas mobile) | — | intermédiaire | ⏳ |
+| 7 | Refonte E2E Playwright (30-40 specs critical paths) | — | v1.8.0 | ⏳ |
+| 8 | (Optionnelle) Sentry / error tracking | — | — | 🔮 |
+
+Rationale : S2/S3/S4 indépendantes, S5 dépend de S2+S3 (drift doc), S7
+dépend de tout (E2E sur app stable). Détail dans l'entité MCP
+`XCH_PLAN_V2_FINALIZATION`.
 
 ## 🆕 v1.4.0 (2026-04-18) — Post audit + Apparence
 
@@ -43,36 +60,36 @@
 
 ## 📊 PROGRESSION GLOBALE
 
-_Métriques mesurées le 2026-04-19 (v1.4.x) — voir section « Métriques réelles » plus bas pour le détail._
+_Métriques mesurées le 2026-04-29 (v1.6.0+) — voir section « Métriques réelles » plus bas pour le détail._
 
 ```
-Backend      ████████████████████ 100% (27 modules NestJS, 261 endpoints REST)
-Frontend     ████████████████████ 100% (18 sections dashboard, 53 pages, 45 composants)
-DB schema    ████████████████████ 100% (32 modèles Prisma + 17 enums)
-Docs         ████████████████████ 100% (10 ADRs, AUTH_MODEL v2, INSTALL dev + prod)
-Tests        ███░░░░░░░░░░░░░░░░░  15% (2/57 E2E Playwright, pas de tests unitaires backend)
+Backend      ████████████████████ 100% (29 modules NestJS, 273 endpoints REST)
+Frontend     ████████████████████ 100% (18 sections dashboard, 53 pages, 57 composants)
+DB schema    ████████████████████ 100% (48 modèles Prisma + 22 enums, 5 migrations versionnées)
+Docs         ████████████████████ 100% (18 ADRs, AUTH_MODEL v2, INSTALL dev + prod)
+Tests        ███░░░░░░░░░░░░░░░░░  15% (80 tests Jest backend, 2/57 E2E Playwright)
 CI/CD        ██████████░░░░░░░░░░  50% (GitHub Actions workflow, pas de quality gates)
 Deploy       ████████████████████ 100% (Docker Compose prod, nginx, MinIO)
 
 MVP TOTAL    ████████████████████ 100% (PRODUCTION READY)
-POST-MVP v1.4 ████████████████████ 100% (Delegation-first + Apparence + Catalogues packs + MCP mémoire)
+POST-MVP v1.6 ████████████████████ 100% (Delegation-first + Apparence + Sécurité S1 + Monitoring natif + Migrations Prisma + Refacto JSON)
 ```
 
-### 📐 Métriques réelles mesurées le 2026-04-19 (v1.4.x, post-audit phase 5)
+### 📐 Métriques réelles mesurées le 2026-04-29 (v1.6.0+, post-ADR-018)
 
 Commandes reproductibles :
 ```bash
-ls -1 backend/src/modules | wc -l                          # 27 modules
-grep -c "^model " backend/prisma/schema.prisma             # 32 modèles  (-1 : AuthProvider retiré en phase 5)
-grep -c "^enum " backend/prisma/schema.prisma              # 17 enums    (-1 : AuthProviderType retiré)
-grep -rEnh "@(Get|Post|Patch|Put|Delete)\(" backend/src/modules --include="*.controller.ts" | wc -l   # 261 endpoints (-2 providers-legacy +1 GET /notifications/config/:delegationId)
-find frontend/src/app/dashboard -maxdepth 1 -type d | tail -n +2 | wc -l   # 18 sections
-find frontend/src/app/dashboard -name 'page.tsx' | wc -l   # 53 pages
-find frontend/src/components -name '*.tsx' | wc -l         # 45 composants
-find backend/src -name '*.ts' | xargs cat | wc -l          # ~27 200 lignes
-find frontend/src -name '*.ts' -o -name '*.tsx' | xargs cat | wc -l   # ~48 700 lignes
-ls docs/decisions/ | grep -c adr                           # 10 ADRs
-git tag --sort=-v:refname | head -1                         # v1.4.0 (correctifs phase 5 non-tagués)
+ls -1 backend/src/modules | wc -l                          # 29 modules (+monitoring ADR-014/016, +sdwan phase 6.6)
+grep -c "^model " backend/prisma/schema.prisma             # 48 modèles  (+16 vs v1.4.x : MonitorCheck, ConnectivityLink, SdwanConfig, SdwanFirewall, AssetAdminLink, SiteHealthSnapshot, SiteEmplacement, TenantFeatureFlag, TenantElectricityConfig, TenantAppearance, TenantBranding, TenantSsoConfig, TenantIntegrationConfig…)
+grep -c "^enum " backend/prisma/schema.prisma              # 22 enums    (+5 vs v1.4.x : monitoring + ADR-018)
+grep -rEnh "@(Get|Post|Patch|Put|Delete)\(" backend/src/modules --include="*.controller.ts" | wc -l   # 273 endpoints (+12 vs v1.4.x : monitoring natif, sdwan)
+find frontend/src/app/dashboard -maxdepth 1 -type d | tail -n +2 | wc -l   # 18 sections (stable)
+find frontend/src/app/dashboard -name 'page.tsx' | wc -l   # 53 pages (stable)
+find frontend/src/components -name '*.tsx' | wc -l         # 57 composants (+12 vs v1.4.x)
+find backend/src -name '*.ts' | xargs cat | wc -l          # ~31 160 lignes
+find frontend/src -name '*.ts' -o -name '*.tsx' | xargs cat | wc -l   # ~52 200 lignes
+ls docs/decisions/ | grep -c adr                           # 18 ADRs (ADR-001 → ADR-018)
+git tag --sort=-v:refname | head -1                         # v1.6.0 (puis v1.6.1 après quick-wins)
 ```
 
 > **Note** : les anciennes sections « Modules livrés : 10/10 » et « 15 modules / 11 modules » qui figuraient ici avant v1.4 étaient restées figées depuis v1.0 (décembre 2025). L'architecture a énormément évolué depuis (ADR-009 delegation-first, ADR-010 apparence, Coûts avancés, VendorCatalog, etc.). Les tableaux ci-dessous ont été refondus en v1.4.x pour refléter l'état réel et sont à re-mesurer à chaque bump de version.
@@ -84,8 +101,8 @@ git tag --sort=-v:refname | head -1                         # v1.4.0 (correctifs
 ### Backend - 100% TERMINÉ ✅
 
 **Statut :** Production-Ready
-**Dernière évolution majeure :** 2026-04-19 (v1.4.x)
-**Modules livrés :** 27/27
+**Dernière évolution majeure :** 2026-04-28 (v1.6.0)
+**Modules livrés :** 29/29
 
 Liste exacte des modules NestJS (`backend/src/modules/`) :
 
@@ -95,8 +112,9 @@ Liste exacte des modules NestJS (`backend/src/modules/`) :
 | **Organisation** | `organization` (délégations), `tenants`, `sites` |
 | **Opérationnel** | `assets`, `asset-models`, `racks`, `tasks`, `floor-plans`, `contacts`, `contact-types` |
 | **Coûts / consommation** | `billing-entities`, `expenses`, `budgets`, `consumption` |
-| **Intégrations** | `integrations` (NetBox / monitoring), `connectivity` |
-| **Notifications & supervision** | `notifications` (config + inbox), `audit`, `search` |
+| **Intégrations** | `integrations` (NetBox), `connectivity`, `sdwan` |
+| **Supervision** | `monitoring` (probes natives ICMP/HTTP/TCP, ADR-014/016) |
+| **Notifications** | `notifications` (config + inbox), `audit`, `search` |
 | **Administration** | `admin` (enum labels), `backup`, `seed`, `setup` |
 
 **Infrastructure :**
@@ -117,10 +135,10 @@ Liste exacte des modules NestJS (`backend/src/modules/`) :
 - ✅ Account lockout (5 échecs → 14 min)
 - ✅ Validation class-validator + helmet + CSP/COOP/CORP/X-Frame-Options (audit phase 2/3 propres)
 
-**Métriques (mesurées 2026-04-19, post-audit phase 5) :**
-- **261** endpoints REST décorés
-- **~27 200** lignes TypeScript (backend/src)
-- **32** modèles Prisma + **17** enums — inclut `Delegation`, `UserDelegation`, `AccessOverride`, `BillingEntity`, `Expense`, `CostAllocation`, `Budget`, `ConnectivityLink`, `AssetModel`, `VendorCatalog`, `UserNotification`, `EnumLabel`, `AuditLog`, `NotificationConfig` + les entités métier core (AuthProvider + enum AuthProviderType retirés en phase 5 — SSO piloté par `Tenant.config.sso`)
+**Métriques (mesurées 2026-04-29, post-ADR-018) :**
+- **273** endpoints REST décorés (+12 vs v1.4.x : monitoring natif + sdwan)
+- **~31 160** lignes TypeScript (backend/src)
+- **48** modèles Prisma + **22** enums — ajouts post-v1.4.x via ADR-014/016 (`MonitorTarget`, `MonitorCheck`), phase 6.6 (`SdwanConfig`, `SdwanFirewall`, `ConnectivityLink` typé), ADR-018 (`AssetAdminLink`, `SiteHealthSnapshot`, `SiteEmplacement`, `TenantFeatureFlag`, `TenantElectricityConfig`, `TenantAppearance`, `TenantBranding`, `TenantSsoConfig`, `TenantIntegrationConfig`…). 5 migrations Prisma versionnées (`0_init` → `5_site_json_cleanup`).
 - **0** policy Casbin (retiré), **0** référence à `User.role` pour autoriser (déprécié depuis v1.2)
 - **3** niveaux de droits : MANAGE ⊃ WRITE ⊃ READ
 - Ressources concernées par RBAC : sites, assets, racks, tasks, floor-plans, contacts, expenses, budgets, user-delegations, access-overrides, audit, netbox, monitoring, consumption, costs, tenants, users, delegations, appearance
@@ -128,14 +146,14 @@ Liste exacte des modules NestJS (`backend/src/modules/`) :
 **Documentation :**
 - ✅ Swagger API (http://localhost:3000/api/docs, dev uniquement)
 - ✅ Checkpoints backend historiques (archivés dans docs/archive/backend/)
-- ✅ 10 ADRs (ADR-001 → ADR-010, cf. docs/decisions/)
+- ✅ 18 ADRs (ADR-001 → ADR-018, cf. docs/decisions/)
 
 ---
 
 ### Frontend - 100% TERMINÉ ✅
 
 **Statut :** Production-Ready
-**Dernière évolution majeure :** 2026-04-19 (v1.4.x)
+**Dernière évolution majeure :** 2026-04-28 (v1.6.0)
 **Sections dashboard :** 18 top-level · **Pages App Router :** 53
 
 Sections dashboard actuelles (`frontend/src/app/dashboard/<section>/`) :
@@ -150,7 +168,7 @@ Sections dashboard actuelles (`frontend/src/app/dashboard/<section>/`) :
 | 6 | **Floor-plans** | Viewer Konva, pins typés, heatmap WiFi, calibration échelle |
 | 7 | **Contacts** | CRUD, types personnalisables, catégories INTERNAL/PROVIDER/PARTNER, import |
 | 8 | **Integrations** | Dashboard providers, NetBox (4 tabs), mapping drag&drop |
-| 9 | **Monitoring** | Table des moniteurs Uptime Kuma / Gatus + mapping UI |
+| 9 | **Monitoring** | Sondes natives (ICMP/HTTP/TCP) + résultats `MonitorCheck` (ADR-014/016, plus de Gatus/Kuma) |
 | 10 | **NetBox** | Config dédiée + historique sync |
 | 11 | **Users** | Liste, filtres, invite, édition (MANAGE+) |
 | 12 | **Admin > Audit** | Journal d'audit (super-admin only) |
@@ -161,7 +179,7 @@ Sections dashboard actuelles (`frontend/src/app/dashboard/<section>/`) :
 | 17 | **Settings** | 11 onglets : Profil, Sécurité, Apparence, Ma délégation, Notifications, Structure, Tenant, SSO, Modules, Types, Modèles d'équipement, Électricité, Sauvegardes |
 | 18 | **Profile, TV** | Profil court + Dashboard TV plein écran |
 
-**Total pages :** 53 `page.tsx` sous `frontend/src/app/` (dont 53 dashboard/), **45 composants** personnalisés.
+**Total pages :** 53 `page.tsx` sous `frontend/src/app/` (dont 53 dashboard/), **57 composants** personnalisés (+12 vs v1.4.x : Connectivity, SD-WAN, Monitoring, etc.).
 
 **Gardes frontend (v1.4) :**
 - `AccessGate` — guard page-level fail-closed (required: super-admin / manage / write / read)

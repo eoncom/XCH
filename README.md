@@ -335,6 +335,22 @@ npm run test:e2e:report       # Ouvrir rapport
 
 ## Changelog (versions recentes)
 
+### v1.6.1 (2026-04-29) — Quick wins post-v1.6
+- **Bug Budgets** : `/dashboard/costs/budgets` ne double-compte plus parent + enfants (somme limitée aux racines).
+- **Wizard Sites — contacts persistés** : POST/PATCH/DELETE via `contactsApi` apres save (regression ADR-018 cible D corrigee). `Contact.isPrimary` ajoute au DTO.
+- **PROJECT_STATUS** metriques re-mesurees (29 modules, 48 modeles Prisma, 22 enums, 273 endpoints, 18 ADRs).
+- **Plan finalization v2** persiste (7 sessions vers v1.8.0).
+
+### v1.6.0 (2026-04-28) — Refacto JSON residuel + Migrations versionnees + Monitoring natif
+- **ADR-014 + ADR-016 (S2)** : sondes natives ICMP/HTTP/TCP, `MonitorTarget` + `MonitorCheck` source unique, fin du couplage Gatus / Uptime Kuma.
+- **ADR-017 (S5)** : bascule `prisma db push` -> `prisma migrate deploy`. 5 migrations versionnees (`0_init` -> `5_site_json_cleanup`).
+- **ADR-018 (S6/S7)** : refacto JSON residuel sur 4 cibles (Asset.networkInfo, Tenant.config, Site.healthBreakdown, Site cleanup) - 11 nouvelles tables typees, 3 enums, ~22 colonnes scalaires extraites.
+
+### v1.5.0 (2026-04-26) — Securite hardening + Tests + Audit phase 5
+- **ADR-015 (S1)** : rotation secrets, Redis auth, Multer magic-bytes, webhook signing.
+- **S4** : 80 tests Jest backend (PermissionGuard, Throttler, Consumption, Webhook).
+- **Audit phase 5** : correctifs P0 (notifications endpoints fail-closed, monitoring webhook public, user-delegations escalation), correctifs P1 (OIDC mapping right, PATCH delegations RequireManage), code mort retire (handleLegacy, AuthProvider, providers-legacy).
+
 ### v1.4.0 (2026-04-18) — Post audit + Apparence
 - **Audit phase 4 + 5** : 3 critiques + 7 majeurs corriges (RBAC scope `/users`, gardes frontend `AccessGate`, OIDC mapping DelegationRight, webhook monitoring `@Public`, escalation user-delegations)
 - **Feature Apparence (ADR-010)** : tenant defaults + user override avec verrou admin (`AppearanceProvider`)

@@ -378,8 +378,14 @@ function BudgetsPage() {
 
   const overBudgetCount = Object.values(statuses).filter((s) => s.overBudget).length;
   const thresholdCount = Object.values(statuses).filter((s) => s.thresholdReached && !s.overBudget).length;
-  const totalBudgeted = Object.values(statuses).reduce((sum, s) => sum + s.budgeted, 0);
-  const totalSpent = Object.values(statuses).reduce((sum, s) => sum + s.spent, 0);
+  // Totaux agrégés : ne sommer QUE les budgets racines. Un sous-budget est par
+  // construction un découpage de l'enveloppe parent (Σ children ≤ parent),
+  // donc l'inclure dans la somme produirait un double comptage. Idem pour le
+  // dépensé : le scope d'un enfant est inclus dans celui du parent, donc
+  // `parent.spent` couvre déjà les dépenses des enfants.
+  const rootBudgets = budgets.filter((b) => !b.parentId);
+  const totalBudgeted = rootBudgets.reduce((sum, b) => sum + (statuses[b.id]?.budgeted ?? 0), 0);
+  const totalSpent = rootBudgets.reduce((sum, b) => sum + (statuses[b.id]?.spent ?? 0), 0);
 
   return (
     <div className="space-y-6">

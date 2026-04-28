@@ -188,6 +188,42 @@
 **📅 Date:** 2024-12-XX
 **✅ Statut:** Accepté
 
+#### ADR-006 → ADR-013
+
+Décisions intermédiaires (Docker network, E2E Playwright, fix SSR/CSR cookies,
+delegation-first model, Apparence, inline expense creation, Gatus
+bidirectional, JSON debt baseline). Voir [`docs/decisions/`](docs/decisions/).
+
+#### ADR-014: Monitoring natif (S2)
+**📍 Chemin:** [`docs/decisions/adr-014-native-monitoring.md`](docs/decisions/adr-014-native-monitoring.md)
+**📝 Décision:** Probes ICMP/HTTP/TCP natives (BullMQ + cron) — fin du couplage Uptime Kuma / Gatus.
+**📅 Date:** 2026-04-23
+**✅ Statut:** Accepté
+
+#### ADR-015: Sécurité hardening (S1)
+**📍 Chemin:** [`docs/decisions/adr-015-s1-security-hardening.md`](docs/decisions/adr-015-s1-security-hardening.md)
+**📝 Décision:** Rotation secrets, Redis auth, Multer magic-bytes, webhook signing.
+**📅 Date:** 2026-04-22
+**✅ Statut:** Accepté
+
+#### ADR-016: Unification du monitoring
+**📍 Chemin:** [`docs/decisions/adr-016-monitoring-unification.md`](docs/decisions/adr-016-monitoring-unification.md)
+**📝 Décision:** `MonitorTarget` + `MonitorCheck` deviennent la source unique de statut runtime (link/SDWAN/asset).
+**📅 Date:** 2026-04-25
+**✅ Statut:** Accepté
+
+#### ADR-017: Migrations Prisma versionnées (S5)
+**📍 Chemin:** [`docs/decisions/adr-017-prisma-versioned-migrations.md`](docs/decisions/adr-017-prisma-versioned-migrations.md)
+**📝 Décision:** Bascule `prisma db push` → `prisma migrate deploy`. Forward-only, pas de revert auto.
+**📅 Date:** 2026-04-27
+**✅ Statut:** Accepté
+
+#### ADR-018: Refacto JSON résiduel (S6/S7)
+**📍 Chemin:** [`docs/decisions/adr-018-json-debt-cleanup.md`](docs/decisions/adr-018-json-debt-cleanup.md)
+**📝 Décision:** 4 cibles (Asset.networkInfo, Tenant.config, Site.healthBreakdown, Site cleanup) — 11 nouvelles tables typées, 5 migrations versionnées.
+**📅 Date:** 2026-04-28
+**✅ Statut:** Accepté (livré v1.6.0)
+
 ### Roadmap
 **📍 Chemin:** [`status/ROADMAP.md`](status/ROADMAP.md)
 **📝 Description:** Planification détaillée du développement par phases

@@ -60,15 +60,9 @@ export interface AuthResponse {
 export type SiteStatus = 'PREPARATION' | 'ACTIVE' | 'CLOSED';
 export type HealthStatus = 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
 
-export interface SiteContact {
-  name: string;
-  phone?: string;
-  email?: string;
-  role?: string;
-  company?: string;
-  isPrimary?: boolean;
-  category?: 'INTERNAL' | 'PROVIDER' | 'PARTNER' | 'TECHNICAL' | 'EMERGENCY';
-}
+// ADR-018 cible D — Site.contacts (JSON-array) was migrated to a 1:N relation
+// on the typed Contact table. Read site.contactsOnSite as Contact[] (defined
+// further below) instead of the legacy SiteContact shape.
 
 // V2 connectivity link
 export interface ConnectivityLink {
@@ -186,7 +180,7 @@ export interface Site {
   accessRightsUrl?: string | null;
   notes?: string | null;
   // ADR-018 — typed relations replace former JSON columns.
-  contactsOnSite?: SiteContact[];
+  contactsOnSite?: Contact[];
   connectivity?: SiteConnectivity;
   emplacements?: Array<{ id: string; type: 'SMB' | 'SHAREPOINT'; url: string; description?: string | null; order: number }>;
   healthSnapshot?: { siteId: string; overall: HealthStatus; componentsJson: any[]; computedAt: string } | null;
@@ -484,6 +478,7 @@ export interface Contact {
   notes?: string;
   delegationId?: string | null;
   siteId?: string | null;
+  isPrimary?: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -501,6 +496,7 @@ export interface CreateContactDto {
   notes?: string;
   delegationId?: string | null;
   siteId?: string | null;
+  isPrimary?: boolean;
 }
 
 export interface UpdateContactDto extends Partial<CreateContactDto> {

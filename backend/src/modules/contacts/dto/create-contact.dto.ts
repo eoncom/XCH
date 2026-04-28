@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsEmail, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEmail, IsBoolean, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateContactDto {
@@ -103,4 +103,12 @@ export class CreateContactDto {
   @IsOptional()
   @IsString()
   siteId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Primary site contact flag (ADR-018 cible D.1, replaces former Site.contacts JSON.isPrimary)',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
 }

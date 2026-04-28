@@ -1133,6 +1133,35 @@ export class SeedService {
       });
     }
 
+    // Second sub-budget — gives the demo a parent + 2 children configuration
+    // (40k + 30k = 70k of the 120k parent envelope earmarked, 50k still
+    // available for direct/non-CdC expenses). Useful to visualize that the
+    // « Total budgété » summary card doesn't double-count children.
+    const equipmentBudgetLabel = `Budget équipement IDF ${budgetYear}`;
+    const existingEquipmentBudget = await this.prisma.budget.findFirst({
+      where: { tenantId, label: equipmentBudgetLabel },
+    });
+    if (!existingEquipmentBudget) {
+      await this.prisma.budget.create({
+        data: {
+          tenantId,
+          label: equipmentBudgetLabel,
+          delegationId: idfOuest,
+          billingEntityId: null,
+          parentId: parentBudget.id,
+          expenseType: 'EQUIPMENT',
+          period: 'YEAR',
+          startDate: new Date(budgetYear, 0, 1),
+          endDate: new Date(budgetYear, 11, 31),
+          amount: 30000 as any,
+          currency: 'EUR',
+          notes:
+            "Sous-budget équipement (partie de l'enveloppe IDF Ouest). Démontre que la somme parent+enfants ne double-compte pas.",
+          alertThresholdPct: 80,
+        },
+      });
+    }
+
     // A recurring expense with a split allocation (60% BU IDF, 40% BU Lyon)
     const expenseLabel = 'Abonnement fibre Orange Business — La Défense';
     const existingExpense = await this.prisma.expense.findFirst({
