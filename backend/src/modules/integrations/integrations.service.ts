@@ -24,22 +24,18 @@ export class IntegrationsService {
   // ==================== INTEGRATION CONFIG ====================
 
   /**
-   * Reconfigure NetBox provider from tenant DB config.
-   * Returns the tenant config for downstream use.
+   * Reconfigure NetBox provider from tenant DB config (ADR-018: typed table).
    */
-  private async ensureNetBoxConfigured(tenantId: string): Promise<Record<string, any> | null> {
+  private async ensureNetBoxConfigured(tenantId: string): Promise<void> {
     try {
-      const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-      if (!tenant) return null;
-      const config = tenant.config as Record<string, any> | null;
-      const netbox = config?.integrations?.netbox;
-      if (netbox?.url && netbox?.token) {
-        this.netboxProvider.reconfigure(netbox.url, netbox.token);
+      const integration = await this.prisma.tenantIntegrationConfig.findUnique({
+        where: { tenantId },
+      });
+      if (integration?.netboxUrl && integration?.netboxToken) {
+        this.netboxProvider.reconfigure(integration.netboxUrl, integration.netboxToken);
       }
-      return config;
     } catch (error) {
       this.logger.warn('Failed to load NetBox config from DB', error);
-      return null;
     }
   }
 
@@ -50,10 +46,11 @@ export class IntegrationsService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    const config = tenant.config as Record<string, any> | null;
-    const integrations = config?.integrations || {};
+    const integration = await this.prisma.tenantIntegrationConfig.findUnique({
+      where: { tenantId },
+    });
 
-    const maskToken = (token?: string) => {
+    const maskToken = (token?: string | null) => {
       if (!token) return '';
       if (token.length <= 4) return '****';
       return '****' + token.slice(-4);
@@ -61,9 +58,9 @@ export class IntegrationsService {
 
     return {
       netbox: {
-        url: integrations.netbox?.url || '',
-        tokenSet: !!integrations.netbox?.token,
-        tokenHint: maskToken(integrations.netbox?.token),
+        url: integration?.netboxUrl || '',
+        tokenSet: !!integration?.netboxToken,
+        tokenHint: maskToken(integration?.netboxToken),
       },
     };
   }
@@ -76,32 +73,26 @@ export class IntegrationsService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    const config = (tenant.config as Record<string, any>) || {};
-    const existing = config.integrations || {};
-    const updatedIntegrations: Record<string, any> = { ...existing };
-
-    if (data.netbox) {
-      updatedIntegrations.netbox = {
-        url: data.netbox.url ?? existing.netbox?.url ?? '',
-        token: data.netbox.token || existing.netbox?.token || '',
-      };
-      if (updatedIntegrations.netbox.url && updatedIntegrations.netbox.token) {
-        this.netboxProvider.reconfigure(
-          updatedIntegrations.netbox.url,
-          updatedIntegrations.netbox.token,
-        );
-      }
-    }
-
-    // Drop any leftover legacy monitoring config now that providers are gone.
-    delete updatedIntegrations.monitoring;
-    delete updatedIntegrations.uptimeKuma;
-
-    const updatedConfig = { ...config, integrations: updatedIntegrations };
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { config: updatedConfig },
+    const existing = await this.prisma.tenantIntegrationConfig.findUnique({
+      where: { tenantId },
     });
+
+    const nextUrl = data.netbox?.url ?? existing?.netboxUrl ?? '';
+    // Empty/undefined token preserves existing value; a non-empty value replaces.
+    const nextToken =
+      data.netbox?.token && data.netbox.token !== ''
+        ? data.netbox.token
+        : existing?.netboxToken ?? '';
+
+    await this.prisma.tenantIntegrationConfig.upsert({
+      where: { tenantId },
+      create: { tenantId, netboxUrl: nextUrl, netboxToken: nextToken },
+      update: { netboxUrl: nextUrl, netboxToken: nextToken },
+    });
+
+    if (nextUrl && nextToken) {
+      this.netboxProvider.reconfigure(nextUrl, nextToken);
+    }
 
     return this.getIntegrationConfig(tenantId);
   }

@@ -101,7 +101,9 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     enabled: isAuthenticated,
   });
 
-  const themeId = tenant?.config?.theme || null;
+  // ADR-018 — theme presets are surfaced under the assembled config.branding
+  // shape (TenantBranding 1:1, no JSON).
+  const themeId = (tenant?.config as any)?.branding?.theme || null;
 
   // Apply theme preset or legacy primaryColor as CSS custom properties
   useEffect(() => {

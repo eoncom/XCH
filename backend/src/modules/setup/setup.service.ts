@@ -102,7 +102,9 @@ export class SetupService {
       throw new ConflictException(`Subdomain "${dto.subdomain}" is already taken`);
     }
 
-    // Create tenant
+    // Create tenant. ADR-018 — config JSON is gone; modules go into the
+    // typed tenant_feature_flags table. Domain/timezone/language used to
+    // live in tenant.config but were never read; we drop them silently.
     const tenant = await this.prisma.tenant.create({
       data: {
         name: dto.organizationName,
@@ -110,21 +112,18 @@ export class SetupService {
         logoUrl: dto.logoUrl || null,
         primaryColor: dto.primaryColor || '#0070f3',
         status: 'ACTIVE',
-        config: {
-          domain: dto.subdomain,
-          timezone: dto.timezone || 'Europe/Paris',
-          language: dto.language || 'Français',
-          modules: {
-            sites: true,
-            assets: true,
-            racks: true,
-            tasks: true,
-            floor_plans: true,
-            contacts: true,
-            integrations_netbox: true,
-            monitoring: true,
-            qr_codes: true,
-          },
+        featureFlags: {
+          create: [
+            { name: 'sites',                enabled: true },
+            { name: 'assets',               enabled: true },
+            { name: 'racks',                enabled: true },
+            { name: 'tasks',                enabled: true },
+            { name: 'floor_plans',          enabled: true },
+            { name: 'contacts',             enabled: true },
+            { name: 'integrations_netbox',  enabled: true },
+            { name: 'monitoring',           enabled: true },
+            { name: 'qr_codes',             enabled: true },
+          ],
         },
       },
     });

@@ -4,7 +4,8 @@ export const REQUIRED_MODULE_KEY = 'requiredModule';
 
 /**
  * Decorator to mark a controller or endpoint as requiring a specific module to be enabled.
- * Used with ModuleGuard to check tenant.config.modules[moduleName].
+ * Used with ModuleGuard to check `tenant_feature_flags` table (ADR-018,
+ * ex-tenant.config.modules JSON map).
  *
  * @example
  * @RequireModule('floor_plans')

@@ -8,10 +8,10 @@ import { ConsumptionService } from './consumption.service';
  * Math under test (computeFromAssets, called by computeSite/computeRack/summary):
  *   - watts = powerConsumption * (dutyCyclePercent / 100)
  *   - kWh/month = (totalWatts * 24 * 30) / 1000
- *   - cost/month = kWh/month * tenant.config.electricity.costPerKwh
+ *   - cost/month = kWh/month * TenantElectricityConfig.costPerKwh (ADR-018)
  *   - active filter: only IN_SERVICE / UNDER_MAINTENANCE contribute to watts
  *     (every linked asset still counts in `assetCount`)
- *   - default costPerKwh = 0.20 EUR when tenant.config.electricity is missing
+ *   - default costPerKwh = 0.20 EUR when no TenantElectricityConfig row exists
  */
 describe('ConsumptionService', () => {
   let service: ConsumptionService;
@@ -19,7 +19,7 @@ describe('ConsumptionService', () => {
 
   beforeEach(() => {
     prisma = {
-      tenant: { findUnique: jest.fn() },
+      tenantElectricityConfig: { findUnique: jest.fn() },
       site: { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn() },
       rack: { findFirst: jest.fn() },
       asset: { findMany: jest.fn() },
@@ -47,8 +47,9 @@ describe('ConsumptionService', () => {
         code: 'ALTO',
         autoGenerateElectricityExpense: false,
       });
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
-        config: { electricity: { costPerKwh: 0.25, currency: 'EUR' } },
+      (prisma.tenantElectricityConfig.findUnique as jest.Mock).mockResolvedValue({
+        costPerKwh: 0.25,
+        currency: 'EUR',
       });
       (prisma.asset.findMany as jest.Mock).mockResolvedValue([
         // Active server: 100W @ 80% = 80W
@@ -104,7 +105,7 @@ describe('ConsumptionService', () => {
         name: 'X',
         code: 'X',
       });
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ config: {} });
+      (prisma.tenantElectricityConfig.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.asset.findMany as jest.Mock).mockResolvedValue([
         {
           type: 'SERVER',
@@ -127,7 +128,7 @@ describe('ConsumptionService', () => {
         name: 'X',
         code: 'X',
       });
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ config: {} });
+      (prisma.tenantElectricityConfig.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.asset.findMany as jest.Mock).mockResolvedValue([
         {
           type: 'PATCH_PANEL',
@@ -151,8 +152,9 @@ describe('ConsumptionService', () => {
         name: 'X',
         code: 'X',
       });
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
-        config: { electricity: { costPerKwh: 1, currency: 'EUR' } },
+      (prisma.tenantElectricityConfig.findUnique as jest.Mock).mockResolvedValue({
+        costPerKwh: 1,
+        currency: 'EUR',
       });
       (prisma.asset.findMany as jest.Mock).mockResolvedValue([
         {
@@ -185,8 +187,9 @@ describe('ConsumptionService', () => {
         name: 'R1',
         siteId: 's1',
       });
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
-        config: { electricity: { costPerKwh: 0.2, currency: 'EUR' } },
+      (prisma.tenantElectricityConfig.findUnique as jest.Mock).mockResolvedValue({
+        costPerKwh: 0.2,
+        currency: 'EUR',
       });
       (prisma.asset.findMany as jest.Mock).mockResolvedValue([
         // computeRack does NOT select status, so the active filter
@@ -206,8 +209,9 @@ describe('ConsumptionService', () => {
 
   describe('summary', () => {
     it('aggregates per-site totals and sorts by watts descending', async () => {
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
-        config: { electricity: { costPerKwh: 0.2, currency: 'EUR' } },
+      (prisma.tenantElectricityConfig.findUnique as jest.Mock).mockResolvedValue({
+        costPerKwh: 0.2,
+        currency: 'EUR',
       });
       (prisma.site.count as jest.Mock).mockResolvedValue(2);
       (prisma.site.findMany as jest.Mock).mockResolvedValue([
@@ -256,7 +260,7 @@ describe('ConsumptionService', () => {
     });
 
     it('honors limit + offset with truncated flag when totalSites > returned', async () => {
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ config: {} });
+      (prisma.tenantElectricityConfig.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.site.count as jest.Mock).mockResolvedValue(150);
       (prisma.site.findMany as jest.Mock).mockResolvedValue([
         { id: 's1', name: 'Site 1', code: 'A', assets: [] },
@@ -276,7 +280,7 @@ describe('ConsumptionService', () => {
     });
 
     it('caps limit to SUMMARY_SITE_CAP (500) even if a higher value is requested', async () => {
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({ config: {} });
+      (prisma.tenantElectricityConfig.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.site.count as jest.Mock).mockResolvedValue(10);
       (prisma.site.findMany as jest.Mock).mockResolvedValue([]);
 

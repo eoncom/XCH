@@ -28,12 +28,12 @@ model Tenant {
   subdomain String       @unique
   status    TenantStatus @default(ACTIVE)
 
-  // Branding
+  // Tenant.config JSON dropped in S6 (ADR-018) — split into typed relations
+  // below: featureFlags / electricity / appearance / branding / ssoConfig /
+  // securityReminders. logoUrl/primaryColor remain as legacy short-hand on
+  // Tenant (also mirrored in TenantBranding).
   logoUrl      String?
   primaryColor String? @default("#0070f3")
-
-  // Configuration (JSON)
-  config Json? @db.JsonB
 
   // SSRF policy (ADR-016, was ADR-014.allowInternalMonitorTargets) — when true,
   // any operator-supplied URL/host (monitor probes, Teams webhook, future
@@ -74,8 +74,145 @@ model Tenant {
   vendorCatalogs      VendorCatalog[]
   monitorChecks       MonitorCheck[]
 
+  // Typed config relations (ADR-018, ex-Tenant.config)
+  featureFlags       TenantFeatureFlag[]
+  electricity        TenantElectricityConfig?
+  appearance         TenantAppearance?
+  branding           TenantBranding?
+  ssoConfig          TenantSsoConfig?
+  securityConfig     TenantSecurityConfig?
+  integrationConfig  TenantIntegrationConfig?
+  securityReminders  TenantSecurityReminder[]
+
   @@index([status])
   @@map("tenants")
+}
+
+// ----- Tenant config split (ADR-018) ---------------------------------------
+
+// 1 row per tenant × module name. Replaces Tenant.config.modules JSON map.
+model TenantFeatureFlag {
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String   // 'floor_plans', 'integrations_netbox', 'tasks', …
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@id([tenantId, name])
+  @@map("tenant_feature_flags")
+}
+
+model TenantElectricityConfig {
+  tenantId   String   @id
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  costPerKwh Decimal  @default(0.20) @db.Decimal(10, 4)
+  currency   String   @default("EUR")
+  updatedAt  DateTime @updatedAt
+
+  @@map("tenant_electricity_configs")
+}
+
+model TenantAppearance {
+  tenantId          String   @id
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  theme             String   @default("light")        // 'light' | 'dark' | 'auto'
+  primaryColor      String   @default("#0070f3")
+  density           String   @default("comfortable")  // 'comfortable' | 'compact'
+  allowUserOverride Boolean  @default(true)
+  updatedAt         DateTime @updatedAt
+
+  @@map("tenant_appearance_configs")
+}
+
+model TenantBranding {
+  tenantId         String   @id
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logoUrl          String?
+  primaryColor     String?
+  secondaryColor   String?
+  accentColor      String?
+  organizationName String?
+  // Color theme preset id (e.g. 'blue', 'green', …) consumed by
+  // BrandingProvider on the frontend. NULL ⇒ fall back to primaryColor.
+  // Distinct from TenantAppearance.theme which is the light/dark/auto mode.
+  theme            String?
+  updatedAt        DateTime @updatedAt
+
+  @@map("tenant_branding_configs")
+}
+
+model TenantSsoConfig {
+  tenantId     String   @id
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider     String   // 'oidc' | 'azure-ad' | …
+  clientId     String
+  clientSecret String   // TODO encrypted-at-rest in a future ADR
+  issuerUrl    String?
+  callbackUrl  String?
+  scopes       String?  // space-separated
+  groupClaim   String?  // claim name in JWT mapping to delegations
+  // SSO group → DelegationRight mapping. Free-form list of {sourceLabel, right}
+  // shaped exactly like the legacy roleMapping JSON. Kept as a JSONB column
+  // because the keys are tenant-defined Entra/AD group names (no enum, no
+  // metric, no query). See Décision E in ADR-018.
+  roleMapping  Json?    @db.JsonB
+  enabled      Boolean  @default(false)
+  updatedAt    DateTime @updatedAt
+
+  @@map("tenant_sso_configs")
+}
+
+model TenantSecurityConfig {
+  tenantId             String   @id
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  require2FA           Boolean  @default(false)
+  sessionTimeout       String   @default("15m")
+  refreshTokenLifetime String   @default("7d")
+  updatedAt            DateTime @updatedAt
+
+  @@map("tenant_security_configs")
+}
+
+// External integrations credentials (NetBox today; Gatus/Kuma removed in
+// ADR-016). Single 1:0..1 with the providers we actually support.
+model TenantIntegrationConfig {
+  tenantId     String   @id
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  netboxUrl    String?
+  netboxToken  String?  // TODO encrypted-at-rest with TenantSsoConfig.clientSecret
+  updatedAt    DateTime @updatedAt
+
+  @@map("tenant_integration_configs")
+}
+
+enum SecurityReminderSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+// Login-page security notices. ADR-018 promoted from
+// Tenant.config.branding.securityReminders JSON-list to a typed table to
+// support per-site scoping (BTP chantiers vs office sites) and severity.
+model TenantSecurityReminder {
+  id        String                   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Optional site scope. NULL = applies to all sites in the tenant.
+  siteId    String?
+  site      Site?                    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  title     String
+  body      String                   @db.Text
+  severity  SecurityReminderSeverity @default(INFO)
+  category  String?                  // 'EPI' | 'Accès' | 'Procédures' | …
+  order     Int                      @default(0)
+  enabled   Boolean                  @default(true)
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, siteId])
+  @@map("tenant_security_reminders")
 }
 
 // ============================================================================
@@ -140,13 +277,15 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  // Appearance (v1.4 — ADR-010)
-  // When appearanceSource = 'inherit' (default) → user follows Tenant.config.appearance.
-  // When appearanceSource = 'custom' → appearancePreference overrides tenant defaults
-  // field by field, ONLY if Tenant.config.appearance.allowUserOverride === true.
+  // Appearance (v1.4 — ADR-010, split scalars in S6 — ADR-018)
+  // When appearanceSource = 'inherit' (default) → user follows TenantAppearance.
+  // When appearanceSource = 'custom' → the 3 scalars below override the tenant
+  // defaults field-by-field, but ONLY if TenantAppearance.allowUserOverride.
   // Backend resolution happens in UsersService.getEffectiveAppearance().
-  appearancePreference Json?  @db.JsonB // { theme?, primaryColor?, density? }
-  appearanceSource     String @default("inherit") // "inherit" | "custom"
+  appearanceTheme        String? // 'light' | 'dark' | 'auto'
+  appearancePrimaryColor String?
+  appearanceDensity      String? // 'comfortable' | 'compact'
+  appearanceSource       String  @default("inherit") // "inherit" | "custom"
 
   // Relations
   assignedTasks        Task[]             @relation("AssignedTo")
@@ -312,6 +451,7 @@ model Site {
   billingEntities   BillingEntity[]
   expenses          Expense[]
   contactsOnSite    Contact[]
+  securityReminders TenantSecurityReminder[]
   accessOverrides   AccessOverride[]
   movementsFrom     AssetMovement[]    @relation("movementFromSite")
   movementsTo       AssetMovement[]    @relation("movementToSite")

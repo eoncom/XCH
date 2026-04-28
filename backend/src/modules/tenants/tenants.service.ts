@@ -8,7 +8,6 @@ import {
 } from './dto/appearance.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
 
-/** Default module configuration — all modules enabled */
 /**
  * Application modules exposed to the sidebar & Settings > Modules tab.
  * Keys MUST match the `moduleKey` values referenced by the sidebar (see
@@ -43,13 +42,20 @@ const MODULE_DESCRIPTIONS: Record<string, { label: string; description: string }
   contacts: { label: 'Contacts', description: 'Annuaire des contacts internes et des fournisseurs' },
   documents: { label: 'Documents', description: 'Pièces jointes et documents liés aux sites / assets / tâches' },
   integrations_netbox: { label: 'NetBox', description: 'Synchronisation lecture seule avec NetBox (DCIM / IPAM)' },
-  monitoring: { label: 'Monitoring', description: 'Intégration Uptime Kuma / Gatus + tableau de bord santé des sites' },
+  monitoring: { label: 'Monitoring', description: 'Probes natives ICMP/HTTP/TCP + tableau de bord santé des sites' },
   alerts: { label: 'Alertes', description: 'Agrégation des alertes (tâches, santé sites, monitoring, garanties, équipements HS)' },
   costs: { label: 'Coûts', description: 'Gestion des dépenses, centres de coûts, budgets et projections mensuelles' },
   consumption: { label: 'Consommation', description: 'Estimation de la consommation électrique et du coût mensuel par site' },
   qr_codes: { label: 'QR Codes', description: 'Génération et scan de QR codes pour les équipements' },
   site_access_control: { label: "Droits d'accès sites", description: "Surcharges d'accès (AccessOverride) ALLOW/DENY par site et par ressource" },
   notifications: { label: 'Notifications', description: 'Alertes email / MS Teams sur événements (tâches assignées, santé sites, garanties, etc.)' },
+};
+
+const DEFAULT_ROLE_MAPPING = {
+  admin: 'MANAGE',
+  manager: 'WRITE',
+  technician: 'READ',
+  default: 'READ',
 };
 
 @Injectable()
@@ -72,37 +78,122 @@ export class TenantsService {
   }
 
   /**
-   * Returns tenant without sensitive integration secrets (tokens, passwords).
-   * Use this for all API responses exposed to the frontend.
-   * Internal services that need credentials should use findOne() directly.
+   * Returns tenant + a config-shaped object for the frontend, without sensitive
+   * integration / SSO secrets. Use this for all API responses exposed to the
+   * frontend; internal services that need credentials should use the typed
+   * accessors (getSsoConfig with masked output, or query the relations directly).
    */
   async findOneSafe(id: string) {
     const tenant = await this.findOne(id);
-
-    if (tenant.config && typeof tenant.config === 'object') {
-      const { integrations, ...safeConfig } = tenant.config as Record<string, any>;
-      return { ...tenant, config: safeConfig };
-    }
-
-    return tenant;
+    const config = await this.assembleSafeConfigShape(id);
+    return { ...tenant, config };
   }
 
   async update(id: string, updateTenantDto: UpdateTenantDto) {
     await this.findOne(id);
 
+    const { config, ...tenantFields } = updateTenantDto;
+
+    // ADR-018 — `config` is a backwards-compat envelope. Route the known
+    // sub-keys (`theme` → TenantBranding.theme, `securityReminders` →
+    // TenantSecurityReminder upsert/delete) to their typed tables; ignore
+    // unknown keys.
+    if (config?.theme !== undefined) {
+      await this.prisma.tenantBranding.upsert({
+        where: { tenantId: id },
+        create: { tenantId: id, theme: config.theme || null },
+        update: { theme: config.theme || null },
+      });
+    }
+    if (Array.isArray(config?.securityReminders)) {
+      // Replace the global (siteId IS NULL) reminders atomically. Per-site
+      // reminders are managed via a dedicated endpoint (out of scope here).
+      await this.prisma.$transaction([
+        this.prisma.tenantSecurityReminder.deleteMany({
+          where: { tenantId: id, siteId: null },
+        }),
+        ...config.securityReminders.map((r, idx) =>
+          this.prisma.tenantSecurityReminder.create({
+            data: {
+              tenantId: id,
+              title: r.title,
+              body: r.body,
+              severity: (r.severity as any) ?? 'INFO',
+              category: r.category ?? null,
+              enabled: r.enabled ?? true,
+              order: idx,
+            },
+          }),
+        ),
+      ]);
+    }
+
     return this.prisma.tenant.update({
       where: { id },
-      data: updateTenantDto,
+      data: tenantFields,
     });
   }
 
+  /**
+   * Backwards-compat shape returned by GET /api/tenants/:id/config — the
+   * frontend still expects a single nested object. We assemble it from the
+   * typed tables, masking secrets.
+   */
   async getConfig(id: string) {
-    const tenant = await this.findOneSafe(id);
+    const tenant = await this.findOne(id);
     return {
       name: tenant.name,
       logoUrl: tenant.logoUrl,
       primaryColor: tenant.primaryColor,
-      config: tenant.config,
+      config: await this.assembleSafeConfigShape(id),
+    };
+  }
+
+  private async assembleSafeConfigShape(tenantId: string) {
+    const [appearance, branding, electricity, sso, security, integration, flags, reminders] =
+      await Promise.all([
+        this.prisma.tenantAppearance.findUnique({ where: { tenantId } }),
+        this.prisma.tenantBranding.findUnique({ where: { tenantId } }),
+        this.prisma.tenantElectricityConfig.findUnique({ where: { tenantId } }),
+        this.prisma.tenantSsoConfig.findUnique({ where: { tenantId } }),
+        this.prisma.tenantSecurityConfig.findUnique({ where: { tenantId } }),
+        this.prisma.tenantIntegrationConfig.findUnique({ where: { tenantId } }),
+        this.prisma.tenantFeatureFlag.findMany({ where: { tenantId } }),
+        this.prisma.tenantSecurityReminder.findMany({
+          where: { tenantId },
+          orderBy: [{ siteId: 'asc' }, { order: 'asc' }],
+        }),
+      ]);
+
+    const modules: Record<string, boolean> = {};
+    for (const f of flags) modules[f.name] = f.enabled;
+
+    return {
+      appearance: appearance ?? null,
+      branding: branding
+        ? { ...branding, securityReminders: reminders.filter((r) => r.siteId === null) }
+        : { securityReminders: reminders.filter((r) => r.siteId === null) },
+      electricity: electricity ?? null,
+      // SSO with masked secret
+      sso: sso
+        ? {
+            enabled: sso.enabled,
+            provider: sso.provider,
+            issuerUrl: sso.issuerUrl,
+            clientId: sso.clientId,
+            clientSecretSet: !!sso.clientSecret,
+            callbackUrl: sso.callbackUrl,
+            scopes: sso.scopes,
+            groupClaim: sso.groupClaim,
+            roleMapping: sso.roleMapping ?? DEFAULT_ROLE_MAPPING,
+          }
+        : null,
+      security: security ?? null,
+      // Integrations: only expose presence of token, never the value.
+      integrations: integration
+        ? { netbox: { url: integration.netboxUrl ?? '', tokenSet: !!integration.netboxToken } }
+        : { netbox: { url: '', tokenSet: false } },
+      modules,
     };
   }
 
@@ -112,52 +203,42 @@ export class TenantsService {
 
   /**
    * Get the list of all modules with their enabled/disabled status for a tenant.
-   * If tenant has no config or no modules key, returns all modules enabled (default).
+   * Modules absent from `tenant_feature_flags` fall back to DEFAULT_MODULES.
    */
   async getModules(tenantId: string) {
-    const tenant = await this.findOne(tenantId);
-    const config = tenant.config as Record<string, any> | null;
-    const savedModules = (config?.modules || {}) as Record<string, boolean>;
+    await this.findOne(tenantId); // ensure exists / 404
+    const flags = await this.prisma.tenantFeatureFlag.findMany({ where: { tenantId } });
+    const saved: Record<string, boolean> = {};
+    for (const f of flags) saved[f.name] = f.enabled;
 
-    // Merge defaults with saved values
     const modules = Object.entries(DEFAULT_MODULES).map(([key, defaultEnabled]) => ({
       key,
       label: MODULE_DESCRIPTIONS[key]?.label || key,
       description: MODULE_DESCRIPTIONS[key]?.description || '',
-      enabled: savedModules[key] !== undefined ? savedModules[key] : defaultEnabled,
+      enabled: saved[key] !== undefined ? saved[key] : defaultEnabled,
     }));
 
     return { modules };
   }
 
   /**
-   * Update module enabled/disabled states for a tenant.
-   * Merges the provided modules map into the existing config.modules.
+   * Update module enabled/disabled states for a tenant. Upserts one row per
+   * known module key — unknown keys are ignored (defense in depth).
    */
   async updateModules(tenantId: string, modules: Record<string, boolean>) {
-    const tenant = await this.findOne(tenantId);
-    const config = (tenant.config as Record<string, any>) || {};
+    await this.findOne(tenantId);
 
-    // Merge provided modules with existing config
-    const existingModules = (config.modules || {}) as Record<string, boolean>;
-    const updatedModules = { ...existingModules };
-
-    // Only accept known module keys
-    for (const [key, enabled] of Object.entries(modules)) {
-      if (key in DEFAULT_MODULES) {
-        updatedModules[key] = enabled;
-      }
-    }
-
-    const updatedConfig = {
-      ...config,
-      modules: updatedModules,
-    };
-
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { config: updatedConfig },
-    });
+    await this.prisma.$transaction(
+      Object.entries(modules)
+        .filter(([key]) => key in DEFAULT_MODULES)
+        .map(([name, enabled]) =>
+          this.prisma.tenantFeatureFlag.upsert({
+            where: { tenantId_name: { tenantId, name } },
+            create: { tenantId, name, enabled },
+            update: { enabled },
+          }),
+        ),
+    );
 
     return this.getModules(tenantId);
   }
@@ -167,67 +248,55 @@ export class TenantsService {
   // ============================================================================
 
   /**
-   * Get SSO configuration for a tenant.
-   * Masks the client secret for display (returns only last 4 chars).
+   * Get SSO configuration for a tenant. Returns a hint of the secret (last 4
+   * chars) so the UI can show "****abcd" rather than reveal the value.
    */
   async getSsoConfig(tenantId: string) {
-    const tenant = await this.findOne(tenantId);
-    const config = tenant.config as Record<string, any> | null;
-    const sso = config?.sso || {};
+    await this.findOne(tenantId);
+    const sso = await this.prisma.tenantSsoConfig.findUnique({ where: { tenantId } });
 
     return {
-      enabled: sso.enabled || false,
-      provider: sso.provider || 'oidc',
-      issuer: sso.issuer || '',
-      clientId: sso.clientId || '',
-      clientSecretSet: !!sso.clientSecret,
-      clientSecretHint: sso.clientSecret
+      enabled: sso?.enabled ?? false,
+      provider: sso?.provider ?? 'oidc',
+      issuer: sso?.issuerUrl ?? '',
+      clientId: sso?.clientId ?? '',
+      clientSecretSet: !!sso?.clientSecret,
+      clientSecretHint: sso?.clientSecret
         ? `****${sso.clientSecret.slice(-4)}`
         : '',
-      callbackUrl: sso.callbackUrl || '',
-      roleMapping: sso.roleMapping || {
-        admin: 'ADMIN',
-        manager: 'MANAGER',
-        technician: 'TECHNICIEN',
-        default: 'VIEWER',
-      },
+      callbackUrl: sso?.callbackUrl ?? '',
+      roleMapping: (sso?.roleMapping as Record<string, string> | null) ?? DEFAULT_ROLE_MAPPING,
     };
   }
 
   /**
-   * Update SSO configuration for a tenant.
-   * Stores the full config in Tenant.config.sso.
-   * If clientSecret is empty/undefined, keeps the existing one.
+   * Update SSO configuration for a tenant. If clientSecret is empty/undefined,
+   * keeps the existing one.
    */
   async updateSsoConfig(tenantId: string, ssoConfig: Record<string, any>) {
-    const tenant = await this.findOne(tenantId);
-    const config = (tenant.config as Record<string, any>) || {};
-    const existingSso = config.sso || {};
+    await this.findOne(tenantId);
+    const existing = await this.prisma.tenantSsoConfig.findUnique({ where: { tenantId } });
 
-    const updatedSso = {
-      enabled: ssoConfig.enabled ?? existingSso.enabled ?? false,
-      provider: ssoConfig.provider || existingSso.provider || 'oidc',
-      issuer: ssoConfig.issuer ?? existingSso.issuer ?? '',
-      clientId: ssoConfig.clientId ?? existingSso.clientId ?? '',
-      // Only update secret if a non-empty value is provided
-      clientSecret: ssoConfig.clientSecret || existingSso.clientSecret || '',
-      callbackUrl: ssoConfig.callbackUrl ?? existingSso.callbackUrl ?? '',
-      roleMapping: ssoConfig.roleMapping ?? existingSso.roleMapping ?? {
-        admin: 'ADMIN',
-        manager: 'MANAGER',
-        technician: 'TECHNICIEN',
-        default: 'VIEWER',
-      },
+    const data = {
+      provider: ssoConfig.provider ?? existing?.provider ?? 'oidc',
+      clientId: ssoConfig.clientId ?? existing?.clientId ?? '',
+      clientSecret:
+        ssoConfig.clientSecret && ssoConfig.clientSecret !== ''
+          ? ssoConfig.clientSecret
+          : existing?.clientSecret ?? '',
+      issuerUrl: ssoConfig.issuer ?? existing?.issuerUrl ?? null,
+      callbackUrl: ssoConfig.callbackUrl ?? existing?.callbackUrl ?? null,
+      scopes: ssoConfig.scopes ?? existing?.scopes ?? null,
+      groupClaim: ssoConfig.groupClaim ?? existing?.groupClaim ?? null,
+      roleMapping:
+        ssoConfig.roleMapping ?? (existing?.roleMapping as any) ?? DEFAULT_ROLE_MAPPING,
+      enabled: ssoConfig.enabled ?? existing?.enabled ?? false,
     };
 
-    const updatedConfig = {
-      ...config,
-      sso: updatedSso,
-    };
-
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { config: updatedConfig },
+    await this.prisma.tenantSsoConfig.upsert({
+      where: { tenantId },
+      create: { tenantId, ...data },
+      update: data,
     });
 
     return this.getSsoConfig(tenantId);
@@ -237,118 +306,90 @@ export class TenantsService {
   // SECURITY CONFIGURATION
   // ============================================================================
 
-  /**
-   * Get security configuration for a tenant.
-   * Includes 2FA enforcement and session timeout settings.
-   */
   async getSecurityConfig(tenantId: string) {
-    const tenant = await this.findOne(tenantId);
-    const config = tenant.config as Record<string, any> | null;
-    const security = config?.security || {};
-
+    await this.findOne(tenantId);
+    const cfg = await this.prisma.tenantSecurityConfig.findUnique({ where: { tenantId } });
     return {
-      require2FA: security.require2FA ?? false,
-      sessionTimeout: security.sessionTimeout ?? '15m',
-      refreshTokenLifetime: security.refreshTokenLifetime ?? '7d',
+      require2FA: cfg?.require2FA ?? false,
+      sessionTimeout: cfg?.sessionTimeout ?? '15m',
+      refreshTokenLifetime: cfg?.refreshTokenLifetime ?? '7d',
     };
   }
 
-  /**
-   * Update security configuration for a tenant.
-   */
-  async updateSecurityConfig(tenantId: string, securityConfig: Record<string, any>) {
-    const tenant = await this.findOne(tenantId);
-    const config = (tenant.config as Record<string, any>) || {};
-    const existingSecurity = config.security || {};
+  async updateSecurityConfig(tenantId: string, body: Record<string, any>) {
+    await this.findOne(tenantId);
+    const existing = await this.prisma.tenantSecurityConfig.findUnique({ where: { tenantId } });
 
-    const updatedSecurity = {
-      require2FA: securityConfig.require2FA ?? existingSecurity.require2FA ?? false,
-      sessionTimeout: securityConfig.sessionTimeout ?? existingSecurity.sessionTimeout ?? '15m',
-      refreshTokenLifetime: securityConfig.refreshTokenLifetime ?? existingSecurity.refreshTokenLifetime ?? '7d',
+    const data = {
+      require2FA: body.require2FA ?? existing?.require2FA ?? false,
+      sessionTimeout: body.sessionTimeout ?? existing?.sessionTimeout ?? '15m',
+      refreshTokenLifetime: body.refreshTokenLifetime ?? existing?.refreshTokenLifetime ?? '7d',
     };
 
-    const updatedConfig = {
-      ...config,
-      security: updatedSecurity,
-    };
-
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { config: updatedConfig },
+    await this.prisma.tenantSecurityConfig.upsert({
+      where: { tenantId },
+      create: { tenantId, ...data },
+      update: data,
     });
 
     return this.getSecurityConfig(tenantId);
   }
 
-  /**
-   * Get electricity configuration (cost per kWh, currency).
-   */
+  // ============================================================================
+  // ELECTRICITY
+  // ============================================================================
+
   async getElectricityConfig(tenantId: string) {
-    const tenant = await this.findOne(tenantId);
-    const config = tenant.config as Record<string, any> | null;
-    const electricity = config?.electricity || {};
+    await this.findOne(tenantId);
+    const cfg = await this.prisma.tenantElectricityConfig.findUnique({ where: { tenantId } });
     return {
-      costPerKwh: Number(electricity.costPerKwh) || 0.20,
-      currency: electricity.currency || 'EUR',
+      costPerKwh: cfg ? Number(cfg.costPerKwh) : 0.20,
+      currency: cfg?.currency ?? 'EUR',
     };
   }
 
-  /**
-   * Update electricity configuration.
-   */
   async updateElectricityConfig(tenantId: string, body: { costPerKwh?: number; currency?: string }) {
-    const tenant = await this.findOne(tenantId);
-    const config = (tenant.config as Record<string, any>) || {};
-    const existing = config.electricity || {};
+    await this.findOne(tenantId);
+    const existing = await this.prisma.tenantElectricityConfig.findUnique({ where: { tenantId } });
 
-    const updated = {
-      costPerKwh: body.costPerKwh !== undefined ? Number(body.costPerKwh) : existing.costPerKwh ?? 0.20,
-      currency: body.currency ?? existing.currency ?? 'EUR',
+    const data = {
+      costPerKwh:
+        body.costPerKwh !== undefined ? Number(body.costPerKwh) : Number(existing?.costPerKwh ?? 0.20),
+      currency: body.currency ?? existing?.currency ?? 'EUR',
     };
 
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { config: { ...config, electricity: updated } },
+    await this.prisma.tenantElectricityConfig.upsert({
+      where: { tenantId },
+      create: { tenantId, ...data },
+      update: data,
     });
 
     return this.getElectricityConfig(tenantId);
   }
 
   // ============================================================================
-  // APPEARANCE (v1.4 — ADR-010)
+  // APPEARANCE (v1.4 — ADR-010, typed in S6 — ADR-018)
   // ============================================================================
 
-  /**
-   * Get the tenant-level appearance defaults.
-   * When `Tenant.primaryColor` is set but `config.appearance.primaryColor` is not,
-   * we fall back to the tenant branding color for backward compatibility.
-   */
   async getAppearanceConfig(tenantId: string): Promise<ResolvedAppearance> {
     const tenant = await this.findOne(tenantId);
-    const config = tenant.config as Record<string, any> | null;
-    const appearance = (config?.appearance || {}) as Partial<ResolvedAppearance>;
+    const cfg = await this.prisma.tenantAppearance.findUnique({ where: { tenantId } });
 
     return {
-      theme: appearance.theme ?? DEFAULT_TENANT_APPEARANCE.theme,
+      theme: cfg?.theme ?? DEFAULT_TENANT_APPEARANCE.theme,
       primaryColor:
-        appearance.primaryColor ?? tenant.primaryColor ?? DEFAULT_TENANT_APPEARANCE.primaryColor,
-      density: appearance.density ?? DEFAULT_TENANT_APPEARANCE.density,
-      allowUserOverride:
-        appearance.allowUserOverride ?? DEFAULT_TENANT_APPEARANCE.allowUserOverride,
+        cfg?.primaryColor ?? tenant.primaryColor ?? DEFAULT_TENANT_APPEARANCE.primaryColor,
+      density: cfg?.density ?? DEFAULT_TENANT_APPEARANCE.density,
+      allowUserOverride: cfg?.allowUserOverride ?? DEFAULT_TENANT_APPEARANCE.allowUserOverride,
     };
   }
 
-  /**
-   * Update the tenant-level appearance defaults (super admin only — enforced at controller).
-   * Logs a tenant-scoped audit entry because this impacts all users who inherit the config.
-   */
   async updateAppearanceConfig(
     tenantId: string,
     userId: string | undefined,
     dto: UpdateTenantAppearanceDto,
   ): Promise<ResolvedAppearance> {
-    const tenant = await this.findOne(tenantId);
-    const config = (tenant.config as Record<string, any>) || {};
+    await this.findOne(tenantId);
     const before = await this.getAppearanceConfig(tenantId);
 
     const updated: ResolvedAppearance = {
@@ -358,9 +399,10 @@ export class TenantsService {
       allowUserOverride: dto.allowUserOverride ?? before.allowUserOverride,
     };
 
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { config: { ...config, appearance: updated } as any },
+    await this.prisma.tenantAppearance.upsert({
+      where: { tenantId },
+      create: { tenantId, ...updated },
+      update: updated,
     });
 
     await this.auditLogService.log({

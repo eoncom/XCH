@@ -1,6 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
-import { useAuthStore } from '@/stores/auth-store';
+// (useQuery / apiClient / useAuthStore imports retired in ADR-018 alongside
+// the dead `tenant.config.warrantyAlertThresholds` lookup.)
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -88,18 +87,9 @@ export function getWarrantyBadgeClasses(status: WarrantyStatus): {
 // ── Hook: read thresholds from tenant config ─────────────────
 
 export function useWarrantyThresholds(): WarrantyThresholds {
-  const { isAuthenticated } = useAuthStore();
-
-  const { data: tenant } = useQuery<any>({
-    queryKey: ['tenant-branding'],
-    queryFn: () => apiClient.get('/api/tenants/current'),
-    staleTime: 10 * 60 * 1000,
-    enabled: isAuthenticated,
-  });
-
-  const cfg = tenant?.config?.warrantyAlertThresholds;
-  return {
-    warning: cfg?.warning ?? DEFAULT_THRESHOLDS.warning,
-    critical: cfg?.critical ?? DEFAULT_THRESHOLDS.critical,
-  };
+  // ADR-018 — `tenant.config.warrantyAlertThresholds` was hopeful; the backend
+  // never wrote it. Defaults applied unconditionally for now. If a future
+  // session adds tenant-tunable thresholds, surface them via a dedicated typed
+  // table (TenantWarrantyConfig) rather than re-introducing JSON.
+  return DEFAULT_THRESHOLDS;
 }

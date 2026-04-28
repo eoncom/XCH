@@ -33,14 +33,13 @@ export class ConsumptionService {
   constructor(private prisma: PrismaClient) {}
 
   private async getElectricityConfig(tenantId: string): Promise<TenantElectricityConfig> {
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { config: true },
+    // ADR-018 — typed table TenantElectricityConfig replaces tenant.config.electricity.
+    const cfg = await this.prisma.tenantElectricityConfig.findUnique({
+      where: { tenantId },
     });
-    const cfg = (tenant?.config as any)?.electricity || {};
     return {
-      costPerKwh: Number(cfg.costPerKwh) || 0.20,
-      currency: cfg.currency || 'EUR',
+      costPerKwh: cfg ? Number(cfg.costPerKwh) : 0.20,
+      currency: cfg?.currency || 'EUR',
     };
   }
 

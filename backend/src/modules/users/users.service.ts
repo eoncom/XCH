@@ -491,13 +491,27 @@ export class UsersService {
   ): Promise<{ source: 'inherit' | 'custom'; preference: Partial<ResolvedAppearance> | null }> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      select: { appearancePreference: true, appearanceSource: true },
+      select: {
+        appearanceTheme: true,
+        appearancePrimaryColor: true,
+        appearanceDensity: true,
+        appearanceSource: true,
+      },
     });
     if (!user) throw new NotFoundException('User not found');
 
     const source = (user.appearanceSource as 'inherit' | 'custom') || 'inherit';
-    const preference =
-      (user.appearancePreference as Partial<ResolvedAppearance> | null) || null;
+    // ADR-018 — Reassemble the {theme, primaryColor, density} shape from
+    // scalar columns so the rest of the service can stay shape-stable.
+    const hasAny =
+      user.appearanceTheme || user.appearancePrimaryColor || user.appearanceDensity;
+    const preference: Partial<ResolvedAppearance> | null = hasAny
+      ? {
+          ...(user.appearanceTheme ? { theme: user.appearanceTheme as any } : {}),
+          ...(user.appearancePrimaryColor ? { primaryColor: user.appearancePrimaryColor } : {}),
+          ...(user.appearanceDensity ? { density: user.appearanceDensity as any } : {}),
+        }
+      : null;
     return { source, preference };
   }
 
@@ -527,40 +541,33 @@ export class UsersService {
       );
     }
 
-    let appearancePreference: Partial<ResolvedAppearance> | null = null;
-    let appearanceSource: 'inherit' | 'custom' = 'inherit';
+    let nextSource: 'inherit' | 'custom' = 'inherit';
+    let nextTheme: string | null = null;
+    let nextPrimary: string | null = null;
+    let nextDensity: string | null = null;
 
     if (requestedSource === 'inherit') {
-      appearancePreference = null;
-      appearanceSource = 'inherit';
+      nextSource = 'inherit';
     } else {
       // Merge with current preference to support partial patches
       const current = await this.getMyAppearance(userId, tenantId);
-      const merged: Partial<ResolvedAppearance> = {
-        ...(current.preference || {}),
-        ...(dto.theme !== undefined ? { theme: dto.theme } : {}),
-        ...(dto.primaryColor !== undefined ? { primaryColor: dto.primaryColor } : {}),
-        ...(dto.density !== undefined ? { density: dto.density } : {}),
-      };
-      appearancePreference = merged;
-      appearanceSource = 'custom';
+      nextTheme       = (dto.theme        ?? current.preference?.theme        ?? null) as string | null;
+      nextPrimary     = (dto.primaryColor ?? current.preference?.primaryColor ?? null) as string | null;
+      nextDensity     = (dto.density      ?? current.preference?.density      ?? null) as string | null;
+      nextSource = 'custom';
     }
 
+    // ADR-018 — when switching back to inherit, null the 3 scalar columns;
+    // when switching to custom, write the merged values.
     await this.prisma.user.update({
       where: { id: userId },
       data: {
-        appearancePreference: appearancePreference ?? undefined,
-        appearanceSource,
+        appearanceTheme:        nextSource === 'custom' ? nextTheme   : null,
+        appearancePrimaryColor: nextSource === 'custom' ? nextPrimary : null,
+        appearanceDensity:      nextSource === 'custom' ? nextDensity : null,
+        appearanceSource:       nextSource,
       },
     });
-
-    // If switching back to inherit, null the column explicitly
-    if (appearanceSource === 'inherit') {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { appearancePreference: null as any },
-      });
-    }
 
     return this.getEffectiveAppearance(userId, tenantId);
   }

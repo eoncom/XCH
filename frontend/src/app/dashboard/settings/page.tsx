@@ -1998,14 +1998,19 @@ export default function SettingsPage() {
         const tenant = await apiClient.get<TenantConfig>('/api/tenants/current');
         setTenantData(tenant);
         setOrgName(tenant.name || 'Mon Organisation');
-        setDomain(tenant.config?.domain || tenant.subdomain || 'xch.local');
-        setTimezone(tenant.config?.timezone || 'Europe/Paris');
-        setLanguage(tenant.config?.language || 'Français');
+        // ADR-018 — domain/timezone/language used to live in tenant.config
+        // (never read by backend). They're now sourced from subdomain only.
+        setDomain(tenant.subdomain || 'xch.local');
+        setTimezone('Europe/Paris');
+        setLanguage('Français');
         setLogoUrl(tenant.logoUrl || '');
         setPrimaryColor(tenant.primaryColor || '#0070f3');
-        setSelectedTheme(tenant.config?.theme || 'blue');
-        if (tenant.config?.securityReminders?.length > 0) {
-          setSecurityReminders(tenant.config.securityReminders);
+        // ADR-018 — branding.theme/securityReminders surfaced via the assembled
+        // config shape (TenantBranding + TenantSecurityReminder relations).
+        setSelectedTheme(((tenant.config as any)?.branding?.theme) || 'blue');
+        const reminders = (tenant.config as any)?.branding?.securityReminders;
+        if (Array.isArray(reminders) && reminders.length > 0) {
+          setSecurityReminders(reminders);
         }
       } catch (error) {
         console.error('Failed to load tenant:', error);

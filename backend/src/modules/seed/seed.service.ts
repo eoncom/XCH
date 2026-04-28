@@ -909,26 +909,21 @@ export class SeedService {
 
   /**
    * Write tenant-level appearance defaults (ADR-010) unless already present.
-   * Uses the tenant's primaryColor as the default primary.
+   * ADR-018 — typed table TenantAppearance replaces tenant.config.appearance.
    */
   private async ensureTenantAppearanceDefaults(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) return;
-    const config = (tenant.config as Record<string, any>) || {};
-    if (config.appearance) return; // don't stomp operator-tuned values
+    const existing = await this.prisma.tenantAppearance.findUnique({ where: { tenantId } });
+    if (existing) return; // don't stomp operator-tuned values
 
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
+    await this.prisma.tenantAppearance.create({
       data: {
-        config: {
-          ...config,
-          appearance: {
-            theme: 'system',
-            primaryColor: tenant.primaryColor || '#0070f3',
-            density: 'comfortable',
-            allowUserOverride: true,
-          },
-        },
+        tenantId,
+        theme: 'system',
+        primaryColor: tenant.primaryColor || '#0070f3',
+        density: 'comfortable',
+        allowUserOverride: true,
       },
     });
     this.logger.log('Tenant appearance defaults initialised');
@@ -1429,7 +1424,10 @@ export class SeedService {
     await this.prisma.user.update({
       where: { id: tech.id },
       data: {
-        appearancePreference: { theme: 'dark', density: 'compact' } as any,
+        // ADR-018 — split into 3 scalar columns instead of an
+        // appearancePreference JSON.
+        appearanceTheme: 'dark',
+        appearanceDensity: 'compact',
         appearanceSource: 'custom',
       },
     });

@@ -7,7 +7,7 @@ import { AuthService } from '../auth.service';
 
 /**
  * Default OIDC group → DelegationRight mapping.
- * Can be overridden per tenant via Tenant.config.sso.roleMapping.
+ * Can be overridden per tenant via TenantSsoConfig.roleMapping (ADR-018).
  * Both legacy labels (ADMIN/MANAGER/TECHNICIEN/VIEWER, pre-v1.2) and
  * new ones (MANAGE/WRITE/READ) are accepted — normalizeRight() translates.
  */
@@ -91,13 +91,18 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
       // Find the active tenant (single-tenant mode)
       const tenant = await this.prisma.tenant.findFirst({
         where: { status: 'ACTIVE' },
+        include: { ssoConfig: true },
       });
 
       const tenantId = tenant?.id || this.config.get('DEFAULT_TENANT_ID') || 'tenant_default';
-      const tenantConfig = tenant?.config as Record<string, any> | null;
+      // ADR-018 — roleMapping lives on TenantSsoConfig (typed table) instead of
+      // Tenant.config.sso.roleMapping. The downstream mapping code stays the
+      // same — we just hand it the JSON map directly.
+      const roleMapping =
+        (tenant?.ssoConfig?.roleMapping as Record<string, any> | null) ?? null;
 
       // Determine right + scopes from OIDC claims
-      const { right, scopes } = this.mapRightAndScopes(profile, tenantConfig);
+      const { right, scopes } = this.mapRightAndScopes(profile, roleMapping);
 
       // Convert scopes to SsoDelegationEntry format for auth service
       const delegationEntries: SsoDelegationEntry[] = scopes
@@ -121,9 +126,10 @@ export class OidcStrategy extends PassportStrategy(Strategy, 'oidc') {
    */
   private mapRightAndScopes(
     profile: any,
-    tenantConfig: Record<string, any> | null,
+    tenantRoleMapping: Record<string, any> | null,
   ): { right: DelegationRight; scopes: ScopeEntry[] } {
-    const roleMapping: Record<string, string | RoleMappingEntry> = tenantConfig?.sso?.roleMapping || DEFAULT_ROLE_MAPPING;
+    const roleMapping: Record<string, string | RoleMappingEntry> =
+      tenantRoleMapping || DEFAULT_ROLE_MAPPING;
     const defaultEntry = roleMapping.default;
     const defaultRoleStr = typeof defaultEntry === 'object' ? defaultEntry.role : (defaultEntry || 'READ');
     const defaultScopes: ScopeEntry[] = typeof defaultEntry === 'object' ? (defaultEntry.scopes || []) : [];
