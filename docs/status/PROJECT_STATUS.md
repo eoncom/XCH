@@ -1,8 +1,8 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-04-28 18:48:51 (Auto-update)
-**Version actuelle :** 1.5.0 (taguée), v1.6 en préparation
-**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 en cours d'exécution
+**Dernière mise à jour :** 2026-04-28 19:07:47 (Auto-update)
+**Version actuelle :** 1.6.0 (taguée 2026-04-28)
+**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré
 
 ## 🚦 Plan v2 vers v1.6 (sessions S0 → S11)
 
@@ -12,11 +12,11 @@
 | S1 | Sécurité hardening (rotation secrets, Redis auth, Multer, magic-bytes) | ✅ Terminée — [ADR-015](../decisions/adr-015-s1-security-hardening.md) (`2f1da73`, `30913c2`, `c2b8ca9`, lot M dans ADR-016) |
 | S4 | Tests Jest critical paths (PermissionGuard, Throttler, Consumption, Webhook) | ✅ Terminée (`0118c8b`) — 80 tests verts |
 | S2 | Monitoring natif (probes ICMP/HTTP/TCP, suppression Gatus/Kuma, UX produit) | ✅ Terminée — [ADR-014](../decisions/adr-014-native-monitoring.md) + [ADR-016](../decisions/adr-016-monitoring-unification.md) |
-| S5 | Migrations Prisma versionnées (`migrate deploy`) | ✅ Terminée 2026-04-27 — [ADR-017](../decisions/adr-017-prisma-versioned-migrations.md) (`7c28abb`, `edcb218`) — smoke OK xch-deploy, 3 CHECK constraints en DB, 2 migrations dans `_prisma_migrations` |
-| **S6/S7** | **Refacto JSON résiduel (Asset.networkInfo, Tenant.config split, Site.healthBreakdown)** | **⏳ À démarrer immédiatement — ADR-018 à rédiger** |
+| S5 | Migrations Prisma versionnées (`migrate deploy`) | ✅ Terminée 2026-04-27 — [ADR-017](../decisions/adr-017-prisma-versioned-migrations.md) |
+| **S6/S7** | **Refacto JSON résiduel (4 cibles — Asset.networkInfo, Tenant.config split intégral, Site.healthBreakdown, Site cleanup)** | ✅ **Terminée 2026-04-28 — [ADR-018](../decisions/adr-018-json-debt-cleanup.md) — 5 migrations versionnées (2 → 5_site_json_cleanup), 11 nouvelles tables, 3 enums, ~22 colonnes scalaires extraites** |
 | S8-S11 | UX/UI globale, E2E refondu, hardening tail | 🔮 Plus tard |
 
-**Tag cible :** v1.6.0 après S5 + S6/S7 livrés et validés sur xch-deploy.
+**Tag :** **v1.6.0** posé 2026-04-28 (Asset/Tenant/Site refactor JSON → typed Prisma, smoke complet validé sur xch-deploy).
 
 ## 🆕 v1.4.0 (2026-04-18) — Post audit + Apparence
 

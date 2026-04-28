@@ -6624,3 +6624,46 @@ feat(prisma): S6 cible C — Site.healthBreakdown vers SiteHealthSnapshot
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+
+---
+
+## 2026-04-28 — Session S6/S7 : Refacto JSON résiduel + tag v1.6.0
+
+**Durée :** ~6h (4 cibles A→D + smoke entre chaque + final)
+**Status :** ✅ Terminée — tag **v1.6.0**
+**Worktree :** `claude/focused-poincare-10b9ef`
+**ADR :** [ADR-018](docs/decisions/adr-018-json-debt-cleanup.md)
+
+**Décisions structurantes (4 cibles + 1 inventaire) :**
+
+- **Cible A** — `Asset.networkInfo Json?` éclaté en 5 colonnes scalaires (`ip`, `mac`, `hostname`, `vlan`, `port`) + table 1:N `AssetAdminLink` pour les liens d'administration. Index partiel `(tenantId, ip)` pour les lookups tenant-wide. Migration `2_asset_network_info_split`.
+- **Cible B** — `Tenant.config Json?` (sac à 7 sous-objets) → 7 modèles typés : `TenantFeatureFlag` (1:N), `TenantElectricityConfig`, `TenantAppearance`, `TenantBranding` (avec colonne `theme` pour les presets de couleurs), `TenantSsoConfig` (avec `roleMapping Json?` justifié), `TenantSecurityConfig`, `TenantIntegrationConfig`. + `TenantSecurityReminder` (1:N, avec `siteId?` pour scoping per-site BTP + enum `SecurityReminderSeverity`). + `User.appearancePreference Json?` → 3 colonnes scalaires (`appearanceTheme`, `appearancePrimaryColor`, `appearanceDensity`). Migration `3_tenant_config_split`.
+- **Cible C** — `Site.metadata.healthBreakdown` cache (rewrite ~30s) extrait en table `SiteHealthSnapshot` 1:0..1 avec `componentsJson Json` (cache éphémère justifié). `recomputeSite()` upsert via `$transaction`. Migration `4_site_health_snapshot`.
+- **Cible D** — Site JSON cleanup unifié : (D.1) `Site.contacts` JSON-array → table `Contact` (relation 1:N existante) avec ajout de `Contact.isPrimary` + nouveau ContactType `personnel-site`. (D.2) `Site.accessNotes Json?` → 4 colonnes `Text` (schedules/badges/procedures/safety). (D.3) `Site.emplacements Json?` → table `SiteEmplacement` 1:N + enum `EmplacementType` (SMB/SHAREPOINT). (D.4) `Site.metadata.serverInfo` 5 scalaires → 4 colonnes scalaires sur Site (notes existait déjà) + **DROP COLUMN `Site.metadata`** entièrement. Migration `5_site_json_cleanup`.
+
+**Cible E (JSON conservés, justification structurée par champ) :**
+
+- Hors scope : `NotificationConfig.{channels,events}` (session dédiée post-v1.6 — ADR-013 pt 1), `MonitorHttpConfig.headers` (YAGNI v1).
+- Conservation argumentée avec volumétrie + trigger de re-question : `Asset.adminLinks` (devenue table `AssetAdminLink`), `VendorCatalog.content` (backup opaque pour re-download, données métier déjà extraites en table `AssetModel` à l'upload), `TenantBranding.securityReminders` (devenue table `TenantSecurityReminder`), `SiteHealthSnapshot.componentsJson` (cache éphémère), `TenantSsoConfig.roleMapping` (clés tenant-defined Entra/AD groups, pas de query métier).
+
+**Changements de structure DB livrés :**
+- **9 nouvelles tables** : `AssetAdminLink`, `TenantFeatureFlag`, `TenantElectricityConfig`, `TenantAppearance`, `TenantBranding`, `TenantSsoConfig`, `TenantSecurityConfig`, `TenantIntegrationConfig`, `TenantSecurityReminder`, `SiteHealthSnapshot`, `SiteEmplacement`. (11 en réalité — compte rectifié)
+- **3 nouveaux enums** : `EmplacementType`, `SecurityReminderSeverity`. (2 en réalité)
+- **22+ colonnes scalaires** ajoutées sur `Asset` (5), `User` (3), `Site` (8), `Contact` (1).
+- **5 colonnes JSON dropées** : `Asset.networkInfo`, `Tenant.config`, `User.appearancePreference`, `Site.metadata`, `Site.contacts`, `Site.accessNotes`, `Site.emplacements` (7 dropées en tout).
+- **4 migrations versionnées** ajoutées (`2_` à `5_`).
+
+**Smoke complet xch-deploy validé :**
+- Reset complet → migrate deploy (5 migrations en chaîne) → setup wizard → seed démo (8 sites, 83 assets, 14 racks, 12 tasks, 11 contacts, 6 users) → login admin@demo.fr + manager@demo.fr → /api/sites/:id retourne `contactsOnSite[2]`, `emplacements`, `healthSnapshot`, scalars accessNotes/serverInfo OK → run-now sur monitor déclenche `recomputeSite()` qui upsert proprement le SiteHealthSnapshot (overall=HEALTHY, 3 components) → /api/tenants/current/config retourne le shape assemblé propre (appearance, modules, integrations.netbox, security null/SSO null comme attendu) → URL publique `https://xch.eoncom.io/api/auth/login` 201 après NPM reload.
+
+**Pièges traversés :**
+- Prisma 7.8 vs 5.8 (cible A) : `npx prisma` sans pin attrape la 7.x qui a renommé `--to-schema-datamodel`. Fix : `npx --package=prisma@5.8.0 prisma ...`.
+- TS errors post-cible B (auth.controller, auth.service, tenants.service) : config.security/sso encore référencé dans 2 fichiers + literal types `'light'|'dark'|'system'` à narrower depuis Prisma `String`.
+- TS errors post-cible D : `metadata: true` dans le SELECT de `health-aggregation.service` cassait l'inférence des relations (le drop de la colonne en cible C n'avait pas été nettoyé). `backup.service.ts` écrivait encore les anciens champs JSON sur le restore — réécrit avec les nouvelles colonnes scalaires.
+- Cache DNS NPM après chaque rebuild backend → 502 sur URL publique. Fix systématique : `docker exec nginx-proxy-manager-app-1 nginx -s reload`. (Déjà documenté en S5.)
+
+**Reste à faire (suivi post-tag) :**
+- Wizard sites/[id]/edit + sites/new : le state local `contacts` n'est plus envoyé au PATCH (table Contact gère via API dédiée). UI à recâbler en session UX/UI globale.
+- `NotificationConfig.{channels, events}` (ADR-013 pt 1) : session dédiée post-v1.6 avec tests d'héritage exhaustifs.
+- Chiffrement at-rest des secrets `TenantSsoConfig.clientSecret` et `TenantIntegrationConfig.netboxToken` : ADR dédiée (KMS / pgcrypto + key rotation).
