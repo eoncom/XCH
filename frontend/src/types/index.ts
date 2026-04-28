@@ -143,6 +143,16 @@ export interface AdminLink {
   url: string;
 }
 
+// ADR-018 — Asset admin links became a typed 1:N relation. AdminLink stays
+// for compatibility with form input shapes; AssetAdminLink is the persisted row.
+export interface AssetAdminLink {
+  id: string;
+  label: string;
+  url: string;
+  order: number;
+  createdAt: string;
+}
+
 export interface SiteAccessNotes {
   schedules?: string;
   badges?: string;
@@ -204,17 +214,14 @@ export interface Asset {
   inventoryTag?: string;
   status: AssetStatus;
   locationText?: string;
-  networkInfo?: {
-    ip?: string;
-    mac?: string;
-    hostname?: string;
-    vlan?: string;
-    port?: string;
-    monitorName?: string;
-    monitorStatus?: 'up' | 'down' | 'unknown';
-    lastHealthCheck?: string;
-    adminLinks?: AdminLink[];
-  };
+  // ADR-018 — split from former networkInfo JSON. ip/mac/hostname/vlan/port
+  // are scalar columns; adminLinks is a 1:N relation to AssetAdminLink.
+  ip?: string;
+  mac?: string;
+  hostname?: string;
+  vlan?: string;
+  port?: string;
+  adminLinks?: AssetAdminLink[];
   purchaseDate?: string;
   warrantyEnd?: string;
   weight?: number;
@@ -417,7 +424,10 @@ export interface HeatmapAccessPoint {
     type: string;
     status: string;
     wifiProfile?: WifiProfile;
-    networkInfo?: any;
+    // ADR-018 — scalar columns (formerly Asset.networkInfo JSON).
+    ip?: string | null;
+    mac?: string | null;
+    hostname?: string | null;
     // Asset-level WiFi overrides (v1.3)
     wifiCoverageRadius?: number | null;
     wifiFrequency?: string | null;
@@ -673,13 +683,13 @@ export interface CreateAssetDto {
   inventoryTag?: string;
   status: AssetStatus;
   locationText?: string;
-  networkInfo?: {
-    ip?: string;
-    mac?: string;
-    hostname?: string;
-    vlan?: string;
-    port?: string;
-  };
+  // ADR-018 — flat scalars + adminLinks 1:N.
+  ip?: string;
+  mac?: string;
+  hostname?: string;
+  vlan?: string;
+  port?: string;
+  adminLinks?: Array<{ label: string; url: string }>;
   purchaseDate?: string;
   warrantyEnd?: string;
   weight?: number;

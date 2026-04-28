@@ -735,21 +735,31 @@ export class SeedService {
     const assets = [];
     for (const a of assetsData) {
       const site = sites.find(s => s.id === a.siteId);
+      // ADR-018 — split former networkInfo JSON into scalar columns +
+      // AssetAdminLink rows. The data array still uses the historical inline
+      // networkInfo shape for readability; the conversion happens here.
+      const ni: any = (a as any).networkInfo ?? {};
+      const adminLinks: Array<{ label: string; url: string }> = Array.isArray(ni.adminLinks)
+        ? ni.adminLinks.filter((l: any) => l?.label && l?.url)
+        : [];
+      const { networkInfo: _drop, ...assetFields } = a as any;
       const asset = await this.prisma.asset.create({
         data: {
           tenantId,
           delegationId: site?.delegationId,
-          ...a,
+          ...assetFields,
+          ip:       ni.ip       ?? null,
+          mac:      ni.mac      ?? null,
+          hostname: ni.hostname ?? null,
+          vlan:     ni.vlan     ?? null,
+          port:     ni.port     ?? null,
+          adminLinks: adminLinks.length
+            ? { create: adminLinks.map((l, idx) => ({ label: l.label, url: l.url, order: idx })) }
+            : undefined,
         },
       });
       assets.push(asset);
     }
-
-    // Phase 6.5: SD-WAN firewallIds / link ↔ asset association used to live
-    // inside the Site.connectivity JSON. The JSON column is gone; these
-    // relationships now rely on ConnectivityLink.assetId (added separately
-    // when needed) and on the health aggregation treating firewalls with
-    // networkInfo.monitorName as SD-WAN components. No post-asset update step.
 
     return assets;
   }

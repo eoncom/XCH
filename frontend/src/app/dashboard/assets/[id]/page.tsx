@@ -460,8 +460,8 @@ export default function AssetDetailPage({
 
           {/* Network Information — conditional */}
           {(() => {
-            const net = asset.networkInfo as any;
-            const hasNetwork = net && (net.ip || net.hostname || net.mac || net.vlan || net.port);
+            const a = asset as any;
+            const hasNetwork = a.ip || a.hostname || a.mac || a.vlan || a.port;
             if (!hasNetwork) return null;
             return (
               <Card>
@@ -473,44 +473,44 @@ export default function AssetDetailPage({
                 </CardHeader>
                 <CardContent>
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {net.ip && (
+                    {a.ip && (
                       <div>
                         <label className="text-sm font-medium text-muted-foreground">
                           Adresse IP
                         </label>
-                        <p className="text-lg font-mono">{net.ip}</p>
+                        <p className="text-lg font-mono">{a.ip}</p>
                       </div>
                     )}
-                    {net.hostname && (
+                    {a.hostname && (
                       <div>
                         <label className="text-sm font-medium text-muted-foreground">
                           Hostname
                         </label>
-                        <p className="text-lg font-mono">{net.hostname}</p>
+                        <p className="text-lg font-mono">{a.hostname}</p>
                       </div>
                     )}
-                    {net.mac && (
+                    {a.mac && (
                       <div>
                         <label className="text-sm font-medium text-muted-foreground">
                           Adresse MAC
                         </label>
-                        <p className="text-lg font-mono">{net.mac}</p>
+                        <p className="text-lg font-mono">{a.mac}</p>
                       </div>
                     )}
-                    {net.vlan && (
+                    {a.vlan && (
                       <div>
                         <label className="text-sm font-medium text-muted-foreground">
                           VLAN
                         </label>
-                        <p className="text-lg font-mono">{net.vlan}</p>
+                        <p className="text-lg font-mono">{a.vlan}</p>
                       </div>
                     )}
-                    {net.port && (
+                    {a.port && (
                       <div>
                         <label className="text-sm font-medium text-muted-foreground">
                           Port
                         </label>
-                        <p className="text-lg font-mono">{net.port}</p>
+                        <p className="text-lg font-mono">{a.port}</p>
                       </div>
                     )}
                   </div>
@@ -519,17 +519,10 @@ export default function AssetDetailPage({
             );
           })()}
 
-          {/* ADR-016 — legacy networkInfo.monitorName "Monitoring" card removed.
-              Real-time monitoring lives under the dedicated Monitoring tab
-              (MonitorConfigSection). */}
+          {/* Admin Links — conditional. ADR-018: now a 1:N AssetAdminLink relation. */}
           {(() => {
-            return null as any;
-          })()}
-
-          {/* Admin Links — conditional */}
-          {(() => {
-            const net = asset.networkInfo as any;
-            if (!net?.adminLinks || net.adminLinks.length === 0) return null;
+            const links = (asset as any).adminLinks as Array<{ label: string; url: string }> | undefined;
+            if (!links || links.length === 0) return null;
             return (
               <Card>
                 <CardHeader>
@@ -540,7 +533,7 @@ export default function AssetDetailPage({
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
-                    {net.adminLinks.map((link: { label: string; url: string }, idx: number) => (
+                    {links.map((link, idx) => (
                       <a
                         key={idx}
                         href={link.url}
@@ -894,7 +887,7 @@ export default function AssetDetailPage({
           <MonitorConfigSection
             targetType="asset"
             targetId={id}
-            defaultTarget={(asset as any).networkInfo?.ip || (asset as any).networkInfo?.hostname || ''}
+            defaultTarget={(asset as any).ip || (asset as any).hostname || ''}
             readOnly={!canUpdate('assets', asset?.siteId)}
           />
         </TabsContent>

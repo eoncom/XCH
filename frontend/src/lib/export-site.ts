@@ -1099,7 +1099,7 @@ function generateAssetsExcel(assets: Asset[], racks: Rack[]): ArrayBuffer {
   ];
 
   for (const a of assets) {
-    const net = a.networkInfo as any;
+    // ADR-018 — ip/hostname/mac are scalars on Asset (formerly networkInfo JSON).
     wsData.push([
       sanitizeForExcel(a.type),
       sanitizeForExcel(a.name),
@@ -1107,9 +1107,9 @@ function generateAssetsExcel(assets: Asset[], racks: Rack[]): ArrayBuffer {
       sanitizeForExcel(a.model),
       sanitizeForExcel(a.serialNumber),
       sanitizeForExcel(a.status),
-      sanitizeForExcel(net?.ip),
-      sanitizeForExcel(net?.hostname),
-      sanitizeForExcel(net?.mac),
+      sanitizeForExcel((a as any).ip),
+      sanitizeForExcel((a as any).hostname),
+      sanitizeForExcel((a as any).mac),
       sanitizeForExcel(a.inventoryTag),
       formatWarranty(a.warrantyEnd),
       a.purchaseDate ? new Date(a.purchaseDate).toLocaleDateString('fr-FR') : '',

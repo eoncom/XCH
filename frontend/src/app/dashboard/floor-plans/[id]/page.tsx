@@ -425,8 +425,10 @@ export default function FloorPlanDetailPage({
           model: pin.asset.model || undefined,
           type: pin.asset.type,
           status: pin.asset.status,
-          wifiProfile: (pin.asset as any).metadata?.wifiProfile || undefined,
-          networkInfo: pin.asset.networkInfo,
+          // ADR-018 — networkInfo JSON dropped, scalars promoted to columns.
+          ip: (pin.asset as any).ip ?? null,
+          mac: (pin.asset as any).mac ?? null,
+          hostname: (pin.asset as any).hostname ?? null,
           // Asset-level WiFi overrides (v1.3)
           wifiCoverageRadius: (pin.asset as any).wifiCoverageRadius ?? null,
           wifiFrequency: (pin.asset as any).wifiFrequency ?? null,

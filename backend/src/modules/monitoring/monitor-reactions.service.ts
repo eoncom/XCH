@@ -247,8 +247,8 @@ export class MonitorReactionsService {
    * by construction.
    *
    * Defense in depth : re-runs validateHost on the NEW value before sync,
-   * so changing asset.networkInfo.ip to 127.0.0.1 cannot bypass the SSRF
-   * validator via this backdoor.
+   * so changing asset.ip to 127.0.0.1 cannot bypass the SSRF validator via
+   * this backdoor (ADR-018 — ip is now a scalar column, no JSON).
    */
   async autoSyncTargetForAsset(
     tenantId: string,

@@ -8,7 +8,12 @@ export interface SdwanFirewallAsset {
   type: string;
   serialNumber: string | null;
   status: string;
-  networkInfo: unknown;
+  // ADR-018 — split scalars (formerly networkInfo JSON).
+  ip: string | null;
+  mac: string | null;
+  hostname: string | null;
+  vlan: string | null;
+  port: string | null;
 }
 
 export interface SdwanFirewall {

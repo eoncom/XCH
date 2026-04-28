@@ -108,11 +108,21 @@ export class AssetsService {
       }
     }
 
+    // Extract adminLinks: 1:N relation, not a direct column.
+    const { adminLinks, ...assetFields } = createAssetDto;
+
     const asset = await this.prisma.asset.create({
       data: {
-        ...createAssetDto,
+        ...assetFields,
         tenantId,
         delegationId: delegationId ?? undefined,
+        adminLinks: adminLinks?.length
+          ? {
+              create: adminLinks
+                .filter((l) => l.label && l.url)
+                .map((l, idx) => ({ label: l.label, url: l.url, order: idx })),
+            }
+          : undefined,
       },
       include: {
         site: {
@@ -128,6 +138,7 @@ export class AssetsService {
             name: true,
           },
         },
+        adminLinks: { orderBy: { order: 'asc' } },
       },
     });
 
@@ -302,6 +313,7 @@ export class AssetsService {
         },
         photos: true,
         externalRefs: true,
+        adminLinks: { orderBy: { order: 'asc' } },
       },
     });
 
@@ -329,8 +341,12 @@ export class AssetsService {
       }
     }
 
+    // adminLinks are managed via dedicated endpoints (or replaced atomically here).
+    // Extract them from the DTO so they don't leak into the asset.update payload.
+    const { adminLinks: nextAdminLinks, ...updateScalarFields } = updateAssetDto as any;
+
     // Resolve delegationId on update — keep site/delegation in sync
-    const updateData: any = { ...updateAssetDto };
+    const updateData: any = { ...updateScalarFields };
     const hasSiteChange = Object.prototype.hasOwnProperty.call(updateAssetDto, 'siteId');
     const hasDelegationChange = Object.prototype.hasOwnProperty.call(updateAssetDto, 'delegationId');
     if (hasSiteChange || hasDelegationChange) {
@@ -364,13 +380,32 @@ export class AssetsService {
       }
     }
 
-    const asset = await this.prisma.asset.update({
-      where: { id },
-      data: updateData,
-      include: {
-        site: true,
-        rack: true,
-      },
+    // If adminLinks is explicitly passed, replace the full set atomically.
+    // Pattern: deleteMany + createMany within a transaction with the asset update.
+    const asset = await this.prisma.$transaction(async (tx) => {
+      if (Array.isArray(nextAdminLinks)) {
+        await tx.assetAdminLink.deleteMany({ where: { assetId: id } });
+        const filtered = nextAdminLinks.filter((l: any) => l?.label && l?.url);
+        if (filtered.length > 0) {
+          await tx.assetAdminLink.createMany({
+            data: filtered.map((l: any, idx: number) => ({
+              assetId: id,
+              label: l.label,
+              url: l.url,
+              order: idx,
+            })),
+          });
+        }
+      }
+      return tx.asset.update({
+        where: { id },
+        data: updateData,
+        include: {
+          site: true,
+          rack: true,
+          adminLinks: { orderBy: { order: 'asc' } },
+        },
+      });
     });
 
     // Track movement history
@@ -425,24 +460,28 @@ export class AssetsService {
       disabledMonitorCount = r.disabledCount;
     }
 
-    // ADR-016 — auto-sync MonitorCheck.target when networkInfo.ip / .hostname
-    // changes. Strict criterion: only checks where target == oldIp (or
-    // oldHostname) get rewritten; user-customized targets stay untouched.
-    if (updateAssetDto.networkInfo !== undefined) {
-      const oldNet: any = currentAsset.networkInfo ?? {};
-      const newNet: any = (asset as any).networkInfo ?? {};
+    // ADR-016 — auto-sync MonitorCheck.target when ip / hostname change.
+    // Strict criterion: only checks where target == oldIp (or oldHostname)
+    // get rewritten; user-customized targets stay untouched.
+    // (Post-ADR-018: ip/hostname are now scalar columns, no JSON parsing.)
+    const ipChanged       = 'ip'       in updateAssetDto && (currentAsset as any).ip       !== (asset as any).ip;
+    const hostnameChanged = 'hostname' in updateAssetDto && (currentAsset as any).hostname !== (asset as any).hostname;
+    if (ipChanged || hostnameChanged) {
       const tenant = await this.prisma.tenant.findUnique({
         where: { id: tenantId },
         select: { allowInternalNetworkTargets: true },
       });
       const allowInternal = tenant?.allowInternalNetworkTargets ?? false;
-      // Sync IP, then hostname (separate audit lines, both run if both changed).
-      await this.monitorReactions
-        .autoSyncTargetForAsset(tenantId, id, oldNet.ip, newNet.ip, allowInternal, userId)
-        .catch((e) => this.logger.warn(`target sync (ip) failed for asset ${id}: ${e.message}`));
-      await this.monitorReactions
-        .autoSyncTargetForAsset(tenantId, id, oldNet.hostname, newNet.hostname, allowInternal, userId)
-        .catch((e) => this.logger.warn(`target sync (hostname) failed for asset ${id}: ${e.message}`));
+      if (ipChanged) {
+        await this.monitorReactions
+          .autoSyncTargetForAsset(tenantId, id, (currentAsset as any).ip, (asset as any).ip, allowInternal, userId)
+          .catch((e) => this.logger.warn(`target sync (ip) failed for asset ${id}: ${e.message}`));
+      }
+      if (hostnameChanged) {
+        await this.monitorReactions
+          .autoSyncTargetForAsset(tenantId, id, (currentAsset as any).hostname, (asset as any).hostname, allowInternal, userId)
+          .catch((e) => this.logger.warn(`target sync (hostname) failed for asset ${id}: ${e.message}`));
+      }
     }
 
     return { ...asset, disabledMonitorCount };
@@ -880,15 +919,9 @@ export class AssetsService {
         warrantyEnd = d;
       }
 
-      // Build networkInfo if IP or MAC provided
-      let networkInfo: any = undefined;
-      if (mapped.ipAddress || mapped.macAddress || mapped.firmwareVersion) {
-        networkInfo = {};
-        if (mapped.ipAddress) networkInfo.ip = mapped.ipAddress;
-        if (mapped.macAddress) networkInfo.mac = mapped.macAddress;
-        if (mapped.firmwareVersion) networkInfo.firmware = mapped.firmwareVersion;
-      }
-
+      // ADR-018 — split scalars from former networkInfo. firmware was never a
+      // first-class column; we drop it on import (CSV header still accepted for
+      // backward compat with old templates, just not persisted).
       validRows.push({
         tenantId,
         type: typeUpper,
@@ -899,7 +932,8 @@ export class AssetsService {
         model: mapped.model || null,
         siteId: resolvedSiteId,
         locationText: mapped.location || null,
-        networkInfo: networkInfo || undefined,
+        ip: mapped.ipAddress || null,
+        mac: mapped.macAddress || null,
         purchaseDate: purchaseDate || undefined,
         warrantyEnd: warrantyEnd || undefined,
         notes: mapped.notes || null,
@@ -1069,14 +1103,6 @@ export class AssetsService {
         }
       }
 
-      let networkInfo: any = undefined;
-      if (mapped.ipAddress || mapped.macAddress || mapped.firmwareVersion) {
-        networkInfo = {};
-        if (mapped.ipAddress) networkInfo.ip = mapped.ipAddress;
-        if (mapped.macAddress) networkInfo.mac = mapped.macAddress;
-        if (mapped.firmwareVersion) networkInfo.firmware = mapped.firmwareVersion;
-      }
-
       if (rowErrors.length > 0) {
         invalidRows.push({ row: rowNum, data: mapped, errors: rowErrors });
       } else {
@@ -1092,7 +1118,8 @@ export class AssetsService {
             model: mapped.model || null,
             siteId: resolvedSiteId,
             locationText: mapped.location || null,
-            networkInfo: networkInfo || undefined,
+            ip: mapped.ipAddress || null,
+            mac: mapped.macAddress || null,
             purchaseDate: purchaseDate || undefined,
             warrantyEnd: warrantyEnd || undefined,
             notes: mapped.notes || null,

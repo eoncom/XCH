@@ -1,6 +1,16 @@
-import { IsString, IsOptional, IsNumber, IsObject, IsDateString, IsIn } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsString, IsOptional, IsNumber, IsDateString, IsIn, IsArray, ValidateNested } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+
+export class AssetAdminLinkInputDto {
+  @ApiProperty()
+  @IsString()
+  label!: string;
+
+  @ApiProperty()
+  @IsString()
+  url!: string;
+}
 
 export class CreateAssetDto {
   @ApiProperty({ description: 'Asset type (dynamic via EnumLabel)', example: 'SWITCH' })
@@ -56,10 +66,42 @@ export class CreateAssetDto {
   @IsOptional()
   locationText?: string;
 
-  @ApiProperty({ required: false })
-  @IsObject()
+  // Network identity — split from former networkInfo JSON in S6 (ADR-018).
+  @ApiProperty({ required: false, description: 'IPv4 / IPv6 address' })
+  @IsString()
   @IsOptional()
-  networkInfo?: any;
+  ip?: string;
+
+  @ApiProperty({ required: false, description: 'MAC address' })
+  @IsString()
+  @IsOptional()
+  mac?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  hostname?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  vlan?: string;
+
+  @ApiProperty({ required: false, description: 'Switch port (textual, free-form)' })
+  @IsString()
+  @IsOptional()
+  port?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Admin URLs attached to the asset (Web GUI, SSH jump, doc, etc.)',
+    type: [AssetAdminLinkInputDto],
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AssetAdminLinkInputDto)
+  @IsOptional()
+  adminLinks?: AssetAdminLinkInputDto[];
 
   @ApiProperty({ required: false })
   @IsString()

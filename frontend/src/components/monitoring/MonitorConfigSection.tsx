@@ -39,7 +39,7 @@ interface Props {
   targetType: TargetType;
   /** ID of the parent entity (siteId, assetId, or linkId). */
   targetId: string;
-  /** Pre-fill the target field on the create form (e.g. asset.networkInfo.ip). */
+  /** Pre-fill the target field on the create form (e.g. asset.ip). */
   defaultTarget?: string;
   /** Show in compact mode (used inside ConnectivityLinksManager rows). */
   compact?: boolean;

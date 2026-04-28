@@ -434,8 +434,13 @@ model Asset {
   // Location
   locationText String?
 
-  // Network info (JSON)
-  networkInfo Json? @db.JsonB // {ip, mac, hostname, vlan, port}
+  // Network identity — extracted from former networkInfo JSON in S6 (ADR-018).
+  // Indexable for IP-based search; queryable for tenant-wide network audits.
+  ip       String?
+  mac      String?
+  hostname String?
+  vlan     String?
+  port     String?
 
   // Rack mounting (optional)
   rackId        String?
@@ -474,6 +479,7 @@ model Asset {
   connectivityLinks ConnectivityLink[]
   sdwanRoles        SdwanFirewall[]
   monitorChecks     MonitorCheck[]
+  adminLinks        AssetAdminLink[]
 
   @@unique([tenantId, serialNumber])
   @@index([tenantId])
@@ -481,8 +487,25 @@ model Asset {
   @@index([tenantId, siteId])
   @@index([tenantId, type])
   @@index([tenantId, status])
+  @@index([tenantId, ip])
   @@index([rackId])
   @@map("assets")
+}
+
+// Admin URLs (web GUI, SSH jump-host, ticket links) attached to an asset.
+// Free-form label/url pairs, ordered for display. Extracted from the former
+// Asset.networkInfo.adminLinks JSON-list in S6 (ADR-018).
+model AssetAdminLink {
+  id        String   @id @default(cuid())
+  assetId   String
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  label     String
+  url       String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([assetId])
+  @@map("asset_admin_links")
 }
 
 // ============================================================================

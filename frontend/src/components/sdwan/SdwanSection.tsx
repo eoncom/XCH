@@ -184,8 +184,9 @@ export function SdwanSection({ siteId, canEdit }: Props) {
             ) : (
               <div className="grid md:grid-cols-2 gap-2 border-t pt-3">
                 {config.firewalls.map((fw) => {
-                  const ni = (fw.asset.networkInfo as any) || {};
-                  const fwStatus = ni.monitorStatus as string | undefined;
+                  // ADR-016 lot E removed monitorStatus from Asset; ADR-018
+                  // dropped Asset.networkInfo entirely. Live monitor status is
+                  // surfaced via the dedicated Monitoring tab now.
                   return (
                     <div key={fw.id} className="border rounded-lg p-3 space-y-1">
                       <div className="flex items-center justify-between">
@@ -194,9 +195,6 @@ export function SdwanSection({ siteId, canEdit }: Props) {
                             <Badge variant="outline">
                               {ROLE_LABELS[fw.role as SdwanFirewallRole] ?? fw.role}
                             </Badge>
-                          )}
-                          {fwStatus && (
-                            <Badge variant={statusBadgeVariant(fwStatus)}>{fwStatus}</Badge>
                           )}
                         </div>
                         {canEdit && (

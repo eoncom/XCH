@@ -291,8 +291,9 @@ export class NetboxSyncService {
       serialNumber: nbDevice.serial || null,
       inventoryTag: nbDevice.asset_tag || null,
       status: this.mapNetboxDeviceStatus(nbDevice.status.value),
-      networkInfo: nbDevice.primary_ip4
-        ? { ip: nbDevice.primary_ip4.address.split('/')[0] }
+      // ADR-018 — ip is now a scalar column on Asset (formerly networkInfo.ip).
+      ip: nbDevice.primary_ip4
+        ? nbDevice.primary_ip4.address.split('/')[0]
         : undefined,
     };
 

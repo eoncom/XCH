@@ -46,17 +46,16 @@ const assetSchema = z.object({
   serialNumber: z.string().optional(),
   inventoryTag: z.string().optional(),
   locationText: z.string().optional(),
-  networkInfo: z.object({
-    ip: z.string().optional(),
-    mac: z.string().optional(),
-    hostname: z.string().optional(),
-    vlan: z.string().optional(),
-    port: z.string().optional(),
-    adminLinks: z.array(z.object({
-      label: z.string(),
-      url: z.string(),
-    })).optional(),
-  }).optional(),
+  // ADR-018 — flat scalars + adminLinks 1:N relation.
+  ip: z.string().optional(),
+  mac: z.string().optional(),
+  hostname: z.string().optional(),
+  vlan: z.string().optional(),
+  port: z.string().optional(),
+  adminLinks: z.array(z.object({
+    label: z.string(),
+    url: z.string(),
+  })).optional(),
   purchaseDate: z.string().optional(),
   warrantyEnd: z.string().optional(),
   // Note: widened to allow comma/text input processed by parseDecimalInput in setValueAs.
@@ -255,23 +254,16 @@ export default function NewAssetPage() {
     }
     delete cleaned.locationScope;
 
-    // Clean networkInfo: remove empty subfields, remove entire object if all empty
-    if (cleaned.networkInfo) {
-      if (!cleaned.networkInfo.ip) delete cleaned.networkInfo.ip;
-      if (!cleaned.networkInfo.mac) delete cleaned.networkInfo.mac;
-      if (!cleaned.networkInfo.hostname) delete cleaned.networkInfo.hostname;
-      if (!cleaned.networkInfo.vlan) delete cleaned.networkInfo.vlan;
-      if (!cleaned.networkInfo.port) delete cleaned.networkInfo.port;
-      // Clean adminLinks: remove entries with empty label or url
-      if (cleaned.networkInfo.adminLinks) {
-        cleaned.networkInfo.adminLinks = cleaned.networkInfo.adminLinks.filter(
-          (l: any) => l.label && l.url
-        );
-        if (cleaned.networkInfo.adminLinks.length === 0) {
-          delete cleaned.networkInfo.adminLinks;
-        }
-      }
-      if (Object.keys(cleaned.networkInfo).length === 0) delete cleaned.networkInfo;
+    // ADR-018 — scalars + adminLinks list. Drop empty strings so they go through
+    // as undefined instead of empty inputs.
+    for (const k of ['ip', 'mac', 'hostname', 'vlan', 'port'] as const) {
+      if (cleaned[k] === '' || cleaned[k] == null) delete cleaned[k];
+    }
+    if (Array.isArray(cleaned.adminLinks)) {
+      cleaned.adminLinks = cleaned.adminLinks.filter(
+        (l: any) => l?.label && l?.url
+      );
+      if (cleaned.adminLinks.length === 0) delete cleaned.adminLinks;
     }
 
     createMutation.mutate(cleaned);
@@ -556,46 +548,46 @@ export default function NewAssetPage() {
           <CardContent>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="networkInfo.ip">Adresse IP</Label>
+                <Label htmlFor="ip">Adresse IP</Label>
                 <Input
-                  id="networkInfo.ip"
-                  {...register('networkInfo.ip')}
+                  id="ip"
+                  {...register('ip')}
                   placeholder="Ex: 192.168.1.100"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="networkInfo.hostname">Hostname</Label>
+                <Label htmlFor="hostname">Hostname</Label>
                 <Input
-                  id="networkInfo.hostname"
-                  {...register('networkInfo.hostname')}
+                  id="hostname"
+                  {...register('hostname')}
                   placeholder="Ex: sw-salle-serveur-01"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="networkInfo.mac">Adresse MAC</Label>
+                <Label htmlFor="mac">Adresse MAC</Label>
                 <Input
-                  id="networkInfo.mac"
-                  {...register('networkInfo.mac')}
+                  id="mac"
+                  {...register('mac')}
                   placeholder="Ex: AA:BB:CC:DD:EE:FF"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="networkInfo.vlan">VLAN</Label>
+                <Label htmlFor="vlan">VLAN</Label>
                 <Input
-                  id="networkInfo.vlan"
-                  {...register('networkInfo.vlan')}
+                  id="vlan"
+                  {...register('vlan')}
                   placeholder="Ex: VLAN 100"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="networkInfo.port">Port réseau</Label>
+                <Label htmlFor="port">Port réseau</Label>
                 <Input
-                  id="networkInfo.port"
-                  {...register('networkInfo.port')}
+                  id="port"
+                  {...register('port')}
                   placeholder="Ex: Gi0/1, eth0"
                 />
               </div>
@@ -614,15 +606,15 @@ export default function NewAssetPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {(watch('networkInfo.adminLinks') || []).map((link: any, index: number) => (
+              {(watch('adminLinks') || []).map((link: any, index: number) => (
                 <div key={index} className="flex items-center gap-2">
                   <Input
                     placeholder="Label (ex: Console, WebUI...)"
                     value={link?.label || ''}
                     onChange={(e) => {
-                      const links = [...(watch('networkInfo.adminLinks') || [])];
+                      const links = [...(watch('adminLinks') || [])];
                       links[index] = { ...links[index], label: e.target.value };
-                      setValue('networkInfo.adminLinks', links);
+                      setValue('adminLinks', links);
                     }}
                     className="flex-1"
                   />
@@ -630,9 +622,9 @@ export default function NewAssetPage() {
                     placeholder="URL (ex: https://192.168.1.1)"
                     value={link?.url || ''}
                     onChange={(e) => {
-                      const links = [...(watch('networkInfo.adminLinks') || [])];
+                      const links = [...(watch('adminLinks') || [])];
                       links[index] = { ...links[index], url: e.target.value };
-                      setValue('networkInfo.adminLinks', links);
+                      setValue('adminLinks', links);
                     }}
                     className="flex-1"
                   />
@@ -642,9 +634,9 @@ export default function NewAssetPage() {
                     size="icon"
                     className="shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
                     onClick={() => {
-                      const links = [...(watch('networkInfo.adminLinks') || [])];
+                      const links = [...(watch('adminLinks') || [])];
                       links.splice(index, 1);
-                      setValue('networkInfo.adminLinks', links);
+                      setValue('adminLinks', links);
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -656,9 +648,9 @@ export default function NewAssetPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const links = [...(watch('networkInfo.adminLinks') || [])];
+                  const links = [...(watch('adminLinks') || [])];
                   links.push({ label: '', url: '' });
-                  setValue('networkInfo.adminLinks', links);
+                  setValue('adminLinks', links);
                 }}
                 className="mt-2"
               >
