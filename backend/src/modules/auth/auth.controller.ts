@@ -98,10 +98,11 @@ export class AuthController {
   ) {
     const user = req.user;
 
-    // Check tenant-level 2FA enforcement
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: user.tenantId } });
-    const tenantConfig = (tenant?.config as Record<string, any>) || {};
-    const require2FA = tenantConfig?.security?.require2FA === true;
+    // ADR-018 — TenantSecurityConfig (typed) replaces tenant.config.security.
+    const securityConfig = await this.prisma.tenantSecurityConfig.findUnique({
+      where: { tenantId: user.tenantId },
+    });
+    const require2FA = securityConfig?.require2FA === true;
 
     // Check if 2FA is enabled for this user OR required by tenant
     if (user.totpEnabled) {

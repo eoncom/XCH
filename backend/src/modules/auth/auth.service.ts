@@ -75,10 +75,14 @@ export class AuthService {
     const securityConfig = await this.prisma.tenantSecurityConfig.findUnique({
       where: { tenantId: user.tenantId },
     });
-    const sessionTimeout =
-      securityConfig?.sessionTimeout || this.config.get('JWT_ACCESS_EXPIRATION', '15m');
-    const refreshLifetime =
-      securityConfig?.refreshTokenLifetime || this.config.get('JWT_REFRESH_EXPIRATION', '7d');
+    const sessionTimeout: string =
+      securityConfig?.sessionTimeout ||
+      this.config.get<string>('JWT_ACCESS_EXPIRATION') ||
+      '15m';
+    const refreshLifetime: string =
+      securityConfig?.refreshTokenLifetime ||
+      this.config.get<string>('JWT_REFRESH_EXPIRATION') ||
+      '7d';
 
     const payload = {
       sub: user.id,
