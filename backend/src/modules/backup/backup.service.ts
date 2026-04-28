@@ -202,15 +202,19 @@ export class BackupService {
           postalCode: siteData.postalCode,
           country: siteData.country || 'France',
           healthStatus: siteData.healthStatus || 'UNKNOWN',
-          // JSON fields
-          contacts: siteData.contacts || undefined,
-          accessNotes: siteData.accessNotes || undefined,
-          // Legacy `connectivity` JSON dropped in phase 6.5 — connectivity
-          // now lives in the structured ConnectivityLink table (restored
-          // separately by the backup flow via restoreConnectivityLinks()).
-          emplacements: siteData.emplacements || undefined,
-          metadata: siteData.metadata || undefined,
-          // String fields
+          // ADR-018 cible D — scalar columns (formerly contacts/accessNotes/
+          // emplacements/metadata.serverInfo JSON). Connectivity links are
+          // restored separately via restoreConnectivityLinks(). Contacts and
+          // emplacements are restored via dedicated tables (Contact +
+          // SiteEmplacement) elsewhere in the backup flow.
+          accessSchedules:  siteData.accessSchedules  ?? null,
+          accessBadges:     siteData.accessBadges     ?? null,
+          accessProcedures: siteData.accessProcedures ?? null,
+          accessSafety:     siteData.accessSafety     ?? null,
+          smbPath:          siteData.smbPath          ?? null,
+          sharepointUrl:    siteData.sharepointUrl    ?? null,
+          gedUrl:           siteData.gedUrl           ?? null,
+          accessRightsUrl:  siteData.accessRightsUrl  ?? null,
           cutProcedure: siteData.cutProcedure || undefined,
           governanceDocsRef: siteData.governanceDocsRef || undefined,
           notes: siteData.notes || undefined,
@@ -642,11 +646,17 @@ export class BackupService {
             postalCode: siteData.postalCode,
             country: siteData.country || 'France',
             healthStatus: siteData.healthStatus || 'UNKNOWN',
-            contacts: siteData.contacts || undefined,
-            accessNotes: siteData.accessNotes || undefined,
-            // Legacy `connectivity` JSON dropped in phase 6.5.
-            emplacements: siteData.emplacements || undefined,
-            metadata: siteData.metadata || undefined,
+            // ADR-018 cible D — scalar columns (formerly contacts/accessNotes/
+            // metadata.serverInfo JSON). Backups taken on v1.5 or earlier are
+            // not supported (demo data only).
+            accessSchedules:  siteData.accessSchedules  ?? null,
+            accessBadges:     siteData.accessBadges     ?? null,
+            accessProcedures: siteData.accessProcedures ?? null,
+            accessSafety:     siteData.accessSafety     ?? null,
+            smbPath:          siteData.smbPath          ?? null,
+            sharepointUrl:    siteData.sharepointUrl    ?? null,
+            gedUrl:           siteData.gedUrl           ?? null,
+            accessRightsUrl:  siteData.accessRightsUrl  ?? null,
             cutProcedure: siteData.cutProcedure || undefined,
             governanceDocsRef: siteData.governanceDocsRef || undefined,
             notes: siteData.notes || undefined,
