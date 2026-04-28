@@ -163,12 +163,23 @@ function EditSitePage({
       : undefined,
   });
 
-  const [contacts, setContacts] = useState<SiteContact[]>(site?.contacts || []);
-  const [accessNotes, setAccessNotes] = useState(site?.accessNotes || {
-    schedules: '', badges: '', procedures: '', safety: ''
+  // ADR-018 cible D — site.contacts/accessNotes/metadata.serverInfo ont été
+  // dropés ; on initialise les états locaux à partir des nouveaux scalaires
+  // (le shape du formulaire reste { schedules, badges, ...} pour minimiser le
+  // diff) et on désimbrique au moment de l'envoi.
+  const [contacts, setContacts] = useState<SiteContact[]>(((site as any)?.contactsOnSite || []) as SiteContact[]);
+  const [accessNotes, setAccessNotes] = useState({
+    schedules:  (site as any)?.accessSchedules  || '',
+    badges:     (site as any)?.accessBadges     || '',
+    procedures: (site as any)?.accessProcedures || '',
+    safety:     (site as any)?.accessSafety     || '',
   });
-  const [serverInfo, setServerInfo] = useState(site?.metadata?.serverInfo || {
-    smbPath: '', sharepointUrl: '', gedUrl: '', accessRightsUrl: '', notes: ''
+  const [serverInfo, setServerInfo] = useState({
+    smbPath:         (site as any)?.smbPath         || '',
+    sharepointUrl:   (site as any)?.sharepointUrl   || '',
+    gedUrl:          (site as any)?.gedUrl          || '',
+    accessRightsUrl: (site as any)?.accessRightsUrl || '',
+    notes:           site?.notes || '',
   });
   const [isGeocoding, setIsGeocoding] = useState(false);
 
@@ -177,11 +188,24 @@ function EditSitePage({
   const [closeWarningInfo, setCloseWarningInfo] = useState<{ activeAssets: number; openTasks: number }>({ activeAssets: 0, openTasks: 0 });
   const [pendingSubmitData, setPendingSubmitData] = useState<any>(null);
 
-  // Update serverInfo state when site data loads
+  // Re-sync local state when site data loads (post-fetch).
   useEffect(() => {
-    if (site?.metadata?.serverInfo) {
-      setServerInfo(site.metadata.serverInfo);
-    }
+    if (!site) return;
+    const s = site as any;
+    setAccessNotes({
+      schedules:  s.accessSchedules  || '',
+      badges:     s.accessBadges     || '',
+      procedures: s.accessProcedures || '',
+      safety:     s.accessSafety     || '',
+    });
+    setServerInfo({
+      smbPath:         s.smbPath         || '',
+      sharepointUrl:   s.sharepointUrl   || '',
+      gedUrl:          s.gedUrl          || '',
+      accessRightsUrl: s.accessRightsUrl || '',
+      notes:           site.notes || '',
+    });
+    setContacts((s.contactsOnSite || []) as SiteContact[]);
   }, [site]);
 
   // Charger tous les contacts pour l'étape Contacts & Accès
@@ -295,18 +319,23 @@ function EditSitePage({
     // through this payload. Links live in the ConnectivityLink table, SD-WAN
     // in SdwanConfig/SdwanFirewall, and cutProcedure is a direct Site scalar —
     // all edited from the site detail page's Infos pratiques tab.
-
-    // Build metadata with serverInfo
-    const hasServerInfo = serverInfo.smbPath || serverInfo.sharepointUrl || serverInfo.gedUrl || serverInfo.accessRightsUrl || serverInfo.notes;
-    const metadata = hasServerInfo
-      ? { ...(site?.metadata || {}), serverInfo }
-      : site?.metadata || undefined;
+    // ADR-018 cible D — accessNotes / metadata.serverInfo dropped, the form
+    // posts the 4+4 scalar columns directly. Contacts are managed via the
+    // Contact API (not via this Site PATCH).
 
     return {
       ...cleanedData,
-      contacts: contacts.filter(c => c.name && c.email),
-      accessNotes,
-      ...(metadata ? { metadata } : {}),
+      // accessNotes split into 4 scalar columns
+      accessSchedules:  accessNotes.schedules  || null,
+      accessBadges:     accessNotes.badges     || null,
+      accessProcedures: accessNotes.procedures || null,
+      accessSafety:     accessNotes.safety     || null,
+      // serverInfo split into 4 URL columns + notes (existing column)
+      smbPath:         serverInfo.smbPath         || null,
+      sharepointUrl:   serverInfo.sharepointUrl   || null,
+      gedUrl:          serverInfo.gedUrl          || null,
+      accessRightsUrl: serverInfo.accessRightsUrl || null,
+      notes: serverInfo.notes || cleanedData.notes || null,
     };
   };
 

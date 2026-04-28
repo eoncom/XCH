@@ -708,10 +708,24 @@ export async function exportSiteZip(
       floorPlans: floorPlans.length,
       documents: documents.length,
     },
-    contacts: site.contacts || [],
+    // ADR-018 cible D — site.contacts/accessNotes/metadata.serverInfo split
+    // into scalar columns + Contact relation. Reassemble the export shape.
+    contacts: (site as any).contactsOnSite || [],
     connectivity: site.connectivity || {},
-    accessNotes: site.accessNotes || {},
-    metadata: site.metadata || {},
+    accessNotes: {
+      schedules:  (site as any).accessSchedules  || '',
+      badges:     (site as any).accessBadges     || '',
+      procedures: (site as any).accessProcedures || '',
+      safety:     (site as any).accessSafety     || '',
+    },
+    serverInfo: {
+      smbPath:         (site as any).smbPath         || '',
+      sharepointUrl:   (site as any).sharepointUrl   || '',
+      gedUrl:          (site as any).gedUrl          || '',
+      accessRightsUrl: (site as any).accessRightsUrl || '',
+      notes:           site.notes || '',
+    },
+    emplacements: (site as any).emplacements || [],
     floorPlans: floorPlans.map(fp => ({
       id: fp.id,
       title: fp.title,
@@ -829,8 +843,10 @@ export async function exportSiteZip(
 
   // Step 9: Add contacts and connectivity data
   onProgress?.({ step: 'Ajout des donn\u00e9es compl\u00e9mentaires...', percent: 90 });
-  if (site.contacts && site.contacts.length > 0) {
-    zip.file('contacts.json', JSON.stringify(site.contacts, null, 2));
+  // ADR-018 cible D \u2014 contacts come from contactsOnSite relation now.
+  const exportContacts = (site as any).contactsOnSite || [];
+  if (exportContacts.length > 0) {
+    zip.file('contacts.json', JSON.stringify(exportContacts, null, 2));
   }
   if (site.connectivity) {
     zip.file('connectivite.json', JSON.stringify(site.connectivity, null, 2));
@@ -905,18 +921,19 @@ function generateSiteReportPdf(
   }
   y += 5;
 
-  // === Contacts ===
-  if (site.contacts && site.contacts.length > 0) {
+  // === Contacts (ADR-018 cible D \u2014 contactsOnSite relation) ===
+  const pdfContacts = ((site as any).contactsOnSite || []) as any[];
+  if (pdfContacts.length > 0) {
     if (y > pageH - 60) { doc.addPage(); y = 20; }
     doc.setFontSize(14);
     doc.setTextColor(59, 130, 246);
-    doc.text(`Contacts (${site.contacts.length})`, margin, y);
+    doc.text(`Contacts (${pdfContacts.length})`, margin, y);
     y += 3;
 
     autoTable(doc, {
       startY: y,
       head: [['Nom', 'R\u00f4le', 'T\u00e9l\u00e9phone', 'Email']],
-      body: site.contacts.map((c: any) => [c.name, c.role || '-', c.phone || '-', c.email || '-']),
+      body: pdfContacts.map((c) => [c.name, c.role || '-', c.phone || '-', c.email || '-']),
       theme: 'striped',
       headStyles: { fillColor: [59, 130, 246] },
       styles: { fontSize: 9 },
@@ -1047,8 +1064,14 @@ function generateSiteReportPdf(
     y = (doc as any).lastAutoTable.finalY + 10;
   }
 
-  // === Server Info ===
-  if (site.metadata?.serverInfo) {
+  // === Server Info (ADR-018 cible D \u2014 split scalars sur Site) ===
+  const pdfSi = {
+    smbPath:         (site as any).smbPath         as string | undefined,
+    sharepointUrl:   (site as any).sharepointUrl   as string | undefined,
+    gedUrl:          (site as any).gedUrl          as string | undefined,
+    accessRightsUrl: (site as any).accessRightsUrl as string | undefined,
+  };
+  if (pdfSi.smbPath || pdfSi.sharepointUrl || pdfSi.gedUrl || pdfSi.accessRightsUrl) {
     if (y > pageH - 50) { doc.addPage(); y = 20; }
     doc.setFontSize(14);
     doc.setTextColor(59, 130, 246);
@@ -1057,7 +1080,7 @@ function generateSiteReportPdf(
 
     doc.setFontSize(10);
     doc.setTextColor(30, 41, 59);
-    const si = site.metadata.serverInfo;
+    const si = pdfSi;
     if (si.smbPath) { doc.text(`SMB: ${si.smbPath}`, margin, y); y += 5; }
     if (si.sharepointUrl) { doc.text(`SharePoint: ${si.sharepointUrl}`, margin, y); y += 5; }
     if (si.gedUrl) { doc.text(`GED: ${si.gedUrl}`, margin, y); y += 5; }

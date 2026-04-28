@@ -174,11 +174,22 @@ export interface Site {
   country?: string;
   latitude?: number;
   longitude?: number;
-  contacts?: SiteContact[];
+  // ADR-018 cible D — accessNotes JSON split into 4 free-form Text columns.
+  accessSchedules?: string | null;
+  accessBadges?: string | null;
+  accessProcedures?: string | null;
+  accessSafety?: string | null;
+  // ADR-018 cible D — metadata.serverInfo split into 4 scalar columns.
+  smbPath?: string | null;
+  sharepointUrl?: string | null;
+  gedUrl?: string | null;
+  accessRightsUrl?: string | null;
+  notes?: string | null;
+  // ADR-018 — typed relations replace former JSON columns.
+  contactsOnSite?: SiteContact[];
   connectivity?: SiteConnectivity;
-  accessNotes?: SiteAccessNotes;
-  notes?: string;
-  metadata?: any;
+  emplacements?: Array<{ id: string; type: 'SMB' | 'SHAREPOINT'; url: string; description?: string | null; order: number }>;
+  healthSnapshot?: { siteId: string; overall: HealthStatus; componentsJson: any[]; computedAt: string } | null;
   monitoringEnabled?: boolean;
   createdAt: string;
   updatedAt: string;

@@ -406,11 +406,15 @@ model Site {
   // PostGIS geometry - POINT(longitude, latitude)
   coordinates Unsupported("geometry(Point,4326)")?
 
-  // Contacts (JSON array)
-  contacts Json? @db.JsonB // [{name, phone, email, role, isPrimary}]
+  // ADR-018 — Site.contacts JSON dropped, all contacts live in the Contact
+  // table via contactsOnSite (1:N) relation.
 
-  // Access notes (JSON)
-  accessNotes Json? @db.JsonB // {schedules, badges, procedures, safety}
+  // Access notes — split from former JSON {schedules, badges, procedures,
+  // safety} into 4 free-form Text columns (ADR-018 cible D.2).
+  accessSchedules  String? @db.Text
+  accessBadges     String? @db.Text
+  accessProcedures String? @db.Text
+  accessSafety     String? @db.Text
 
   // Connectivity moved to the structured ConnectivityLink[] table in v1.3
   // (ADR-009 follow-up). Legacy JSON column dropped in phase 6.5 — the
@@ -419,11 +423,18 @@ model Site {
   // below, and per-link data lives in ConnectivityLink rows filtered by siteId.
   cutProcedure String? @db.Text
 
-  // Document Emplacements (JSON array)
-  emplacements Json? @db.JsonB // [{type: 'smb'|'sharepoint', url, description}]
+  // ADR-018 — Site.emplacements JSON dropped, list lives in SiteEmplacement
+  // typed table (1:N) with EmplacementType enum.
 
   // Governance Documents Reference
   governanceDocsRef String? // URL to "Referentiel droits documents"
+
+  // Server / document portal URLs — split from former Site.metadata.serverInfo
+  // JSON (ADR-018 cible D.4). `notes` already existed as a column on Site.
+  smbPath          String?
+  sharepointUrl    String?
+  gedUrl           String?
+  accessRightsUrl  String?
 
   // Monitoring
   monitoringEnabled Boolean @default(true)
@@ -435,8 +446,8 @@ model Site {
   healthStatus    HealthStatus @default(UNKNOWN)
   lastHealthCheck DateTime?
 
-  // Metadata
-  metadata  Json?    @db.JsonB // {serverInfo: {smbPath, sharepointUrl, gedUrl, accessRightsUrl, notes}}
+  // ADR-018 — Site.metadata JSON dropped (last consumer healthBreakdown
+  // moved to SiteHealthSnapshot in cible C; serverInfo split above in cible D).
   notes     String?  @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -451,6 +462,7 @@ model Site {
   billingEntities   BillingEntity[]
   expenses          Expense[]
   contactsOnSite    Contact[]
+  emplacements      SiteEmplacement[]
   securityReminders TenantSecurityReminder[]
   healthSnapshot    SiteHealthSnapshot?
   accessOverrides   AccessOverride[]
@@ -981,6 +993,9 @@ model Contact {
   // Contexte professionnel
   company String? @db.VarChar(100) // Entreprise
   role    String? @db.VarChar(100) // Fonction/role
+
+  // ADR-018 cible D.1 — promoted from former Site.contacts JSON.
+  isPrimary Boolean @default(false)
 
   notes String? @db.Text
 
@@ -1630,6 +1645,28 @@ model UserNotification {
 // ============================================================================
 // NATIVE MONITORING (ADR-014)
 // ============================================================================
+// Document storage portals attached to a site. ADR-018 cible D.3 — replaces
+// the former Site.emplacements JSON-list. `type` is an enum; URL/description
+// stay free-form text.
+enum EmplacementType {
+  SMB
+  SHAREPOINT
+}
+
+model SiteEmplacement {
+  id          String          @id @default(cuid())
+  siteId      String
+  site        Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  type        EmplacementType
+  url         String
+  description String?
+  order       Int             @default(0)
+  createdAt   DateTime        @default(now())
+
+  @@index([siteId])
+  @@map("site_emplacements")
+}
+
 // Aggregated health snapshot per site, recomputed by HealthAggregationService
 // on every monitor pulse. ADR-018 — replaces Site.metadata.healthBreakdown JSON.
 // `componentsJson` stays JSON because it's an ephemeral cache rewritten every

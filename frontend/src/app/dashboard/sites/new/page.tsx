@@ -178,21 +178,21 @@ export default function NewSitePage() {
       return;
     }
 
-    const hasServerInfo =
-      serverInfo.smbPath ||
-      serverInfo.sharepointUrl ||
-      serverInfo.gedUrl ||
-      serverInfo.accessRightsUrl ||
-      serverInfo.notes;
-
+    // ADR-018 cible D — split scalars on the wire. Contacts can no longer
+    // travel with the site PATCH; they must be created via the Contact API
+    // after the site is in place. Wizard contacts state is captured but
+    // post-create hookup is out of scope of this refactor (TODO).
     const payload = {
       ...data,
-      contacts: contacts.filter((c) => c.name && c.email),
-      accessNotes:
-        accessNotes.schedules || accessNotes.badges || accessNotes.procedures || accessNotes.safety
-          ? accessNotes
-          : undefined,
-      ...(hasServerInfo ? { metadata: { serverInfo } } : {}),
+      accessSchedules:  accessNotes.schedules  || null,
+      accessBadges:     accessNotes.badges     || null,
+      accessProcedures: accessNotes.procedures || null,
+      accessSafety:     accessNotes.safety     || null,
+      smbPath:         serverInfo.smbPath         || null,
+      sharepointUrl:   serverInfo.sharepointUrl   || null,
+      gedUrl:          serverInfo.gedUrl          || null,
+      accessRightsUrl: serverInfo.accessRightsUrl || null,
+      notes: serverInfo.notes || (data as any).notes || null,
     };
 
     createMutation.mutate(payload);

@@ -19,13 +19,16 @@ export class SeedService {
     await this.ensureTenantAppearanceDefaults(tenantId);
 
     const delegations = await this.createOrganization(tenantId);
-    const sites = await this.createSites(tenantId, delegations);
+    // ADR-018 cible D — createSites materialises inline contacts as Contact
+    // rows, which need a ContactType FK. Move createContactTypes BEFORE
+    // createSites so the FK is available.
+    const contactTypes = await this.createContactTypes(tenantId);
+    const sites = await this.createSites(tenantId, delegations, contactTypes);
     const users = await this.createUsers(tenantId);
     await this.createUserDelegations(tenantId, users, delegations);
     const racks = await this.createRacks(tenantId, sites);
     const assets = await this.createAssets(tenantId, sites, racks);
     const tasks = await this.createTasks(tenantId, sites, users, assets);
-    const contactTypes = await this.createContactTypes(tenantId);
     const contacts = await this.createContacts(tenantId, contactTypes);
 
     // v1.4 post-audit enrichments (ADR-010 + phase 4 demo coverage)
@@ -178,7 +181,11 @@ export class SeedService {
   // SITES - 6 sites réalistes (3 grands, 2 moyens, 1 petit)
   // ============================================================================
 
-  private async createSites(tenantId: string, delegations: { default: string; idfOuest?: string; lyon?: string; marseille?: string }) {
+  private async createSites(
+    tenantId: string,
+    delegations: { default: string; idfOuest?: string; lyon?: string; marseille?: string },
+    contactTypes: any[],
+  ) {
     const sitesData: any[] = [
       // === GRANDS CHANTIERS (3-4 baies, équipement complet) ===
       {
@@ -325,7 +332,9 @@ export class SeedService {
 
     const sites = [];
     for (const s of sitesData) {
-      const { _delegation, ...siteFields } = s;
+      // ADR-018 cible D — strip the inline contacts array from the site row;
+      // contacts go into the Contact table via the relation.
+      const { _delegation, contacts: inlineContacts, ...siteFields } = s as any;
       const delegationId =
         (_delegation === 'lyon' && delegations.lyon) ||
         (_delegation === 'marseille' && delegations.marseille) ||
@@ -347,6 +356,37 @@ export class SeedService {
           `UPDATE "sites" SET coordinates = ST_SetSRID(ST_MakePoint($1, $2), 4326) WHERE id = $3`,
           c[1], c[0], site.id,
         );
+      }
+
+      // Materialise contacts as Contact rows. Idempotent on (siteId, email, phone).
+      const personnelType = contactTypes.find((t) => t.slug === 'personnel-site');
+      if (Array.isArray(inlineContacts) && personnelType) {
+        for (const c of inlineContacts) {
+          if (!c?.name) continue;
+          const existing = await this.prisma.contact.findFirst({
+            where: {
+              siteId: site.id,
+              tenantId,
+              email: c.email ?? null,
+              phone: c.phone ?? null,
+            },
+            select: { id: true },
+          });
+          if (existing) continue;
+          await this.prisma.contact.create({
+            data: {
+              tenantId,
+              siteId: site.id,
+              typeId: personnelType.id,
+              name: c.name,
+              email: c.email ?? null,
+              phone: c.phone ?? null,
+              role: c.role ?? null,
+              isPrimary: c.isPrimary ?? false,
+              isActive: true,
+            },
+          });
+        }
       }
       sites.push(site);
     }
@@ -827,6 +867,9 @@ export class SeedService {
     const types = [];
 
     const systemTypes = [
+      // ADR-018 cible D — Personnel site is the default ContactType used when
+      // promoting former Site.contacts JSON entries to Contact rows.
+      { name: 'Personnel site', slug: 'personnel-site', category: ContactCategory.INTERNAL, color: '#22C55E', icon: 'User' },
       { name: 'Télécommunications', slug: 'telecommunications', category: ContactCategory.PROVIDER, color: '#3B82F6', icon: 'Phone' },
       { name: 'Internet & Réseau', slug: 'internet-reseau', category: ContactCategory.PROVIDER, color: '#8B5CF6', icon: 'Wifi' },
       { name: 'Cloud & Hosting', slug: 'cloud-hosting', category: ContactCategory.PROVIDER, color: '#06B6D4', icon: 'Cloud' },

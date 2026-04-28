@@ -169,15 +169,19 @@ export class SitesService {
         s.city,
         s."postalCode",
         s.country,
-        s.contacts,
-        s."accessNotes",
+        s."accessSchedules",
+        s."accessBadges",
+        s."accessProcedures",
+        s."accessSafety",
         s."cutProcedure",
-        s.emplacements,
         s."governanceDocsRef",
+        s."smbPath",
+        s."sharepointUrl",
+        s."gedUrl",
+        s."accessRightsUrl",
         s."healthStatus",
         s."lastHealthCheck",
         s.notes,
-        s.metadata,
         s."monitoringEnabled",
         s."createdAt",
         s."updatedAt",
@@ -236,15 +240,19 @@ export class SitesService {
         s.city,
         s."postalCode",
         s.country,
-        s.contacts,
-        s."accessNotes",
+        s."accessSchedules",
+        s."accessBadges",
+        s."accessProcedures",
+        s."accessSafety",
         s."cutProcedure",
-        s.emplacements,
         s."governanceDocsRef",
+        s."smbPath",
+        s."sharepointUrl",
+        s."gedUrl",
+        s."accessRightsUrl",
         s."healthStatus",
         s."lastHealthCheck",
         s.notes,
-        s.metadata,
         s."monitoringEnabled",
         s."createdAt",
         s."updatedAt",
@@ -286,6 +294,18 @@ export class SitesService {
       where: { siteId: id },
     });
 
+    // ADR-018 cible D — load contacts (table relation) + emplacements (typed 1:N).
+    const [contactsOnSite, emplacements] = await Promise.all([
+      this.prisma.contact.findMany({
+        where: { siteId: id, tenantId, isActive: true },
+        orderBy: [{ isPrimary: 'desc' }, { name: 'asc' }],
+      }),
+      this.prisma.siteEmplacement.findMany({
+        where: { siteId: id },
+        orderBy: { order: 'asc' },
+      }),
+    ]);
+
     // Backward-compat computed `connectivity` object so existing frontend code
     // (FloorPlanViewer NRO pins, export-site, sites list) that reads
     // `site.connectivity.primary.provider` etc. keeps working against the
@@ -326,6 +346,9 @@ export class SitesService {
       connectivityLinks,
       connectivity: computedConnectivity,
       healthSnapshot,
+      // ADR-018 cible D — typed relations replace former JSON columns.
+      contactsOnSite,
+      emplacements,
       _count: {
         assets: Number(site._count_assets) || 0,
         racks: Number(site._count_racks) || 0,

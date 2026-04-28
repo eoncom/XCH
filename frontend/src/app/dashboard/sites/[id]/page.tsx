@@ -982,7 +982,15 @@ function SiteResourcesSection({ serverInfo, siteId }: { serverInfo: any; siteId:
 }
 
 // === Infos accès site (compact, collapsible) ===
-function SiteAccessInfoSection({ accessNotes, securityReminders, siteId }: { accessNotes: Site['accessNotes']; securityReminders: { id: string; text: string }[]; siteId: string }) {
+function SiteAccessInfoSection({
+  accessNotes,
+  securityReminders,
+  siteId,
+}: {
+  accessNotes: { schedules?: string | null; badges?: string | null; procedures?: string | null; safety?: string | null };
+  securityReminders: { id: string; text: string }[];
+  siteId: string;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   if (!accessNotes || (!accessNotes.schedules && !accessNotes.badges && !accessNotes.procedures && !accessNotes.safety)) return null;
@@ -1245,11 +1253,20 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   // Déterminer si on a du contenu pour l'onglet Infos pratiques
-  const hasServerInfo = site.metadata?.serverInfo && (site.metadata.serverInfo.smbPath || site.metadata.serverInfo.sharepointUrl || site.metadata.serverInfo.gedUrl || site.metadata.serverInfo.accessRightsUrl);
-  const hasContacts = site.contacts && site.contacts.length > 0;
+  // ADR-018 cible D — moved from site.metadata.serverInfo to scalar columns.
+  const hasServerInfo = !!(
+    (site as any).smbPath || (site as any).sharepointUrl || (site as any).gedUrl || (site as any).accessRightsUrl
+  );
+  // ADR-018 cible D — site.contacts JSON dropped, contacts come from the
+  // Contact table via the contactsOnSite relation.
+  const hasContacts = ((site as any).contactsOnSite || []).length > 0;
   const hasConnectivity = site.connectivity && Array.isArray(site.connectivity.links) && site.connectivity.links.length > 0;
   const hasStructuredConnectivity = Array.isArray((site as any).connectivityLinks) && (site as any).connectivityLinks.length > 0;
-  const hasAccessNotes = site.accessNotes && (site.accessNotes.schedules || site.accessNotes.badges || site.accessNotes.procedures || site.accessNotes.safety);
+  // ADR-018 cible D — accessNotes JSON dropped; 4 free-form Text columns now.
+  const hasAccessNotes = !!(
+    (site as any).accessSchedules || (site as any).accessBadges ||
+    (site as any).accessProcedures || (site as any).accessSafety
+  );
   // Show tab whenever the user can edit (so they can add structured connectivity links) or existing content
   const hasInfosPratiques = hasServerInfo || hasContacts || hasConnectivity || hasStructuredConnectivity || hasAccessNotes || canUpdate('sites', id);
 
@@ -1277,33 +1294,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                 {site.address}{site.postalCode ? `, ${site.postalCode}` : ''}{site.city ? ` ${site.city}` : ''}
               </p>
             )}
-            {/* Badges référents */}
-            {site.metadata?.referents && (
-              <div className="flex gap-3 mt-2 flex-wrap">
-                {site.metadata.referents.it && (
-                  <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-950/30 px-3 py-1.5 rounded-lg">
-                    <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-white">
-                      {site.metadata.referents.it.split(' ').map((n: string) => n[0]).join('').substring(0, 2)}
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground leading-none">Référent IT</p>
-                      <p className="text-sm font-semibold leading-tight">{site.metadata.referents.it}</p>
-                    </div>
-                  </div>
-                )}
-                {site.metadata.referents.pm && (
-                  <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 rounded-lg">
-                    <div className="h-7 w-7 rounded-full bg-amber-600 flex items-center justify-center text-xs font-bold text-white">
-                      {site.metadata.referents.pm.split(' ').map((n: string) => n[0]).join('').substring(0, 2)}
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground leading-none">Chef de Projet</p>
-                      <p className="text-sm font-semibold leading-tight">{site.metadata.referents.pm}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {/*
+              ADR-018 cible D — `site.metadata.referents` was hopeful UI: the
+              backend never wrote it, the badges always rendered empty. With
+              Site.metadata dropped, the dead branch is removed entirely. If
+              "referent IT" / "chef de projet" become a real feature, model
+              them as Contact roles or as scalar columns on Site.
+            */}
           </div>
         </div>
         <div className="flex gap-2">
@@ -1579,8 +1576,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
           {/* Synthèse rapide : contact principal + horaires */}
           {(() => {
-            const primaryContact = (site.contacts || []).find((c: any) => c.isPrimary) || (site.contacts || [])[0];
-            const schedules = site.accessNotes?.schedules;
+            // ADR-018 cible D — contactsOnSite relation + accessSchedules scalar.
+            const allContacts = ((site as any).contactsOnSite || []) as any[];
+            const primaryContact = allContacts.find((c) => c.isPrimary) || allContacts[0];
+            const schedules = (site as any).accessSchedules as string | undefined;
             if (!primaryContact && !schedules) return null;
 
             return (
@@ -1708,10 +1707,19 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
         {hasInfosPratiques && (
           <TabsContent value="infos-pratiques" className="space-y-6">
             {/* Ressources & Partages (bien visible en haut) */}
-            <SiteResourcesSection serverInfo={site.metadata?.serverInfo} siteId={id} />
+            <SiteResourcesSection
+              serverInfo={{
+                smbPath: (site as any).smbPath,
+                sharepointUrl: (site as any).sharepointUrl,
+                gedUrl: (site as any).gedUrl,
+                accessRightsUrl: (site as any).accessRightsUrl,
+                notes: site.notes,
+              }}
+              siteId={id}
+            />
 
             {/* Contacts en grille de 3 */}
-            <SiteContactsGrid contacts={site.contacts || []} siteId={id} />
+            <SiteContactsGrid contacts={(site as any).contactsOnSite || []} siteId={id} />
 
             {/* Connectivité — source unique : ConnectivityLink[] (phase 6.5 :
                 ancienne section SiteConnectivitySection retirée, legacy JSON drop) */}
@@ -1782,7 +1790,16 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             )}
 
             {/* Accès au site */}
-            <SiteAccessInfoSection accessNotes={site.accessNotes} securityReminders={securityReminders} siteId={id} />
+            <SiteAccessInfoSection
+              accessNotes={{
+                schedules: (site as any).accessSchedules,
+                badges: (site as any).accessBadges,
+                procedures: (site as any).accessProcedures,
+                safety: (site as any).accessSafety,
+              }}
+              securityReminders={securityReminders}
+              siteId={id}
+            />
           </TabsContent>
         )}
 

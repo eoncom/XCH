@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsObject, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { SiteStatus, HealthStatus } from '@prisma/client';
 
@@ -54,14 +54,30 @@ export class CreateSiteDto {
   @IsOptional()
   longitude?: number;
 
+  // ADR-018 — Site.contacts JSON dropped; contacts are managed via the
+  // Contact API (POST /api/contacts with siteId), not via the Site DTO.
+
+  // Access notes — split from former JSON. Each is a free-form Text column
+  // (ADR-018 cible D.2).
   @ApiProperty({ required: false })
+  @IsString()
   @IsOptional()
-  contacts?: any; // Can be array or object (JSONB)
+  accessSchedules?: string;
 
   @ApiProperty({ required: false })
-  @IsObject()
+  @IsString()
   @IsOptional()
-  accessNotes?: any;
+  accessBadges?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  accessProcedures?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  accessSafety?: string;
 
   // Connectivity moved to the structured ConnectivityLink table in v1.3 —
   // POST/PATCH connectivity data via /api/connectivity, not via the Site DTO.
@@ -71,15 +87,35 @@ export class CreateSiteDto {
   @IsOptional()
   cutProcedure?: string;
 
-  @ApiProperty({ required: false, description: 'Array of document emplacements (SMB/SharePoint links)' })
-  @IsObject()
-  @IsOptional()
-  emplacements?: any;
+  // ADR-018 — emplacements managed via dedicated SiteEmplacement
+  // CRUD endpoints (out of scope of the bulk Site DTO).
 
   @ApiProperty({ required: false, description: 'URL to governance documents reference' })
   @IsString()
   @IsOptional()
   governanceDocsRef?: string;
+
+  // Server / document portal URLs split from former Site.metadata.serverInfo
+  // (ADR-018 cible D.4).
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  smbPath?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  sharepointUrl?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  gedUrl?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  accessRightsUrl?: string;
 
   @ApiProperty({ enum: HealthStatus, default: HealthStatus.UNKNOWN })
   @IsEnum(HealthStatus)
@@ -90,11 +126,6 @@ export class CreateSiteDto {
   @IsString()
   @IsOptional()
   notes?: string;
-
-  @ApiProperty({ required: false, description: 'Metadata JSON (serverInfo, etc.)' })
-  @IsObject()
-  @IsOptional()
-  metadata?: any;
 
   @ApiProperty({ required: false, description: 'Enable/disable monitoring for this site', default: true })
   @IsBoolean()
