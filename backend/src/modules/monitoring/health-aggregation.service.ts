@@ -91,7 +91,6 @@ export class HealthAggregationService {
           where: { enabled: true },
           select: { id: true, target: true, lastStatus: true },
         },
-        metadata: true,
       },
     });
 
