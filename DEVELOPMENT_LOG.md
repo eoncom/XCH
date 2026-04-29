@@ -6751,3 +6751,24 @@ fix(prisma): notif-settings — upsert avec compound unique nullable cassait TS
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-29
+
+**Date:** 2026-04-29 22:54:56
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 0
+
+**Commit message:**
+```
+docs(status): bump version label to v1.7.1 + smoke prod vert (partial unique index appliqué)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

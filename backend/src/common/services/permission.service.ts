@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaClient, PermissionLevel, OverrideEffect } from '@prisma/client';
 import { Resource } from '../constants/resources';
+import { CallerCtx } from '../types/caller-ctx.interface';
 
 /**
  * Effective permission returned by resolve().
@@ -246,5 +247,114 @@ export class PermissionService {
       select: { delegationId: true },
     });
     return delegations.map((d) => d.delegationId);
+  }
+
+  // ============================================================================
+  // ADR-021 — uniform CallerCtx-based helpers used by every service for
+  // row-level filtering. Throw 404 on read denial (defense in depth — don't
+  // reveal an id we shouldn't see), 403 on write denial (the user knew the
+  // resource via a legitimate window).
+  // ============================================================================
+
+  /**
+   * Site IDs the user can read (READ/WRITE/MANAGE through delegation, or
+   * granted via AccessOverride). null = super admin (all sites).
+   *
+   * Wrapper around `resolveAllSites` for the canonical name pattern of
+   * ADR-021. The underlying algorithm is unchanged.
+   */
+  async getReadableSiteIds(callerCtx: CallerCtx): Promise<string[] | null> {
+    if (callerCtx.isSuperAdmin) return null;
+    const resolved = await this.resolveAllSites(callerCtx.userId, callerCtx.tenantId);
+    return Array.from(resolved.keys());
+  }
+
+  /**
+   * Delegation IDs the user has any role on (READ + WRITE + MANAGE union).
+   * Complement of `getManagedDelegationIds` which is MANAGE-only and reserved
+   * for the cost module. Use this one for everything else (Contact, etc.).
+   *
+   * Returns null for super admin, [] for users with no UserDelegation.
+   */
+  async getReadableDelegationIds(callerCtx: CallerCtx): Promise<string[] | null> {
+    if (callerCtx.isSuperAdmin) return null;
+    const delegations = await this.prisma.userDelegation.findMany({
+      where: { tenantId: callerCtx.tenantId, userId: callerCtx.userId },
+      select: { delegationId: true },
+    });
+    return delegations.map((d) => d.delegationId);
+  }
+
+  /**
+   * Throw 404 NotFoundException if the user can't read the given site.
+   * Super admin bypass.
+   */
+  async assertCanReadSite(callerCtx: CallerCtx, siteId: string): Promise<void> {
+    if (callerCtx.isSuperAdmin) return;
+    const readable = await this.getReadableSiteIds(callerCtx);
+    if (readable !== null && !readable.includes(siteId)) {
+      throw new NotFoundException();
+    }
+  }
+
+  /**
+   * Throw 403 ForbiddenException if the user can't write the given site.
+   * Walks the full `resolve()` algorithm so AccessOverride DENY at resource
+   * level is honoured. Super admin bypass.
+   */
+  async assertCanWriteSite(callerCtx: CallerCtx, siteId: string, resource: Resource = '*'): Promise<void> {
+    if (callerCtx.isSuperAdmin) return;
+    const perm = await this.resolve(callerCtx.userId, siteId, resource, callerCtx.tenantId);
+    if (perm !== 'WRITE') {
+      throw new ForbiddenException();
+    }
+  }
+
+  /**
+   * Throw 404 NotFoundException if the user can't read the given delegation.
+   *
+   * `allowGlobal` controls how `delegationId === null` is interpreted :
+   *   - true  : null = "shared/global, readable by everyone" (Contact, Expense
+   *             per schema annotation, TenantSecurityReminder).
+   *   - false : null = "tenant-wide super-admin only" (NotificationChannel,
+   *             NotificationRule).
+   * Default `false` is the safer choice — explicit opt-in for sharing.
+   */
+  async assertCanReadDelegation(
+    callerCtx: CallerCtx,
+    delegationId: string | null,
+    options: { allowGlobal?: boolean } = {},
+  ): Promise<void> {
+    if (callerCtx.isSuperAdmin) return;
+    if (delegationId === null) {
+      if (options.allowGlobal) return;
+      throw new NotFoundException();
+    }
+    const readable = await this.getReadableDelegationIds(callerCtx);
+    if (readable !== null && !readable.includes(delegationId)) {
+      throw new NotFoundException();
+    }
+  }
+
+  /**
+   * Throw 403 ForbiddenException if the user can't write the given delegation.
+   * "Write" here = the user has WRITE or MANAGE through UserDelegation.
+   * Super admin bypass. Globals (`null`) are super-admin only.
+   */
+  async assertCanWriteDelegation(
+    callerCtx: CallerCtx,
+    delegationId: string | null,
+  ): Promise<void> {
+    if (callerCtx.isSuperAdmin) return;
+    if (delegationId === null) {
+      throw new ForbiddenException();
+    }
+    const userDelegation = await this.prisma.userDelegation.findUnique({
+      where: { userId_delegationId: { userId: callerCtx.userId, delegationId } },
+      select: { right: true },
+    });
+    if (!userDelegation || userDelegation.right === 'READ') {
+      throw new ForbiddenException();
+    }
   }
 }
