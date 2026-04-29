@@ -121,50 +121,51 @@ export class NotificationSettingsService {
         },
       });
 
-      // Upsert each channel
+      // Upsert each channel via findFirst + update/create — Prisma's
+      // compound unique key TS signature doesn't accept `null` for the
+      // nullable delegationId, so we sidestep `upsert` entirely.
       for (const ch of dto.channels) {
-        await tx.notificationChannel.upsert({
-          where: {
-            tenantId_delegationId_kind: { tenantId, delegationId, kind: ch.kind },
-          },
-          create: {
-            tenantId,
-            delegationId,
-            kind: ch.kind,
-            enabled: ch.enabled ?? true,
-            recipients: ch.recipients ?? [],
-            webhookUrl: this.crypto.encryptIfPlain(ch.webhookUrl ?? null),
-          },
-          update: {
-            enabled: ch.enabled ?? true,
-            recipients: ch.recipients ?? [],
-            webhookUrl: this.crypto.encryptIfPlain(ch.webhookUrl ?? null),
-          },
+        const existing = await tx.notificationChannel.findFirst({
+          where: { tenantId, delegationId, kind: ch.kind },
+          select: { id: true },
         });
+        const persisted = {
+          enabled: ch.enabled ?? true,
+          recipients: ch.recipients ?? [],
+          webhookUrl: this.crypto.encryptIfPlain(ch.webhookUrl ?? null),
+        };
+        if (existing) {
+          await tx.notificationChannel.update({
+            where: { id: existing.id },
+            data: persisted,
+          });
+        } else {
+          await tx.notificationChannel.create({
+            data: { tenantId, delegationId, kind: ch.kind, ...persisted },
+          });
+        }
       }
 
-      // Upsert each rule
+      // Same pattern for rules.
       for (const rule of dto.rules) {
-        await tx.notificationRule.upsert({
-          where: {
-            tenantId_delegationId_eventType: {
-              tenantId,
-              delegationId,
-              eventType: rule.eventType,
-            },
-          },
-          create: {
-            tenantId,
-            delegationId,
-            eventType: rule.eventType,
-            enabled: rule.enabled ?? true,
-            channels: rule.channels ?? [],
-          },
-          update: {
-            enabled: rule.enabled ?? true,
-            channels: rule.channels ?? [],
-          },
+        const existing = await tx.notificationRule.findFirst({
+          where: { tenantId, delegationId, eventType: rule.eventType },
+          select: { id: true },
         });
+        const persisted = {
+          enabled: rule.enabled ?? true,
+          channels: rule.channels ?? [],
+        };
+        if (existing) {
+          await tx.notificationRule.update({
+            where: { id: existing.id },
+            data: persisted,
+          });
+        } else {
+          await tx.notificationRule.create({
+            data: { tenantId, delegationId, eventType: rule.eventType, ...persisted },
+          });
+        }
       }
 
       return this.getSettings(tenantId, delegationId);
