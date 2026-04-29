@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ConsumptionService } from './consumption.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireRead } from '../../common/decorators/require-right.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('consumption')
@@ -15,8 +17,8 @@ export class ConsumptionController {
   @Get('summary')
   @RequireRead()
   @ApiOperation({ summary: 'Tenant-wide electrical consumption summary (per site)' })
-  summary(@Request() req: AuthRequest) {
-    return this.service.summary(req.user.tenantId);
+  summary(@Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    return this.service.summary(req.user.tenantId, {}, ctx);
   }
 
   @Get()
@@ -26,27 +28,36 @@ export class ConsumptionController {
     @Query('siteId') siteId: string | undefined,
     @Query('rackId') rackId: string | undefined,
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     if (siteId) {
-      return this.service.computeSite(req.user.tenantId, siteId);
+      return this.service.computeSite(req.user.tenantId, siteId, ctx);
     }
     if (rackId) {
-      return this.service.computeRack(req.user.tenantId, rackId);
+      return this.service.computeRack(req.user.tenantId, rackId, ctx);
     }
-    return this.service.summary(req.user.tenantId);
+    return this.service.summary(req.user.tenantId, {}, ctx);
   }
 
   @Get('site/:id')
   @RequireRead()
   @ApiOperation({ summary: 'Consumption for a specific site' })
-  computeSite(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.service.computeSite(req.user.tenantId, id);
+  computeSite(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
+  ) {
+    return this.service.computeSite(req.user.tenantId, id, ctx);
   }
 
   @Get('rack/:id')
   @RequireRead()
   @ApiOperation({ summary: 'Consumption for a specific rack' })
-  computeRack(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.service.computeRack(req.user.tenantId, id);
+  computeRack(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
+  ) {
+    return this.service.computeRack(req.user.tenantId, id, ctx);
   }
 }

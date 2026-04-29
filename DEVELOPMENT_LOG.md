@@ -6835,3 +6835,24 @@ fix(rbac): contacts + connectivity scope by delegation/site (Session 4a PR3)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-29
+
+**Date:** 2026-04-29 23:39:02
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 8
+- Frontend files modified: 0
+
+**Commit message:**
+```
+fix(rbac): rename @CallerCtx() decorator → @CallerCtxParam() (TS2395 conflict) + add missing ctx arg in connectivity.generateExpense findOne call
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

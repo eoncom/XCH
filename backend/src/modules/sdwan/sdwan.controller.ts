@@ -16,6 +16,8 @@ import {
   RequireRead,
   RequireWrite,
 } from '../../common/decorators/require-right.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { SdwanService } from './sdwan.service';
 import { AttachFirewallDto, UpsertSdwanConfigDto } from './dto/sdwan.dto';
@@ -30,8 +32,12 @@ export class SdwanController {
   @Get(':siteId')
   @RequireRead()
   @ApiOperation({ summary: 'Get SD-WAN config for a site (null if unconfigured)' })
-  getBySite(@Param('siteId') siteId: string, @Request() req: AuthRequest) {
-    return this.service.getBySite(req.user.tenantId, siteId);
+  getBySite(
+    @Param('siteId') siteId: string,
+    @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
+  ) {
+    return this.service.getBySite(req.user.tenantId, siteId, ctx);
   }
 
   @Put(':siteId')
@@ -41,15 +47,20 @@ export class SdwanController {
     @Param('siteId') siteId: string,
     @Body() dto: UpsertSdwanConfigDto,
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
-    return this.service.upsert(req.user.tenantId, siteId, dto);
+    return this.service.upsert(req.user.tenantId, siteId, dto, ctx);
   }
 
   @Delete(':siteId')
   @RequireManage()
   @ApiOperation({ summary: 'Delete SD-WAN config for a site (removes all firewall links)' })
-  remove(@Param('siteId') siteId: string, @Request() req: AuthRequest) {
-    return this.service.remove(req.user.tenantId, siteId);
+  remove(
+    @Param('siteId') siteId: string,
+    @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
+  ) {
+    return this.service.remove(req.user.tenantId, siteId, ctx);
   }
 
   @Post(':siteId/firewalls')
@@ -59,8 +70,9 @@ export class SdwanController {
     @Param('siteId') siteId: string,
     @Body() dto: AttachFirewallDto,
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
-    return this.service.attachFirewall(req.user.tenantId, siteId, dto);
+    return this.service.attachFirewall(req.user.tenantId, siteId, dto, ctx);
   }
 
   @Delete(':siteId/firewalls/:assetId')
@@ -70,7 +82,8 @@ export class SdwanController {
     @Param('siteId') siteId: string,
     @Param('assetId') assetId: string,
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
-    return this.service.detachFirewall(req.user.tenantId, siteId, assetId);
+    return this.service.detachFirewall(req.user.tenantId, siteId, assetId, ctx);
   }
 }

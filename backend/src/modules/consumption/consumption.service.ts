@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 
 /**
  * Hard cap for the number of sites loaded by a single summary() call.
@@ -30,7 +32,10 @@ interface TenantElectricityConfig {
 
 @Injectable()
 export class ConsumptionService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(
+    private prisma: PrismaClient,
+    private perm: PermissionService,
+  ) {}
 
   private async getElectricityConfig(tenantId: string): Promise<TenantElectricityConfig> {
     // ADR-018 — typed table TenantElectricityConfig replaces tenant.config.electricity.
@@ -82,12 +87,19 @@ export class ConsumptionService {
     };
   }
 
-  async computeSite(tenantId: string, siteId: string): Promise<ConsumptionResult & { site: any }> {
+  async computeSite(
+    tenantId: string,
+    siteId: string,
+    callerCtx: CallerCtx,
+  ): Promise<ConsumptionResult & { site: any }> {
     const site = await this.prisma.site.findFirst({
       where: { id: siteId, tenantId },
       select: { id: true, name: true, code: true, autoGenerateElectricityExpense: true },
     });
     if (!site) throw new NotFoundException('Site not found');
+
+    // ADR-021 — guess-by-id defense.
+    await this.perm.assertCanReadSite(callerCtx, siteId);
 
     // v1.4.x — we count ALL assets linked to the site so the value matches the
     // "Équipements" tab on the site detail page and the `/dashboard/assets`
@@ -104,12 +116,19 @@ export class ConsumptionService {
     return { ...result, site };
   }
 
-  async computeRack(tenantId: string, rackId: string): Promise<ConsumptionResult & { rack: any }> {
+  async computeRack(
+    tenantId: string,
+    rackId: string,
+    callerCtx: CallerCtx,
+  ): Promise<ConsumptionResult & { rack: any }> {
     const rack = await this.prisma.rack.findFirst({
       where: { id: rackId, tenantId },
       select: { id: true, name: true, siteId: true },
     });
     if (!rack) throw new NotFoundException('Rack not found');
+
+    // ADR-021 — guess-by-id defense via the rack's site.
+    await this.perm.assertCanReadSite(callerCtx, rack.siteId);
 
     const assets = await this.prisma.asset.findMany({
       where: { tenantId, rackId },
@@ -124,6 +143,7 @@ export class ConsumptionService {
   async summary(
     tenantId: string,
     opts: { limit?: number; offset?: number } = {},
+    callerCtx?: CallerCtx,
   ) {
     // Hard-cap : un tenant pathologique avec >500 sites bloquait le serveur
     // (50k+ assets en mémoire via include.assets). Cap forcé même si l'user
@@ -135,10 +155,34 @@ export class ConsumptionService {
       throw new BadRequestException('limit must be >= 1');
     }
 
-    const totalSites = await this.prisma.site.count({ where: { tenantId } });
+    // ADR-021 — restrict the iterated set to sites the caller can read.
+    // null callerCtx = legacy / cron path, no scoping (use SYSTEM_CTX in
+    // future cron callers). Empty list short-circuits to 0 sites.
+    const baseWhere: any = { tenantId };
+    if (callerCtx) {
+      const readable = await this.perm.getReadableSiteIds(callerCtx);
+      if (readable !== null) {
+        if (readable.length === 0) {
+          return {
+            totals: {
+              totalWatts: 0,
+              kWhMonth: 0,
+              costMonth: 0,
+              currency: (await this.getElectricityConfig(tenantId)).currency,
+              costPerKwh: (await this.getElectricityConfig(tenantId)).costPerKwh,
+            },
+            sites: [],
+            meta: { totalSites: 0, returned: 0, limit, offset, truncated: false },
+          };
+        }
+        baseWhere.id = { in: readable };
+      }
+    }
+
+    const totalSites = await this.prisma.site.count({ where: baseWhere });
 
     const sites = await this.prisma.site.findMany({
-      where: { tenantId },
+      where: baseWhere,
       select: {
         id: true,
         name: true,

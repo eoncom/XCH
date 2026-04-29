@@ -64,7 +64,9 @@ export class NotificationController {
     @Request() req: any,
   ) {
     const tenantId = req.user.tenantId;
-    return this.settingsService.resolveSettings(tenantId, delegationId ?? null);
+    const delId = delegationId ?? null;
+    this.enforceDelegationConsistency(req, delId);
+    return this.settingsService.resolveSettings(tenantId, delId);
   }
 
   /**
@@ -81,6 +83,7 @@ export class NotificationController {
     const tenantId = req.user.tenantId;
     const delId = delegationIdParam === 'global' ? null : delegationIdParam;
     this.requireSuperAdminForGlobal(req.user, delId);
+    this.enforceDelegationConsistency(req, delId);
     return this.settingsService.getSettings(tenantId, delId);
   }
 
@@ -95,6 +98,7 @@ export class NotificationController {
     const tenantId = req.user.tenantId;
     const delId = delegationId || null;
     this.requireSuperAdminForGlobal(req.user, delId);
+    this.enforceDelegationConsistency(req, delId);
     return this.settingsService.getSettings(tenantId, delId);
   }
 
@@ -110,6 +114,7 @@ export class NotificationController {
     const tenantId = req.user.tenantId;
     const delegationId = dto.delegationId ?? null;
     this.requireSuperAdminForGlobal(req.user, delegationId);
+    this.enforceDelegationConsistency(req, delegationId);
     return this.settingsService.saveSettings(tenantId, delegationId, {
       channels: dto.channels,
       rules: dto.rules,
@@ -127,6 +132,7 @@ export class NotificationController {
     const tenantId = req.user.tenantId;
     const delId = delegationIdParam === 'global' ? null : delegationIdParam;
     this.requireSuperAdminForGlobal(req.user, delId);
+    this.enforceDelegationConsistency(req, delId);
     return this.settingsService.deleteSettings(tenantId, delId);
   }
 
@@ -161,6 +167,29 @@ export class NotificationController {
   private requireSuperAdminForGlobal(user: any, delegationId: string | null) {
     if (delegationId === null && !user.isSuperAdmin) {
       throw new ForbiddenException('Only super admins can manage global notification settings');
+    }
+  }
+
+  /**
+   * ADR-021 §C — refuse cross-skew between the active delegation
+   * (X-Delegation-Id header validated by DelegationGuard) and the
+   * delegationId carried in the URL param / query / body. Without
+   * this check, a MANAGE-on-A user could write the config of B simply
+   * by passing `delegationId: B` in the body — bug captured in
+   * audit Phase 1.
+   *
+   * Skips when the param is null (handled by requireSuperAdminForGlobal)
+   * or when the user is super admin (bypass).
+   */
+  private enforceDelegationConsistency(req: any, paramOrDtoDelegationId: string | null) {
+    if (paramOrDtoDelegationId === null) return;
+    if (req.user?.isSuperAdmin) return;
+    const headerDelegationId = req.delegationId ?? null;
+    if (headerDelegationId !== paramOrDtoDelegationId) {
+      throw new ForbiddenException(
+        `Delegation mismatch : header X-Delegation-Id=${headerDelegationId ?? 'null'} ` +
+          `does not match payload delegationId=${paramOrDtoDelegationId}`,
+      );
     }
   }
 }
