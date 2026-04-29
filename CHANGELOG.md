@@ -11,13 +11,11 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed (DB integrity)
 - **Trou d'intégrité comblé** : `notification_channels @@unique([tenantId, delegationId, kind])` et `notification_rules @@unique([tenantId, delegationId, eventType])` ne protégeaient PAS la row globale (`delegationId IS NULL`) — PostgreSQL traite `NULL ≠ NULL` par défaut dans les contraintes UNIQUE. Conséquence possible : 2 rows globales du même `(tenantId, kind)` coexistant, résolution d'inheritance non déterministe.
-- Migration `7_notif_unique_nulls_not_distinct` : DROP + CREATE des 2 INDEX UNIQUE avec `NULLS NOT DISTINCT` (PG 15+, confirmé sur xch-deploy 15.8).
-- Activation du preview feature `nullsNotDistinct` dans `generator client { previewFeatures = [...] }` (Prisma 5.13+, projet en 5.22).
-- Annotation `nulls: "not distinct"` sur les 2 `@@unique` concernés.
+- Migration `7_notif_unique_nulls_not_distinct` : ajoute 2 partial UNIQUE INDEX (`notification_channels_global_uniq` + `notification_rules_global_uniq`) ciblant les rows globales (`WHERE delegationId IS NULL`), en complément des `@@unique` Prisma existants qui couvrent les rows non-globales.
 
 ### Documentation
-- ADR-020 §C addendum rédigé : audit complet du schéma (seules 2 tables concernées sur 14 `@@unique`), alternatives écartées (sentinel value, 2 tables séparées, partial index), règle architecturale gravée :
-  > Tout `@@unique` qui inclut un champ nullable DOIT utiliser `nulls: "not distinct"`. À ajouter au check-list de tout nouveau modèle Prisma.
+- ADR-020 §C addendum : audit complet du schéma (seules 2 tables concernées sur 14 `@@unique`), alternatives écartées documentées (sentinel value, 2 tables séparées, `nulls: "not distinct"` Prisma — testé en pratique : non supporté Prisma 5.22). Règle architecturale gravée :
+  > Tout `@@unique` Prisma qui inclut un champ nullable DOIT être complété par un partial UNIQUE INDEX SQL ciblant les rows où le champ est NULL.
 
 ### Note
 Le `findFirst + update/create` du `NotificationSettingsService` reste — il contourne un bug TS Prisma (compound unique avec champ nullable génère `delegationId: string` non-nullable côté TS) indépendant de la garantie DB. Documenté en commentaire (ADR-020 §C).

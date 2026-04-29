@@ -383,27 +383,31 @@ dans la liste de colonnes du `@@unique`. Résultat :
 AccessOverride, EnumLabel, Expense, Budget, etc.) ont leurs `@@unique`
 sur des colonnes NOT NULL — pas de problème.
 
-### Décision : `NULLS NOT DISTINCT` (PostgreSQL 15+)
+### Décision : Partial UNIQUE INDEX (complémentaire au `@@unique` Prisma)
 
-PG 15.8 confirmé sur xch-deploy ; image `postgis/postgis:15-3.4-alpine`
-épinglée dans `docker-compose.yml`. La syntaxe `NULLS NOT DISTINCT`
-est dispo nativement.
+**Première tentative** : option `nulls: "not distinct"` sur le `@@unique`
+Prisma + preview flag `nullsNotDistinct`. **Échec** : Prisma 5.22 ne
+reconnaît ni le flag (rejeté par le validator schema), ni l'argument
+`nulls` sur `@@unique` ("No such argument"). La feature
+NULLS NOT DISTINCT côté Prisma n'est pas exposée à cette version.
 
-Côté Prisma 5.22+ (déjà installé via `^5.8.0`), le preview feature
-`nullsNotDistinct` permet d'écrire :
-
-```prisma
-@@unique([tenantId, delegationId, kind], nulls: "not distinct")
-```
-
-ce qui se traduit en :
+**Solution retenue** : partial UNIQUE INDEX SQL custom, déclaré dans
+la migration en complément du `@@unique` Prisma standard. Zéro
+dépendance preview feature, fonctionne dès PostgreSQL 7+, ne touche
+pas à l'index généré par Prisma → pas de drift au prochain migrate diff.
 
 ```sql
-CREATE UNIQUE INDEX ... ON notification_channels (...) NULLS NOT DISTINCT;
+-- Couvre les rows avec delegationId NOT NULL via le @@unique Prisma standard.
+-- Couvre les rows avec delegationId IS NULL via un partial unique index :
+CREATE UNIQUE INDEX "notification_channels_global_uniq"
+  ON "notification_channels" ("tenantId", "kind")
+  WHERE "delegationId" IS NULL;
 ```
 
 À partir de cette migration, une 2ᵉ tentative d'INSERT
-`(tenantA, NULL, EMAIL)` lève une violation `unique constraint`.
+`(tenantA, NULL, EMAIL)` lève une violation `unique constraint`. La
+table garde son `@@unique([tenantId, delegationId, kind])` Prisma
+intact pour les rows non-globales.
 
 ### Alternatives écartées
 
@@ -414,31 +418,45 @@ CREATE UNIQUE INDEX ... ON notification_channels (...) NULLS NOT DISTINCT;
 2. **2 tables séparées** (`TenantNotificationChannel` + `DelegationNotificationChannel`) —
    sur-ingénierie, duplique le code de résolution sans bénéfice.
 
-3. **Partial UNIQUE INDEX** (`CREATE UNIQUE INDEX ... WHERE delegationId IS NULL`
-   et un autre `WHERE delegationId IS NOT NULL`) — équivalent fonctionnel
-   pour PG <15, plus verbeux. Inutile vu PG 15+ disponible.
+3. **`@@unique([..., nulls: "not distinct"])` Prisma** — testé en pratique :
+   Prisma 5.22 ne supporte ni l'argument `nulls`, ni le preview flag
+   `nullsNotDistinct`. Bumper Prisma à 6.x serait nécessaire — risque
+   de régressions disproportionné pour ce fix.
 
 4. **Conserver le workaround applicatif seul** — laisse le trou DB.
    Inacceptable : un autre processus peut toujours casser l'invariant.
 
-### Règle architecturale graveée (post-v1.7.1)
+### Règle architecturale gravée (post-v1.7.1)
 
-> **Tout `@@unique` qui inclut un champ nullable DOIT utiliser
-> `nulls: "not distinct"`.** À ajouter au check-list de tout nouveau
-> modèle Prisma. Si la nouvelle table cible un environnement
-> PostgreSQL < 15, fallback partial unique index dans la migration SQL.
+> **Tout `@@unique` Prisma qui inclut un champ nullable DOIT être
+> complété par un partial UNIQUE INDEX SQL ciblant les rows où le
+> champ est `NULL`** :
+>
+> ```sql
+> CREATE UNIQUE INDEX "<table>_<scope>_uniq"
+>   ON "<table>" (<other_cols>)
+>   WHERE "<nullableCol>" IS NULL;
+> ```
+>
+> À ajouter au check-list de tout nouveau modèle Prisma. Le partial
+> index est posé dans la migration SQL accompagnant le modèle ;
+> Prisma ne le touche pas (pas dans le schéma) → pas de drift.
 
 Cette règle est complémentaire de la règle §B (config_json
 non-sensible). Les deux forment le socle d'intégrité Prisma+PG XCH.
 
+Quand Prisma 6+ ou ultérieur exposera `nulls: "not distinct"` (ou un
+équivalent GA), on pourra basculer vers cette syntaxe pour tout
+intégrer dans le schéma. La migration sera alors à fusionner.
+
 ### Fichiers livrés par v1.7.1
 
 - `backend/prisma/schema.prisma` :
-  - `previewFeatures = ["postgresqlExtensions", "nullsNotDistinct"]`.
-  - `@@unique([..., delegationId, ...], nulls: "not distinct")` sur
-    `NotificationChannel` + `NotificationRule`.
+  - Commentaires sur `NotificationChannel.@@unique` et
+    `NotificationRule.@@unique` pointant vers la migration 7.
 - `backend/prisma/migrations/7_notif_unique_nulls_not_distinct/migration.sql` :
-  DROP + CREATE des 2 INDEX UNIQUE avec `NULLS NOT DISTINCT`.
+  - `CREATE UNIQUE INDEX notification_channels_global_uniq ON notification_channels (tenantId, kind) WHERE delegationId IS NULL;`
+  - Idem pour `notification_rules_global_uniq`.
 
 ### Côté code applicatif
 

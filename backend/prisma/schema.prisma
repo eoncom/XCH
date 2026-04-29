@@ -1616,10 +1616,11 @@ model NotificationChannel {
   createdAt    DateTime                @default(now())
   updatedAt    DateTime                @updatedAt
 
-  // ADR-020 §C — `nulls: "not distinct"` makes (tenantId, NULL, kind)
-  // collide with itself in PG, so a tenant can't end up with 2 global
-  // rows of the same kind via races / direct SQL / parallel writers.
-  @@unique([tenantId, delegationId, kind], map: "notification_channels_tenantId_delegationId_kind_key", nulls: "not distinct")
+  // ADR-020 §C — Plain @@unique (NULLS DISTINCT par défaut PG) couvre
+  // les rows avec delegationId NOT NULL. Un partial unique index nommé
+  // `notification_channels_global_uniq` ajouté en migration 7 ferme le
+  // trou des rows globales (delegationId IS NULL). Voir migration SQL.
+  @@unique([tenantId, delegationId, kind])
   @@index([tenantId])
   @@map("notification_channels")
 }
@@ -1641,8 +1642,9 @@ model NotificationRule {
   createdAt    DateTime                    @default(now())
   updatedAt    DateTime                    @updatedAt
 
-  // ADR-020 §C — see NotificationChannel comment.
-  @@unique([tenantId, delegationId, eventType], map: "notification_rules_tenantId_delegationId_eventType_key", nulls: "not distinct")
+  // ADR-020 §C — voir commentaire NotificationChannel. Partial unique
+  // index `notification_rules_global_uniq` en migration 7.
+  @@unique([tenantId, delegationId, eventType])
   @@index([tenantId, eventType])
   @@map("notification_rules")
 }

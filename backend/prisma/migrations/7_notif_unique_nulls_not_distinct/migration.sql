@@ -1,33 +1,34 @@
 -- =============================================================================
 -- 7_notif_unique_nulls_not_distinct — ADR-020 §C
 --
--- Le @@unique([tenantId, delegationId, kind]) (et idem pour eventType) ne
--- protégeait PAS les rows globales (delegationId IS NULL). PostgreSQL traite
--- NULL ≠ NULL dans les UNIQUE constraints par défaut, donc deux rows
---   (tenantA, NULL, EMAIL)
--- pouvaient coexister sans violation — trou d'intégrité de la résolution
--- d'inheritance NotificationSettingsService (delegation > global > defaults).
+-- Trou d'intégrité comblé : @@unique([tenantId, delegationId, kind]) (et
+-- idem pour eventType) avec delegationId nullable ne protégeait PAS les
+-- rows globales. PostgreSQL traite NULL ≠ NULL dans les UNIQUE par défaut,
+-- donc deux rows (tenantA, NULL, EMAIL) pouvaient coexister.
 --
--- Fix : drop les 2 INDEX UNIQUE et les recréer avec NULLS NOT DISTINCT
--- (PG 15+, confirmé sur xch-deploy 15.8). À partir de cette migration,
--- une 2ᵉ row globale du même (tenantId, kind) ou (tenantId, eventType)
--- échoue côté DB avec violation de contrainte.
+-- Approche retenue : partial UNIQUE INDEX en complément du @@unique Prisma
+-- existant. Plus robuste que l'option `nulls: "not distinct"` qui n'est
+-- pas supportée par Prisma 5.22 (le validator rejette le preview flag
+-- `nullsNotDistinct`). Le partial index PG est universel (PG 7+), zéro
+-- dépendance preview feature, et il ne touche pas au key généré par
+-- Prisma → pas de drift au prochain migrate diff.
 --
--- Le findFirst+update/create côté NotificationSettingsService devient une
--- décision éclairée (bug Prisma compound unique nullable côté TS), pas un
--- workaround d'intégrité.
+-- Couverture combinée :
+--   - delegationId IS NOT NULL : @@unique Prisma (NULLS DISTINCT default)
+--   - delegationId IS NULL    : partial unique index ci-dessous
+--
+-- À partir de cette migration, une 2ᵉ tentative d'INSERT
+-- (tenantA, NULL, EMAIL) lève une violation `unique constraint`.
 -- =============================================================================
 
--- 1. notification_channels ----------------------------------------------------
+-- 1. notification_channels — partial unique sur le scope global ---------------
 
-DROP INDEX "notification_channels_tenantId_delegationId_kind_key";
+CREATE UNIQUE INDEX "notification_channels_global_uniq"
+  ON "notification_channels" ("tenantId", "kind")
+  WHERE "delegationId" IS NULL;
 
-CREATE UNIQUE INDEX "notification_channels_tenantId_delegationId_kind_key"
-  ON "notification_channels" ("tenantId", "delegationId", "kind") NULLS NOT DISTINCT;
+-- 2. notification_rules — partial unique sur le scope global ------------------
 
--- 2. notification_rules -------------------------------------------------------
-
-DROP INDEX "notification_rules_tenantId_delegationId_eventType_key";
-
-CREATE UNIQUE INDEX "notification_rules_tenantId_delegationId_eventType_key"
-  ON "notification_rules" ("tenantId", "delegationId", "eventType") NULLS NOT DISTINCT;
+CREATE UNIQUE INDEX "notification_rules_global_uniq"
+  ON "notification_rules" ("tenantId", "eventType")
+  WHERE "delegationId" IS NULL;
