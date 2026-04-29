@@ -6688,3 +6688,24 @@ chore(release): bump 1.5.0 → 1.6.0 + clôture ADR-018 (S6/S7)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-29
+
+**Date:** 2026-04-29 03:01:15
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 13
+- Frontend files modified: 1
+
+**Commit message:**
+```
+chore(release): v1.6.1 — bug budgets fix + wizard contacts CRUD + plan v2 finalization persisté
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

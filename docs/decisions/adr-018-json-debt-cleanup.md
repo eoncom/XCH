@@ -280,7 +280,7 @@ model TenantSsoConfig {
   tenant        Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   provider      String  // 'oidc' | 'azure-ad' | …
   clientId      String
-  clientSecret  String  // encrypted-at-rest TODO post-S6 (cf. follow-up below)
+  clientSecret  String  // encrypted-at-rest LIVRÉ par ADR-019 (Session 2, v1.6.2)
   issuerUrl     String?
   callbackUrl   String?
   scopes        String?  // space-separated, e.g. "openid profile email groups"
@@ -809,7 +809,7 @@ Trois statuts distincts :
 **Positives :**
 - Schéma totalement type-safe — fini les `(x as any).y` côté backend et `any` côté frontend.
 - Surface JSON divisée par ~3 (passe de 9-10 colonnes JSON « sac » à ~5 colonnes JSON-list délibérées).
-- SSO secrets isolables (chemin vers chiffrement at-rest ouvert).
+- SSO secrets isolables (chemin vers chiffrement at-rest **livré ensuite par ADR-019** — Session 2 du plan finalization v2, tag v1.6.2).
 - Recherche par IP (Asset) et par status (SiteHealthSnapshot) en O(log n) au lieu de scan + parse.
 - Type frontend `Asset.networkInfo.{monitorName, monitorStatus, lastHealthCheck}` (mort depuis ADR-016) supprimé en passant.
 - Migrations versionnées et revertibles (grâce à ADR-017).

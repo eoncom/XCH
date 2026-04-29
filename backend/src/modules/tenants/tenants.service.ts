@@ -7,6 +7,7 @@ import {
   UpdateTenantAppearanceDto,
 } from './dto/appearance.dto';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { CryptoService } from '../../common/crypto/crypto.service';
 
 /**
  * Application modules exposed to the sidebar & Settings > Modules tab.
@@ -63,6 +64,7 @@ export class TenantsService {
   constructor(
     private prisma: PrismaClient,
     private auditLogService: AuditLogService,
+    private crypto: CryptoService,
   ) {}
 
   async findOne(id: string) {
@@ -255,15 +257,17 @@ export class TenantsService {
     await this.findOne(tenantId);
     const sso = await this.prisma.tenantSsoConfig.findUnique({ where: { tenantId } });
 
+    // ADR-019 — clientSecret is encrypted-at-rest. Decrypt before deriving
+    // the UI hint (last 4 chars of plaintext, not of ciphertext).
+    const plainSecret = this.crypto.decryptOrLegacy(sso?.clientSecret);
+
     return {
       enabled: sso?.enabled ?? false,
       provider: sso?.provider ?? 'oidc',
       issuer: sso?.issuerUrl ?? '',
       clientId: sso?.clientId ?? '',
-      clientSecretSet: !!sso?.clientSecret,
-      clientSecretHint: sso?.clientSecret
-        ? `****${sso.clientSecret.slice(-4)}`
-        : '',
+      clientSecretSet: !!plainSecret,
+      clientSecretHint: plainSecret ? `****${plainSecret.slice(-4)}` : '',
       callbackUrl: sso?.callbackUrl ?? '',
       roleMapping: (sso?.roleMapping as Record<string, string> | null) ?? DEFAULT_ROLE_MAPPING,
     };
@@ -277,13 +281,21 @@ export class TenantsService {
     await this.findOne(tenantId);
     const existing = await this.prisma.tenantSsoConfig.findUnique({ where: { tenantId } });
 
+    // ADR-019 — encrypt-at-rest. The user-provided value (if any) is
+    // plaintext and gets enveloped; the existing value already is in v1:…
+    // form so encryptIfPlain is a no-op.
+    const newSecretPlain =
+      ssoConfig.clientSecret && ssoConfig.clientSecret !== ''
+        ? ssoConfig.clientSecret
+        : null;
+    const persistedSecret = newSecretPlain
+      ? this.crypto.encryptIfPlain(newSecretPlain)
+      : existing?.clientSecret ?? '';
+
     const data = {
       provider: ssoConfig.provider ?? existing?.provider ?? 'oidc',
       clientId: ssoConfig.clientId ?? existing?.clientId ?? '',
-      clientSecret:
-        ssoConfig.clientSecret && ssoConfig.clientSecret !== ''
-          ? ssoConfig.clientSecret
-          : existing?.clientSecret ?? '',
+      clientSecret: persistedSecret ?? '',
       issuerUrl: ssoConfig.issuer ?? existing?.issuerUrl ?? null,
       callbackUrl: ssoConfig.callbackUrl ?? existing?.callbackUrl ?? null,
       scopes: ssoConfig.scopes ?? existing?.scopes ?? null,

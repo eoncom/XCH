@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { EmailService } from '../../common/services/email.service';
+import { HashService } from '../../common/crypto/hash.service';
 
 interface SsoDelegationEntry {
   delegationId: string;
@@ -20,6 +21,7 @@ export class AuthService {
     private jwtService: JwtService,
     private config: ConfigService,
     private emailService: EmailService,
+    private hash: HashService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -251,6 +253,8 @@ export class AuthService {
     const token = crypto.randomUUID();
     const expiry = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72h
 
+    // ADR-019 §6 — store SHA-256 hash, not the raw token. The clear `token`
+    // travels by email; `acceptInvite` rehashes the inbound value to look up.
     const user = await this.prisma.user.create({
       data: {
         email,
@@ -258,7 +262,7 @@ export class AuthService {
         active: false,
         tenantId: adminTenantId,
         authProvider: 'local',
-        inviteToken: token,
+        inviteToken: this.hash.sha256(token),
         inviteTokenExpiry: expiry,
       },
       include: { tenant: true },
@@ -277,9 +281,10 @@ export class AuthService {
   }
 
   async acceptInvite(token: string, password: string) {
+    // ADR-019 §6 — look up by hash, not by raw token.
     const user = await this.prisma.user.findFirst({
       where: {
-        inviteToken: token,
+        inviteToken: this.hash.sha256(token),
         inviteTokenExpiry: { gt: new Date() },
       },
     });
@@ -318,10 +323,11 @@ export class AuthService {
     const token = crypto.randomUUID();
     const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1h
 
+    // ADR-019 §6 — store the hash; clear value goes out by email only.
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
-        resetToken: token,
+        resetToken: this.hash.sha256(token),
         resetTokenExpiry: expiry,
       },
     });
@@ -332,9 +338,10 @@ export class AuthService {
   }
 
   async resetPassword(token: string, newPassword: string) {
+    // ADR-019 §6 — look up by hash.
     const user = await this.prisma.user.findFirst({
       where: {
-        resetToken: token,
+        resetToken: this.hash.sha256(token),
         resetTokenExpiry: { gt: new Date() },
       },
     });

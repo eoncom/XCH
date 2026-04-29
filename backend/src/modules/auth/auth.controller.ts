@@ -34,6 +34,7 @@ import { SkipDelegation } from '../../common/decorators/skip-delegation.decorato
 import { Public } from '../../common/decorators/public.decorator';
 import { RequireWrite, RequireManage } from '../../common/decorators/require-right.decorator';
 import { PermissionService } from '../../common/services/permission.service';
+import { CryptoService } from '../../common/crypto/crypto.service';
 
 @ApiTags('auth')
 @SkipDelegation()
@@ -46,6 +47,7 @@ export class AuthController {
     private configService: ConfigService,
     private prisma: PrismaClient,
     private permissionService: PermissionService,
+    private crypto: CryptoService,
   ) {}
 
   /**
@@ -269,10 +271,12 @@ export class AuthController {
     const { secret, otpAuthUrl } = this.totpService.generateSecret(user.email);
     const qrCodeDataUrl = await this.totpService.generateQRCodeDataUrl(otpAuthUrl);
 
-    // Store the secret temporarily (not enabled yet)
+    // ADR-019 — totpSecret persisted encrypted-at-rest. The plaintext is
+    // returned to the caller (the user enters it into their authenticator
+    // app or scans the QR), but never lands on disk in clear.
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { totpSecret: secret },
+      data: { totpSecret: this.crypto.encryptIfPlain(secret) },
     });
 
     return { secret, qrCodeDataUrl };
@@ -294,7 +298,12 @@ export class AuthController {
       throw new BadRequestException('2FA is already enabled');
     }
 
-    const isValid = this.totpService.verifyToken(user.totpSecret, body.token);
+    // ADR-019 — totpSecret stored as v1:… envelope. Decrypt before TOTP verify.
+    const plainSecret = this.crypto.decryptOrLegacy(user.totpSecret);
+    if (!plainSecret) {
+      throw new BadRequestException('2FA setup state corrupted — please restart');
+    }
+    const isValid = this.totpService.verifyToken(plainSecret, body.token);
     if (!isValid) {
       throw new UnauthorizedException('Invalid TOTP code');
     }
@@ -341,7 +350,12 @@ export class AuthController {
       throw new UnauthorizedException('2FA not configured');
     }
 
-    const isValid = this.totpService.verifyToken(user.totpSecret, body.code);
+    // ADR-019 — decrypt before TOTP verify.
+    const plainSecret = this.crypto.decryptOrLegacy(user.totpSecret);
+    if (!plainSecret) {
+      throw new UnauthorizedException('2FA secret unreadable');
+    }
+    const isValid = this.totpService.verifyToken(plainSecret, body.code);
     if (!isValid) {
       throw new UnauthorizedException('Invalid TOTP code');
     }

@@ -7,6 +7,48 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.6.2] - 2026-04-29 — Chiffrement secrets at-rest (Session 2 du plan v2 finalization)
+
+### Security / Added
+- **ADR-019 — AES-256-GCM at-rest pour 4 colonnes sensibles** :
+  - `TenantSsoConfig.clientSecret` (OIDC client secret)
+  - `TenantIntegrationConfig.netboxToken` (API token NetBox)
+  - `User.totpSecret` (clé TOTP 2FA — bypass 2FA évité en cas de fuite DB)
+  - `NotificationConfig.channels.teams.webhookUrl` (sub-field JSON)
+- **`XCH_MASTER_KEY`** env var (32 bytes base64) — chargée au boot,
+  fail-soft si absente (encrypt/decrypt no-op + warn, le boot ne crashe pas).
+- Format envelope `v1:<iv-b64>:<authTag-b64>:<ct-b64>` versionné. Rotation
+  supportée via `XCH_MASTER_KEY_V<n>` pour les anciennes versions.
+- `CryptoService` (Nest, @Global) avec `encrypt`, `decrypt`,
+  `encryptIfPlain` (idempotent), `decryptOrLegacy` (transitoire),
+  `encryptSubfields` / `decryptSubfields` (walker JSON pour la cible 4).
+- 22 tests Jest (round-trip, tampering rejected, key mismatch, fail-soft,
+  walker idempotence, no-mutation).
+- Phase C ajoutée à `scripts/rotate-secrets.sh` pour générer XCH_MASTER_KEY.
+
+### Security / Changed
+- **`User.inviteToken` + `User.resetToken`** ne sont plus stockés en clair —
+  hash SHA-256 (lookup par hash). Le clear-text part toujours par email.
+  Bonus groupé avec ADR-019 (même esprit colonne sensible, surface limitée).
+
+### Documentation
+- ADR-019 rédigée (chiffrement secrets at-rest).
+- ADR-018 : note de suivi mise à jour (`clientSecret encrypted-at-rest LIVRÉ par ADR-019`).
+- README + docs/00-INDEX : ADR-019 ajoutée au sommaire.
+- INSTALL_PROD : section XCH_MASTER_KEY (génération + warning sur la perte).
+
+### Forward dependency
+- **Session 3** (NotificationConfig refacto, ADR-020) devra continuer à
+  chiffrer les credentials de channels après le split structurel — la
+  liste `ENCRYPTED_CHANNEL_PATHS` à graver dans la nouvelle structure.
+
+### Hors scope (par décision)
+- KMS externe (Vault, AWS/GCP/Azure KMS) : phase pilote, repoussé v2.0+.
+- `passwordHash` reste en bcrypt (déjà sécurisé).
+- `qrCodeToken` reste en clair (token éphémère, hors périmètre).
+
+---
+
 ## [1.6.1] - 2026-04-29 — Quick wins post-v1.6 (bugs + drift doc)
 
 ### Fixed

@@ -1,8 +1,8 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-04-29 01:50:55 (Auto-update)
-**Version actuelle :** 1.6.1 (taguée 2026-04-29)
-**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + quick wins v1.6.1
+**Dernière mise à jour :** 2026-04-29 03:01:15 (Auto-update)
+**Version actuelle :** 1.6.2 (taguée 2026-04-29)
+**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + Session 1 (v1.6.1) + Session 2 (v1.6.2 chiffrement secrets at-rest)
 
 ## 🚦 Plan v2 vers v1.6 (sessions S0 → S11)
 
@@ -23,7 +23,7 @@
 | Session | Description | ADR prévue | Tag cible | Statut |
 |---|---|---|---|---|
 | 1 | Quick wins : bug Budgets, wizard Contacts CRUD, drift doc, re-mesure métriques, persistance plan v2 | — | v1.6.1 | ✅ Livrée 2026-04-29 |
-| 2 | Chiffrement secrets at-rest (Tenant.config SSO, integrationConfig API tokens, webhook secrets, SMTP/Teams) | ADR-019 | v1.6.2 ou v1.7.0 | ⏳ À démarrer |
+| 2 | Chiffrement secrets at-rest (4 cibles : clientSecret SSO, netboxToken, totpSecret, teams.webhookUrl) + bonus hash invite/reset tokens | ADR-019 | v1.6.2 | ✅ Livrée 2026-04-29 |
 | 3 | NotificationConfig refacto (Channel + Rule + Digest) + Worker générique BullMQ | ADR-020 | v1.7.0 candidat | ⏳ |
 | 4 | Performance & intégrité DB (indexes, FK CHECK, query plans sur endpoints lourds) | — | intermédiaire | ⏳ |
 | 5 | Hardening tail : CSP nonce, DTOs structurés, drift doc final | — | v1.7.0 | ⏳ |

@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { validateUrl } from '../../common/security/network';
+import { CryptoService } from '../../common/crypto/crypto.service';
 import {
   NotificationChannel,
   NotificationChannelsConfig,
@@ -10,6 +11,13 @@ import {
   getDefaultConfig,
   NOTIFICATION_EVENTS,
 } from './notification-events';
+
+/**
+ * ADR-019 — JSON sub-fields containing secrets stored encrypted-at-rest.
+ * Forward dependency Session 3 (NotificationConfig refacto) : preserve
+ * this list when the JSON column is split into typed scalars.
+ */
+const ENCRYPTED_CHANNEL_PATHS = ['teams.webhookUrl'];
 
 export interface ResolvedConfig {
   channels: NotificationChannelsConfig;
@@ -24,7 +32,20 @@ export interface ResolvedConfig {
 export class NotificationConfigService {
   private readonly logger = new Logger(NotificationConfigService.name);
 
-  constructor(private prisma: PrismaClient) {}
+  constructor(
+    private prisma: PrismaClient,
+    private crypto: CryptoService,
+  ) {}
+
+  /** Encrypt the configured sub-paths (write side). */
+  private encryptChannels(channels: any): any {
+    return this.crypto.encryptSubfields(channels ?? {}, ENCRYPTED_CHANNEL_PATHS);
+  }
+
+  /** Decrypt the configured sub-paths (read side). */
+  private decryptChannels(channels: any): any {
+    return this.crypto.decryptSubfields(channels ?? {}, ENCRYPTED_CHANNEL_PATHS);
+  }
 
   /**
    * Get notification config for a delegation (or global if delegationId=null).
@@ -46,7 +67,13 @@ export class NotificationConfigService {
       };
     }
 
-    return { ...config, isDefault: false };
+    // ADR-019 — decrypt sub-field secrets at module boundary so consumers
+    // (UI admin form, channel senders) see plaintext.
+    return {
+      ...config,
+      channels: this.decryptChannels(config.channels),
+      isDefault: false,
+    };
   }
 
   /**
@@ -65,6 +92,10 @@ export class NotificationConfigService {
       }
     }
 
+    // ADR-019 — encrypt sub-field secrets before persist. The webhookUrl
+    // we just SSRF-validated above is the plaintext we envelope here.
+    const persistedChannels = this.encryptChannels(data.channels);
+
     // Find existing config
     const existing = await this.prisma.notificationConfig.findFirst({
       where: { tenantId, delegationId },
@@ -74,7 +105,7 @@ export class NotificationConfigService {
       return this.prisma.notificationConfig.update({
         where: { id: existing.id },
         data: {
-          channels: data.channels,
+          channels: persistedChannels,
           events: data.events,
         },
       });
@@ -84,7 +115,7 @@ export class NotificationConfigService {
       data: {
         tenantId,
         delegationId,
-        channels: data.channels,
+        channels: persistedChannels,
         events: data.events,
       } as any,
     });
@@ -120,8 +151,10 @@ export class NotificationConfigService {
       where: { tenantId, delegationId: null },
     });
 
+    // ADR-019 — decrypt at the module boundary. Senders downstream
+    // (TeamsChannel, EmailChannel) keep consuming plaintext.
     let resolvedChannels: NotificationChannelsConfig = globalConfig
-      ? (globalConfig.channels as any)
+      ? (this.decryptChannels(globalConfig.channels) as any)
       : defaults.channels;
     let resolvedEvents: NotificationEventsConfig = globalConfig
       ? (globalConfig.events as any)
@@ -142,7 +175,7 @@ export class NotificationConfigService {
       });
 
       if (delConfig) {
-        const delChannels = delConfig.channels as any;
+        const delChannels = this.decryptChannels(delConfig.channels) as any;
         const delEvents = delConfig.events as any;
 
         resolvedChannels = this.mergeChannels(resolvedChannels, delChannels);
@@ -168,10 +201,12 @@ export class NotificationConfigService {
    * Get all configs for a tenant (for admin overview).
    */
   async getAllConfigs(tenantId: string) {
-    return this.prisma.notificationConfig.findMany({
+    const rows = await this.prisma.notificationConfig.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'asc' },
     });
+    // ADR-019 — decrypt at module boundary.
+    return rows.map((r) => ({ ...r, channels: this.decryptChannels(r.channels) }));
   }
 
   /**

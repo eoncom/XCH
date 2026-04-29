@@ -335,6 +335,16 @@ npm run test:e2e:report       # Ouvrir rapport
 
 ## Changelog (versions recentes)
 
+### v1.6.2 (2026-04-29) — Chiffrement secrets at-rest (Session 2)
+- **ADR-019** : AES-256-GCM applicatif pour 4 colonnes sensibles en DB —
+  `TenantSsoConfig.clientSecret`, `TenantIntegrationConfig.netboxToken`,
+  `User.totpSecret`, `NotificationConfig.channels.teams.webhookUrl`.
+  Format `v1:<iv>:<tag>:<ct>` versionné (rotation MASTER_KEY supportée).
+- **`XCH_MASTER_KEY`** : nouvelle env var requise prod (32 bytes base64).
+  Phase C ajoutée à `scripts/rotate-secrets.sh`.
+- **Bonus hash SHA-256** : `User.inviteToken` + `User.resetToken` ne sont
+  plus stockés en clair (lookup par hash, comme l'API standard).
+
 ### v1.6.1 (2026-04-29) — Quick wins post-v1.6
 - **Bug Budgets** : `/dashboard/costs/budgets` ne double-compte plus parent + enfants (somme limitée aux racines).
 - **Wizard Sites — contacts persistés** : POST/PATCH/DELETE via `contactsApi` apres save (regression ADR-018 cible D corrigee). `Contact.isPrimary` ajoute au DTO.

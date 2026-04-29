@@ -9,6 +9,7 @@
 # Modes:
 #   --phase a   (défaut) JWT_SECRET, JWT_REFRESH_SECRET, MINIO_*, webhook secret synchronisé Gatus
 #   --phase b   REDIS_PASSWORD (modifie docker-compose.yml — phase B, à valider après A)
+#   --phase c   XCH_MASTER_KEY (ADR-019 secrets at-rest) — pose initiale ou rotation
 #   --phase all enchaîne A puis B avec confirmation entre les deux
 #
 # Flags:
@@ -81,8 +82,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ ! "$PHASE" =~ ^(a|b|all)$ ]]; then
-    echo -e "${RED}--phase doit être a, b ou all (reçu: $PHASE)${NC}" >&2
+if [[ ! "$PHASE" =~ ^(a|b|c|all)$ ]]; then
+    echo -e "${RED}--phase doit être a, b, c ou all (reçu: $PHASE)${NC}" >&2
     exit 2
 fi
 
@@ -448,11 +449,87 @@ PY
     print_header "✓ PHASE B TERMINÉE"
 }
 
+# ── PHASE C ─ ADR-019 secrets at-rest ───────────────────────────────────────
+phase_c() {
+    print_header "PHASE C — XCH_MASTER_KEY (ADR-019 secrets at-rest)"
+
+    local CURRENT_LEN
+    CURRENT_LEN="$(env_len XCH_MASTER_KEY "$BACKEND_ENV")"
+    echo -e "  XCH_MASTER_KEY actuel : len=${CURRENT_LEN}"
+    if [ "$CURRENT_LEN" -gt 0 ]; then
+        echo -e "  ${YELLOW}Une XCH_MASTER_KEY est déjà posée. Rotation = poser comme${NC}"
+        echo -e "  ${YELLOW}XCH_MASTER_KEY_V1, générer une nouvelle XCH_MASTER_KEY (qui devient v2),${NC}"
+        echo -e "  ${YELLOW}puis ré-écrire les secrets pour les remonter en v2.${NC}"
+        echo -e "  ${YELLOW}La rotation full-cycle n'est pas automatisée dans ce script v1.6.2 :${NC}"
+        echo -e "  ${YELLOW}reset+seed sur xch-deploy reste l'opération de référence pour le pilote.${NC}"
+        if ! ask "Continuer pour réécrire la valeur (efface les secrets DB existants côté v1) ?"; then
+            return 0
+        fi
+    fi
+
+    echo -e "\n${YELLOW}Cette phase :${NC}"
+    echo "  - Génère XCH_MASTER_KEY (32 bytes aléatoires, base64)"
+    echo "  - Pose dans backend/.env"
+    echo "  - Demande un reset+seed pour réinitialiser les secrets DB en v1: enveloppes"
+    if ! ask "Confirmer Phase C ?"; then
+        echo "Abandon."
+        return 1
+    fi
+
+    local NEW_KEY
+    NEW_KEY="$(openssl rand -base64 32 | tr -d '\n')"
+
+    echo -e "\n${BLUE}1. Backup .env${NC}"
+    if [ "$DRY_RUN" = false ]; then
+        cp "$BACKEND_ENV" "${BACKEND_ENV}.bak.${TS}.c"
+        echo -e "  ${GREEN}✓${NC} ${BACKEND_ENV}.bak.${TS}.c"
+    fi
+
+    echo -e "\n${BLUE}2. Pose XCH_MASTER_KEY${NC}"
+    set_env "XCH_MASTER_KEY" "$NEW_KEY" "$BACKEND_ENV"
+    echo -e "  ${GREEN}✓${NC} XCH_MASTER_KEY (len=$(env_len XCH_MASTER_KEY "$BACKEND_ENV"))"
+
+    if [ "$DRY_RUN" = false ]; then
+        umask 077
+        if [ -z "${SECRETS_LOG:-}" ] || [ ! -e "$SECRETS_LOG" ]; then
+            SECRETS_LOG="/tmp/xch-rotated-${TS}.txt"
+        fi
+        echo "" >> "$SECRETS_LOG"
+        echo "# Phase C — ADR-019" >> "$SECRETS_LOG"
+        echo "XCH_MASTER_KEY=$NEW_KEY" >> "$SECRETS_LOG"
+        chmod 600 "$SECRETS_LOG"
+        echo -e "  ${GREEN}✓${NC} archivé dans ${SECRETS_LOG} (chmod 600)"
+    fi
+
+    echo -e "\n${BLUE}3. Restart backend pour charger la nouvelle clé${NC}"
+    if [ "$DRY_RUN" = false ]; then
+        docker compose up -d --no-deps --force-recreate backend
+        echo -e "  ${BLUE}attente backend health${NC}"
+        if healthcheck "http://localhost:3002/api/auth/login" 60; then
+            echo -e "\n  ${GREEN}✓${NC} backend redémarré"
+        else
+            echo -e "\n  ${RED}✗${NC} backend ne répond pas après 60s"
+            return 1
+        fi
+    fi
+
+    echo -e "\n${YELLOW}À FAIRE manuellement après cette phase :${NC}"
+    echo "  - Reset+seed pour repartir avec des secrets propres :"
+    echo "      docker exec xch-backend npx prisma migrate reset --force --skip-seed"
+    echo "      curl -X POST http://localhost:3002/api/setup/initialize -H 'Content-Type: application/json' \\"
+    echo "        -d '{\"organizationName\":\"Demo\",\"subdomain\":\"demo\",\"adminName\":\"Admin\",\"adminEmail\":\"admin@demo.fr\",\"adminPassword\":\"Demo1234\",\"loadDemoData\":true}'"
+    echo "  - Vérifier que les colonnes secrets en DB sont bien préfixées v1: :"
+    echo "      docker exec xch-postgres psql -U xch_user xch_dev -c \"SELECT clientSecret FROM tenant_sso_configs;\""
+
+    print_header "✓ PHASE C TERMINÉE"
+}
+
 # ── Main ────────────────────────────────────────────────────────────────────
 case "$PHASE" in
     a)   phase_a ;;
     b)   phase_b ;;
-    all) phase_a && (ask "Phase A OK. Enchaîner Phase B ?" && phase_b) ;;
+    c)   phase_c ;;
+    all) phase_a && (ask "Phase A OK. Enchaîner Phase B ?" && phase_b) && (ask "Enchaîner Phase C (XCH_MASTER_KEY) ?" && phase_c) ;;
 esac
 
 echo

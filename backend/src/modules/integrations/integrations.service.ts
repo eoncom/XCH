@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { NetBoxProviderService } from './providers/netbox.provider';
 import { IntegrationMappingService } from './mapping/integration-mapping.service';
 import { SyncNetBoxSitesDto, SyncNetBoxDevicesDto, MapAssetToNetBoxDto } from './dto/sync-netbox.dto';
+import { CryptoService } from '../../common/crypto/crypto.service';
 
 /**
  * IntegrationsService — NetBox-only after ADR-016.
@@ -19,6 +20,7 @@ export class IntegrationsService {
     private prisma: PrismaClient,
     private netboxProvider: NetBoxProviderService,
     private integrationMappingService: IntegrationMappingService,
+    private crypto: CryptoService,
   ) {}
 
   // ==================== INTEGRATION CONFIG ====================
@@ -31,8 +33,11 @@ export class IntegrationsService {
       const integration = await this.prisma.tenantIntegrationConfig.findUnique({
         where: { tenantId },
       });
-      if (integration?.netboxUrl && integration?.netboxToken) {
-        this.netboxProvider.reconfigure(integration.netboxUrl, integration.netboxToken);
+      // ADR-019 — netboxToken stored encrypted-at-rest. Decrypt before
+      // handing it to the axios provider.
+      const plainToken = this.crypto.decryptOrLegacy(integration?.netboxToken);
+      if (integration?.netboxUrl && plainToken) {
+        this.netboxProvider.reconfigure(integration.netboxUrl, plainToken);
       }
     } catch (error) {
       this.logger.warn('Failed to load NetBox config from DB', error);
@@ -56,11 +61,15 @@ export class IntegrationsService {
       return '****' + token.slice(-4);
     };
 
+    // ADR-019 — decrypt to derive the UI hint from the plaintext (last
+    // 4 chars of ciphertext would be meaningless to the user).
+    const plainToken = this.crypto.decryptOrLegacy(integration?.netboxToken);
+
     return {
       netbox: {
         url: integration?.netboxUrl || '',
-        tokenSet: !!integration?.netboxToken,
-        tokenHint: maskToken(integration?.netboxToken),
+        tokenSet: !!plainToken,
+        tokenHint: maskToken(plainToken),
       },
     };
   }
@@ -78,20 +87,25 @@ export class IntegrationsService {
     });
 
     const nextUrl = data.netbox?.url ?? existing?.netboxUrl ?? '';
-    // Empty/undefined token preserves existing value; a non-empty value replaces.
-    const nextToken =
-      data.netbox?.token && data.netbox.token !== ''
-        ? data.netbox.token
-        : existing?.netboxToken ?? '';
+    // ADR-019 — empty/undefined token preserves the (already encrypted)
+    // existing value; a new non-empty plaintext is enveloped before persist.
+    const newTokenPlain =
+      data.netbox?.token && data.netbox.token !== '' ? data.netbox.token : null;
+    const persistedToken = newTokenPlain
+      ? this.crypto.encryptIfPlain(newTokenPlain)
+      : existing?.netboxToken ?? '';
 
     await this.prisma.tenantIntegrationConfig.upsert({
       where: { tenantId },
-      create: { tenantId, netboxUrl: nextUrl, netboxToken: nextToken },
-      update: { netboxUrl: nextUrl, netboxToken: nextToken },
+      create: { tenantId, netboxUrl: nextUrl, netboxToken: persistedToken ?? '' },
+      update: { netboxUrl: nextUrl, netboxToken: persistedToken ?? '' },
     });
 
-    if (nextUrl && nextToken) {
-      this.netboxProvider.reconfigure(nextUrl, nextToken);
+    // Use plaintext for runtime reconfigure (newly provided OR decrypted
+    // from the existing envelope).
+    const runtimeToken = newTokenPlain ?? this.crypto.decryptOrLegacy(existing?.netboxToken);
+    if (nextUrl && runtimeToken) {
+      this.netboxProvider.reconfigure(nextUrl, runtimeToken);
     }
 
     return this.getIntegrationConfig(tenantId);

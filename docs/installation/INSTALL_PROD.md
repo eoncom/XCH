@@ -283,6 +283,18 @@ JWT_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 
 # ==========================================
+# CHIFFREMENT SECRETS AT-REST (ADR-019)
+# ==========================================
+# CRITIQUE : 32 bytes aléatoires en base64.
+# Commande : openssl rand -base64 32
+#
+# Si perdue SANS BACKUP, les colonnes chiffrées
+# (TenantSsoConfig.clientSecret, TenantIntegrationConfig.netboxToken,
+# User.totpSecret, NotificationConfig.channels.teams.webhookUrl)
+# deviennent illisibles. Reset+seed nécessaire dans ce cas.
+XCH_MASTER_KEY=CHANGEZ_MOI_MASTER_KEY_32_BYTES_BASE64
+
+# ==========================================
 # OIDC (Si utilisé)
 # ==========================================
 OIDC_ENABLED=true
@@ -342,8 +354,16 @@ openssl rand -base64 32
 # Générer MINIO_SECRET_KEY
 openssl rand -base64 32
 
+# Générer XCH_MASTER_KEY (chiffrement secrets at-rest, ADR-019)
+# 32 bytes EXACTS — la base64 doit décoder à 32 bytes
+openssl rand -base64 32
+
 # Copier ces valeurs dans .env
 # NE JAMAIS committer .env dans Git!
+# IMPORTANT : sauvegarder XCH_MASTER_KEY hors du serveur (gestionnaire
+# de mots de passe / coffre). Sa perte rend les colonnes chiffrées
+# (SSO clientSecret, NetBox token, TOTP secret, Teams webhook URL)
+# irrécupérables.
 ```
 
 ### 3.4 Configuration .env frontend

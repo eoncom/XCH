@@ -224,6 +224,12 @@ bidirectional, JSON debt baseline). Voir [`docs/decisions/`](docs/decisions/).
 **📅 Date:** 2026-04-28
 **✅ Statut:** Accepté (livré v1.6.0)
 
+#### ADR-019: Chiffrement secrets at-rest (Session 2)
+**📍 Chemin:** [`docs/decisions/adr-019-secrets-at-rest-encryption.md`](docs/decisions/adr-019-secrets-at-rest-encryption.md)
+**📝 Décision:** AES-256-GCM applicatif (XCH_MASTER_KEY 32 bytes), 4 cibles (clientSecret SSO, netboxToken, totpSecret, teams.webhookUrl) + bonus hash SHA-256 invite/reset tokens.
+**📅 Date:** 2026-04-29
+**✅ Statut:** Accepté (livré v1.6.2)
+
 ### Roadmap
 **📍 Chemin:** [`status/ROADMAP.md`](status/ROADMAP.md)
 **📝 Description:** Planification détaillée du développement par phases
