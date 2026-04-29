@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { MonitorReactionsService } from '../monitoring/monitor-reactions.service';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import {
   CreateConnectivityLinkDto,
   UpdateConnectivityLinkDto,
@@ -20,14 +22,16 @@ export class ConnectivityService {
   constructor(
     private prisma: PrismaClient,
     private monitorReactions: MonitorReactionsService,
+    private perm: PermissionService,
   ) {}
 
-  async create(tenantId: string, dto: CreateConnectivityLinkDto) {
-    // Validate site belongs to tenant
+  async create(tenantId: string, dto: CreateConnectivityLinkDto, callerCtx: CallerCtx) {
+    // ADR-021 — site must exist + caller must have write access on it.
     const site = await this.prisma.site.findFirst({
       where: { id: dto.siteId, tenantId },
     });
     if (!site) throw new NotFoundException('Site not found');
+    await this.perm.assertCanWriteSite(callerCtx, dto.siteId);
 
     if (dto.assetId) {
       await this.validateAssetForSite(tenantId, dto.assetId, dto.siteId);
@@ -73,9 +77,27 @@ export class ConnectivityService {
     }
   }
 
-  async findAll(tenantId: string, filters: FilterConnectivityLinkDto = {}) {
+  async findAll(
+    tenantId: string,
+    filters: FilterConnectivityLinkDto = {},
+    callerCtx: CallerCtx,
+  ) {
     const where: any = { tenantId };
-    if (filters.siteId) where.siteId = filters.siteId;
+
+    // ADR-021 — automatic site scope. Non-super-admin users see only links
+    // attached to a site they can read. Empty array short-circuits to [].
+    const readableSites = await this.perm.getReadableSiteIds(callerCtx);
+    if (readableSites !== null) {
+      where.siteId = { in: readableSites };
+    }
+
+    if (filters.siteId) {
+      // UI narrowing : if the user already has the scope filter applied,
+      // tighten further to a specific site they can read.
+      where.siteId = readableSites !== null
+        ? { in: readableSites.filter((s) => s === filters.siteId) }
+        : filters.siteId;
+    }
     if (filters.role) where.role = filters.role;
     if (filters.type) where.type = filters.type;
 
@@ -86,20 +108,32 @@ export class ConnectivityService {
     });
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(tenantId: string, id: string, callerCtx: CallerCtx) {
     const link = await this.prisma.connectivityLink.findFirst({
       where: { id, tenantId },
       include: LINK_INCLUDE,
     });
     if (!link) throw new NotFoundException('Connectivity link not found');
+
+    // ADR-021 — guess-by-id defense.
+    await this.perm.assertCanReadSite(callerCtx, link.siteId);
+
     return link;
   }
 
-  async update(tenantId: string, id: string, dto: UpdateConnectivityLinkDto) {
+  async update(
+    tenantId: string,
+    id: string,
+    dto: UpdateConnectivityLinkDto,
+    callerCtx: CallerCtx,
+  ) {
     const existing = await this.prisma.connectivityLink.findFirst({
       where: { id, tenantId },
     });
     if (!existing) throw new NotFoundException('Connectivity link not found');
+
+    // ADR-021 — write access on the link's site.
+    await this.perm.assertCanWriteSite(callerCtx, existing.siteId);
 
     if (dto.assetId !== undefined && dto.assetId !== null) {
       await this.validateAssetForSite(tenantId, dto.assetId, existing.siteId);
@@ -147,11 +181,14 @@ export class ConnectivityService {
     return updated;
   }
 
-  async remove(tenantId: string, id: string) {
+  async remove(tenantId: string, id: string, callerCtx: CallerCtx) {
     const link = await this.prisma.connectivityLink.findFirst({
       where: { id, tenantId },
     });
     if (!link) throw new NotFoundException('Connectivity link not found');
+
+    // ADR-021 — write access on the link's site.
+    await this.perm.assertCanWriteSite(callerCtx, link.siteId);
 
     await this.prisma.connectivityLink.delete({ where: { id } });
     return { deleted: true };
@@ -166,12 +203,16 @@ export class ConnectivityService {
     id: string,
     body: { bearerId: string; label?: string },
     createdBy: string,
+    callerCtx: CallerCtx,
   ) {
     const link = await this.prisma.connectivityLink.findFirst({
       where: { id, tenantId },
       include: { site: { select: { id: true, name: true, delegationId: true } } },
     });
     if (!link) throw new NotFoundException('Connectivity link not found');
+
+    // ADR-021 — write access on the link's site.
+    await this.perm.assertCanWriteSite(callerCtx, link.siteId);
 
     if (!link.monthlyPrice || Number(link.monthlyPrice) <= 0) {
       throw new BadRequestException('Monthly price must be set to generate an expense');

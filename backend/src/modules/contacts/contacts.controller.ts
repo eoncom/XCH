@@ -24,6 +24,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
+import { CallerCtx as CallerCtxDecorator } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 
 @RequireModule('contacts')
@@ -46,8 +48,9 @@ export class ContactsController {
   create(
     @Body() createContactDto: CreateContactDto,
     @Request() req: AuthRequest,
+    @CallerCtxDecorator() ctx: CallerCtx,
   ) {
-    return this.contactsService.create(req.user.tenantId, createContactDto);
+    return this.contactsService.create(req.user.tenantId, createContactDto, ctx);
   }
 
   @Get()
@@ -57,8 +60,12 @@ export class ContactsController {
     status: 200,
     description: 'Return all contacts matching the query parameters.',
   })
-  findAll(@Query() query: QueryContactDto, @Request() req: AuthRequest) {
-    return this.contactsService.findAll(req.user.tenantId, query);
+  findAll(
+    @Query() query: QueryContactDto,
+    @Request() req: AuthRequest,
+    @CallerCtxDecorator() ctx: CallerCtx,
+  ) {
+    return this.contactsService.findAll(req.user.tenantId, query, ctx);
   }
 
   @Get(':id')
@@ -66,8 +73,12 @@ export class ContactsController {
   @ApiOperation({ summary: 'Get a contact by ID' })
   @ApiResponse({ status: 200, description: 'Return the contact.' })
   @ApiResponse({ status: 404, description: 'Contact not found.' })
-  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.contactsService.findOne(req.user.tenantId, id);
+  findOne(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+    @CallerCtxDecorator() ctx: CallerCtx,
+  ) {
+    return this.contactsService.findOne(req.user.tenantId, id, ctx);
   }
 
   @Patch(':id')
@@ -82,11 +93,13 @@ export class ContactsController {
     @Param('id') id: string,
     @Body() updateContactDto: UpdateContactDto,
     @Request() req: AuthRequest,
+    @CallerCtxDecorator() ctx: CallerCtx,
   ) {
     return this.contactsService.update(
       req.user.tenantId,
       id,
       updateContactDto,
+      ctx,
     );
   }
 
@@ -98,7 +111,11 @@ export class ContactsController {
     description: 'The contact has been successfully deleted.',
   })
   @ApiResponse({ status: 404, description: 'Contact not found.' })
-  remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.contactsService.remove(req.user.tenantId, id);
+  remove(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+    @CallerCtxDecorator() ctx: CallerCtx,
+  ) {
+    return this.contactsService.remove(req.user.tenantId, id, ctx);
   }
 }
