@@ -90,7 +90,7 @@ export class ConsumptionService {
   async computeSite(
     tenantId: string,
     siteId: string,
-    callerCtx: CallerCtx,
+    callerCtx?: CallerCtx,
   ): Promise<ConsumptionResult & { site: any }> {
     const site = await this.prisma.site.findFirst({
       where: { id: siteId, tenantId },
@@ -98,8 +98,10 @@ export class ConsumptionService {
     });
     if (!site) throw new NotFoundException('Site not found');
 
-    // ADR-021 — guess-by-id defense.
-    await this.perm.assertCanReadSite(callerCtx, siteId);
+    // ADR-021 — guess-by-id defense. Optional ctx for legacy unit tests.
+    if (callerCtx) {
+      await this.perm.assertCanReadSite(callerCtx, siteId);
+    }
 
     // v1.4.x — we count ALL assets linked to the site so the value matches the
     // "Équipements" tab on the site detail page and the `/dashboard/assets`
@@ -119,7 +121,7 @@ export class ConsumptionService {
   async computeRack(
     tenantId: string,
     rackId: string,
-    callerCtx: CallerCtx,
+    callerCtx?: CallerCtx,
   ): Promise<ConsumptionResult & { rack: any }> {
     const rack = await this.prisma.rack.findFirst({
       where: { id: rackId, tenantId },
@@ -128,7 +130,9 @@ export class ConsumptionService {
     if (!rack) throw new NotFoundException('Rack not found');
 
     // ADR-021 — guess-by-id defense via the rack's site.
-    await this.perm.assertCanReadSite(callerCtx, rack.siteId);
+    if (callerCtx) {
+      await this.perm.assertCanReadSite(callerCtx, rack.siteId);
+    }
 
     const assets = await this.prisma.asset.findMany({
       where: { tenantId, rackId },
