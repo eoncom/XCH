@@ -2,12 +2,12 @@
 // PostgreSQL 15+ with PostGIS extension
 
 generator client {
-  provider        = "prisma-client-js"
-  // ADR-020 §C — nullsNotDistinct enables `nulls: "not distinct"` on
-  // @@unique constraints that include a nullable column, so the global
-  // scope (delegationId IS NULL) row can't be duplicated. Preview since
-  // Prisma 5.13 ; pinned via `prisma: ^5.8.0` resolved 5.22+ in lockfile.
-  previewFeatures = ["postgresqlExtensions", "nullsNotDistinct"]
+  provider = "prisma-client-js"
+  // ADR-020 §C — `@@unique(..., nulls: "not distinct")` is GA since
+  // Prisma 5.7. The previously-considered "nullsNotDistinct" preview
+  // flag does NOT exist in 5.22 (validation rejects it). The option on
+  // @@unique works on its own ; see notification_channels / rules below.
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {

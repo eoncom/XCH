@@ -1,6 +1,6 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-04-29 09:13:53 (Auto-update)
+**Dernière mise à jour :** 2026-04-29 09:21:57 (Auto-update)
 **Version actuelle :** 1.7.0 (taguée 2026-04-29)
 **Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + Session 1 (v1.6.1) + Session 2 (v1.6.2) + Session 3 (v1.7.0 NotificationConfig refacto + Worker BullMQ)
 
