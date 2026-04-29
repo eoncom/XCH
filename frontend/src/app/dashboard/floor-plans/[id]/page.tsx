@@ -190,9 +190,14 @@ export default function FloorPlanDetailPage({
   const [calibrationMode, setCalibrationMode] = useState(false);
   const [showCalibrationGrid, setShowCalibrationGrid] = useState(false);
 
-  const { data: floorPlan, isLoading } = useQuery<FloorPlan>({
+  const { data: floorPlan, isLoading, error } = useQuery<FloorPlan>({
     queryKey: ['floor-plan', id],
     queryFn: () => floorPlansApi.getById(id),
+    retry: (failureCount, err: any) => {
+      const status = err?.response?.status ?? err?.status;
+      if (status === 404 || status === 403) return false;
+      return failureCount < 2;
+    },
   });
 
   // Load assets from the site for pin association
@@ -461,8 +466,22 @@ export default function FloorPlanDetailPage({
     return <div className="text-center py-12">Chargement...</div>;
   }
 
-  if (!floorPlan) {
-    return <div className="text-center py-12">Plan non trouvé</div>;
+  if (error || !floorPlan) {
+    // ADR-021 — 404 cross-delegation ou ressource supprimée.
+    return (
+      <div className="text-center py-12 space-y-3">
+        <p className="text-muted-foreground">
+          Plan introuvable ou inaccessible. Le lien que vous avez suivi est
+          peut-être périmé, ou ce plan appartient à un site auquel vous n'avez
+          pas accès.
+        </p>
+        <Button variant="outline" asChild>
+          <Link href="/dashboard/floor-plans">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste
+          </Link>
+        </Button>
+      </div>
+    );
   }
 
   return (

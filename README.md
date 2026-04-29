@@ -335,6 +335,24 @@ npm run test:e2e:report       # Ouvrir rapport
 
 ## Changelog (versions recentes)
 
+### v1.8.0 (2026-04-30) — RBAC universel + tests d'intrusion bloquants (Session 4)
+- **ADR-021** : data filtering systématique au niveau service via
+  `CallerCtx + DI PermissionService`. 14 modules fixés (contacts,
+  connectivity, notif-settings, sdwan, consumption + 9 modules avec
+  findOne universel).
+- **Shape d'erreur breaking** : 404 sur read cross-delegation (defense
+  in depth), 403 sur write, 403 sur cross-skew.
+- **Workflow CI bloquant** : `backend-integration.yml` Jest+supertest,
+  ~85 attaques d'intrusion, branch protection main exigeant ce check.
+- **`@CallerCtxParam()` + `SYSTEM_CTX(reason, tenantId)` factory traçable**.
+- **UX deep-link 404** : 4 pages détail patchées (sites/assets/tasks/
+  floor-plans) avec message clair + bouton retour liste.
+
+### v1.7.1 (2026-04-29) — Hardening @@unique nullable (ADR-020 §C)
+- Trou d'intégrité PG comblé : 2 partial UNIQUE INDEX sur
+  `notification_channels_global_uniq` + `notification_rules_global_uniq`
+  (`WHERE delegationId IS NULL`). Plus de 2ᵉ row globale possible.
+
 ### v1.7.0 (2026-04-29) — Notifications refacto + Worker BullMQ (Session 3)
 - **ADR-020** : `NotificationConfig` (1 table, 2 JSON) → 2 tables typées
   `NotificationChannel` + `NotificationRule` avec enums Prisma. Migration

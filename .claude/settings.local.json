@@ -200,7 +200,8 @@
       "Bash(awk '/^function SiteConnectivitySection/,/^function [A-Z]/' frontend/src/app/dashboard/sites/[id]/page.tsx)",
       "Bash(awk 'NR==917,NR==1041' frontend/src/app/dashboard/sites/[id]/page.tsx)",
       "Bash(sed -i.bak '917,1040d' frontend/src/app/dashboard/sites/[id]/page.tsx)",
-      "Bash(rm frontend/src/app/dashboard/sites/[id]/page.tsx.bak)"
+      "Bash(rm frontend/src/app/dashboard/sites/[id]/page.tsx.bak)",
+      "Bash(git tag *)"
     ]
   }
 }

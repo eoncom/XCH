@@ -7,6 +7,111 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.8.0] - 2026-04-30 — RBAC universel + tests d'intrusion bloquants en CI (Session 4 du plan v2 finalization)
+
+### Security (BREAKING — shape d'erreur HTTP)
+
+**ADR-021 — RBAC universel : data filtering systématique au niveau service.**
+
+L'audit Phase 1 a montré que sur 15 modules backend, un seul (`users`)
+filtrait correctement par scope au niveau service. 14 modules avaient
+soit aucun scope automatique (contacts/connectivity), soit un trou
+sur `findOne(id)` (sites/assets/racks/tasks/floor-plans/monitoring/
+expenses/budgets/billing-entities), soit une API atypique avec
+cross-skew (notification-settings) ou pas de validation de scope
+(sdwan/consumption). Cette session ferme tous ces trous via un
+pattern unifié.
+
+#### Pattern unifié (ADR-021)
+
+- **`CallerCtx + DI PermissionService`** dans tous les services au lieu
+  du pattern `accessibleSiteIds[]` pré-résolu au controller (à l'origine
+  du bug Contact 4 ans).
+- Helpers canoniques : `getReadableSiteIds`, `getReadableDelegationIds`
+  (READ+WRITE+MANAGE union), `getManagedDelegationIds` (MANAGE-only,
+  cost module), `assertCanReadSite/Delegation` (404), `assertCanWriteSite/Delegation` (403).
+- **Shape d'erreur HTTP** : 404 sur read non autorisé (defense in depth,
+  ne révèle pas l'existence), 403 sur write non autorisé, 403 sur
+  cross-skew header≠body. **BREAKING** : un GET cross-delegation passe
+  de "200 + leak" à "404".
+- **`SYSTEM_CTX(reason, tenantId)` factory traçable** : chaque appel
+  log INFO via canal `AuditSystemCtx`. Bypass paresseux devient bypass
+  auditable. Grep `SYSTEM_CTX(` au merge = liste exhaustive.
+
+#### Modules fixés
+
+- **contacts + connectivity** (PR3) : modules sans aucun scope auto
+  fermés. Régression utilisateur Contact (technicien voit toutes les
+  délégations) confirmée fermée en smoke prod.
+- **notification-settings + sdwan + consumption** (PR4) :
+  - notif : `enforceDelegationConsistency(req, paramOrDtoDelegationId)`
+    refuse cross-skew header X-Delegation-Id vs body delegationId.
+  - sdwan : `ensureSiteForRead/Write` avec `assertCanRead/WriteSite`.
+  - consumption : `computeSite/computeRack/summary` scopés par
+    `assertCanReadSite` et `getReadableSiteIds`.
+- **sites + assets + racks + tasks + floor-plans + monitoring +
+  expenses + budgets + billing-entities** (PR5) : findOne universel
+  avec assert au niveau service. Spec paramétrique `find-one-cross-delegation.spec.ts`
+  itère 9 modules × 3 attaques.
+
+#### Audit schéma actif des champs scope-nullable
+
+ADR-021 §6 contient l'audit complet (4 catégories) :
+- **A. Global lisible (allowGlobal=true)** : Contact, Expense,
+  TenantSecurityReminder.
+- **B. Super-admin only** : NotificationChannel, NotificationRule.
+- **C. À confirmer (alignée Expense)** : Budget.
+- **D. Pas un scope autz** : AuditLog, Photo, MonitorCheck (polymorphique),
+  AssetMovement, CostAllocation, NotificationLog.
+
+### Added
+
+- **Workflow CI bloquant** `backend-integration.yml` : services Postgres
+  15 + Redis, Jest+supertest, branch protection main exigeant ce check.
+- **6 specs intrusion** : foundations (canary helpers, 17 tests),
+  contacts-cross-delegation (15 attaques), connectivity-cross-site
+  (8 attaques), notification-settings-cross-skew (6 attaques),
+  sdwan-cross-delegation (6 attaques), consumption-cross-delegation
+  (5 attaques), find-one-cross-delegation (27 attaques paramétriques
+  sur 9 modules). **~85 attaques au total**, bloquantes en CI.
+- **`backend/test/integration/fixtures/rbac-seed.ts`** : seed
+  déterministe (1 tenant, 2 délégations A/B, 5 users, 1 row par module
+  par délégation = 16 rows). Réutilisable par toutes les futures specs.
+- **`@CallerCtxParam()` decorator** + interface `CallerCtx` + factory
+  `SYSTEM_CTX(reason, tenantId)`.
+
+### Frontend (UX 404 deep-link)
+
+R7 du plan : 4 pages détail audit ❌ patchées en gestion d'erreur 404 :
+- `dashboard/sites/[id]/page.tsx` : message clair + bouton retour liste.
+- `dashboard/assets/[id]/page.tsx` : idem.
+- `dashboard/tasks/[id]/page.tsx` : idem.
+- `dashboard/floor-plans/[id]/page.tsx` : idem.
+
+React Query `retry` désactivé pour 403/404 (pas la peine de retry —
+le scope ne change pas en cours de session).
+
+Pages ⚠️ restantes (`monitoring/[id]`, `consumption/[siteId]`) : tech
+debt UX mineure documentée pour Session 5 ou 6.
+
+### Documentation
+
+- ADR-021 rédigée (8 sections : status / context / decision /
+  consequences / alternatives / forward deps / annexe table 15 modules /
+  audit schéma scope-nullable).
+- Pattern technique de référence dans le plan utilisateur.
+- README + CHANGELOG + 00-INDEX + PROJECT_STATUS à jour.
+
+### Hors scope (Session 5+)
+
+- Postgres RLS comme défense en profondeur DB.
+- Lint custom ts-morph qui détecte tout `findOne` sur entité
+  tenant-scopée sans paramètre `CallerCtx`.
+- UX deep-link 404 pour les 2 pages ⚠️ restantes.
+- Indexes / FK CHECK / query plans (Session 5).
+
+---
+
 ## [1.7.1] - 2026-04-29 — Hardening intégrité @@unique avec champ nullable (ADR-020 §C)
 
 ### Fixed (DB integrity)

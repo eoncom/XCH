@@ -1133,12 +1133,19 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  const { data: site, isLoading } = useQuery<Site>({
+  const { data: site, isLoading, error } = useQuery<Site>({
     queryKey: ['site', id],
     queryFn: () => sitesApi.getById(id),
     // ADR-016 follow-up — refetch every 30s so Site.healthStatus +
     // metadata.healthBreakdown stay in sync with the worker without F5.
     refetchInterval: 30_000,
+    // ADR-021 — backend renvoie 404 sur cross-delegation. Pas la peine
+    // de retry, le user n'aura jamais accès via la même session.
+    retry: (failureCount, err: any) => {
+      const status = err?.response?.status ?? err?.status;
+      if (status === 404 || status === 403) return false;
+      return failureCount < 2;
+    },
   });
 
   // Load assets linked to this site.
@@ -1248,8 +1255,23 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     return <div className="text-center py-12">Chargement...</div>;
   }
 
-  if (!site) {
-    return <div className="text-center py-12">Site non trouvé</div>;
+  if (error || !site) {
+    // ADR-021 — un 404 backend (cross-delegation, ressource supprimée)
+    // doit afficher un message clair + bouton retour, pas un écran blanc.
+    return (
+      <div className="text-center py-12 space-y-3">
+        <p className="text-muted-foreground">
+          Site introuvable ou inaccessible. Le lien que vous avez suivi est
+          peut-être périmé, ou ce site appartient à une délégation à laquelle
+          vous n'avez pas accès.
+        </p>
+        <Button variant="outline" asChild>
+          <Link href="/dashboard/sites">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste
+          </Link>
+        </Button>
+      </div>
+    );
   }
 
   // Déterminer si on a du contenu pour l'onglet Infos pratiques

@@ -90,9 +90,14 @@ export default function AssetDetailPage({
   } | null>(null);
   const { canUpdate, canDelete } = usePermissions();
 
-  const { data: asset, isLoading } = useQuery<Asset>({
+  const { data: asset, isLoading, error } = useQuery<Asset>({
     queryKey: ['asset', id],
     queryFn: () => assetsApi.getById(id),
+    retry: (failureCount, err: any) => {
+      const status = err?.response?.status ?? err?.status;
+      if (status === 404 || status === 403) return false;
+      return failureCount < 2;
+    },
   });
 
   // Load asset attachments count
@@ -176,8 +181,22 @@ export default function AssetDetailPage({
     return <div className="text-center py-12">Chargement...</div>;
   }
 
-  if (!asset) {
-    return <div className="text-center py-12">Équipement non trouvé</div>;
+  if (error || !asset) {
+    // ADR-021 — 404 cross-delegation ou ressource supprimée.
+    return (
+      <div className="text-center py-12 space-y-3">
+        <p className="text-muted-foreground">
+          Équipement introuvable ou inaccessible. Le lien que vous avez suivi est
+          peut-être périmé, ou cet équipement appartient à un site auquel vous
+          n'avez pas accès.
+        </p>
+        <Button variant="outline" asChild>
+          <Link href="/dashboard/assets">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste
+          </Link>
+        </Button>
+      </div>
+    );
   }
 
   return (

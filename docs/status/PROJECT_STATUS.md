@@ -1,8 +1,8 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-04-29 23:58:52 (Auto-update)
-**Version actuelle :** 1.7.1 (taguée 2026-04-29)
-**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + Session 1 (v1.6.1) + Session 2 (v1.6.2) + Session 3 (v1.7.0 NotificationConfig refacto + Worker BullMQ) + patch v1.7.1 (intégrité @@unique nullable, ADR-020 §C)
+**Dernière mise à jour :** 2026-04-30 00:09:01 (Auto-update)
+**Version actuelle :** 1.8.0 (taguée 2026-04-30)
+**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + Sessions 1-4 finalization v2 livrées + RBAC universel ADR-021 (14/15 modules fixés, ~85 attaques d'intrusion bloquantes en CI)
 
 ## 🚦 Plan v2 vers v1.6 (sessions S0 → S11)
 
@@ -25,8 +25,8 @@
 | 1 | Quick wins : bug Budgets, wizard Contacts CRUD, drift doc, re-mesure métriques, persistance plan v2 | — | v1.6.1 | ✅ Livrée 2026-04-29 |
 | 2 | Chiffrement secrets at-rest (4 cibles : clientSecret SSO, netboxToken, totpSecret, teams.webhookUrl) + bonus hash invite/reset tokens | ADR-019 | v1.6.2 | ✅ Livrée 2026-04-29 |
 | 3 | NotificationConfig refacto (Channel + Rule, pas de Digest YAGNI) + Worker générique BullMQ + walker JSON retiré | ADR-020 | v1.7.0 | ✅ Livrée 2026-04-29 |
-| 4 | Performance & intégrité DB (indexes, FK CHECK, query plans sur endpoints lourds) | — | intermédiaire | ⏳ |
-| 5 | Hardening tail : CSP nonce, DTOs structurés, drift doc final | — | v1.7.0 | ⏳ |
+| 4 | RBAC universel + tests d'intrusion bloquants (réorienté depuis perf/intégrité DB après audit RBAC découvrant 14/15 modules incohérents) | ADR-021 | v1.8.0 | ✅ Livrée 2026-04-30 |
+| 5 | Performance & intégrité DB (indexes, FK CHECK, query plans) — déplacé depuis Session 4 originale + UX deep-link 404 résiduelle | — | intermédiaire | ⏳ |
 | 6 | UX dark canvas + erreurs réseau + tap targets (cible laptop/iPad/tablette, pas mobile) | — | intermédiaire | ⏳ |
 | 7 | Refonte E2E Playwright (30-40 specs critical paths) | — | v1.8.0 | ⏳ |
 | 8 | (Optionnelle) Sentry / error tracking | — | — | 🔮 |

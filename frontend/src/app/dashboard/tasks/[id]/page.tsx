@@ -122,9 +122,14 @@ export default function TaskDetailPage({
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
-  const { data: task, isLoading } = useQuery<Task>({
+  const { data: task, isLoading, error } = useQuery<Task>({
     queryKey: ['task', id],
     queryFn: () => tasksApi.getById(id),
+    retry: (failureCount, err: any) => {
+      const status = err?.response?.status ?? err?.status;
+      if (status === 404 || status === 403) return false;
+      return failureCount < 2;
+    },
   });
 
   const { data: comments = [] } = useQuery<TaskComment[]>({
@@ -293,8 +298,22 @@ export default function TaskDetailPage({
     return <div className="text-center py-12">Chargement...</div>;
   }
 
-  if (!task) {
-    return <div className="text-center py-12">Tâche non trouvée</div>;
+  if (error || !task) {
+    // ADR-021 — 404 cross-delegation ou ressource supprimée.
+    return (
+      <div className="text-center py-12 space-y-3">
+        <p className="text-muted-foreground">
+          Tâche introuvable ou inaccessible. Le lien que vous avez suivi est
+          peut-être périmé, ou cette tâche appartient à un site auquel vous
+          n'avez pas accès.
+        </p>
+        <Button variant="outline" asChild>
+          <Link href="/dashboard/tasks">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste
+          </Link>
+        </Button>
+      </div>
+    );
   }
 
   // Filter out invalid checklist items for display and calculations

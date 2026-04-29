@@ -234,7 +234,13 @@ bidirectional, JSON debt baseline). Voir [`docs/decisions/`](docs/decisions/).
 **📍 Chemin:** [`docs/decisions/adr-020-notifications-refacto-async.md`](docs/decisions/adr-020-notifications-refacto-async.md)
 **📝 Décision:** Split `NotificationConfig` (JSON) → 2 tables typées (`NotificationChannel` + `NotificationRule`), enums Prisma, queue `notifications` + processor BullMQ (retry 3× backoff), `teams.webhookUrl` colonne scalaire chiffrée. Règle architecturale : `config_json` ne contient jamais de secret.
 **📅 Date:** 2026-04-29
-**✅ Statut:** Accepté (livré v1.7.0)
+**✅ Statut:** Accepté (livré v1.7.0 + addendum §C livré v1.7.1 partial UNIQUE INDEX)
+
+#### ADR-021: RBAC universel — data filtering au niveau service (Session 4)
+**📍 Chemin:** [`docs/decisions/adr-021-rbac-universal-data-filtering.md`](docs/decisions/adr-021-rbac-universal-data-filtering.md)
+**📝 Décision:** `CallerCtx + DI PermissionService` dans tous les services, helpers canoniques `getReadable/Managed*Ids` + `assertCanRead/Write*`, findOne re-checke l'accès, shape erreur 404/403/403, factory `SYSTEM_CTX` traçable, audit schéma scope-nullable 4 catégories. Tests intrusion bloquants en CI. 14/15 modules fixés.
+**📅 Date:** 2026-04-30
+**✅ Statut:** Accepté (livré v1.8.0)
 
 ### Roadmap
 **📍 Chemin:** [`status/ROADMAP.md`](status/ROADMAP.md)
