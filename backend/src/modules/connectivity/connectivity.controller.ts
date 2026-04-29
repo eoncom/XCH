@@ -8,7 +8,7 @@ import {
 } from './dto/create-connectivity-link.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead, RequireManage } from '../../common/decorators/require-right.decorator';
-import { CallerCtx as CallerCtxDecorator } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
 import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { ExpensesService } from '../expenses/expenses.service';
@@ -30,7 +30,7 @@ export class ConnectivityController {
   create(
     @Body() dto: CreateConnectivityLinkDto,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.service.create(req.user.tenantId, dto, ctx);
   }
@@ -41,7 +41,7 @@ export class ConnectivityController {
   findAll(
     @Query() filters: FilterConnectivityLinkDto,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.service.findAll(req.user.tenantId, filters, ctx);
   }
@@ -52,7 +52,7 @@ export class ConnectivityController {
   findOne(
     @Param('id') id: string,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.service.findOne(req.user.tenantId, id, ctx);
   }
@@ -64,7 +64,7 @@ export class ConnectivityController {
     @Param('id') id: string,
     @Body() dto: UpdateConnectivityLinkDto,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.service.update(req.user.tenantId, id, dto, ctx);
   }
@@ -75,7 +75,7 @@ export class ConnectivityController {
   remove(
     @Param('id') id: string,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.service.remove(req.user.tenantId, id, ctx);
   }
@@ -87,7 +87,7 @@ export class ConnectivityController {
     @Param('id') id: string,
     @Body() body: { bearerId: string; label?: string },
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.service.generateExpense(req.user.tenantId, id, body, req.user.id, ctx);
   }
@@ -102,7 +102,7 @@ export class ConnectivityController {
   async resyncExpense(
     @Param('id') id: string,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     const link = await this.service.findOne(req.user.tenantId, id, ctx);
     if (!(link as any).expenseId) {

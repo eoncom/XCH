@@ -6814,3 +6814,24 @@ ci(rbac): backend integration tests workflow + foundations canary spec (Session 
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-29
+
+**Date:** 2026-04-29 23:11:24
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 0
+
+**Commit message:**
+```
+fix(rbac): contacts + connectivity scope by delegation/site (Session 4a PR3)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

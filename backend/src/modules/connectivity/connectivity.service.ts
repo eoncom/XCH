@@ -252,6 +252,6 @@ export class ConnectivityService {
       data: { expenseId: expense.id },
     });
 
-    return this.findOne(tenantId, id);
+    return this.findOne(tenantId, id, callerCtx);
   }
 }

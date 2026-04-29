@@ -16,7 +16,10 @@ import { CallerCtx } from '../types/caller-ctx.interface';
  * authenticated routes only. Use `SYSTEM_CTX(reason, tenantId)` for
  * cron / BullMQ / seed call sites instead.
  */
-export const CallerCtx = createParamDecorator(
+// Renamed `CallerCtxParam` (vs `CallerCtx`) to avoid TS2395 merged-
+// declaration conflict with the imported `CallerCtx` interface.
+// Controllers import { CallerCtxParam } @CallerCtxParam() ctx: CallerCtx.
+export const CallerCtxParam = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): CallerCtx => {
     const request = ctx.switchToHttp().getRequest();
     const user = request.user;

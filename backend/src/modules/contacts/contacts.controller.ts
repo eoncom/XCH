@@ -24,7 +24,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
-import { CallerCtx as CallerCtxDecorator } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
 import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 
@@ -48,7 +48,7 @@ export class ContactsController {
   create(
     @Body() createContactDto: CreateContactDto,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.contactsService.create(req.user.tenantId, createContactDto, ctx);
   }
@@ -63,7 +63,7 @@ export class ContactsController {
   findAll(
     @Query() query: QueryContactDto,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.contactsService.findAll(req.user.tenantId, query, ctx);
   }
@@ -76,7 +76,7 @@ export class ContactsController {
   findOne(
     @Param('id') id: string,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.contactsService.findOne(req.user.tenantId, id, ctx);
   }
@@ -93,7 +93,7 @@ export class ContactsController {
     @Param('id') id: string,
     @Body() updateContactDto: UpdateContactDto,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.contactsService.update(
       req.user.tenantId,
@@ -114,7 +114,7 @@ export class ContactsController {
   remove(
     @Param('id') id: string,
     @Request() req: AuthRequest,
-    @CallerCtxDecorator() ctx: CallerCtx,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
     return this.contactsService.remove(req.user.tenantId, id, ctx);
   }
