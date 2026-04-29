@@ -14,6 +14,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
 import { ExpensesService } from '../expenses/expenses.service';
@@ -103,8 +105,8 @@ export class TasksController {
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get task by id' })
-  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    const task = await this.tasksService.findOne(id, req.user.tenantId);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const task = await this.tasksService.findOne(id, req.user.tenantId, ctx);
     if (task.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, task.siteId, 'tasks', req.user.tenantId,
@@ -119,8 +121,8 @@ export class TasksController {
   @Patch(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Update task' })
-  async update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto, @Request() req: AuthRequest) {
-    const task = await this.tasksService.findOne(id, req.user.tenantId);
+  async update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const task = await this.tasksService.findOne(id, req.user.tenantId, ctx);
     if (task.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, task.siteId, 'tasks', req.user.tenantId,
@@ -129,7 +131,7 @@ export class TasksController {
         throw new ForbiddenException('Insufficient permissions to modify tasks on this site');
       }
     }
-    return this.tasksService.update(id, req.user.tenantId, updateTaskDto, req.user.userId);
+    return this.tasksService.update(id, req.user.tenantId, updateTaskDto, req.user.userId, ctx);
   }
 
   @Patch(':id/checklist')
@@ -139,8 +141,9 @@ export class TasksController {
     @Param('id') id: string,
     @Body() updateChecklistDto: UpdateChecklistDto,
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
-    const task = await this.tasksService.findOne(id, req.user.tenantId);
+    const task = await this.tasksService.findOne(id, req.user.tenantId, ctx);
     if (task.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, task.siteId, 'tasks', req.user.tenantId,
@@ -155,8 +158,8 @@ export class TasksController {
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete task' })
-  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    const task = await this.tasksService.findOne(id, req.user.tenantId);
+  async remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const task = await this.tasksService.findOne(id, req.user.tenantId, ctx);
     if (task.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, task.siteId, 'tasks', req.user.tenantId,
@@ -165,7 +168,7 @@ export class TasksController {
         throw new ForbiddenException('Insufficient permissions to delete tasks on this site');
       }
     }
-    return this.tasksService.remove(id, req.user.tenantId, req.user.userId);
+    return this.tasksService.remove(id, req.user.tenantId, req.user.userId, ctx);
   }
 
   // ============================================================================
@@ -300,8 +303,9 @@ export class TasksController {
     @Param('id') id: string,
     @Body() body: { bearerId: string; label?: string; useEstimated?: boolean },
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
-    const task = await this.tasksService.findOne(id, req.user.tenantId);
+    const task = await this.tasksService.findOne(id, req.user.tenantId, ctx);
     if (task.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, task.siteId, 'expenses', req.user.tenantId,
@@ -328,8 +332,9 @@ export class TasksController {
   async resyncExpense(
     @Param('id') id: string,
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
-    const task = await this.tasksService.findOne(id, req.user.tenantId);
+    const task = await this.tasksService.findOne(id, req.user.tenantId, ctx);
     if (!(task as any).expenseId) {
       throw new BadRequestException('No expense linked to this task');
     }

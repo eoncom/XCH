@@ -6,6 +6,8 @@ import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
 import { FilterExpenseDto } from './dto/filter-expense.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireManage } from '../../common/decorators/require-right.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { Response } from 'express';
 import { PermissionService } from '../../common/services/permission.service';
@@ -192,8 +194,8 @@ export class ExpensesController {
   @Get(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Get an expense with allocations' })
-  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    const expense = await this.expensesService.findOne(req.user.tenantId, id);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const expense = await this.expensesService.findOne(req.user.tenantId, id, ctx);
     await this.scopeOrFail(req, (expense as any).delegationId);
     return expense;
   }
@@ -201,19 +203,19 @@ export class ExpensesController {
   @Patch(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Update an expense' })
-  async update(@Param('id') id: string, @Body() dto: UpdateExpenseDto, @Request() req: AuthRequest) {
-    const existing = await this.expensesService.findOne(req.user.tenantId, id);
+  async update(@Param('id') id: string, @Body() dto: UpdateExpenseDto, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const existing = await this.expensesService.findOne(req.user.tenantId, id, ctx);
     const scope = await this.scopeOrFail(req, (existing as any).delegationId);
     if (dto.delegationId) await this.scopeOrFail(req, dto.delegationId);
-    return this.expensesService.update(req.user.tenantId, id, dto, scope);
+    return this.expensesService.update(req.user.tenantId, id, dto, scope, ctx);
   }
 
   @Delete(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Delete an expense' })
-  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    const existing = await this.expensesService.findOne(req.user.tenantId, id);
+  async remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const existing = await this.expensesService.findOne(req.user.tenantId, id, ctx);
     await this.scopeOrFail(req, (existing as any).delegationId);
-    return this.expensesService.remove(req.user.tenantId, id);
+    return this.expensesService.remove(req.user.tenantId, id, ctx);
   }
 }

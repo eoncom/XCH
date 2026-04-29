@@ -7,6 +7,8 @@ import { UpdatePinDto } from './dto/update-pin.dto';
 import { FilterFloorPlanDto } from './dto/filter-floor-plan.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { StorageService } from '../../common/services/storage.service';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { validateMagicBytes, validateMagicBytesForMimetype } from '../../common/utils/upload-security';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
@@ -20,6 +22,7 @@ export class FloorPlansService {
   constructor(
     private prisma: PrismaClient,
     private storageService: StorageService,
+    private perm: PermissionService,
   ) {}
 
   /**
@@ -350,7 +353,7 @@ export class FloorPlansService {
   /**
    * Find one floor plan
    */
-  async findOne(id: string, tenantId: string) {
+  async findOne(id: string, tenantId: string, callerCtx?: CallerCtx) {
     const floorPlan = await this.prisma.floorPlan.findFirst({
       where: { id, site: { tenantId } },
       include: {
@@ -369,14 +372,24 @@ export class FloorPlansService {
       throw new NotFoundException('Floor plan not found');
     }
 
+    // ADR-021 — guess-by-id defense. FloorPlan.siteId is REQUIRED (non-null).
+    if (callerCtx && floorPlan.siteId) {
+      await this.perm.assertCanReadSite(callerCtx, floorPlan.siteId);
+    }
+
     return floorPlan;
   }
 
   /**
    * Update floor plan metadata
    */
-  async update(id: string, tenantId: string, updateFloorPlanDto: UpdateFloorPlanDto) {
-    await this.findOne(id, tenantId);
+  async update(id: string, tenantId: string, updateFloorPlanDto: UpdateFloorPlanDto, callerCtx?: CallerCtx) {
+    const existing = await this.findOne(id, tenantId, callerCtx);
+
+    // ADR-021 — write access check before mutation.
+    if (callerCtx && existing.siteId) {
+      await this.perm.assertCanWriteSite(callerCtx, existing.siteId);
+    }
 
     return await this.prisma.floorPlan.update({
       where: { id },
@@ -391,8 +404,13 @@ export class FloorPlansService {
   /**
    * Delete floor plan (and associated file)
    */
-  async remove(id: string, tenantId: string) {
-    const floorPlan = await this.findOne(id, tenantId);
+  async remove(id: string, tenantId: string, callerCtx?: CallerCtx) {
+    const floorPlan = await this.findOne(id, tenantId, callerCtx);
+
+    // ADR-021 — write access required to delete.
+    if (callerCtx && floorPlan.siteId) {
+      await this.perm.assertCanWriteSite(callerCtx, floorPlan.siteId);
+    }
 
     // Best-effort cleanup of floor plan files from storage
     try {

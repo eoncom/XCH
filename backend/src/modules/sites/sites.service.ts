@@ -9,6 +9,8 @@ import { validateMagicBytesForMimetype } from '../../common/utils/upload-securit
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { NotificationEmitter } from '../notifications/notification-emitter';
 import { MonitorReactionsService } from '../monitoring/monitor-reactions.service';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { createId } from '@paralleldrive/cuid2';
 
@@ -22,6 +24,7 @@ export class SitesService {
     private auditLogService: AuditLogService,
     private notificationEmitter: NotificationEmitter,
     private monitorReactions: MonitorReactionsService,
+    private perm: PermissionService,
   ) {}
 
   async create(tenantId: string, createSiteDto: CreateSiteDto, userId?: string) {
@@ -226,7 +229,12 @@ export class SitesService {
     return buildPaginatedResponse(transformedResults, total, page, pageSize);
   }
 
-  async findOne(id: string, tenantId: string) {
+  async findOne(id: string, tenantId: string, callerCtx?: CallerCtx) {
+    // ADR-021 — guess-by-id defense. Optional ctx for legacy callers
+    // (gradually migrating). When provided, throws 404 on cross-deleg.
+    if (callerCtx) {
+      await this.perm.assertCanReadSite(callerCtx, id);
+    }
     // Use raw query to extract latitude/longitude from PostGIS coordinates
     const sites = await this.prisma.$queryRawUnsafe(`
       SELECT
@@ -365,7 +373,11 @@ export class SitesService {
     };
   }
 
-  async update(id: string, tenantId: string, updateSiteDto: UpdateSiteDto, userId?: string) {
+  async update(id: string, tenantId: string, updateSiteDto: UpdateSiteDto, userId?: string, callerCtx?: CallerCtx) {
+    // ADR-021 — write access check before mutation.
+    if (callerCtx) {
+      await this.perm.assertCanWriteSite(callerCtx, id);
+    }
     // Get current state for diff
     const before = await this.prisma.site.findUnique({ where: { id } });
 
@@ -448,7 +460,11 @@ export class SitesService {
     return { ...updated, disabledMonitorCount };
   }
 
-  async remove(id: string, tenantId: string, userId?: string) {
+  async remove(id: string, tenantId: string, userId?: string, callerCtx?: CallerCtx) {
+    // ADR-021 — write access check before deletion.
+    if (callerCtx) {
+      await this.perm.assertCanWriteSite(callerCtx, id);
+    }
     const site = await this.findOne(id, tenantId);
 
     // Dependency protection: refuse deletion if the site contains active data

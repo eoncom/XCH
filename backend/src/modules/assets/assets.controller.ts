@@ -18,6 +18,8 @@ import { BulkQRCodeDto } from './dto/bulk-qrcode.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
 import { ExpensesService } from '../expenses/expenses.service';
@@ -207,8 +209,8 @@ export class AssetsController {
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get asset by id' })
-  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    const asset = await this.assetsService.findOne(id, req.user.tenantId);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const asset = await this.assetsService.findOne(id, req.user.tenantId, ctx);
     // Check per-resource read permission
     if (asset.siteId) {
       const perm = await this.permissionService.resolve(
@@ -238,9 +240,9 @@ export class AssetsController {
   @Patch(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Update asset' })
-  async update(@Param('id') id: string, @Body() updateAssetDto: UpdateAssetDto, @Request() req: AuthRequest) {
+  async update(@Param('id') id: string, @Body() updateAssetDto: UpdateAssetDto, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     // Get asset to check siteId
-    const asset = await this.assetsService.findOne(id, req.user.tenantId);
+    const asset = await this.assetsService.findOne(id, req.user.tenantId, ctx);
     if (asset.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, asset.siteId, 'assets', req.user.tenantId,
@@ -249,14 +251,14 @@ export class AssetsController {
         throw new ForbiddenException('Insufficient permissions to modify assets on this site');
       }
     }
-    return this.assetsService.update(id, req.user.tenantId, updateAssetDto, req.user.userId);
+    return this.assetsService.update(id, req.user.tenantId, updateAssetDto, req.user.userId, ctx);
   }
 
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete asset' })
-  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    const asset = await this.assetsService.findOne(id, req.user.tenantId);
+  async remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const asset = await this.assetsService.findOne(id, req.user.tenantId, ctx);
     if (asset.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, asset.siteId, 'assets', req.user.tenantId,
@@ -265,7 +267,7 @@ export class AssetsController {
         throw new ForbiddenException('Insufficient permissions to delete assets on this site');
       }
     }
-    return this.assetsService.remove(id, req.user.tenantId, req.user.userId);
+    return this.assetsService.remove(id, req.user.tenantId, req.user.userId, ctx);
   }
 
   // ============================================================================

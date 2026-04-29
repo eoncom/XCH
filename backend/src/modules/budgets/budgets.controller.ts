@@ -5,6 +5,8 @@ import { BudgetsService } from './budgets.service';
 import { CreateBudgetDto, UpdateBudgetDto, FilterBudgetDto } from './dto/create-budget.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireManage } from '../../common/decorators/require-right.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
 
@@ -83,8 +85,8 @@ export class BudgetsController {
   @Get(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Get a budget' })
-  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    const budget = await this.service.findOne(req.user.tenantId, id);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const budget = await this.service.findOne(req.user.tenantId, id, ctx);
     await this.scopeOrFail(req, (budget as any).delegationId ?? undefined);
     return budget;
   }
@@ -92,8 +94,8 @@ export class BudgetsController {
   @Get(':id/status')
   @RequireManage()
   @ApiOperation({ summary: 'Get budget status (spent vs budgeted + matching expenses)' })
-  async getStatus(@Param('id') id: string, @Request() req: AuthRequest) {
-    const budget = await this.service.findOne(req.user.tenantId, id);
+  async getStatus(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const budget = await this.service.findOne(req.user.tenantId, id, ctx);
     await this.scopeOrFail(req, (budget as any).delegationId ?? undefined);
     return this.service.getStatus(req.user.tenantId, id);
   }
@@ -101,8 +103,8 @@ export class BudgetsController {
   @Patch(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Update a budget' })
-  async update(@Param('id') id: string, @Body() dto: UpdateBudgetDto, @Request() req: AuthRequest) {
-    const existing = await this.service.findOne(req.user.tenantId, id);
+  async update(@Param('id') id: string, @Body() dto: UpdateBudgetDto, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const existing = await this.service.findOne(req.user.tenantId, id, ctx);
     const scope = await this.scopeOrFail(req, (existing as any).delegationId ?? undefined);
     if (dto.delegationId) await this.scopeOrFail(req, dto.delegationId);
     if (scope !== null && 'delegationId' in dto && !dto.delegationId) {
@@ -113,15 +115,15 @@ export class BudgetsController {
     if (dto.billingEntityId !== undefined) {
       await this.ensureCdcInScope(req, scope, dto.billingEntityId);
     }
-    return this.service.update(req.user.tenantId, id, dto);
+    return this.service.update(req.user.tenantId, id, dto, ctx);
   }
 
   @Delete(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Delete a budget' })
-  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    const existing = await this.service.findOne(req.user.tenantId, id);
+  async remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const existing = await this.service.findOne(req.user.tenantId, id, ctx);
     await this.scopeOrFail(req, (existing as any).delegationId ?? undefined);
-    return this.service.remove(req.user.tenantId, id);
+    return this.service.remove(req.user.tenantId, id, ctx);
   }
 }

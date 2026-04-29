@@ -10,6 +10,8 @@ import {
 } from './dto/create-monitor-check.dto';
 import { validateTarget } from './probes/target-validator';
 import { MONITOR_QUEUE, JOB_PROBE } from './monitor.scheduler';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 
 // Includes the parent's site too — needed by the UI to group / display
 // "Site Tour Alto" even when the check is rattaché to an asset or a link.
@@ -42,6 +44,7 @@ export class MonitorsService {
   constructor(
     private prisma: PrismaClient,
     @InjectQueue(MONITOR_QUEUE) private readonly queue: Queue,
+    private perm: PermissionService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -158,24 +161,50 @@ export class MonitorsService {
     });
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(tenantId: string, id: string, callerCtx?: CallerCtx) {
     const check = await this.prisma.monitorCheck.findFirst({
       where: { id, tenantId },
       include: CHECK_INCLUDE,
     });
     if (!check) throw new NotFoundException('Monitor check not found');
+
+    // ADR-021 — guess-by-id defense. MonitorCheck is polymorphic
+    // (siteId | assetId | linkId — exactly one). Resolve the effective siteId
+    // from whichever parent is set; if all are null (rare misformed row),
+    // skip the assertion rather than refuse.
+    if (callerCtx) {
+      const resolvedSiteId =
+        check.siteId ?? check.asset?.siteId ?? check.link?.siteId ?? null;
+      if (resolvedSiteId) {
+        await this.perm.assertCanReadSite(callerCtx, resolvedSiteId);
+      }
+    }
+
     return check;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // UPDATE
   // ─────────────────────────────────────────────────────────────────────────
-  async update(tenantId: string, id: string, dto: UpdateMonitorCheckDto) {
+  async update(tenantId: string, id: string, dto: UpdateMonitorCheckDto, callerCtx?: CallerCtx) {
     const existing = await this.prisma.monitorCheck.findFirst({
       where: { id, tenantId },
-      include: { httpConfig: true },
+      include: {
+        httpConfig: true,
+        asset: { select: { siteId: true } },
+        link: { select: { siteId: true } },
+      },
     });
     if (!existing) throw new NotFoundException('Monitor check not found');
+
+    // ADR-021 — write access on the resolved parent site.
+    if (callerCtx) {
+      const resolvedSiteId =
+        existing.siteId ?? existing.asset?.siteId ?? existing.link?.siteId ?? null;
+      if (resolvedSiteId) {
+        await this.perm.assertCanWriteSite(callerCtx, resolvedSiteId);
+      }
+    }
 
     // Don't allow re-targeting (changing siteId/assetId/linkId) — would break
     // history continuity. To re-target, the user deletes and recreates.
@@ -254,12 +283,27 @@ export class MonitorsService {
   // ─────────────────────────────────────────────────────────────────────────
   // DELETE
   // ─────────────────────────────────────────────────────────────────────────
-  async remove(tenantId: string, id: string) {
+  async remove(tenantId: string, id: string, callerCtx?: CallerCtx) {
     const existing = await this.prisma.monitorCheck.findFirst({
       where: { id, tenantId },
-      select: { id: true },
+      select: {
+        id: true,
+        siteId: true,
+        asset: { select: { siteId: true } },
+        link: { select: { siteId: true } },
+      },
     });
     if (!existing) throw new NotFoundException('Monitor check not found');
+
+    // ADR-021 — write access on the resolved parent site.
+    if (callerCtx) {
+      const resolvedSiteId =
+        existing.siteId ?? existing.asset?.siteId ?? existing.link?.siteId ?? null;
+      if (resolvedSiteId) {
+        await this.perm.assertCanWriteSite(callerCtx, resolvedSiteId);
+      }
+    }
+
     // Cascade deletes httpConfig and results via Prisma onDelete: Cascade.
     await this.prisma.monitorCheck.delete({ where: { id } });
     return { deleted: true };

@@ -1,4 +1,4 @@
-import { PrismaClient, DelegationRight } from '@prisma/client';
+import { PrismaClient, DelegationRight, MonitorKind } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -34,6 +34,29 @@ export interface RbacSeedResult {
   sites: { a: string; b: string };
   contacts: { aContactId: string; bContactId: string; globalContactId: string };
   links: { aLinkId: string; bLinkId: string };
+  /**
+   * One row per module per delegation (A & B), seeded for the parametric
+   * cross-delegation findOne test (find-one-cross-delegation.spec.ts).
+   * Minimal fields only — extend per-spec if a finer assertion is needed.
+   */
+  modules: {
+    aRackId: string;
+    bRackId: string;
+    aTaskId: string;
+    bTaskId: string;
+    aFloorPlanId: string;
+    bFloorPlanId: string;
+    aAssetId: string;
+    bAssetId: string;
+    aMonitorCheckId: string;
+    bMonitorCheckId: string;
+    aBillingEntityId: string;
+    bBillingEntityId: string;
+    aExpenseId: string;
+    bExpenseId: string;
+    aBudgetId: string;
+    bBudgetId: string;
+  };
 }
 
 const TENANT_ID = 'rbac-tenant';
@@ -214,6 +237,184 @@ export async function seedRbac(prisma: PrismaClient): Promise<RbacSeedResult> {
     },
   });
 
+  // ─────────────────────────────────────────────────────────────────────
+  // Per-module rows — one per delegation A/B, minimal-shape inserts. Used
+  // by find-one-cross-delegation.spec.ts to validate the ADR-021 guess-by-id
+  // defense uniformly across modules.
+  // ─────────────────────────────────────────────────────────────────────
+
+  // Racks (siteId required)
+  const aRack = await prisma.rack.create({
+    data: {
+      id: 'rbac-rack-a',
+      tenantId: TENANT_ID,
+      siteId: siteA.id,
+      name: 'Rack A',
+      heightU: 42,
+    },
+  });
+  const bRack = await prisma.rack.create({
+    data: {
+      id: 'rbac-rack-b',
+      tenantId: TENANT_ID,
+      siteId: siteB.id,
+      name: 'Rack B',
+      heightU: 42,
+    },
+  });
+
+  // Tasks (siteId required, type/title required)
+  const aTask = await prisma.task.create({
+    data: {
+      id: 'rbac-task-a',
+      tenantId: TENANT_ID,
+      siteId: siteA.id,
+      title: 'Task A',
+    },
+  });
+  const bTask = await prisma.task.create({
+    data: {
+      id: 'rbac-task-b',
+      tenantId: TENANT_ID,
+      siteId: siteB.id,
+      title: 'Task B',
+    },
+  });
+
+  // FloorPlans (siteId required, fileUrl + uploadedBy required)
+  const aFloorPlan = await prisma.floorPlan.create({
+    data: {
+      id: 'rbac-floorplan-a',
+      siteId: siteA.id,
+      title: 'Floor Plan A',
+      fileUrl: 'rbac://noop',
+      uploadedBy: admin.id,
+    },
+  });
+  const bFloorPlan = await prisma.floorPlan.create({
+    data: {
+      id: 'rbac-floorplan-b',
+      siteId: siteB.id,
+      title: 'Floor Plan B',
+      fileUrl: 'rbac://noop',
+      uploadedBy: admin.id,
+    },
+  });
+
+  // Assets (siteId optional, but we want them site-scoped for the test)
+  const aAsset = await prisma.asset.create({
+    data: {
+      id: 'rbac-asset-a',
+      tenantId: TENANT_ID,
+      delegationId: DEL_A,
+      siteId: siteA.id,
+      type: 'OTHER',
+      status: 'IN_SERVICE',
+    },
+  });
+  const bAsset = await prisma.asset.create({
+    data: {
+      id: 'rbac-asset-b',
+      tenantId: TENANT_ID,
+      delegationId: DEL_B,
+      siteId: siteB.id,
+      type: 'OTHER',
+      status: 'IN_SERVICE',
+    },
+  });
+
+  // MonitorChecks (polymorphic — pick siteId direct, simplest scenario)
+  const aMonitorCheck = await prisma.monitorCheck.create({
+    data: {
+      id: 'rbac-monitor-a',
+      tenantId: TENANT_ID,
+      siteId: siteA.id,
+      kind: MonitorKind.ICMP,
+      target: '127.0.0.1',
+    },
+  });
+  const bMonitorCheck = await prisma.monitorCheck.create({
+    data: {
+      id: 'rbac-monitor-b',
+      tenantId: TENANT_ID,
+      siteId: siteB.id,
+      kind: MonitorKind.ICMP,
+      target: '127.0.0.2',
+    },
+  });
+
+  // BillingEntities (delegation-scoped)
+  const aBillingEntity = await prisma.billingEntity.create({
+    data: {
+      id: 'rbac-be-a',
+      tenantId: TENANT_ID,
+      name: 'Billing A',
+      code: 'BE-A',
+      type: 'DIRECTION',
+      delegationId: DEL_A,
+    },
+  });
+  const bBillingEntity = await prisma.billingEntity.create({
+    data: {
+      id: 'rbac-be-b',
+      tenantId: TENANT_ID,
+      name: 'Billing B',
+      code: 'BE-B',
+      type: 'DIRECTION',
+      delegationId: DEL_B,
+    },
+  });
+
+  // Expenses (delegationId required, bearerId required)
+  const aExpense = await prisma.expense.create({
+    data: {
+      id: 'rbac-expense-a',
+      tenantId: TENANT_ID,
+      label: 'Expense A',
+      totalAmount: 100,
+      dateIncurred: new Date('2026-01-01'),
+      bearerId: aBillingEntity.id,
+      delegationId: DEL_A,
+      createdBy: admin.id,
+    },
+  });
+  const bExpense = await prisma.expense.create({
+    data: {
+      id: 'rbac-expense-b',
+      tenantId: TENANT_ID,
+      label: 'Expense B',
+      totalAmount: 200,
+      dateIncurred: new Date('2026-01-01'),
+      bearerId: bBillingEntity.id,
+      delegationId: DEL_B,
+      createdBy: admin.id,
+    },
+  });
+
+  // Budgets (delegationId nullable)
+  const aBudget = await prisma.budget.create({
+    data: {
+      id: 'rbac-budget-a',
+      tenantId: TENANT_ID,
+      label: 'Budget A',
+      delegationId: DEL_A,
+      startDate: new Date('2026-01-01'),
+      endDate: new Date('2026-12-31'),
+      amount: 10000,
+    },
+  });
+  const bBudget = await prisma.budget.create({
+    data: {
+      id: 'rbac-budget-b',
+      tenantId: TENANT_ID,
+      label: 'Budget B',
+      delegationId: DEL_B,
+      startDate: new Date('2026-01-01'),
+      endDate: new Date('2026-12-31'),
+      amount: 20000,
+    },
+  });
+
   return {
     tenantId: TENANT_ID,
     delegations: { a: DEL_A, b: DEL_B },
@@ -227,6 +428,24 @@ export async function seedRbac(prisma: PrismaClient): Promise<RbacSeedResult> {
     sites: { a: siteA.id, b: siteB.id },
     contacts: { aContactId: aContact.id, bContactId: bContact.id, globalContactId: globalContact.id },
     links: { aLinkId: aLink.id, bLinkId: bLink.id },
+    modules: {
+      aRackId: aRack.id,
+      bRackId: bRack.id,
+      aTaskId: aTask.id,
+      bTaskId: bTask.id,
+      aFloorPlanId: aFloorPlan.id,
+      bFloorPlanId: bFloorPlan.id,
+      aAssetId: aAsset.id,
+      bAssetId: bAsset.id,
+      aMonitorCheckId: aMonitorCheck.id,
+      bMonitorCheckId: bMonitorCheck.id,
+      aBillingEntityId: aBillingEntity.id,
+      bBillingEntityId: bBillingEntity.id,
+      aExpenseId: aExpense.id,
+      bExpenseId: bExpense.id,
+      aBudgetId: aBudget.id,
+      bBudgetId: bBudget.id,
+    },
   };
 }
 

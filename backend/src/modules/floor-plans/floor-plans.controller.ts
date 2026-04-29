@@ -33,6 +33,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
 
@@ -180,8 +182,8 @@ export class FloorPlansController {
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get floor plan by ID with all pins' })
-  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId, ctx);
     if (floorPlan.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
@@ -290,8 +292,9 @@ export class FloorPlansController {
     @Param('id') id: string,
     @Request() req: AuthRequest,
     @Body() updateFloorPlanDto: UpdateFloorPlanDto,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
-    const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
+    const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId, ctx);
     if (floorPlan.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
@@ -300,14 +303,14 @@ export class FloorPlansController {
         throw new ForbiddenException('Insufficient permissions to modify floor plans on this site');
       }
     }
-    return this.floorPlansService.update(id, req.user.tenantId, updateFloorPlanDto);
+    return this.floorPlansService.update(id, req.user.tenantId, updateFloorPlanDto, ctx);
   }
 
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete floor plan (and file)' })
-  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId);
+  async remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const floorPlan = await this.floorPlansService.findOne(id, req.user.tenantId, ctx);
     if (floorPlan.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, floorPlan.siteId, 'plans', req.user.tenantId,
@@ -316,7 +319,7 @@ export class FloorPlansController {
         throw new ForbiddenException('Insufficient permissions to delete floor plans on this site');
       }
     }
-    return this.floorPlansService.remove(id, req.user.tenantId);
+    return this.floorPlansService.remove(id, req.user.tenantId, ctx);
   }
 
   // ==================== PINS ENDPOINTS ====================

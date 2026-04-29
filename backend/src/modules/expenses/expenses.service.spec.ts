@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { ExpensesService } from './expenses.service';
 import { BudgetsService } from '../budgets/budgets.service';
+import { PermissionService } from '../../common/services/permission.service';
 
 /**
  * S4 — ExpensesService.projection() unit tests.
@@ -19,13 +20,15 @@ describe('ExpensesService.projection', () => {
   let service: ExpensesService;
   let prisma: jest.Mocked<PrismaClient>;
   let budgets: jest.Mocked<BudgetsService>;
+  let perm: jest.Mocked<PermissionService>;
 
   beforeEach(() => {
     prisma = {
       expense: { findMany: jest.fn() },
     } as unknown as jest.Mocked<PrismaClient>;
     budgets = {} as unknown as jest.Mocked<BudgetsService>;
-    service = new ExpensesService(prisma, budgets);
+    perm = {} as unknown as jest.Mocked<PermissionService>;
+    service = new ExpensesService(prisma, budgets, perm);
   });
 
   it('rejects malformed date inputs', async () => {

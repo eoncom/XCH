@@ -4,6 +4,8 @@ import { CreateBudgetDto, UpdateBudgetDto, FilterBudgetDto } from './dto/create-
 import { buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { UserNotificationService } from '../notifications/user-notification.service';
 import { validateDelegationSiteCoherence } from '../../common/utils/delegation-site-validation.util';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 
 const BUDGET_INCLUDE = {
   delegation: { select: { id: true, name: true, code: true } },
@@ -20,6 +22,7 @@ export class BudgetsService {
   constructor(
     private prisma: PrismaClient,
     private notifications: UserNotificationService,
+    private perm: PermissionService,
   ) {}
 
   async create(tenantId: string, dto: CreateBudgetDto) {
@@ -88,20 +91,34 @@ export class BudgetsService {
     return buildPaginatedResponse(data, total, page, pageSize);
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(tenantId: string, id: string, callerCtx?: CallerCtx) {
     const budget = await this.prisma.budget.findFirst({
       where: { id, tenantId },
       include: BUDGET_INCLUDE,
     });
     if (!budget) throw new NotFoundException('Budget not found');
+
+    // ADR-021 — guess-by-id defense. Budget is delegation-scoped (catégorie C
+    // de l'ADR-021 §6, aligné sur Expense) — null = global readable.
+    if (callerCtx) {
+      await this.perm.assertCanReadDelegation(callerCtx, budget.delegationId, {
+        allowGlobal: true,
+      });
+    }
+
     return budget;
   }
 
-  async update(tenantId: string, id: string, dto: UpdateBudgetDto) {
+  async update(tenantId: string, id: string, dto: UpdateBudgetDto, callerCtx?: CallerCtx) {
     const existing = await this.prisma.budget.findFirst({
       where: { id, tenantId },
     });
     if (!existing) throw new NotFoundException('Budget not found');
+
+    // ADR-021 — write access on the CURRENT scope (before any move).
+    if (callerCtx) {
+      await this.perm.assertCanWriteDelegation(callerCtx, existing.delegationId);
+    }
 
     // Re-validate hierarchy on any field that can break it.
     if (
@@ -150,12 +167,17 @@ export class BudgetsService {
     });
   }
 
-  async remove(tenantId: string, id: string) {
+  async remove(tenantId: string, id: string, callerCtx?: CallerCtx) {
     const budget = await this.prisma.budget.findFirst({
       where: { id, tenantId },
       include: { _count: { select: { children: true } } },
     });
     if (!budget) throw new NotFoundException('Budget not found');
+
+    // ADR-021 — write access required to delete.
+    if (callerCtx) {
+      await this.perm.assertCanWriteDelegation(callerCtx, budget.delegationId);
+    }
 
     // onDelete: Restrict in schema — surface the reason clearly.
     if (budget._count.children > 0) {

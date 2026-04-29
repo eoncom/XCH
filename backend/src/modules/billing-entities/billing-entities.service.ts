@@ -2,10 +2,15 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaClient } from '@prisma/client';
 import { CreateBillingEntityDto, UpdateBillingEntityDto } from './dto/create-billing-entity.dto';
 import { validateDelegationSiteCoherence } from '../../common/utils/delegation-site-validation.util';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 
 @Injectable()
 export class BillingEntitiesService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(
+    private prisma: PrismaClient,
+    private perm: PermissionService,
+  ) {}
 
   async create(tenantId: string, dto: CreateBillingEntityDto) {
     // Check code uniqueness
@@ -96,19 +101,33 @@ export class BillingEntitiesService {
     });
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(tenantId: string, id: string, callerCtx?: CallerCtx) {
     const entity = await this.prisma.billingEntity.findFirst({
       where: { id, tenantId },
     });
     if (!entity) throw new NotFoundException('Billing entity not found');
+
+    // ADR-021 — guess-by-id defense. BillingEntity.delegationId=null = global
+    // readable (aligned on Expense, ADR-021 §6 catégorie A).
+    if (callerCtx) {
+      await this.perm.assertCanReadDelegation(callerCtx, entity.delegationId, {
+        allowGlobal: true,
+      });
+    }
+
     return entity;
   }
 
-  async update(tenantId: string, id: string, dto: UpdateBillingEntityDto) {
+  async update(tenantId: string, id: string, dto: UpdateBillingEntityDto, callerCtx?: CallerCtx) {
     const entity = await this.prisma.billingEntity.findFirst({
       where: { id, tenantId },
     });
     if (!entity) throw new NotFoundException('Billing entity not found');
+
+    // ADR-021 — write access on the CURRENT scope (before any move).
+    if (callerCtx) {
+      await this.perm.assertCanWriteDelegation(callerCtx, entity.delegationId);
+    }
 
     if (dto.code && dto.code !== entity.code) {
       const existing = await this.prisma.billingEntity.findUnique({
@@ -134,11 +153,16 @@ export class BillingEntitiesService {
     });
   }
 
-  async remove(tenantId: string, id: string) {
+  async remove(tenantId: string, id: string, callerCtx?: CallerCtx) {
     const entity = await this.prisma.billingEntity.findFirst({
       where: { id, tenantId },
     });
     if (!entity) throw new NotFoundException('Billing entity not found');
+
+    // ADR-021 — write access required to delete.
+    if (callerCtx) {
+      await this.perm.assertCanWriteDelegation(callerCtx, entity.delegationId);
+    }
 
     const expenseCount = await this.prisma.expense.count({
       where: { bearerId: id },

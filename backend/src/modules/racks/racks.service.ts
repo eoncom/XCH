@@ -8,6 +8,8 @@ import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfac
 import { StorageService } from '../../common/services/storage.service';
 import { validateMagicBytesForMimetype } from '../../common/utils/upload-security';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { createId } from '@paralleldrive/cuid2';
 
@@ -19,6 +21,7 @@ export class RacksService {
     private prisma: PrismaClient,
     private storageService: StorageService,
     private auditLogService: AuditLogService,
+    private perm: PermissionService,
   ) {}
 
   async create(tenantId: string, createRackDto: CreateRackDto, userId?: string) {
@@ -143,7 +146,7 @@ export class RacksService {
     return buildPaginatedResponse(data, total, page, pageSize);
   }
 
-  async findOne(id: string, tenantId: string) {
+  async findOne(id: string, tenantId: string, callerCtx?: CallerCtx) {
     const rack = await this.prisma.rack.findFirst({
       where: {
         id,
@@ -174,6 +177,11 @@ export class RacksService {
       throw new NotFoundException('Rack not found');
     }
 
+    // ADR-021 — guess-by-id defense. Rack.siteId is REQUIRED (non-null).
+    if (callerCtx && rack.siteId) {
+      await this.perm.assertCanReadSite(callerCtx, rack.siteId);
+    }
+
     // Calculate occupation
     const totalU = rack.heightU;
     const usedU = rack.assets.reduce((sum: number, asset) => sum + (asset.rackHeightU || 0), 0);
@@ -191,10 +199,15 @@ export class RacksService {
     };
   }
 
-  async update(id: string, tenantId: string, updateRackDto: UpdateRackDto, userId?: string) {
+  async update(id: string, tenantId: string, updateRackDto: UpdateRackDto, userId?: string, callerCtx?: CallerCtx) {
     const before = await this.prisma.rack.findFirst({ where: { id, tenantId } });
     if (!before) {
       throw new NotFoundException('Rack not found');
+    }
+
+    // ADR-021 — write access check before mutation.
+    if (callerCtx && before.siteId) {
+      await this.perm.assertCanWriteSite(callerCtx, before.siteId);
     }
 
     const rack = await this.prisma.rack.update({
@@ -228,7 +241,7 @@ export class RacksService {
     return rack;
   }
 
-  async remove(id: string, tenantId: string, userId?: string) {
+  async remove(id: string, tenantId: string, userId?: string, callerCtx?: CallerCtx) {
     // Check if rack exists and has equipment
     const rack = await this.prisma.rack.findFirst({
       where: { id, tenantId },
@@ -241,6 +254,11 @@ export class RacksService {
 
     if (!rack) {
       throw new NotFoundException('Rack not found');
+    }
+
+    // ADR-021 — write access check before deletion.
+    if (callerCtx && rack.siteId) {
+      await this.perm.assertCanWriteSite(callerCtx, rack.siteId);
     }
 
     if (rack.assets && rack.assets.length > 0) {

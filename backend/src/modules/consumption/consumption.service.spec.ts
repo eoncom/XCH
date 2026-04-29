@@ -25,7 +25,16 @@ describe('ConsumptionService', () => {
       asset: { findMany: jest.fn() },
     } as unknown as jest.Mocked<PrismaClient>;
 
-    service = new ConsumptionService(prisma);
+    // ADR-021 (Session 4 PR4) — ConsumptionService gained a PermissionService
+    // dep for assertCanReadSite + getReadableSiteIds. The legacy unit tests
+    // here focus on math (computeFromAssets) and never exercise the auth
+    // hook, so an empty mock is enough.
+    const perm: any = {
+      assertCanReadSite: jest.fn().mockResolvedValue(undefined),
+      getReadableSiteIds: jest.fn().mockResolvedValue(null),
+    };
+
+    service = new ConsumptionService(prisma, perm);
   });
 
   // ----------------------------------------------------------------

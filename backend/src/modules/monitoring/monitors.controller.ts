@@ -13,6 +13,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
 import { MonitorsService } from './monitors.service';
@@ -56,8 +58,8 @@ export class MonitorsController {
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get a monitor check' })
-  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.service.findOne(req.user.tenantId, id);
+  findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    return this.service.findOne(req.user.tenantId, id, ctx);
   }
 
   @Patch(':id')
@@ -67,15 +69,16 @@ export class MonitorsController {
     @Param('id') id: string,
     @Body() dto: UpdateMonitorCheckDto,
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
-    return this.service.update(req.user.tenantId, id, dto);
+    return this.service.update(req.user.tenantId, id, dto, ctx);
   }
 
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete a monitor check (cascades httpConfig + results)' })
-  remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.service.remove(req.user.tenantId, id);
+  remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    return this.service.remove(req.user.tenantId, id, ctx);
   }
 
   @Get(':id/history')

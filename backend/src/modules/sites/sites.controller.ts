@@ -12,6 +12,8 @@ import { UploadAttachmentDto } from '../assets/dto/upload-attachment.dto';
 import { PaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 
 @ApiTags('sites')
@@ -59,22 +61,27 @@ export class SitesController {
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get site by id' })
-  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.sitesService.findOne(id, req.user.tenantId);
+  findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    return this.sitesService.findOne(id, req.user.tenantId, ctx);
   }
 
   @Patch(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Update site' })
-  update(@Param('id') id: string, @Body() updateSiteDto: UpdateSiteDto, @Request() req: AuthRequest) {
-    return this.sitesService.update(id, req.user.tenantId, updateSiteDto, req.user.userId);
+  update(
+    @Param('id') id: string,
+    @Body() updateSiteDto: UpdateSiteDto,
+    @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
+  ) {
+    return this.sitesService.update(id, req.user.tenantId, updateSiteDto, req.user.userId, ctx);
   }
 
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete site' })
-  remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.sitesService.remove(id, req.user.tenantId, req.user.userId);
+  remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    return this.sitesService.remove(id, req.user.tenantId, req.user.userId, ctx);
   }
 
   // ============================================================================

@@ -14,6 +14,8 @@ import { validateMagicBytesForMimetype } from '../../common/utils/upload-securit
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { NotificationEmitter } from '../notifications/notification-emitter';
 import { MonitorReactionsService } from '../monitoring/monitor-reactions.service';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { createId } from '@paralleldrive/cuid2';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
@@ -30,6 +32,7 @@ export class AssetsService {
     private auditLogService: AuditLogService,
     private notificationEmitter: NotificationEmitter,
     private monitorReactions: MonitorReactionsService,
+    private perm: PermissionService,
   ) {}
 
   /**
@@ -273,7 +276,7 @@ export class AssetsService {
     return buildPaginatedResponse(assets, total, page, pageSize);
   }
 
-  async findOne(id: string, tenantId: string) {
+  async findOne(id: string, tenantId: string, callerCtx?: CallerCtx) {
     const asset = await this.prisma.asset.findFirst({
       where: {
         id,
@@ -321,12 +324,24 @@ export class AssetsService {
       throw new NotFoundException('Asset not found');
     }
 
+    // ADR-021 — guess-by-id defense. Asset.siteId is nullable
+    // (asset en stock = no site assignment), only assert when set.
+    if (callerCtx && asset.siteId) {
+      await this.perm.assertCanReadSite(callerCtx, asset.siteId);
+    }
+
     return asset;
   }
 
-  async update(id: string, tenantId: string, updateAssetDto: UpdateAssetDto, userId?: string) {
+  async update(id: string, tenantId: string, updateAssetDto: UpdateAssetDto, userId?: string, callerCtx?: CallerCtx) {
     // Get current state BEFORE update for movement tracking
-    const currentAsset = await this.findOne(id, tenantId);
+    const currentAsset = await this.findOne(id, tenantId, callerCtx);
+
+    // ADR-021 — write access on the current site (defense in depth in addition
+    // to the controller-level permissionService.resolve).
+    if (callerCtx && currentAsset.siteId) {
+      await this.perm.assertCanWriteSite(callerCtx, currentAsset.siteId);
+    }
 
     // Validate dynamic enums if changed
     await this.validateDynamicEnum(tenantId, 'AssetType', updateAssetDto.type);
@@ -630,8 +645,13 @@ export class AssetsService {
     }
   }
 
-  async remove(id: string, tenantId: string, userId?: string) {
-    const asset = await this.findOne(id, tenantId);
+  async remove(id: string, tenantId: string, userId?: string, callerCtx?: CallerCtx) {
+    const asset = await this.findOne(id, tenantId, callerCtx);
+
+    // ADR-021 — write access required to delete.
+    if (callerCtx && asset.siteId) {
+      await this.perm.assertCanWriteSite(callerCtx, asset.siteId);
+    }
 
     // Best-effort cleanup of attachment files from storage
     try {

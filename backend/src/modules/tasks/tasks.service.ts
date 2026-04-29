@@ -10,6 +10,8 @@ import { validateMagicBytesForMimetype } from '../../common/utils/upload-securit
 import { AuditLogService } from '../../common/services/audit-log.service';
 import { NotificationEmitter } from '../notifications/notification-emitter';
 import { UserNotificationService } from '../notifications/user-notification.service';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { createId } from '@paralleldrive/cuid2';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 
@@ -23,6 +25,7 @@ export class TasksService {
     private auditLogService: AuditLogService,
     private notificationEmitter: NotificationEmitter,
     private userNotificationService: UserNotificationService,
+    private perm: PermissionService,
   ) {}
 
   async create(tenantId: string, userId: string, createTaskDto: CreateTaskDto) {
@@ -241,7 +244,7 @@ export class TasksService {
     return buildPaginatedResponse(data, total, page, pageSize);
   }
 
-  async findOne(id: string, tenantId: string) {
+  async findOne(id: string, tenantId: string, callerCtx?: CallerCtx) {
     const task = await this.prisma.task.findFirst({
       where: {
         id,
@@ -278,6 +281,12 @@ export class TasksService {
       throw new NotFoundException('Task not found');
     }
 
+    // ADR-021 — guess-by-id defense. Task.siteId is REQUIRED (non-null)
+    // per schema, we keep the truthy guard as defense-in-depth anyway.
+    if (callerCtx && task.siteId) {
+      await this.perm.assertCanReadSite(callerCtx, task.siteId);
+    }
+
     // Calculate checklist completion
     let checklistCompletion = null;
     if (task.checklistItems && task.checklistItems.length > 0) {
@@ -305,10 +314,15 @@ export class TasksService {
     };
   }
 
-  async update(id: string, tenantId: string, updateTaskDto: UpdateTaskDto, userId?: string) {
+  async update(id: string, tenantId: string, updateTaskDto: UpdateTaskDto, userId?: string, callerCtx?: CallerCtx) {
     const before = await this.prisma.task.findFirst({ where: { id, tenantId } });
     if (!before) {
       throw new NotFoundException('Task not found');
+    }
+
+    // ADR-021 — write access check before mutation.
+    if (callerCtx && before.siteId) {
+      await this.perm.assertCanWriteSite(callerCtx, before.siteId);
     }
 
     // Auto-complete task if status is DONE and no completedAt
@@ -448,8 +462,13 @@ export class TasksService {
     return task;
   }
 
-  async remove(id: string, tenantId: string, userId?: string) {
-    const task = await this.findOne(id, tenantId);
+  async remove(id: string, tenantId: string, userId?: string, callerCtx?: CallerCtx) {
+    const task = await this.findOne(id, tenantId, callerCtx);
+
+    // ADR-021 — write access required to delete.
+    if (callerCtx && task.siteId) {
+      await this.perm.assertCanWriteSite(callerCtx, task.siteId);
+    }
 
     await this.prisma.task.delete({
       where: { id },

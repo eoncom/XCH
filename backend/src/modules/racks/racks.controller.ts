@@ -13,6 +13,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
+import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
 
@@ -56,8 +58,8 @@ export class RacksController {
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get rack by id with occupation details' })
-  async findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    const rack = await this.racksService.findOne(id, req.user.tenantId);
+  async findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const rack = await this.racksService.findOne(id, req.user.tenantId, ctx);
     if (rack.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, rack.siteId, 'racks', req.user.tenantId,
@@ -87,8 +89,9 @@ export class RacksController {
     @Param('id') id: string,
     @Body() mountDto: MountEquipmentDto,
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
-    const rack = await this.racksService.findOne(id, req.user.tenantId);
+    const rack = await this.racksService.findOne(id, req.user.tenantId, ctx);
     if (rack.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, rack.siteId, 'racks', req.user.tenantId,
@@ -107,8 +110,9 @@ export class RacksController {
     @Param('id') id: string,
     @Param('assetId') assetId: string,
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ) {
-    const rack = await this.racksService.findOne(id, req.user.tenantId);
+    const rack = await this.racksService.findOne(id, req.user.tenantId, ctx);
     if (rack.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, rack.siteId, 'racks', req.user.tenantId,
@@ -123,8 +127,8 @@ export class RacksController {
   @Patch(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Update rack' })
-  async update(@Param('id') id: string, @Body() updateRackDto: UpdateRackDto, @Request() req: AuthRequest) {
-    const rack = await this.racksService.findOne(id, req.user.tenantId);
+  async update(@Param('id') id: string, @Body() updateRackDto: UpdateRackDto, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const rack = await this.racksService.findOne(id, req.user.tenantId, ctx);
     if (rack.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, rack.siteId, 'racks', req.user.tenantId,
@@ -133,14 +137,14 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions to modify racks on this site');
       }
     }
-    return this.racksService.update(id, req.user.tenantId, updateRackDto, req.user.userId);
+    return this.racksService.update(id, req.user.tenantId, updateRackDto, req.user.userId, ctx);
   }
 
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete rack' })
-  async remove(@Param('id') id: string, @Request() req: AuthRequest) {
-    const rack = await this.racksService.findOne(id, req.user.tenantId);
+  async remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+    const rack = await this.racksService.findOne(id, req.user.tenantId, ctx);
     if (rack.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, rack.siteId, 'racks', req.user.tenantId,
@@ -149,7 +153,7 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions to delete racks on this site');
       }
     }
-    return this.racksService.remove(id, req.user.tenantId, req.user.userId);
+    return this.racksService.remove(id, req.user.tenantId, req.user.userId, ctx);
   }
 
   // ============================================================================

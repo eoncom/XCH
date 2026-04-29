@@ -4,6 +4,8 @@ import { CreateExpenseDto, UpdateExpenseDto, AllocationDto } from './dto/create-
 import { FilterExpenseDto } from './dto/filter-expense.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { validateDelegationSiteCoherence } from '../../common/utils/delegation-site-validation.util';
+import { PermissionService } from '../../common/services/permission.service';
+import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { BudgetsService } from '../budgets/budgets.service';
 
 const EXPENSE_INCLUDE: any = {
@@ -22,6 +24,7 @@ export class ExpensesService {
     private prisma: PrismaClient,
     @Inject(forwardRef(() => BudgetsService))
     private readonly budgets: BudgetsService,
+    private perm: PermissionService,
   ) {}
 
   /**
@@ -197,7 +200,7 @@ export class ExpensesService {
     return buildPaginatedResponse(data, total, page, pageSize);
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(tenantId: string, id: string, callerCtx?: CallerCtx) {
     const expense = await this.prisma.expense.findFirst({
       where: { id, tenantId },
       include: {
@@ -207,6 +210,15 @@ export class ExpensesService {
       } as any,
     });
     if (!expense) throw new NotFoundException('Expense not found');
+
+    // ADR-021 — guess-by-id defense. Expense.delegationId=null = global readable
+    // (cf. ADR-021 §6 catégorie A : Contact / Expense / TenantSecurityReminder).
+    if (callerCtx) {
+      await this.perm.assertCanReadDelegation(callerCtx, (expense as any).delegationId, {
+        allowGlobal: true,
+      });
+    }
+
     return expense;
   }
 
@@ -215,11 +227,18 @@ export class ExpensesService {
     id: string,
     dto: UpdateExpenseDto,
     scopeDelegationIds: string[] | null = null,
+    callerCtx?: CallerCtx,
   ) {
     const expense = await this.prisma.expense.findFirst({
       where: { id, tenantId },
     });
     if (!expense) throw new NotFoundException('Expense not found');
+
+    // ADR-021 — write access on the CURRENT scope (before any move).
+    // A global expense (delegationId=null) can only be edited by super admin.
+    if (callerCtx) {
+      await this.perm.assertCanWriteDelegation(callerCtx, (expense as any).delegationId);
+    }
 
     if (dto.bearerId) {
       const bearer = await this.prisma.billingEntity.findFirst({
@@ -306,11 +325,16 @@ export class ExpensesService {
     return updated;
   }
 
-  async remove(tenantId: string, id: string) {
+  async remove(tenantId: string, id: string, callerCtx?: CallerCtx) {
     const expense = await this.prisma.expense.findFirst({
       where: { id, tenantId },
     });
     if (!expense) throw new NotFoundException('Expense not found');
+
+    // ADR-021 — write access required to delete.
+    if (callerCtx) {
+      await this.perm.assertCanWriteDelegation(callerCtx, (expense as any).delegationId);
+    }
 
     await this.prisma.expense.delete({ where: { id } });
     return { message: 'Expense deleted' };
