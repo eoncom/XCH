@@ -3,7 +3,11 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
+  // ADR-020 §C — nullsNotDistinct enables `nulls: "not distinct"` on
+  // @@unique constraints that include a nullable column, so the global
+  // scope (delegationId IS NULL) row can't be duplicated. Preview since
+  // Prisma 5.13 ; pinned via `prisma: ^5.8.0` resolved 5.22+ in lockfile.
+  previewFeatures = ["postgresqlExtensions", "nullsNotDistinct"]
 }
 
 datasource db {
@@ -1612,7 +1616,10 @@ model NotificationChannel {
   createdAt    DateTime                @default(now())
   updatedAt    DateTime                @updatedAt
 
-  @@unique([tenantId, delegationId, kind])
+  // ADR-020 §C — `nulls: "not distinct"` makes (tenantId, NULL, kind)
+  // collide with itself in PG, so a tenant can't end up with 2 global
+  // rows of the same kind via races / direct SQL / parallel writers.
+  @@unique([tenantId, delegationId, kind], map: "notification_channels_tenantId_delegationId_kind_key", nulls: "not distinct")
   @@index([tenantId])
   @@map("notification_channels")
 }
@@ -1634,7 +1641,8 @@ model NotificationRule {
   createdAt    DateTime                    @default(now())
   updatedAt    DateTime                    @updatedAt
 
-  @@unique([tenantId, delegationId, eventType])
+  // ADR-020 §C — see NotificationChannel comment.
+  @@unique([tenantId, delegationId, eventType], map: "notification_rules_tenantId_delegationId_eventType_key", nulls: "not distinct")
   @@index([tenantId, eventType])
   @@map("notification_rules")
 }

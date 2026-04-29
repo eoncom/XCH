@@ -121,9 +121,12 @@ export class NotificationSettingsService {
         },
       });
 
-      // Upsert each channel via findFirst + update/create — Prisma's
-      // compound unique key TS signature doesn't accept `null` for the
-      // nullable delegationId, so we sidestep `upsert` entirely.
+      // findFirst + update/create instead of upsert : Prisma's TS signature
+      // for compound unique with a nullable column types `delegationId`
+      // as `string` (non-null), so `upsert({ where: { tenantId_delegationId_kind: { …, delegationId: null, … } } })`
+      // refuses to compile. Bug upstream Prisma — independent of the
+      // DB-level NULLS NOT DISTINCT integrity guarantee added in
+      // migration 7 (ADR-020 §C addendum). Functionally equivalent.
       for (const ch of dto.channels) {
         const existing = await tx.notificationChannel.findFirst({
           where: { tenantId, delegationId, kind: ch.kind },
@@ -146,7 +149,7 @@ export class NotificationSettingsService {
         }
       }
 
-      // Same pattern for rules.
+      // Same pattern for rules — see channel comment above (ADR-020 §C).
       for (const rule of dto.rules) {
         const existing = await tx.notificationRule.findFirst({
           where: { tenantId, delegationId, eventType: rule.eventType },

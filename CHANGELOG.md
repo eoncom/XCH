@@ -7,6 +7,23 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.7.1] - 2026-04-29 — Hardening intégrité @@unique avec champ nullable (ADR-020 §C)
+
+### Fixed (DB integrity)
+- **Trou d'intégrité comblé** : `notification_channels @@unique([tenantId, delegationId, kind])` et `notification_rules @@unique([tenantId, delegationId, eventType])` ne protégeaient PAS la row globale (`delegationId IS NULL`) — PostgreSQL traite `NULL ≠ NULL` par défaut dans les contraintes UNIQUE. Conséquence possible : 2 rows globales du même `(tenantId, kind)` coexistant, résolution d'inheritance non déterministe.
+- Migration `7_notif_unique_nulls_not_distinct` : DROP + CREATE des 2 INDEX UNIQUE avec `NULLS NOT DISTINCT` (PG 15+, confirmé sur xch-deploy 15.8).
+- Activation du preview feature `nullsNotDistinct` dans `generator client { previewFeatures = [...] }` (Prisma 5.13+, projet en 5.22).
+- Annotation `nulls: "not distinct"` sur les 2 `@@unique` concernés.
+
+### Documentation
+- ADR-020 §C addendum rédigé : audit complet du schéma (seules 2 tables concernées sur 14 `@@unique`), alternatives écartées (sentinel value, 2 tables séparées, partial index), règle architecturale gravée :
+  > Tout `@@unique` qui inclut un champ nullable DOIT utiliser `nulls: "not distinct"`. À ajouter au check-list de tout nouveau modèle Prisma.
+
+### Note
+Le `findFirst + update/create` du `NotificationSettingsService` reste — il contourne un bug TS Prisma (compound unique avec champ nullable génère `delegationId: string` non-nullable côté TS) indépendant de la garantie DB. Documenté en commentaire (ADR-020 §C).
+
+---
+
 ## [1.7.0] - 2026-04-29 — NotificationConfig refacto + Worker BullMQ (Session 3 du plan v2 finalization)
 
 ### Changed (BREAKING — API + DB)

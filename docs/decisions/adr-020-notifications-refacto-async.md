@@ -96,11 +96,13 @@ model NotificationRule {
   createdAt    DateTime                    @default(now())
   updatedAt    DateTime                    @updatedAt
 
-  @@unique([tenantId, delegationId, eventType])
+  @@unique([tenantId, delegationId, eventType], nulls: "not distinct")
   @@index([tenantId, eventType])
   @@map("notification_rules")
 }
 ```
+
+(L'option `nulls: "not distinct"` est ajoutée en addendum §C — voir plus bas.)
 
 #### Pourquoi pas `NotificationDigest`
 
@@ -342,3 +344,109 @@ Tests :
 9. Bump v1.6.2 → v1.7.0 + commit + tag + smoke prod (reset+seed +
    send notification de test + vérification log + vérification
    chiffrement webhookUrl).
+
+---
+
+## Addendum §C — Intégrité des `@@unique` avec champ nullable (2026-04-29, v1.7.1)
+
+### Problème détecté post-livraison v1.7.0
+
+Le `@@unique([tenantId, delegationId, kind])` (et idem
+`[tenantId, delegationId, eventType]`) ne protégeait PAS la row globale
+(`delegationId IS NULL`). En PostgreSQL, le comportement par défaut
+des contraintes UNIQUE est `NULLS DISTINCT` : deux NULLs sont considérés
+**différents** entre eux. Conséquence directe : deux rows
+`(tenantA, NULL, EMAIL)` peuvent coexister sans violation, ce qui casse
+la sémantique d'inheritance "delegation > global > defaults" du
+`NotificationSettingsService.resolveSettings()`. La résolution prendrait
+la première trouvée — comportement non déterministe.
+
+Initialement masqué par le workaround applicatif `findFirst + create/update`
+livré en v1.7.0 (pour contourner un bug Prisma TS séparé sur la
+signature des compound unique avec champ nullable). Mais une race
+condition, un autre worker, un import direct ou une session SQL
+manuelle peuvent toujours créer des doublons. **L'intégrité doit être
+garantie au niveau DB**, pas seulement applicatif.
+
+### Audit du schéma — surface réelle
+
+Toutes les contraintes `@@unique` du schéma vérifiées 2026-04-29.
+Champs concernés : ceux marqués `String?` (ou équivalent nullable)
+dans la liste de colonnes du `@@unique`. Résultat :
+
+| Modèle | Contrainte | Champ nullable |
+|---|---|---|
+| `notification_channels` | `(tenantId, delegationId, kind)` | `delegationId` |
+| `notification_rules` | `(tenantId, delegationId, eventType)` | `delegationId` |
+
+**Toutes les autres tables** (Tenant, Site, Rack, Asset, Contact,
+AccessOverride, EnumLabel, Expense, Budget, etc.) ont leurs `@@unique`
+sur des colonnes NOT NULL — pas de problème.
+
+### Décision : `NULLS NOT DISTINCT` (PostgreSQL 15+)
+
+PG 15.8 confirmé sur xch-deploy ; image `postgis/postgis:15-3.4-alpine`
+épinglée dans `docker-compose.yml`. La syntaxe `NULLS NOT DISTINCT`
+est dispo nativement.
+
+Côté Prisma 5.22+ (déjà installé via `^5.8.0`), le preview feature
+`nullsNotDistinct` permet d'écrire :
+
+```prisma
+@@unique([tenantId, delegationId, kind], nulls: "not distinct")
+```
+
+ce qui se traduit en :
+
+```sql
+CREATE UNIQUE INDEX ... ON notification_channels (...) NULLS NOT DISTINCT;
+```
+
+À partir de cette migration, une 2ᵉ tentative d'INSERT
+`(tenantA, NULL, EMAIL)` lève une violation `unique constraint`.
+
+### Alternatives écartées
+
+1. **Sentinel `'__GLOBAL__'`** au lieu de `NULL` — viole la sémantique
+   relationnelle (FK Delegation devient sale ou doit être faussée
+   avec une row `delegations.id = '__GLOBAL__'` artificielle).
+
+2. **2 tables séparées** (`TenantNotificationChannel` + `DelegationNotificationChannel`) —
+   sur-ingénierie, duplique le code de résolution sans bénéfice.
+
+3. **Partial UNIQUE INDEX** (`CREATE UNIQUE INDEX ... WHERE delegationId IS NULL`
+   et un autre `WHERE delegationId IS NOT NULL`) — équivalent fonctionnel
+   pour PG <15, plus verbeux. Inutile vu PG 15+ disponible.
+
+4. **Conserver le workaround applicatif seul** — laisse le trou DB.
+   Inacceptable : un autre processus peut toujours casser l'invariant.
+
+### Règle architecturale graveée (post-v1.7.1)
+
+> **Tout `@@unique` qui inclut un champ nullable DOIT utiliser
+> `nulls: "not distinct"`.** À ajouter au check-list de tout nouveau
+> modèle Prisma. Si la nouvelle table cible un environnement
+> PostgreSQL < 15, fallback partial unique index dans la migration SQL.
+
+Cette règle est complémentaire de la règle §B (config_json
+non-sensible). Les deux forment le socle d'intégrité Prisma+PG XCH.
+
+### Fichiers livrés par v1.7.1
+
+- `backend/prisma/schema.prisma` :
+  - `previewFeatures = ["postgresqlExtensions", "nullsNotDistinct"]`.
+  - `@@unique([..., delegationId, ...], nulls: "not distinct")` sur
+    `NotificationChannel` + `NotificationRule`.
+- `backend/prisma/migrations/7_notif_unique_nulls_not_distinct/migration.sql` :
+  DROP + CREATE des 2 INDEX UNIQUE avec `NULLS NOT DISTINCT`.
+
+### Côté code applicatif
+
+Le `findFirst + update/create` du `NotificationSettingsService`
+**reste** — il contourne le bug TS Prisma (compound unique avec
+champ nullable génère `delegationId: string` non-nullable côté
+TypeScript, indépendamment de l'option `nulls`). C'est un bug
+upstream Prisma, pas notre responsabilité. Le contournement est
+documenté en commentaire dans le service ; la simplicité de
+findFirst+update/create est compétitive avec `upsert`, donc pas
+de régression de lisibilité.

@@ -6730,3 +6730,24 @@ chore(release): v1.6.2 — ADR-019 secrets at-rest (AES-256-GCM) + bonus hash in
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-29
+
+**Date:** 2026-04-29 09:13:53
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 1
+
+**Commit message:**
+```
+fix(prisma): notif-settings — upsert avec compound unique nullable cassait TS
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
