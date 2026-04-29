@@ -22,7 +22,15 @@ export async function bootTestApp(): Promise<INestApplication> {
 
   const app = moduleFixture.createNestApplication();
   app.use(cookieParser());
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  // Mirror main.ts settings so tests reflect production behaviour.
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
   app.setGlobalPrefix('api');
   await app.init();
   return app;

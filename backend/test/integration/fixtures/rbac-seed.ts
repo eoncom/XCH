@@ -156,7 +156,7 @@ export async function seedRbac(prisma: PrismaClient): Promise<RbacSeedResult> {
       id: 'rbac-contact-type',
       tenantId: TENANT_ID,
       slug: 'rbac-default',
-      label: 'Default',
+      name: 'Default',
       category: 'TECHNICAL',
       isActive: true,
     },
@@ -194,14 +194,14 @@ export async function seedRbac(prisma: PrismaClient): Promise<RbacSeedResult> {
     },
   });
 
-  // ConnectivityLinks : one per site
+  // ConnectivityLinks : one per site (provider + type required, role default PRIMARY)
   const aLink = await prisma.connectivityLink.create({
     data: {
       id: 'rbac-link-a',
       tenantId: TENANT_ID,
       siteId: siteA.id,
-      label: 'Link A',
-      role: 'PRIMARY',
+      provider: 'Test ISP A',
+      type: 'FIBER',
     },
   });
   const bLink = await prisma.connectivityLink.create({
@@ -209,8 +209,8 @@ export async function seedRbac(prisma: PrismaClient): Promise<RbacSeedResult> {
       id: 'rbac-link-b',
       tenantId: TENANT_ID,
       siteId: siteB.id,
-      label: 'Link B',
-      role: 'PRIMARY',
+      provider: 'Test ISP B',
+      type: 'FIBER',
     },
   });
 

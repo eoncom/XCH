@@ -1,0 +1,102 @@
+name: Backend Integration Tests
+
+# ADR-021 — bloquant pour merge sur main. Lance les specs Jest
+# d'intégration backend (RBAC intrusion + foundations canary) avec
+# une vraie DB Postgres et un Redis. Rapide (~30s pour les helpers,
+# ~2min avec toutes les intrusion specs PR3+).
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  integration-tests:
+    name: Backend integration (Jest + Postgres + Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgis/postgis:15-3.4-alpine
+        env:
+          POSTGRES_DB: xch_test
+          POSTGRES_USER: xch_user
+          POSTGRES_PASSWORD: xch_password_secure_2024
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U xch_user -d xch_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://xch_user:xch_password_secure_2024@localhost:5432/xch_test
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_SECRET: test_jwt_secret_for_ci_only_not_production_at_least_32_chars
+      JWT_REFRESH_SECRET: test_refresh_secret_for_ci_only_at_least_32_chars
+      JWT_ACCESS_EXPIRATION: 15m
+      JWT_REFRESH_EXPIRATION: 7d
+      # Crypto secret (ADR-019) — required to instantiate CryptoService.
+      # 32 raw bytes base64 = 44 chars.
+      XCH_MASTER_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      NODE_ENV: test
+      CI: 'true'
+      # MinIO not needed for RBAC intrusion specs — mocked storage path.
+      MINIO_ENDPOINT: localhost
+      MINIO_PORT: '9000'
+      MINIO_ACCESS_KEY: dummy
+      MINIO_SECRET_KEY: dummysecretkeydummysecretkeydummy
+      MINIO_BUCKET_NAME: xch-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Apply migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Run integration tests
+        working-directory: backend
+        run: npm run test:integration
+
+      - name: Upload Jest results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-integration-output
+          path: backend/coverage/
+          retention-days: 7

@@ -6772,3 +6772,24 @@ docs(status): bump version label to v1.7.1 + smoke prod vert (partial unique ind
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-04-29
+
+**Date:** 2026-04-29 22:58:30
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat(rbac): permission helpers harmonization + ADR-021 (Session 4a PR1)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
