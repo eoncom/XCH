@@ -187,9 +187,10 @@ export class MonitorProcessor {
     const bodyText = `Le monitor ${check.kind} sur "${targetDisplay}" est passé ${previousStatus} → ${result.status}.${reason}`;
     const bodyHtml = `<p>Le monitor <strong>${check.kind}</strong> sur <code>${escapeHtml(targetDisplay)}</code> est passé <strong>${previousStatus} → ${result.status}</strong>.</p>${result.error ? `<p>Raison : <code>${escapeHtml(result.error)}</code></p>` : ''}`;
 
-    // Fire-and-forget — NotificationService never throws (graceful degradation).
+    // ADR-020 — async dispatch via the `notifications` queue. Returns
+    // immediately ; processor handles fan-out + retry.
     this.notifications
-      .dispatch({
+      .queueDispatch({
         tenantId: check.tenantId,
         eventType,
         scopeContext: { siteId: effectiveSiteId },
@@ -199,7 +200,7 @@ export class MonitorProcessor {
         bodyText,
         actionUrl: `/dashboard/monitoring/${check.id}`,
       })
-      .catch((e) => this.logger.warn(`notification dispatch failed: ${e.message}`));
+      .catch((e) => this.logger.warn(`notification enqueue failed: ${e.message}`));
 
     // ADR-016 — recompute Site.healthStatus in real-time on every transition.
     // The 5-min cron HealthSyncScheduler still runs as a safety net.

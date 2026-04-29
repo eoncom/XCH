@@ -11,8 +11,13 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Separator } from '@/components/ui/separator';
-import { notificationsApi, type NotificationConfigData, type ChannelConfig, type EventConfig } from '@/lib/api/notifications';
+import {
+  notificationsApi,
+  type NotificationChannelKind,
+  type NotificationEventType,
+  type NotificationChannelDto,
+  type NotificationRuleDto,
+} from '@/lib/api/notifications';
 import { organizationApi } from '@/lib/api/organization';
 import { showToast } from '@/lib/toast';
 import { useAuthStore } from '@/stores/auth-store';
@@ -20,14 +25,9 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useDelegation } from '@/contexts/DelegationContext';
 import {
   Bell, Mail, MessageSquare, Settings, Save, TestTube, ArrowLeft,
-  Check, X, ChevronRight, Info, RotateCcw, History, Loader2,
+  Check, X, Info, RotateCcw, History, Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
-
-const SCOPE_LABELS: Record<string, string> = {
-  GLOBAL: 'Global',
-  DELEGATION: 'Par délégation',
-};
 
 const CATEGORY_LABELS: Record<string, string> = {
   tasks: 'Tâches',
@@ -37,65 +37,53 @@ const CATEGORY_LABELS: Record<string, string> = {
   auth: 'Authentification',
 };
 
+const CHANNEL_KINDS: NotificationChannelKind[] = ['EMAIL', 'TEAMS'];
+
 /**
- * Reusable panel (phase 6 fix): the Settings → Notifications tab used to open
- * as an external route, breaking the tab continuity. This component is now the
- * single source of truth rendered both by the standalone route (below) and by
- * the in-page tab in `settings/page.tsx`. Pass `embedded=true` to skip the
- * redundant "← Retour" header when it's rendered inside another page.
+ * Notifications settings panel — ADR-020 (post-refacto).
+ *
+ * Modèle : 2 listes typées (channels par kind, rules par eventType). Plus
+ * de flag `inherit` par-row : un override existe (row dans la table) ou
+ * il n'existe pas (héritage automatique sur le scope parent global).
+ *
+ * "Réinitialiser (hériter)" → DELETE de tous les channels + rules au
+ * scope courant ; au prochain GET, isDefault=true.
  */
 export function NotificationsConfigPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
-  const tenantId = user?.tenantId || '';
   const { isAdmin, isManagerOrAbove, isSuperAdmin } = usePermissions();
   const { delegations: userDelegations, currentDelegation } = useDelegation();
 
-  // Delegations where the caller has MANAGE — the only ones they can
-  // configure notifications on. Super admins are not restricted here;
-  // the backend /delegations fetch below powers their picker.
   const manageableDelegations = useMemo(
     () => userDelegations.filter((d) => d.right === 'MANAGE'),
     [userDelegations],
   );
 
-  // Scope defaults:
-  // - Super admin opens on GLOBAL (tenant-wide config) — historical behaviour.
-  // - Everyone else opens on DELEGATION, pre-selecting their active delegation
-  //   (or the first delegation where they hold MANAGE). This avoids the
-  //   slow 403 bounce on GET /config/global that the page used to trigger
-  //   at mount even for delegation-scoped MANAGE users.
   const defaultDelegationId =
     currentDelegation?.delegationId ||
     manageableDelegations[0]?.delegationId ||
     null;
-  const [scopeMode, setScopeMode] = useState<string>(isSuperAdmin ? 'GLOBAL' : 'DELEGATION');
+
+  const [scopeMode, setScopeMode] = useState<'GLOBAL' | 'DELEGATION'>(isSuperAdmin ? 'GLOBAL' : 'DELEGATION');
   const [delegationId, setDelegationId] = useState<string | null>(
     isSuperAdmin ? null : defaultDelegationId,
   );
 
-  // Defer the Journal tab data fetch until the user actually opens it.
-  // Before v1.4.x, logs were fetched on every mount which added ~1s latency
-  // to the page even for users that never consulted the history.
   const [activeTab, setActiveTab] = useState<string>('channels');
 
-  // Local edited state
-  const [editedChannels, setEditedChannels] = useState<Record<string, ChannelConfig>>({});
-  const [editedEvents, setEditedEvents] = useState<Record<string, EventConfig>>({});
+  // Local edited state — channels indexed by kind, rules indexed by event.
+  const [channelsByKind, setChannelsByKind] = useState<Record<NotificationChannelKind, NotificationChannelDto>>(() => emptyChannels());
+  const [rulesByEvent, setRulesByEvent] = useState<Record<NotificationEventType, NotificationRuleDto>>(() => ({} as any));
   const [isDirty, setIsDirty] = useState(false);
-
-  // Email recipients input
   const [newRecipient, setNewRecipient] = useState('');
 
-  // Fetch metadata (stable — 5 min cache is plenty, the event catalog rarely changes)
   const { data: meta } = useQuery({
     queryKey: ['notification-meta'],
     queryFn: notificationsApi.getMeta,
     staleTime: 5 * 60_000,
   });
 
-  // Fetch delegations for scope selection — super admin only. Non-super-admins
-  // pick from their own MANAGE delegations (already in DelegationContext).
   const { data: delegationsFromApi } = useQuery({
     queryKey: ['delegations'],
     queryFn: () => organizationApi.getDelegations(),
@@ -103,25 +91,17 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
     staleTime: 60_000,
   });
 
-  // Delegations shown in the scope picker. Super admins see everything from
-  // the server; others see only the ones where they hold MANAGE.
   const delegations = isSuperAdmin
     ? delegationsFromApi
     : manageableDelegations.map((ud) => ({ id: ud.delegationId, name: ud.delegation.name }));
 
-  // Fetch config for the currently selected scope.
-  // We never hit /config/global for non-super-admins — the backend would 403
-  // and that 403 used to add a visible latency to the Canaux/Événements/Journal
-  // sections as the fail branch resolved.
-  const { data: config, isLoading: configLoading } = useQuery({
-    queryKey: ['notification-config', delegationId],
-    queryFn: () => notificationsApi.getConfig(delegationId),
+  const { data: settings, isLoading: settingsLoading } = useQuery({
+    queryKey: ['notification-settings', delegationId],
+    queryFn: () => notificationsApi.getSettings(delegationId),
     enabled: (scopeMode === 'GLOBAL' && isSuperAdmin) || !!delegationId,
     staleTime: 30_000,
   });
 
-  // Fetch logs — LAZY: only when the Journal tab is actually open. Removes the
-  // ~1s on-mount penalty for users that never look at logs.
   const { data: logsResponse } = useQuery({
     queryKey: ['notification-logs'],
     queryFn: () => notificationsApi.getLogs({ page: 1, pageSize: 20 }),
@@ -130,41 +110,49 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
   });
   const logs = logsResponse?.data || [];
 
-  // Initialize edited state from fetched config
+  // Load → indexed state
   useEffect(() => {
-    if (config) {
-      setEditedChannels(config.channels || {});
-      setEditedEvents(config.events || {});
+    if (settings) {
+      const ch: Record<NotificationChannelKind, NotificationChannelDto> = emptyChannels();
+      for (const c of settings.channels) ch[c.kind] = c;
+      setChannelsByKind(ch);
+
+      const rl: Record<NotificationEventType, NotificationRuleDto> = {} as any;
+      for (const r of settings.rules) rl[r.eventType] = r;
+      setRulesByEvent(rl);
+
       setIsDirty(false);
     }
-  }, [config]);
+  }, [settings]);
 
-  // Reset delegationId when scope mode changes.
-  // Switching to DELEGATION pre-selects the active delegation (or the first
-  // MANAGE one) so the config loads immediately without an intermediate
-  // "Choose..." empty state.
   useEffect(() => {
     if (scopeMode === 'GLOBAL') {
       setDelegationId(null);
     } else if (!delegationId) {
       setDelegationId(defaultDelegationId || '');
     }
-    // defaultDelegationId intentionally excluded from deps — we only want to
-    // re-seed when scopeMode flips, not when the active delegation changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeMode]);
 
-  // Save mutation
   const saveMutation = useMutation({
     mutationFn: () =>
-      notificationsApi.saveConfig({
+      notificationsApi.saveSettings({
         delegationId,
-        channels: editedChannels,
-        events: editedEvents,
+        channels: Object.values(channelsByKind).map((c) => ({
+          kind: c.kind,
+          enabled: c.enabled,
+          recipients: c.recipients,
+          webhookUrl: c.webhookUrl,
+        })),
+        rules: Object.values(rulesByEvent).map((r) => ({
+          eventType: r.eventType,
+          enabled: r.enabled,
+          channels: r.channels,
+        })),
       }),
     onSuccess: () => {
       showToast.success('Configuration sauvegardée');
-      queryClient.invalidateQueries({ queryKey: ['notification-config'] });
+      queryClient.invalidateQueries({ queryKey: ['notification-settings'] });
       setIsDirty(false);
     },
     onError: (err: any) => {
@@ -172,86 +160,89 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
     },
   });
 
-  // Test mutation
   const testMutation = useMutation({
-    mutationFn: (params: { channel: string; config: any }) =>
-      notificationsApi.testChannel(params.channel, params.config),
+    mutationFn: (params: { kind: NotificationChannelKind }) =>
+      notificationsApi.testChannel(params.kind, {
+        recipients: channelsByKind[params.kind]?.recipients,
+        webhookUrl: channelsByKind[params.kind]?.webhookUrl,
+      }),
     onSuccess: (result) => {
-      if (result.success) {
-        showToast.success('Test envoyé avec succès !');
-      } else {
-        showToast.error(`Échec du test : ${result.error}`);
-      }
+      if (result.success) showToast.success('Test envoyé avec succès !');
+      else showToast.error(`Échec du test : ${result.error}`);
     },
-    onError: (err: any) => {
-      showToast.error(err.message || 'Erreur lors du test');
-    },
+    onError: (err: any) => showToast.error(err.message || 'Erreur lors du test'),
   });
 
-  // Reset to inheritance
   const resetMutation = useMutation({
-    mutationFn: () => notificationsApi.deleteConfig(delegationId),
+    mutationFn: () => notificationsApi.deleteSettings(delegationId),
     onSuccess: () => {
-      showToast.success('Configuration réinitialisée (héritage parent)');
-      queryClient.invalidateQueries({ queryKey: ['notification-config'] });
+      showToast.success('Réinitialisé — héritage du global rétabli');
+      queryClient.invalidateQueries({ queryKey: ['notification-settings'] });
     },
   });
 
-  // ── Channel handlers ──
-  const updateChannel = (name: string, updates: Partial<ChannelConfig>) => {
-    setEditedChannels((prev) => ({
+  const updateChannel = (kind: NotificationChannelKind, updates: Partial<NotificationChannelDto>) => {
+    setChannelsByKind((prev) => ({
       ...prev,
-      [name]: { ...prev[name], ...updates },
+      [kind]: {
+        ...prev[kind],
+        ...updates,
+        kind,
+      },
     }));
     setIsDirty(true);
   };
 
-  const addRecipient = (channelName: string) => {
+  const addRecipient = (kind: NotificationChannelKind) => {
     if (!newRecipient || !newRecipient.includes('@')) return;
-    const current = editedChannels[channelName]?.recipients || [];
+    const current = channelsByKind[kind]?.recipients || [];
     if (!current.includes(newRecipient)) {
-      updateChannel(channelName, { recipients: [...current, newRecipient] });
+      updateChannel(kind, { recipients: [...current, newRecipient] });
     }
     setNewRecipient('');
   };
 
-  const removeRecipient = (channelName: string, email: string) => {
-    const current = editedChannels[channelName]?.recipients || [];
-    updateChannel(channelName, { recipients: current.filter((r) => r !== email) });
+  const removeRecipient = (kind: NotificationChannelKind, email: string) => {
+    const current = channelsByKind[kind]?.recipients || [];
+    updateChannel(kind, { recipients: current.filter((r) => r !== email) });
   };
 
-  // ── Event handlers ──
-  const updateEvent = (eventKey: string, updates: Partial<EventConfig>) => {
-    setEditedEvents((prev) => ({
+  const updateRule = (eventType: NotificationEventType, updates: Partial<NotificationRuleDto>) => {
+    setRulesByEvent((prev) => ({
       ...prev,
-      [eventKey]: { ...prev[eventKey], ...updates },
+      [eventType]: {
+        eventType,
+        enabled: prev[eventType]?.enabled ?? true,
+        channels: prev[eventType]?.channels ?? [],
+        ...updates,
+      },
     }));
     setIsDirty(true);
   };
 
-  const toggleEventChannel = (eventKey: string, channel: string) => {
-    const current = editedEvents[eventKey]?.channels || [];
-    const newChannels = current.includes(channel)
-      ? current.filter((c) => c !== channel)
-      : [...current, channel];
-    updateEvent(eventKey, { channels: newChannels });
+  const toggleRuleChannel = (eventType: NotificationEventType, kind: NotificationChannelKind) => {
+    const current = rulesByEvent[eventType]?.channels || [];
+    const next = current.includes(kind) ? current.filter((c) => c !== kind) : [...current, kind];
+    updateRule(eventType, { channels: next });
   };
 
-  // Group events by category
   const eventsByCategory = useMemo(() => {
     if (!meta?.events) return {};
-    const grouped: Record<string, { key: string; meta: any; config: EventConfig }[]> = {};
+    const grouped: Record<string, { key: NotificationEventType; meta: any; rule: NotificationRuleDto }[]> = {};
     for (const [key, eventMeta] of Object.entries(meta.events)) {
       const cat = eventMeta.category;
       if (!grouped[cat]) grouped[cat] = [];
+      const eventKey = key as NotificationEventType;
       grouped[cat].push({
-        key,
+        key: eventKey,
         meta: eventMeta,
-        config: editedEvents[key] || { inherit: true, enabled: false, channels: [] },
+        rule:
+          rulesByEvent[eventKey] ||
+          { eventType: eventKey, enabled: true, channels: eventMeta.defaultChannels },
       });
     }
     return grouped;
-  }, [meta, editedEvents]);
+  }, [meta, rulesByEvent]);
 
   if (!isManagerOrAbove) {
     return (
@@ -265,10 +256,11 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
     );
   }
 
+  const emailChannel = channelsByKind.EMAIL;
+  const teamsChannel = channelsByKind.TEAMS;
+
   return (
     <div className={embedded ? 'space-y-6' : 'space-y-6 p-6'}>
-      {/* Header — hidden when embedded inside the Settings tab system (the tab
-          label already says "Notifications"). The action buttons stay visible. */}
       <div className="flex items-center justify-between">
         {embedded ? (
           <div />
@@ -284,7 +276,7 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
                 <Bell className="h-6 w-6" /> Configuration des notifications
               </h1>
               <p className="text-sm text-muted-foreground">
-                Canaux et événements suivis par délégation.
+                Canaux et règles par événement, scope global ou délégation.
               </p>
             </div>
           </div>
@@ -307,20 +299,15 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Périmètre de configuration</CardTitle>
           <CardDescription>
-            {isSuperAdmin
-              ? 'Les configurations par délégation héritent de la configuration globale.'
-              : 'Vous configurez les notifications pour les délégations que vous administrez.'}
+            Une délégation hérite de la configuration globale tant qu'elle n'a pas son propre override.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-4 items-end flex-wrap">
-            {/* Level picker — only super admins can flip between global and delegation.
-                Non-super-admins are locked on DELEGATION (no point showing a
-                single-option select that would 403 on Global anyway). */}
             {isSuperAdmin && (
               <div className="w-48">
                 <Label>Niveau</Label>
-                <Select value={scopeMode} onValueChange={setScopeMode}>
+                <Select value={scopeMode} onValueChange={(v) => setScopeMode(v as 'GLOBAL' | 'DELEGATION')}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="GLOBAL">Global</SelectItem>
@@ -330,9 +317,6 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
               </div>
             )}
 
-            {/* Delegation picker — visible whenever DELEGATION scope is active.
-                For non-super-admins with a single manageable delegation, we skip
-                the Select and just show the name as read-only. */}
             {scopeMode === 'DELEGATION' && delegations && delegations.length > 0 && (
               <div className="w-64">
                 <Label>Délégation</Label>
@@ -353,7 +337,7 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
               </div>
             )}
 
-            {config?.isDefault && scopeMode !== 'GLOBAL' && (
+            {settings?.isDefault && scopeMode !== 'GLOBAL' && (
               <Badge variant="outline" className="text-blue-600 border-blue-200">
                 <Info className="h-3 w-3 mr-1" /> Hérite du global
               </Badge>
@@ -362,7 +346,7 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
         </CardContent>
       </Card>
 
-      {configLoading ? (
+      {settingsLoading ? (
         <Card><CardContent className="p-10 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></CardContent></Card>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -385,25 +369,13 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
                       <CardDescription>Notifications par email SMTP</CardDescription>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    {scopeMode !== 'GLOBAL' && (
-                      <div className="flex items-center gap-2">
-                        <Label className="text-xs text-muted-foreground">Hériter</Label>
-                        <Switch
-                          checked={editedChannels.email?.inherit || false}
-                          onCheckedChange={(v) => updateChannel('email', { inherit: v })}
-                        />
-                      </div>
-                    )}
-                    <Switch
-                      checked={editedChannels.email?.enabled || false}
-                      onCheckedChange={(v) => updateChannel('email', { enabled: v, inherit: false })}
-                      disabled={editedChannels.email?.inherit}
-                    />
-                  </div>
+                  <Switch
+                    checked={!!emailChannel?.enabled}
+                    onCheckedChange={(v) => updateChannel('EMAIL', { enabled: v, recipients: emailChannel?.recipients ?? [], webhookUrl: null })}
+                  />
                 </div>
               </CardHeader>
-              {!editedChannels.email?.inherit && editedChannels.email?.enabled && (
+              {emailChannel?.enabled && (
                 <CardContent className="space-y-4">
                   <div>
                     <Label className="text-sm">Destinataires</Label>
@@ -413,16 +385,16 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
                         placeholder="email@example.com"
                         value={newRecipient}
                         onChange={(e) => setNewRecipient(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRecipient('email'))}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addRecipient('EMAIL'))}
                         className="max-w-sm"
                       />
-                      <Button variant="outline" size="sm" onClick={() => addRecipient('email')}>Ajouter</Button>
+                      <Button variant="outline" size="sm" onClick={() => addRecipient('EMAIL')}>Ajouter</Button>
                     </div>
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {(editedChannels.email?.recipients || []).map((r) => (
+                      {(emailChannel?.recipients || []).map((r) => (
                         <Badge key={r} variant="secondary" className="gap-1">
                           {r}
-                          <button onClick={() => removeRecipient('email', r)} className="ml-1 hover:text-red-500">
+                          <button onClick={() => removeRecipient('EMAIL', r)} className="ml-1 hover:text-red-500">
                             <X className="h-3 w-3" />
                           </button>
                         </Badge>
@@ -432,8 +404,8 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => testMutation.mutate({ channel: 'email', config: editedChannels.email })}
-                    disabled={testMutation.isPending || !(editedChannels.email?.recipients?.length)}
+                    onClick={() => testMutation.mutate({ kind: 'EMAIL' })}
+                    disabled={testMutation.isPending || !(emailChannel?.recipients?.length)}
                   >
                     <TestTube className="h-4 w-4 mr-2" /> Tester l&apos;envoi
                   </Button>
@@ -452,43 +424,31 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
                       <CardDescription>Notifications via Incoming Webhook</CardDescription>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    {scopeMode !== 'GLOBAL' && (
-                      <div className="flex items-center gap-2">
-                        <Label className="text-xs text-muted-foreground">Hériter</Label>
-                        <Switch
-                          checked={editedChannels.teams?.inherit || false}
-                          onCheckedChange={(v) => updateChannel('teams', { inherit: v })}
-                        />
-                      </div>
-                    )}
-                    <Switch
-                      checked={editedChannels.teams?.enabled || false}
-                      onCheckedChange={(v) => updateChannel('teams', { enabled: v, inherit: false })}
-                      disabled={editedChannels.teams?.inherit}
-                    />
-                  </div>
+                  <Switch
+                    checked={!!teamsChannel?.enabled}
+                    onCheckedChange={(v) => updateChannel('TEAMS', { enabled: v, recipients: [], webhookUrl: teamsChannel?.webhookUrl ?? null })}
+                  />
                 </div>
               </CardHeader>
-              {!editedChannels.teams?.inherit && editedChannels.teams?.enabled && (
+              {teamsChannel?.enabled && (
                 <CardContent className="space-y-4">
                   <div>
                     <Label className="text-sm">Webhook URL</Label>
                     <Input
                       placeholder="https://outlook.office.com/webhook/..."
-                      value={editedChannels.teams?.webhookUrl || ''}
-                      onChange={(e) => updateChannel('teams', { webhookUrl: e.target.value })}
+                      value={teamsChannel?.webhookUrl || ''}
+                      onChange={(e) => updateChannel('TEAMS', { webhookUrl: e.target.value })}
                       className="mt-1"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      Créez un Incoming Webhook dans votre canal Teams, puis collez l&apos;URL ici.
+                      Créez un Incoming Webhook dans votre canal Teams, puis collez l&apos;URL ici. Stockée chiffrée (ADR-019).
                     </p>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => testMutation.mutate({ channel: 'teams', config: editedChannels.teams })}
-                    disabled={testMutation.isPending || !editedChannels.teams?.webhookUrl}
+                    onClick={() => testMutation.mutate({ kind: 'TEAMS' })}
+                    disabled={testMutation.isPending || !teamsChannel?.webhookUrl}
                   >
                     <TestTube className="h-4 w-4 mr-2" /> Tester le webhook
                   </Button>
@@ -506,54 +466,33 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {events.map(({ key, meta: eventMeta, config: eventCfg }) => (
+                    {events.map(({ key, meta: eventMeta, rule }) => (
                       <div key={key} className="flex items-center justify-between py-2 border-b last:border-0">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-sm">{eventMeta.label}</span>
-                            {scopeMode !== 'GLOBAL' && eventCfg.inherit && (
-                              <Badge variant="outline" className="text-xs text-blue-500 border-blue-200">hérité</Badge>
-                            )}
                           </div>
                           <p className="text-xs text-muted-foreground">{eventMeta.description}</p>
                         </div>
                         <div className="flex items-center gap-4">
-                          {/* Channel toggles */}
                           <div className="flex gap-2">
-                            {['email', 'teams'].map((ch) => (
+                            {CHANNEL_KINDS.map((kind) => (
                               <Button
-                                key={ch}
-                                variant={eventCfg.channels?.includes(ch) ? 'default' : 'outline'}
+                                key={kind}
+                                variant={rule.channels?.includes(kind) ? 'default' : 'outline'}
                                 size="sm"
                                 className="h-7 px-2 text-xs"
-                                onClick={() => {
-                                  updateEvent(key, { inherit: false });
-                                  toggleEventChannel(key, ch);
-                                }}
-                                disabled={eventCfg.inherit}
+                                onClick={() => toggleRuleChannel(key, kind)}
                               >
-                                {ch === 'email' ? <Mail className="h-3 w-3 mr-1" /> : <MessageSquare className="h-3 w-3 mr-1" />}
-                                {ch === 'email' ? 'Email' : 'Teams'}
+                                {kind === 'EMAIL' ? <Mail className="h-3 w-3 mr-1" /> : <MessageSquare className="h-3 w-3 mr-1" />}
+                                {kind === 'EMAIL' ? 'Email' : 'Teams'}
                               </Button>
                             ))}
                           </div>
-                          {/* Enable/disable */}
                           <Switch
-                            checked={eventCfg.enabled}
-                            onCheckedChange={(v) => updateEvent(key, { enabled: v, inherit: false })}
-                            disabled={eventCfg.inherit}
+                            checked={rule.enabled}
+                            onCheckedChange={(v) => updateRule(key, { enabled: v })}
                           />
-                          {/* Inherit toggle */}
-                          {scopeMode !== 'GLOBAL' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => updateEvent(key, { inherit: !eventCfg.inherit })}
-                            >
-                              {eventCfg.inherit ? 'Surcharger' : 'Hériter'}
-                            </Button>
-                          )}
                         </div>
                       </div>
                     ))}
@@ -593,7 +532,7 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
                             </TableCell>
                             <TableCell>
                               <Badge variant="outline" className="text-xs">
-                                {meta?.events?.[log.eventType]?.label || log.eventType}
+                                {meta?.events?.[log.eventType as NotificationEventType]?.label || log.eventType}
                               </Badge>
                             </TableCell>
                             <TableCell>
@@ -624,4 +563,11 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
       )}
     </div>
   );
+}
+
+function emptyChannels(): Record<NotificationChannelKind, NotificationChannelDto> {
+  return {
+    EMAIL: { kind: 'EMAIL', enabled: false, recipients: [], webhookUrl: null },
+    TEAMS: { kind: 'TEAMS', enabled: false, recipients: [], webhookUrl: null },
+  };
 }

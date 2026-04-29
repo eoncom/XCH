@@ -20,7 +20,7 @@ export class NotificationEmitter {
     assignee: { id: string; name: string; email: string };
     actor?: { id: string; name: string; email: string };
   }) {
-    await this.notificationService.dispatch({
+    await this.notificationService.queueDispatch({
       tenantId: params.tenantId,
       eventType: NotificationEventType.TASK_ASSIGNED,
       scopeContext: { siteId: params.task.siteId },
@@ -47,7 +47,7 @@ export class NotificationEmitter {
     newStatus: string;
     actor?: { id: string; name: string; email: string };
   }) {
-    await this.notificationService.dispatch({
+    await this.notificationService.queueDispatch({
       tenantId: params.tenantId,
       eventType: NotificationEventType.TASK_STATUS_CHANGED,
       scopeContext: { siteId: params.task.siteId },
@@ -76,7 +76,7 @@ export class NotificationEmitter {
     newStatus: string;
     actor?: { id: string; name: string; email: string };
   }) {
-    await this.notificationService.dispatch({
+    await this.notificationService.queueDispatch({
       tenantId: params.tenantId,
       eventType: NotificationEventType.SITE_STATUS_CHANGED,
       scopeContext: { siteId: params.site.id },
@@ -104,7 +104,7 @@ export class NotificationEmitter {
     reason: string;
     actor?: { id: string; name: string; email: string };
   }) {
-    await this.notificationService.dispatch({
+    await this.notificationService.queueDispatch({
       tenantId: params.tenantId,
       eventType: NotificationEventType.ASSET_CRITICAL,
       scopeContext: { siteId: params.asset.siteId },
@@ -136,7 +136,7 @@ export class NotificationEmitter {
     inviteLink: string;
     actor?: { id: string; name: string; email: string };
   }) {
-    await this.notificationService.dispatch({
+    await this.notificationService.queueDispatch({
       tenantId: params.tenantId,
       eventType: NotificationEventType.USER_INVITED,
       entity: { type: 'user', id: params.user.id, name: params.user.name },

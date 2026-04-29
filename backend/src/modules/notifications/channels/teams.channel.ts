@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { INotificationChannel } from './channel.interface';
-import { NotificationPayload, ChannelConfig } from '../notification-events';
+import {
+  NotificationChannelKind,
+  NotificationPayload,
+  RuntimeChannelConfig,
+} from '../notification-events';
 import { validateUrl, makeSafeAxios } from '../../../common/security/network';
 
 /**
@@ -17,12 +21,15 @@ import { validateUrl, makeSafeAxios } from '../../../common/security/network';
  */
 @Injectable()
 export class TeamsChannel implements INotificationChannel {
-  readonly name = 'teams';
+  readonly kind = NotificationChannelKind.TEAMS;
   private readonly logger = new Logger(TeamsChannel.name);
 
   constructor(private config: ConfigService) {}
 
-  async send(payload: NotificationPayload, config: ChannelConfig): Promise<{ success: boolean; error?: string }> {
+  async send(
+    payload: NotificationPayload,
+    config: RuntimeChannelConfig,
+  ): Promise<{ success: boolean; error?: string }> {
     const webhookUrl = config.webhookUrl;
     if (!webhookUrl) {
       return { success: false, error: 'No Teams webhook URL configured' };
@@ -38,7 +45,7 @@ export class TeamsChannel implements INotificationChannel {
     return this.postCard(webhookUrl, card);
   }
 
-  async test(config: ChannelConfig): Promise<{ success: boolean; error?: string }> {
+  async test(config: RuntimeChannelConfig): Promise<{ success: boolean; error?: string }> {
     const webhookUrl = config.webhookUrl;
     if (!webhookUrl) {
       return { success: false, error: 'No Teams webhook URL configured' };

@@ -62,7 +62,8 @@ model Tenant {
   enumLabels          EnumLabel[]
   billingEntities     BillingEntity[]
   expenses            Expense[]
-  notificationConfigs NotificationConfig[]
+  notificationChannels NotificationChannel[]
+  notificationRules    NotificationRule[]
   notificationLogs    NotificationLog[]
   userDelegations     UserDelegation[]
   accessOverrides     AccessOverride[]
@@ -336,7 +337,8 @@ model Delegation {
   contacts            Contact[]
   billingEntities     BillingEntity[]
   expenses            Expense[]
-  notificationConfigs NotificationConfig[]
+  notificationChannels NotificationChannel[]
+  notificationRules    NotificationRule[]
   budgets             Budget[]
 
   @@unique([tenantId, code])
@@ -1564,29 +1566,77 @@ model SdwanFirewall {
 // NOTIFICATIONS
 // ============================================================================
 
-/// Configuration des notifications par delegation (R4)
-/// Heritage : global (delegationId=null) → delegation
-model NotificationConfig {
-  id       String @id @default(cuid())
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+/// ADR-020 — supported channel kinds. Adding a new one (Slack, Discord,
+/// Pagerduty…) requires : (1) extend this enum, (2) add a sender in
+/// modules/notifications/channels/, (3) NotificationProcessor route.
+enum NotificationChannelKind {
+  EMAIL
+  TEAMS
+}
 
-  // Rattachement : null = global tenant config, sinon = delegation-specific
+/// ADR-020 — events that can trigger notifications. Mirror of
+/// NotificationEventType TS enum (notification-events.ts). Keep in sync.
+enum NotificationEventType {
+  TASK_ASSIGNED
+  TASK_STATUS_CHANGED
+  SITE_STATUS_CHANGED
+  ASSET_CRITICAL
+  MONITOR_DOWN
+  MONITOR_UP
+  USER_INVITED
+  PASSWORD_RESET
+}
+
+/// Notification channels (ADR-020) — typed split of the former
+/// NotificationConfig.channels JSON. One row per (tenant, delegation, kind).
+/// Inheritance : delegation row > global row (delegationId=null) > defaults.
+model NotificationChannel {
+  id           String                  @id @default(cuid())
+  tenantId     String
+  tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   delegationId String?
-  delegation   Delegation? @relation(fields: [delegationId], references: [id], onDelete: Cascade)
+  delegation   Delegation?             @relation(fields: [delegationId], references: [id], onDelete: Cascade)
 
-  /// Config canaux : { email: { inherit, enabled, recipients[] }, teams: { inherit, enabled, webhookUrl } }
-  channels Json @db.JsonB
+  kind         NotificationChannelKind
+  enabled      Boolean                 @default(true)
 
-  /// Config evenements : { TASK_ASSIGNED: { inherit, enabled, channels[] }, ... }
-  events Json @db.JsonB
+  /// EMAIL only: comma-separable list of recipient addresses.
+  recipients   String[]                @default([])
+  /// TEAMS only: incoming-webhook URL — encrypted-at-rest (ADR-019,
+  /// CryptoService.encryptIfPlain at write, decryptOrLegacy at read).
+  webhookUrl   String?
+  /// Non-sensitive options only (formatting, future per-channel flags).
+  /// ADR-020 rule : NEVER store secrets here — use scalar columns.
+  config       Json?                   @db.JsonB
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
 
-  @@unique([tenantId, delegationId])
+  @@unique([tenantId, delegationId, kind])
   @@index([tenantId])
-  @@map("notification_configs")
+  @@map("notification_channels")
+}
+
+/// Notification rules (ADR-020) — typed split of the former
+/// NotificationConfig.events JSON. One row per (tenant, delegation, eventType).
+/// Same inheritance pattern as NotificationChannel.
+model NotificationRule {
+  id           String                      @id @default(cuid())
+  tenantId     String
+  tenant       Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  delegationId String?
+  delegation   Delegation?                 @relation(fields: [delegationId], references: [id], onDelete: Cascade)
+
+  eventType    NotificationEventType
+  channels     NotificationChannelKind[]   @default([])
+  enabled      Boolean                     @default(true)
+
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
+
+  @@unique([tenantId, delegationId, eventType])
+  @@index([tenantId, eventType])
+  @@map("notification_rules")
 }
 
 /// Journal des notifications envoyees (audit) (R12)

@@ -171,43 +171,6 @@ describe('CryptoService', () => {
     });
   });
 
-  describe('encryptSubfields / decryptSubfields walker', () => {
-    let svc: CryptoService;
-    beforeAll(() => {
-      svc = buildService({ XCH_MASTER_KEY: masterKey });
-    });
-
-    it('encrypts the sub-path leaf, leaves siblings untouched', () => {
-      const channels = {
-        email: { enabled: true, recipients: ['ops@example.com'] },
-        teams: { enabled: true, webhookUrl: 'https://outlook.office.com/webhook/abc' },
-      };
-      const out = svc.encryptSubfields(channels, ['teams.webhookUrl']);
-      expect(out.email).toEqual(channels.email);
-      expect(out.teams.enabled).toBe(true);
-      expect(svc.isEncrypted(out.teams.webhookUrl)).toBe(true);
-    });
-
-    it('round-trips encrypt → decrypt with same shape', () => {
-      const channels = {
-        teams: { webhookUrl: 'https://example.com/abc' },
-      };
-      const enc = svc.encryptSubfields(channels, ['teams.webhookUrl']);
-      const dec = svc.decryptSubfields(enc, ['teams.webhookUrl']);
-      expect(dec.teams.webhookUrl).toBe('https://example.com/abc');
-    });
-
-    it('no-op if the path does not exist', () => {
-      const channels = { email: { enabled: false } };
-      const out = svc.encryptSubfields(channels, ['teams.webhookUrl']);
-      expect(out).toEqual(channels);
-    });
-
-    it('does not mutate the input', () => {
-      const channels = { teams: { webhookUrl: 'plain' } };
-      const before = JSON.stringify(channels);
-      svc.encryptSubfields(channels, ['teams.webhookUrl']);
-      expect(JSON.stringify(channels)).toBe(before);
-    });
-  });
+  // encryptSubfields / decryptSubfields walker removed in ADR-020 §B —
+  // secrets always live in scalar columns, not JSON sub-fields.
 });

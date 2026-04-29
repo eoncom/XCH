@@ -1,109 +1,102 @@
 /**
- * Notification Events — Central definition of all notification event types.
- * Extensible: add new events here, they auto-appear in config UI.
+ * Notification Events catalog (ADR-020).
+ *
+ * Ces enums DOIVENT rester alignés avec les enums Prisma `NotificationEventType`
+ * et `NotificationChannelKind` (schema.prisma). Pour ajouter un event :
+ *  1. Étendre l'enum TS ci-dessous.
+ *  2. Étendre l'enum Prisma + nouvelle migration.
+ *  3. Ajouter une entrée NOTIFICATION_EVENTS_META.
  */
 
-export enum NotificationEventType {
-  TASK_ASSIGNED = 'TASK_ASSIGNED',
-  TASK_STATUS_CHANGED = 'TASK_STATUS_CHANGED',
-  SITE_STATUS_CHANGED = 'SITE_STATUS_CHANGED',
-  ASSET_CRITICAL = 'ASSET_CRITICAL',
-  // Native monitoring (ADR-014 + ADR-016 — sole monitoring source after
-  // Gatus/Kuma removal).
-  MONITOR_DOWN = 'MONITOR_DOWN',
-  MONITOR_UP = 'MONITOR_UP',
-  USER_INVITED = 'USER_INVITED',
-  PASSWORD_RESET = 'PASSWORD_RESET',
-}
+import { NotificationEventType, NotificationChannelKind } from '@prisma/client';
 
-export enum NotificationChannel {
-  EMAIL = 'email',
-  TEAMS = 'teams',
-}
+// Re-export Prisma enums so the rest of the module reads from a single source.
+export { NotificationEventType, NotificationChannelKind };
 
 export interface NotificationEventMeta {
   label: string;
   description: string;
-  defaultChannels: NotificationChannel[];
+  defaultChannels: NotificationChannelKind[];
   category: 'tasks' | 'sites' | 'assets' | 'monitoring' | 'auth';
 }
 
-export const NOTIFICATION_EVENTS: Record<NotificationEventType, NotificationEventMeta> = {
-  [NotificationEventType.TASK_ASSIGNED]: {
+export const NOTIFICATION_EVENTS_META: Record<NotificationEventType, NotificationEventMeta> = {
+  TASK_ASSIGNED: {
     label: 'Tâche assignée',
     description: 'Notification quand une tâche est assignée à un utilisateur',
-    defaultChannels: [NotificationChannel.EMAIL],
+    defaultChannels: [NotificationChannelKind.EMAIL],
     category: 'tasks',
   },
-  [NotificationEventType.TASK_STATUS_CHANGED]: {
+  TASK_STATUS_CHANGED: {
     label: 'Changement statut tâche',
-    description: 'Notification quand le statut d\'une tâche change',
-    defaultChannels: [NotificationChannel.EMAIL],
+    description: "Notification quand le statut d'une tâche change",
+    defaultChannels: [NotificationChannelKind.EMAIL],
     category: 'tasks',
   },
-  [NotificationEventType.SITE_STATUS_CHANGED]: {
+  SITE_STATUS_CHANGED: {
     label: 'Changement statut site',
-    description: 'Notification quand le statut d\'un site change (actif, fermé, etc.)',
-    defaultChannels: [NotificationChannel.EMAIL, NotificationChannel.TEAMS],
+    description: "Notification quand le statut d'un site change (actif, fermé, etc.)",
+    defaultChannels: [NotificationChannelKind.EMAIL, NotificationChannelKind.TEAMS],
     category: 'sites',
   },
-  [NotificationEventType.ASSET_CRITICAL]: {
+  ASSET_CRITICAL: {
     label: 'Asset critique hors service',
     description: 'Notification quand un asset critique passe hors service',
-    defaultChannels: [NotificationChannel.EMAIL, NotificationChannel.TEAMS],
+    defaultChannels: [NotificationChannelKind.EMAIL, NotificationChannelKind.TEAMS],
     category: 'assets',
   },
-  [NotificationEventType.MONITOR_DOWN]: {
+  MONITOR_DOWN: {
     label: 'Monitor en panne',
     description: 'Notification quand un monitor natif passe à DOWN (ADR-014)',
-    defaultChannels: [NotificationChannel.EMAIL, NotificationChannel.TEAMS],
+    defaultChannels: [NotificationChannelKind.EMAIL, NotificationChannelKind.TEAMS],
     category: 'monitoring',
   },
-  [NotificationEventType.MONITOR_UP]: {
+  MONITOR_UP: {
     label: 'Monitor rétabli',
     description: 'Notification quand un monitor natif revient UP (ADR-014)',
-    defaultChannels: [NotificationChannel.EMAIL],
+    defaultChannels: [NotificationChannelKind.EMAIL],
     category: 'monitoring',
   },
-  [NotificationEventType.USER_INVITED]: {
+  USER_INVITED: {
     label: 'Invitation utilisateur',
-    description: 'Email d\'invitation envoyé à un nouvel utilisateur',
-    defaultChannels: [NotificationChannel.EMAIL],
+    description: "Email d'invitation envoyé à un nouvel utilisateur",
+    defaultChannels: [NotificationChannelKind.EMAIL],
     category: 'auth',
   },
-  [NotificationEventType.PASSWORD_RESET]: {
+  PASSWORD_RESET: {
     label: 'Réinitialisation mot de passe',
     description: 'Email de réinitialisation de mot de passe',
-    defaultChannels: [NotificationChannel.EMAIL],
+    defaultChannels: [NotificationChannelKind.EMAIL],
     category: 'auth',
   },
 };
 
-/** Payload sent to notification channels */
+/**
+ * Payload sent through the queue. The processor enriches it with the
+ * resolved channel configs at dispatch time.
+ */
 export interface NotificationPayload {
   tenantId: string;
   eventType: NotificationEventType;
-  /** Scope context — used for config resolution */
+  /** Scope context — used for rule resolution (delegation override). */
   scopeContext?: {
     siteId?: string;
     delegationId?: string;
   };
-  /** Entity that triggered the notification */
+  /** Entity that triggered the notification. */
   entity: {
     type: string; // 'task', 'site', 'asset', 'user'
     id: string;
     name: string;
   };
-  /** Human-readable title */
   title: string;
-  /** Human-readable body (HTML for email, plain for Teams) */
+  /** HTML body for email. */
   bodyHtml: string;
+  /** Plain-text body for Teams. */
   bodyText: string;
-  /** Link to the entity in XCH UI */
+  /** Link to the entity in XCH UI (relative path). */
   actionUrl?: string;
-  /** Additional context */
   metadata?: Record<string, any>;
-  /** Actor who triggered the event */
   actor?: {
     id: string;
     name: string;
@@ -111,48 +104,12 @@ export interface NotificationPayload {
   };
 }
 
-/** Channel config shape */
-export interface ChannelConfig {
-  inherit: boolean;
-  enabled: boolean;
-  // Channel-specific
-  recipients?: string[]; // email
-  webhookUrl?: string;   // teams
-}
-
-/** Event config shape */
-export interface EventConfig {
-  inherit: boolean;
-  enabled: boolean;
-  channels: NotificationChannel[];
-}
-
-/** Full notification config shape (stored in DB as JSON) */
-export interface NotificationChannelsConfig {
-  email: ChannelConfig;
-  teams: ChannelConfig;
-}
-
-export interface NotificationEventsConfig {
-  [key: string]: EventConfig;
-}
-
-/** Default tenant-level config */
-export function getDefaultConfig(): { channels: NotificationChannelsConfig; events: NotificationEventsConfig } {
-  return {
-    channels: {
-      email: { inherit: false, enabled: true, recipients: [] },
-      teams: { inherit: false, enabled: false, webhookUrl: '' },
-    },
-    events: Object.fromEntries(
-      Object.entries(NOTIFICATION_EVENTS).map(([key, meta]) => [
-        key,
-        {
-          inherit: false,
-          enabled: true,
-          channels: meta.defaultChannels,
-        },
-      ]),
-    ),
-  };
+/**
+ * Plain runtime config passed to channel senders. webhookUrl + recipients
+ * are already decrypted / plain at this point.
+ */
+export interface RuntimeChannelConfig {
+  kind: NotificationChannelKind;
+  recipients: string[];
+  webhookUrl: string | null;
 }

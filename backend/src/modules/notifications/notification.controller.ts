@@ -13,24 +13,25 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { NotificationConfigService } from './notification-config.service';
+import { NotificationSettingsService } from './notification-settings.service';
 import { NotificationService } from './notification.service';
-import { SaveNotificationConfigDto, TestChannelDto, NotificationLogQueryDto } from './dto/notification-config.dto';
-import { NOTIFICATION_EVENTS } from './notification-events';
+import {
+  SaveNotificationSettingsDto,
+  TestChannelDto,
+  NotificationLogQueryDto,
+} from './dto/notification-config.dto';
+import { NOTIFICATION_EVENTS_META } from './notification-events';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { RequireRead, RequireManage } from '../../common/decorators/require-right.decorator';
 
 /**
- * Notification config controller.
+ * Notification settings controller (ADR-020).
  *
  * Authorization (AUTH_MODEL v2) :
  * - /meta is a static catalog of events/channels → any authenticated user.
- * - /config, /config/resolved, PUT /config, DELETE /config/:delegationId,
- *   POST /test, GET /logs : require MANAGE on the active delegation
- *   (resolved by DelegationGuard via X-Delegation-Id). A `delegationId=null`
- *   query (global/tenant-wide config) is super-admin only and enforced inside
- *   the handler.
- * - GET /configs (tenant-wide overview) is super-admin only.
+ * - /config(.../resolved/.../configs) routes : MANAGE on the active
+ *   delegation (DelegationGuard via X-Delegation-Id).
+ * - delegationId=null (tenant-global) → super-admin only, enforced inline.
  */
 @ApiTags('Notifications')
 @ApiBearerAuth()
@@ -38,146 +39,128 @@ import { RequireRead, RequireManage } from '../../common/decorators/require-righ
 @Controller('notifications')
 export class NotificationController {
   constructor(
-    private configService: NotificationConfigService,
+    private settingsService: NotificationSettingsService,
     private notificationService: NotificationService,
   ) {}
 
-  /**
-   * Get available event types and channels (for UI rendering).
-   */
+  /** Static event/channel metadata for UI rendering. */
   @Get('meta')
   @SkipDelegation()
   @RequireRead()
   @ApiOperation({ summary: 'Get notification event types and channels metadata' })
   getMeta() {
     return {
-      events: NOTIFICATION_EVENTS,
+      events: NOTIFICATION_EVENTS_META,
       channels: this.notificationService.getAvailableChannels(),
     };
   }
 
-  /**
-   * Get the resolved (effective) config for a delegation, with inheritance applied.
-   * Declared BEFORE `config/:delegationId` so the literal `resolved` segment wins.
-   */
+  /** Resolved (post-inheritance) view — used by the UI debug pane. */
   @Get('config/resolved')
   @RequireManage()
-  @ApiOperation({ summary: 'Get resolved config with inheritance for a delegation' })
-  async getResolvedConfig(
+  @ApiOperation({ summary: 'Get resolved settings with inheritance for a delegation' })
+  async getResolvedSettings(
     @Query('delegationId') delegationId: string | undefined,
     @Request() req: any,
   ) {
     const tenantId = req.user.tenantId;
-    return this.configService.resolveConfig(tenantId, delegationId);
+    return this.settingsService.resolveSettings(tenantId, delegationId ?? null);
   }
 
   /**
-   * Get notification config for a delegation (path-based). The `global` sentinel
-   * in the path maps to a tenant-wide config (super-admin only); any other value
-   * is treated as a delegation id and requires MANAGE on that delegation.
+   * Path-based getter — the `global` sentinel maps to delegationId=null
+   * (super-admin only).
    */
   @Get('config/:delegationId')
   @RequireManage()
-  @ApiOperation({ summary: 'Get notification config for a delegation (use "global" for tenant-wide)' })
-  async getConfigByParam(
+  @ApiOperation({ summary: 'Get settings for a delegation (use "global" for tenant-wide)' })
+  async getSettingsByParam(
     @Param('delegationId') delegationIdParam: string,
     @Request() req: any,
   ) {
     const tenantId = req.user.tenantId;
     const delId = delegationIdParam === 'global' ? null : delegationIdParam;
     this.requireSuperAdminForGlobal(req.user, delId);
-    return this.configService.getConfig(tenantId, delId);
+    return this.settingsService.getSettings(tenantId, delId);
   }
 
-  /**
-   * Query-based variant kept for backward compat (external API clients).
-   */
+  /** Query-based variant kept for backward compat. */
   @Get('config')
   @RequireManage()
-  @ApiOperation({ summary: 'Get notification config via ?delegationId=… (backward compat)' })
-  async getConfig(
+  @ApiOperation({ summary: 'Get settings via ?delegationId=…' })
+  async getSettings(
     @Query('delegationId') delegationId: string | undefined,
     @Request() req: any,
   ) {
     const tenantId = req.user.tenantId;
     const delId = delegationId || null;
     this.requireSuperAdminForGlobal(req.user, delId);
-    return this.configService.getConfig(tenantId, delId);
+    return this.settingsService.getSettings(tenantId, delId);
   }
 
   /**
-   * Save notification config for a delegation (or global).
-   * Global config is super-admin only.
+   * Save settings. Atomic — channels and rules upserted in a single
+   * transaction. Channels and rules absent from the payload are deleted
+   * at this scope.
    */
   @Put('config')
   @RequireManage()
-  @ApiOperation({ summary: 'Save notification config' })
-  async saveConfig(@Body() dto: SaveNotificationConfigDto, @Request() req: any) {
+  @ApiOperation({ summary: 'Save notification settings (channels + rules)' })
+  async saveSettings(@Body() dto: SaveNotificationSettingsDto, @Request() req: any) {
     const tenantId = req.user.tenantId;
     const delegationId = dto.delegationId ?? null;
     this.requireSuperAdminForGlobal(req.user, delegationId);
-    return this.configService.saveConfig(tenantId, delegationId, {
+    return this.settingsService.saveSettings(tenantId, delegationId, {
       channels: dto.channels,
-      events: dto.events,
+      rules: dto.rules,
     });
   }
 
-  /**
-   * Delete notification config for a delegation (revert to inheritance).
-   * `global` sentinel deletes the tenant-wide config (super-admin only).
-   */
+  /** Delete every channel + rule at this scope (revert to inheritance). */
   @Delete('config/:delegationId')
   @RequireManage()
-  @ApiOperation({ summary: 'Delete config for a delegation — or the tenant-wide config with "global"' })
-  async deleteConfig(
+  @ApiOperation({ summary: 'Delete settings at this scope — "global" = tenant-wide' })
+  async deleteSettings(
     @Param('delegationId') delegationIdParam: string,
     @Request() req: any,
   ) {
     const tenantId = req.user.tenantId;
     const delId = delegationIdParam === 'global' ? null : delegationIdParam;
     this.requireSuperAdminForGlobal(req.user, delId);
-    return this.configService.deleteConfig(tenantId, delId);
+    return this.settingsService.deleteSettings(tenantId, delId);
   }
 
-  /**
-   * Get all notification configs for the tenant (admin overview).
-   * Super-admin only: SkipDelegation + RequireManage resolves to isSuperAdmin in PermissionGuard.
-   */
+  /** Tenant-wide overview (super-admin). */
   @Get('configs')
   @SkipDelegation()
   @RequireManage()
-  @ApiOperation({ summary: 'List all notification configs for the tenant (super admin only)' })
-  async getAllConfigs(@Request() req: any) {
-    return this.configService.getAllConfigs(req.user.tenantId);
+  @ApiOperation({ summary: 'List all notification settings rows for the tenant (super admin)' })
+  async getAllSettings(@Request() req: any) {
+    return this.settingsService.getAllSettings(req.user.tenantId);
   }
 
-  /**
-   * Test a notification channel.
-   */
+  /** Synchronous channel test — UI affordance. */
   @Post('test')
   @RequireManage()
   @ApiOperation({ summary: 'Test a notification channel' })
   async testChannel(@Body() dto: TestChannelDto) {
-    return this.notificationService.testChannel(dto.channel, dto.config as any);
+    return this.notificationService.testChannel(dto.kind, {
+      recipients: dto.recipients,
+      webhookUrl: dto.webhookUrl,
+    });
   }
 
-  /**
-   * Get notification logs.
-   */
+  /** NotificationLog tail. */
   @Get('logs')
   @RequireManage()
   @ApiOperation({ summary: 'Get notification logs' })
   async getLogs(@Query() query: NotificationLogQueryDto, @Request() req: any) {
-    return this.configService.getLogs(req.user.tenantId, query);
+    return this.settingsService.getLogs(req.user.tenantId, query);
   }
 
-  /**
-   * Global (tenant-wide) notification config is super-admin only.
-   * Delegation-scoped access is already validated by DelegationGuard + PermissionGuard.
-   */
   private requireSuperAdminForGlobal(user: any, delegationId: string | null) {
     if (delegationId === null && !user.isSuperAdmin) {
-      throw new ForbiddenException('Only super admins can manage global notification config');
+      throw new ForbiddenException('Only super admins can manage global notification settings');
     }
   }
 }

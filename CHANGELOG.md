@@ -7,6 +7,44 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.7.0] - 2026-04-29 — NotificationConfig refacto + Worker BullMQ (Session 3 du plan v2 finalization)
+
+### Changed (BREAKING — API + DB)
+- **ADR-020 — `NotificationConfig` (1 table, 2 colonnes JSON) → split en 2 tables typées** :
+  - `NotificationChannel` (kind, enabled, recipients[], webhookUrl scalaire chiffré, config JSON non-sensible).
+  - `NotificationRule` (eventType, channels[] enum, enabled).
+  - Migration `6_notifications_split` : INSERT depuis JSON puis DROP `notification_configs`.
+  - 2 nouveaux enums Prisma : `NotificationChannelKind` (EMAIL, TEAMS), `NotificationEventType` (8 valeurs).
+- **Inheritance simplifiée** : plus de flag `inherit:true` JSON. Convention : delegation row override > global row > defaults `NOTIFICATION_EVENTS_META`.
+- **API contract breaking** :
+  - `GET /api/notifications/config?delegationId=…` → `{ scope, channels[], rules[], isDefault }`.
+  - `PUT /api/notifications/config` → reçoit la même shape, transaction upsert.
+  - DTO : `SaveNotificationSettingsDto` + `SaveSettingsChannelDto` + `SaveSettingsRuleDto` typés enums.
+  - `POST /api/notifications/test` reçoit `{ kind, recipients?, webhookUrl? }`.
+- **Frontend** : `NotificationsConfigPanel.tsx` + `lib/api/notifications.ts` adaptés au nouveau shape. Plus d'option « Hériter par-event/par-channel » — un override existe (row) ou il n'existe pas. Le bouton « Réinitialiser (hériter) » fait DELETE de tous les rows au scope courant.
+
+### Added (worker async)
+- **Queue BullMQ `notifications`** + `NotificationProcessor` (consume `notification-dispatch` jobs).
+  - Retry 3× backoff exponentiel (1s, 5s, 30s).
+  - `removeOnComplete: { age: 3600, count: 1000 }` / `removeOnFail: { age: 86400 }`.
+  - Logs persistés par le processor dans `NotificationLog` (source de vérité unique).
+- **`NotificationService.queueDispatch()`** : remplace `dispatch()`. Push instantané sur Redis (~ms), retour avant l'envoi effectif. Les 5 callers (tasks/assets/sites/monitoring/auth — via `NotificationEmitter` + `MonitorProcessor` direct) utilisent désormais cette voie.
+- **`NotificationSettingsService`** : nouveau service CRUD + `resolveSettings()` (delegation > global > defaults).
+
+### Security
+- **`teams.webhookUrl` chiffré at-rest** comme colonne scalaire (`CryptoService.encryptIfPlain` au write, `decryptOrLegacy` au read), ADR-019 pattern. Le walker JSON sub-field (`encryptSubfields` / `decryptSubfields` / `ENCRYPTED_CHANNEL_PATHS`) est **retiré** du `CryptoService` et de ses tests — règle architecturale unique post-ADR-020 : `config_json` ne contient jamais de secret, tout secret en colonne scalaire chiffrée.
+
+### Removed
+- `notification-config.service.ts` (legacy NotificationConfigService).
+- `getDefaultConfig`, `NotificationChannelsConfig`, `NotificationEventsConfig`, `ChannelConfig`, `EventConfig` (interfaces JSON-shape de l'ancien modèle).
+- `CryptoService.encryptSubfields` / `decryptSubfields` (pattern walker abandonné).
+
+### Documentation
+- ADR-020 rédigée (avec règle architecturale `config_json` non-sensible).
+- ADR-019 référencée comme "pattern parent" pour le chiffrement scalaire.
+
+---
+
 ## [1.6.2] - 2026-04-29 — Chiffrement secrets at-rest (Session 2 du plan v2 finalization)
 
 ### Security / Added

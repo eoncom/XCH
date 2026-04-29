@@ -230,6 +230,12 @@ bidirectional, JSON debt baseline). Voir [`docs/decisions/`](docs/decisions/).
 **📅 Date:** 2026-04-29
 **✅ Statut:** Accepté (livré v1.6.2)
 
+#### ADR-020: NotificationConfig refacto + Worker BullMQ (Session 3)
+**📍 Chemin:** [`docs/decisions/adr-020-notifications-refacto-async.md`](docs/decisions/adr-020-notifications-refacto-async.md)
+**📝 Décision:** Split `NotificationConfig` (JSON) → 2 tables typées (`NotificationChannel` + `NotificationRule`), enums Prisma, queue `notifications` + processor BullMQ (retry 3× backoff), `teams.webhookUrl` colonne scalaire chiffrée. Règle architecturale : `config_json` ne contient jamais de secret.
+**📅 Date:** 2026-04-29
+**✅ Statut:** Accepté (livré v1.7.0)
+
 ### Roadmap
 **📍 Chemin:** [`status/ROADMAP.md`](status/ROADMAP.md)
 **📝 Description:** Planification détaillée du développement par phases

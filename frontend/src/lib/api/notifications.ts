@@ -1,35 +1,72 @@
 import { apiClient } from '../api-client';
 
-export interface ChannelConfig {
-  inherit: boolean;
+/**
+ * ADR-020 — flat shape mirroring the backend's NotificationChannel +
+ * NotificationRule tables. webhookUrl is plaintext over the wire (decrypted
+ * at API boundary by NotificationSettingsService).
+ */
+export type NotificationChannelKind = 'EMAIL' | 'TEAMS';
+
+export type NotificationEventType =
+  | 'TASK_ASSIGNED'
+  | 'TASK_STATUS_CHANGED'
+  | 'SITE_STATUS_CHANGED'
+  | 'ASSET_CRITICAL'
+  | 'MONITOR_DOWN'
+  | 'MONITOR_UP'
+  | 'USER_INVITED'
+  | 'PASSWORD_RESET';
+
+export interface NotificationChannelDto {
+  id?: string;
+  kind: NotificationChannelKind;
   enabled: boolean;
-  recipients?: string[];
-  webhookUrl?: string;
+  /** EMAIL only. */
+  recipients: string[];
+  /** TEAMS only. Plaintext at write, returned as plaintext for the form. */
+  webhookUrl: string | null;
+  /** Read-only metadata. */
+  webhookUrlSet?: boolean;
+  webhookUrlHint?: string | null;
 }
 
-export interface EventConfig {
-  inherit: boolean;
+export interface NotificationRuleDto {
+  id?: string;
+  eventType: NotificationEventType;
   enabled: boolean;
-  channels: string[];
+  channels: NotificationChannelKind[];
 }
 
-export interface NotificationConfigData {
-  id: string | null;
-  tenantId: string;
-  delegationId: string | null;
-  channels: Record<string, ChannelConfig>;
-  events: Record<string, EventConfig>;
-  isDefault?: boolean;
+export interface NotificationSettings {
+  scope: { tenantId: string; delegationId: string | null };
+  channels: NotificationChannelDto[];
+  rules: NotificationRuleDto[];
+  isDefault: boolean;
+}
+
+export interface ResolvedSettings {
+  channels: Array<{
+    kind: NotificationChannelKind;
+    recipients: string[];
+    webhookUrl: string | null;
+    enabled: boolean;
+  }>;
+  rules: Array<{
+    eventType: NotificationEventType;
+    enabled: boolean;
+    channels: NotificationChannelKind[];
+    source: 'global' | 'delegation' | 'default';
+  }>;
 }
 
 export interface NotificationMeta {
-  events: Record<string, {
+  events: Record<NotificationEventType, {
     label: string;
     description: string;
-    defaultChannels: string[];
-    category: string;
+    defaultChannels: NotificationChannelKind[];
+    category: 'tasks' | 'sites' | 'assets' | 'monitoring' | 'auth';
   }>;
-  channels: { name: string; label: string }[];
+  channels: { kind: NotificationChannelKind; label: string }[];
 }
 
 export interface NotificationLog {
@@ -45,30 +82,45 @@ export interface NotificationLog {
 }
 
 export const notificationsApi = {
-  getMeta: () =>
-    apiClient.get<NotificationMeta>('/api/notifications/meta'),
+  getMeta: () => apiClient.get<NotificationMeta>('/api/notifications/meta'),
 
-  getConfig: (delegationId: string | null) =>
-    apiClient.get<NotificationConfigData>(`/api/notifications/config/${delegationId || 'global'}`),
+  getSettings: (delegationId: string | null) =>
+    apiClient.get<NotificationSettings>(
+      `/api/notifications/config/${delegationId || 'global'}`,
+    ),
 
-  getResolvedConfig: (delegationId?: string) => {
+  getResolvedSettings: (delegationId?: string) => {
     const qs = new URLSearchParams();
     if (delegationId) qs.set('delegationId', delegationId);
     const query = qs.toString();
-    return apiClient.get(`/api/notifications/config/resolved${query ? `?${query}` : ''}`);
+    return apiClient.get<ResolvedSettings>(
+      `/api/notifications/config/resolved${query ? `?${query}` : ''}`,
+    );
   },
 
-  saveConfig: (data: { delegationId: string | null; channels: any; events: any }) =>
-    apiClient.put('/api/notifications/config', data),
+  saveSettings: (data: {
+    delegationId: string | null;
+    channels: Array<Pick<NotificationChannelDto, 'kind' | 'enabled' | 'recipients' | 'webhookUrl'>>;
+    rules: Array<Pick<NotificationRuleDto, 'eventType' | 'enabled' | 'channels'>>;
+  }) => apiClient.put<NotificationSettings>('/api/notifications/config', data),
 
-  deleteConfig: (delegationId: string | null) =>
+  deleteSettings: (delegationId: string | null) =>
     apiClient.delete(`/api/notifications/config/${delegationId || 'global'}`),
 
-  getAllConfigs: () =>
-    apiClient.get<NotificationConfigData[]>('/api/notifications/configs'),
+  getAllSettings: () =>
+    apiClient.get<{
+      channels: NotificationChannelDto[];
+      rules: NotificationRuleDto[];
+    }>('/api/notifications/configs'),
 
-  testChannel: (channel: string, config: any) =>
-    apiClient.post<{ success: boolean; error?: string }>('/api/notifications/test', { channel, config }),
+  testChannel: (
+    kind: NotificationChannelKind,
+    config: { recipients?: string[]; webhookUrl?: string | null },
+  ) =>
+    apiClient.post<{ success: boolean; error?: string }>('/api/notifications/test', {
+      kind,
+      ...config,
+    }),
 
   getLogs: async (params?: { page?: number; pageSize?: number; eventType?: string }) => {
     const qs = new URLSearchParams();
@@ -76,6 +128,8 @@ export const notificationsApi = {
     if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
     if (params?.eventType) qs.set('eventType', params.eventType);
     const query = qs.toString();
-    return apiClient.get<{ data: NotificationLog[]; meta: any }>(`/api/notifications/logs${query ? `?${query}` : ''}`);
+    return apiClient.get<{ data: NotificationLog[]; meta: any }>(
+      `/api/notifications/logs${query ? `?${query}` : ''}`,
+    );
   },
 };

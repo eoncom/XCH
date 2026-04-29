@@ -1,21 +1,23 @@
-import { NotificationPayload, ChannelConfig } from '../notification-events';
+import { NotificationPayload, RuntimeChannelConfig } from '../notification-events';
 
 /**
- * Interface for notification channels.
- * Extensible: implement this interface to add new channels (Slack, etc.)
+ * Sender interface for notification channels (ADR-020).
+ *
+ * Channels receive a `RuntimeChannelConfig` with secrets already decrypted —
+ * they never touch the DB or CryptoService directly. Adding a new channel
+ * (Slack, Discord, …) means : (1) extend NotificationChannelKind enum, (2)
+ * implement this interface, (3) register it in NotificationProcessor.
  */
 export interface INotificationChannel {
-  /** Channel identifier */
-  readonly name: string;
+  /** Channel identifier (must match NotificationChannelKind value). */
+  readonly kind: string;
 
-  /**
-   * Send a notification through this channel.
-   * @returns true if sent successfully, false otherwise
-   */
-  send(payload: NotificationPayload, config: ChannelConfig): Promise<{ success: boolean; error?: string }>;
+  /** Send a notification. Returns success/error — never throws. */
+  send(
+    payload: NotificationPayload,
+    config: RuntimeChannelConfig,
+  ): Promise<{ success: boolean; error?: string }>;
 
-  /**
-   * Test the channel configuration (e.g., send test message)
-   */
-  test(config: ChannelConfig): Promise<{ success: boolean; error?: string }>;
+  /** Test the configuration (e.g. send a probe message). */
+  test(config: RuntimeChannelConfig): Promise<{ success: boolean; error?: string }>;
 }

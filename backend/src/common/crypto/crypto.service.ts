@@ -167,60 +167,12 @@ export class CryptoService {
     }
   }
 
-  /**
-   * Walk a JSON-like object and encrypt the leaves at the given dot
-   * paths. Mutates a shallow copy and returns it. Used for cible 4
-   * (NotificationConfig.channels.teams.webhookUrl).
-   */
-  encryptSubfields<T extends object>(obj: T, paths: string[]): T {
-    if (!obj || typeof obj !== 'object') return obj;
-    const out: any = Array.isArray(obj) ? [...obj] : { ...obj };
-    for (const path of paths) {
-      const segments = path.split('.');
-      this.applyAtPath(out, segments, (leaf) =>
-        typeof leaf === 'string' ? this.encryptIfPlain(leaf) : leaf,
-      );
-    }
-    return out;
-  }
-
-  /** Inverse of `encryptSubfields`. */
-  decryptSubfields<T extends object>(obj: T, paths: string[]): T {
-    if (!obj || typeof obj !== 'object') return obj;
-    const out: any = Array.isArray(obj) ? [...obj] : { ...obj };
-    for (const path of paths) {
-      const segments = path.split('.');
-      this.applyAtPath(out, segments, (leaf) =>
-        typeof leaf === 'string' ? this.decryptOrLegacy(leaf) : leaf,
-      );
-    }
-    return out;
-  }
-
   /** Constant-time string compare — kept here so callers don't reach for crypto directly. */
   safeEquals(a: string, b: string): boolean {
     const ba = Buffer.from(a);
     const bb = Buffer.from(b);
     if (ba.length !== bb.length) return false;
     return timingSafeEqual(ba, bb);
-  }
-
-  private applyAtPath(
-    root: any,
-    segments: string[],
-    transform: (leaf: any) => any,
-  ): void {
-    if (segments.length === 0) return;
-    const [head, ...rest] = segments;
-    const node = root[head];
-    if (node == null) return;
-    if (rest.length === 0) {
-      root[head] = transform(node);
-    } else if (typeof node === 'object') {
-      // Shallow-copy so we don't mutate the input
-      root[head] = Array.isArray(node) ? [...node] : { ...node };
-      this.applyAtPath(root[head], rest, transform);
-    }
   }
 
   private loadKey(envName: string): Buffer | null {

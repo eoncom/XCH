@@ -2,11 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { INotificationChannel } from './channel.interface';
-import { NotificationPayload, ChannelConfig } from '../notification-events';
+import {
+  NotificationChannelKind,
+  NotificationPayload,
+  RuntimeChannelConfig,
+} from '../notification-events';
 
 @Injectable()
 export class EmailChannel implements INotificationChannel {
-  readonly name = 'email';
+  readonly kind = NotificationChannelKind.EMAIL;
   private transporter: nodemailer.Transporter | null = null;
   private readonly logger = new Logger(EmailChannel.name);
   private readonly fromAddress: string;
@@ -31,7 +35,10 @@ export class EmailChannel implements INotificationChannel {
     }
   }
 
-  async send(payload: NotificationPayload, config: ChannelConfig): Promise<{ success: boolean; error?: string }> {
+  async send(
+    payload: NotificationPayload,
+    config: RuntimeChannelConfig,
+  ): Promise<{ success: boolean; error?: string }> {
     const recipients = config.recipients || [];
     if (recipients.length === 0) {
       return { success: false, error: 'No email recipients configured' };
@@ -59,7 +66,7 @@ export class EmailChannel implements INotificationChannel {
     }
   }
 
-  async test(config: ChannelConfig): Promise<{ success: boolean; error?: string }> {
+  async test(config: RuntimeChannelConfig): Promise<{ success: boolean; error?: string }> {
     if (!this.transporter) {
       return { success: false, error: 'SMTP not configured. Set SMTP_HOST in environment.' };
     }

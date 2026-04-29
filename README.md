@@ -335,6 +335,21 @@ npm run test:e2e:report       # Ouvrir rapport
 
 ## Changelog (versions recentes)
 
+### v1.7.0 (2026-04-29) — Notifications refacto + Worker BullMQ (Session 3)
+- **ADR-020** : `NotificationConfig` (1 table, 2 JSON) → 2 tables typées
+  `NotificationChannel` + `NotificationRule` avec enums Prisma. Migration
+  versionnée `6_notifications_split` (INSERT FROM JSON puis DROP).
+- **Worker BullMQ** : queue `notifications` + `NotificationProcessor`
+  (retry 3× backoff exponentiel, fan-out vers EmailChannel / TeamsChannel).
+  Les 5 callers (tasks/assets/sites/monitoring/auth) ne bloquent plus sur
+  SMTP / Teams.
+- **`teams.webhookUrl`** : colonne scalaire chiffrée (ADR-019 pattern).
+  Le walker JSON sub-field (`encryptSubfields` / `decryptSubfields`)
+  retiré : règle unique post-ADR-020 — `config_json` ne contient jamais
+  de secret.
+- **API breaking** côté front : nouveau shape `{ channels[], rules[] }`,
+  panel UI refondu, DTO typés enums.
+
 ### v1.6.2 (2026-04-29) — Chiffrement secrets at-rest (Session 2)
 - **ADR-019** : AES-256-GCM applicatif pour 4 colonnes sensibles en DB —
   `TenantSsoConfig.clientSecret`, `TenantIntegrationConfig.netboxToken`,

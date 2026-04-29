@@ -1,8 +1,10 @@
 import { Module, Global } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { BullModule } from '@nestjs/bull';
 import { NotificationService } from './notification.service';
-import { NotificationConfigService } from './notification-config.service';
+import { NotificationSettingsService } from './notification-settings.service';
 import { NotificationController } from './notification.controller';
+import { NotificationProcessor, NOTIFICATIONS_QUEUE } from './notification.processor';
 import { EmailChannel } from './channels/email.channel';
 import { TeamsChannel } from './channels/teams.channel';
 import { NotificationEmitter } from './notification-emitter';
@@ -10,16 +12,21 @@ import { UserNotificationService } from './user-notification.service';
 import { UserNotificationController } from './user-notification.controller';
 
 /**
- * Global module — NotificationService can be injected anywhere
- * without importing NotificationsModule explicitly.
+ * Global module — NotificationService + NotificationEmitter can be injected
+ * anywhere without re-importing. Owns the BullMQ queue `notifications` (ADR-020)
+ * and the processor that drains it.
  */
 @Global()
 @Module({
-  imports: [ConfigModule],
+  imports: [
+    ConfigModule,
+    BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE }),
+  ],
   controllers: [NotificationController, UserNotificationController],
   providers: [
     NotificationService,
-    NotificationConfigService,
+    NotificationSettingsService,
+    NotificationProcessor,
     NotificationEmitter,
     EmailChannel,
     TeamsChannel,
@@ -27,7 +34,7 @@ import { UserNotificationController } from './user-notification.controller';
   ],
   exports: [
     NotificationService,
-    NotificationConfigService,
+    NotificationSettingsService,
     NotificationEmitter,
     UserNotificationService,
   ],
