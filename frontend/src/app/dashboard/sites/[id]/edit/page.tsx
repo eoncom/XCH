@@ -551,23 +551,23 @@ function EditSitePage({
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
                   currentStep === step.id
-                    ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-200'
-                    : 'bg-white border-gray-300 text-gray-500 group-hover:border-blue-400 group-hover:text-blue-600'
+                    ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-200 dark:ring-blue-900'
+                    : 'bg-card border-border text-muted-foreground group-hover:border-blue-400 group-hover:text-blue-600'
                 }`}
               >
                 <span className="text-sm font-semibold">{step.id}</span>
               </div>
               <div className="mt-2 text-center">
                 <div className={`text-sm font-medium transition-colors ${
-                  currentStep === step.id ? 'text-blue-700' : 'text-gray-500 group-hover:text-blue-600'
+                  currentStep === step.id ? 'text-blue-700 dark:text-blue-400' : 'text-muted-foreground group-hover:text-blue-600'
                 }`}>
                   {step.name}
                 </div>
-                <div className="text-xs text-gray-400">{step.description}</div>
+                <div className="text-xs text-muted-foreground/80">{step.description}</div>
               </div>
             </button>
             {index < STEPS.length - 1 && (
-              <div className="w-16 h-0.5 mx-4 bg-gray-200" />
+              <div className="w-16 h-0.5 mx-4 bg-border" />
             )}
           </div>
         ))}

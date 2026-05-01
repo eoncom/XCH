@@ -2500,6 +2500,8 @@ export default function SettingsPage() {
                         : 'border-muted hover:border-muted-foreground/50'
                     }`}
                   >
+                    {/* Theme picker swatches: hardcoded light/dark colors are intentional —
+                        each swatch previews what the named theme looks like. */}
                     <div className="h-16 w-16 rounded-lg bg-white border border-gray-200 flex items-center justify-center mb-3 shadow-sm">
                       <Sun className="h-8 w-8 text-yellow-500" />
                     </div>
@@ -2515,6 +2517,7 @@ export default function SettingsPage() {
                         : 'border-muted hover:border-muted-foreground/50'
                     }`}
                   >
+                    {/* See comment above on the light swatch — same rationale. */}
                     <div className="h-16 w-16 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center mb-3 shadow-sm">
                       <Moon className="h-8 w-8 text-slate-400" />
                     </div>
@@ -2764,7 +2767,9 @@ export default function SettingsPage() {
                     </Label>
                     <div className="flex items-center gap-4">
                       {logoUrl && (
-                        <div className="h-12 w-12 rounded-lg border bg-white flex items-center justify-center overflow-hidden">
+                        // Logos are typically transparent/light — keep white bg in both themes,
+                        // add a ring in dark mode so the swatch reads against the dark canvas.
+                        <div className="h-12 w-12 rounded-lg border bg-white dark:ring-1 dark:ring-border flex items-center justify-center overflow-hidden">
                           <img src={logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
                         </div>
                       )}

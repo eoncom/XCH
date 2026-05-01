@@ -25,7 +25,7 @@ import { getWarrantyStatus, getWarrantyDaysLeft, useWarrantyThresholds, type War
 const SitesMap = dynamic(() => import('@/components/maps/SitesMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-[400px] flex items-center justify-center bg-gray-50 rounded-md">
+    <div className="h-[400px] flex items-center justify-center bg-muted rounded-md text-muted-foreground">
       Chargement de la carte...
     </div>
   ),
@@ -480,7 +480,7 @@ export default function DashboardPage() {
                 height="400px"
               />
             ) : (
-              <div className="h-[400px] flex items-center justify-center rounded-md border bg-gray-50 text-sm text-muted-foreground">
+              <div className="h-[400px] flex items-center justify-center rounded-md border bg-muted text-sm text-muted-foreground">
                 Aucun site avec coordonnées GPS disponible
               </div>
             )}
