@@ -1,6 +1,6 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-05-01 22:03:37 (Auto-update)
+**Dernière mise à jour :** 2026-05-01 22:42:51 (Auto-update)
 **Version actuelle :** 1.8.0 (taguée 2026-04-30)
 **Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + Sessions 1-4 finalization v2 livrées + RBAC universel ADR-021 (14/15 modules fixés, ~85 attaques d'intrusion bloquantes en CI)
 
@@ -27,8 +27,8 @@
 | 3 | NotificationConfig refacto (Channel + Rule, pas de Digest YAGNI) + Worker générique BullMQ + walker JSON retiré | ADR-020 | v1.7.0 | ✅ Livrée 2026-04-29 |
 | 4 | RBAC universel + tests d'intrusion bloquants (réorienté depuis perf/intégrité DB après audit RBAC découvrant 14/15 modules incohérents) | ADR-021 | v1.8.0 | ✅ Livrée 2026-04-30 |
 | 5 | Performance & intégrité DB (indexes, FK CHECK, query plans) + UX deep-link 404 résiduelle (monitoring/[id], consumption/[siteId]) | — | v1.8.1 | ✅ Livrée 2026-05-01 |
-| 6 | UX dark canvas + erreurs réseau + tap targets (cible laptop/iPad/tablette, pas mobile) | — | intermédiaire | ⏳ |
-| 7 | Refonte E2E Playwright (30-40 specs critical paths) | — | v1.8.0 | ⏳ |
+| 6 | UX dark canvas + erreurs réseau + tap targets (cible laptop/iPad/tablette, pas mobile) | — | v1.8.2 | ✅ Livrée 2026-05-01 |
+| 7 | Refonte E2E Playwright (30-40 specs critical paths) | — | v1.9.0 | ⏳ |
 | 8 | (Optionnelle) Sentry / error tracking | — | — | 🔮 |
 
 Rationale : S2/S3/S4 indépendantes, S5 dépend de S2+S3 (drift doc), S7
