@@ -314,6 +314,18 @@ function PinMarker({ pin, onClick, onDragEnd, draggable = false, imageWidth, ima
       onDragMove={() => {}}
       onDragEnd={handleDragEnd}
     >
+      {/* S6 PR5 — Invisible 44x44 hit area centered on the pin so taps
+          on tablet/iPad land cleanly on a finger-sized target without
+          changing the visual size of the pin shape. */}
+      <Rect
+        x={-22}
+        y={-22}
+        width={44}
+        height={44}
+        fill="transparent"
+        listening={true}
+      />
+
       {/* Shadow */}
       <Circle
         radius={15}
@@ -1512,21 +1524,21 @@ export default function FloorPlanViewer({
       <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
         <button
           onClick={handleZoomIn}
-          className="w-9 h-9 rounded-lg bg-white/90 dark:bg-gray-800/90 border shadow-sm hover:bg-white dark:hover:bg-gray-700 flex items-center justify-center text-lg font-bold transition-colors"
+          className="w-10 h-10 rounded-lg bg-white/90 dark:bg-gray-800/90 border shadow-sm hover:bg-white dark:hover:bg-gray-700 flex items-center justify-center text-lg font-bold transition-colors"
           title="Zoom avant"
         >
           +
         </button>
         <button
           onClick={handleZoomOut}
-          className="w-9 h-9 rounded-lg bg-white/90 dark:bg-gray-800/90 border shadow-sm hover:bg-white dark:hover:bg-gray-700 flex items-center justify-center text-lg font-bold transition-colors"
+          className="w-10 h-10 rounded-lg bg-white/90 dark:bg-gray-800/90 border shadow-sm hover:bg-white dark:hover:bg-gray-700 flex items-center justify-center text-lg font-bold transition-colors"
           title="Zoom arrière"
         >
           −
         </button>
         <button
           onClick={handleResetZoom}
-          className="w-9 h-9 rounded-lg bg-white/90 dark:bg-gray-800/90 border shadow-sm hover:bg-white dark:hover:bg-gray-700 flex items-center justify-center text-xs font-medium transition-colors"
+          className="w-10 h-10 rounded-lg bg-white/90 dark:bg-gray-800/90 border shadow-sm hover:bg-white dark:hover:bg-gray-700 flex items-center justify-center text-xs font-medium transition-colors"
           title="Réinitialiser le zoom"
         >
           1:1

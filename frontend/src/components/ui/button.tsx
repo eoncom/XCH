@@ -38,8 +38,16 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : 'button';
+    // S6 PR5 — data-size lets globals.css @media (pointer: coarse) bump
+    // small / icon variants up to a 44px tap target on touch devices
+    // without affecting laptop+mouse layouts.
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp
+        data-size={size ?? 'default'}
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
     );
   }
 );

@@ -115,7 +115,7 @@ export function NotificationInbox() {
         type="button"
         onClick={toggleOpen}
         title="Notifications"
-        className="relative inline-flex items-center justify-center rounded-md hover:bg-accent w-9 h-9"
+        className="relative inline-flex items-center justify-center rounded-md hover:bg-accent w-10 h-10"
       >
         <Bell className="h-5 w-5" />
         {unread > 0 && (

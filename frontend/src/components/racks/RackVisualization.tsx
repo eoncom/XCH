@@ -20,7 +20,10 @@ interface RackVisualizationProps {
   selectedUnit?: number;
 }
 
-const UNIT_HEIGHT = 30;
+// S6 PR5 — Unit height bumped 30 → 36 so each U slot tap area meets the
+// touch target floor for tablet use. Total rack height grows ~20%; the
+// scrollable card container absorbs it without layout overflow.
+const UNIT_HEIGHT = 36;
 const RACK_WIDTH = 400;
 const PADDING = 20;
 
