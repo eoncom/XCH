@@ -905,6 +905,8 @@ model Task {
   @@index([tenantId, status])
   @@index([tenantId, assignedTo])
   @@index([tenantId, dueDate])
+  // Kanban hot-path: WHERE tenantId=… AND status=… ORDER BY dueDate
+  @@index([tenantId, status, dueDate])
   @@index([expenseId])
   @@map("tasks")
 }
@@ -1375,6 +1377,9 @@ model Expense {
   @@index([bearerId])
   @@index([tenantId, delegationId])
   @@index([vendorId])
+  // Budget threshold + filtres expenses récents par délégation:
+  // WHERE tenantId=… AND delegationId=… AND dateIncurred BETWEEN …
+  @@index([tenantId, delegationId, dateIncurred(sort: Desc)])
   @@map("expenses")
 }
 
