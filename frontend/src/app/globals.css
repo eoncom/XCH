@@ -181,3 +181,51 @@
     @apply backdrop-blur-sm bg-black/50;
   }
 }
+
+/* S6 PR5 — Tap targets for touch devices (iPad, tablette, laptop tactile).
+ *
+ * The XCH target devices are laptop / iPad / tablet (validated 2026-04-26).
+ * iOS HIG asks for 44pt × 44pt minimum, Material Design for 48dp.
+ * `pointer: coarse` matches finger / stylus input. A laptop with a mouse
+ * connected reports `fine` and gets nothing — visuals stay identical.
+ *
+ * Default shadcn primitives ship sub-44pt sizes (button h-10/h-9, icon
+ * 10x10, checkbox 4x4, switch h-5). Rather than bumping every default
+ * (which would shift desktop layouts), we extend the hit area on coarse
+ * pointers only.
+ *
+ * `min-height` does NOT shrink elements below their declared height; it
+ * raises them when h-9 / h-10 are smaller than 44px. Visual position is
+ * preserved by Flex / Grid alignment.
+ */
+@media (pointer: coarse) {
+  button,
+  a[role="button"],
+  [role="tab"],
+  [role="menuitem"] {
+    min-height: 44px;
+  }
+
+  button[data-size="icon"],
+  button[data-size="sm"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Hit-area extension for Radix checkbox / switch — pseudo-element overlay,
+   * doesn't change the visual square (h-4 w-4) but absorbs taps in a 44x44 zone.
+   * `pointer-events: auto` ensures the overlay catches the tap; the parent
+   * still emits the change event because it's the click target ancestor. */
+  [role="checkbox"],
+  [role="switch"] {
+    position: relative;
+  }
+
+  [role="checkbox"]::before,
+  [role="switch"]::before {
+    content: '';
+    position: absolute;
+    inset: -14px;
+    pointer-events: auto;
+  }
+}
