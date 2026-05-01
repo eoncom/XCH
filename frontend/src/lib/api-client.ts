@@ -2,15 +2,38 @@
 // Set NEXT_PUBLIC_API_URL only when backend is on a different origin
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
+const DEFAULT_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 120_000;
+
+export type ApiErrorKind = 'http' | 'timeout' | 'network' | 'aborted' | 'unknown';
+
 export class ApiError extends Error {
+  public readonly kind: ApiErrorKind;
+
   constructor(
     public status: number,
     message: string,
-    public data?: any
+    public data?: any,
+    kind: ApiErrorKind = 'http'
   ) {
     super(message);
     this.name = 'ApiError';
+    this.kind = kind;
   }
+}
+
+function classifyFetchFailure(err: unknown): ApiError {
+  if (err instanceof ApiError) return err;
+  // AbortController.abort() raises DOMException 'AbortError'.
+  if (err instanceof DOMException && err.name === 'AbortError') {
+    return new ApiError(0, 'Délai dépassé, réessayez', undefined, 'timeout');
+  }
+  // fetch() throws TypeError on network failure (DNS, offline, CORS preflight refused).
+  if (err instanceof TypeError) {
+    return new ApiError(0, 'Connexion indisponible', undefined, 'network');
+  }
+  const message = err instanceof Error ? err.message : 'Erreur inconnue';
+  return new ApiError(0, message, undefined, 'unknown');
 }
 
 class ApiClient {
@@ -73,9 +96,19 @@ class ApiClient {
       }
     }
 
+    // Compose AbortController: outer timeout + caller's signal (if any).
+    const callerSignal = options.signal ?? null;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    if (callerSignal) {
+      if (callerSignal.aborted) controller.abort();
+      else callerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+
     const config: RequestInit = {
       ...options,
       credentials: 'include', // ✅ CRITICAL - sends/receives cookies automatically
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         ...delegationHeaders,
@@ -83,29 +116,42 @@ class ApiClient {
       },
     };
 
-    let response = await fetch(`${this.baseURL}${endpoint}`, config);
-
-    // Handle 401 - Try refresh token
-    if (response.status === 401 && typeof window !== 'undefined') {
-      const refreshed = await this.refreshToken();
-
-      if (refreshed) {
-        // Retry request with new accessToken cookie (automatic)
+    try {
+      let response: Response;
+      try {
         response = await fetch(`${this.baseURL}${endpoint}`, config);
-      } else {
-        // Refresh failed - clear cache and redirect to login
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-        throw new ApiError(401, 'Session expired');
+      } catch (err) {
+        throw classifyFetchFailure(err);
       }
-    }
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: response.statusText }));
-      throw new ApiError(response.status, error.message || 'An error occurred', error);
-    }
+      // Handle 401 - Try refresh token
+      if (response.status === 401 && typeof window !== 'undefined') {
+        const refreshed = await this.refreshToken();
 
-    return response.json();
+        if (refreshed) {
+          // Retry request with new accessToken cookie (automatic)
+          try {
+            response = await fetch(`${this.baseURL}${endpoint}`, config);
+          } catch (err) {
+            throw classifyFetchFailure(err);
+          }
+        } else {
+          // Refresh failed - clear cache and redirect to login
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+          throw new ApiError(401, 'Session expirée');
+        }
+      }
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: response.statusText }));
+        throw new ApiError(response.status, error.message || `HTTP ${response.status}`, error);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   async get<T = any>(endpoint: string): Promise<T> {
@@ -137,23 +183,42 @@ class ApiClient {
     return this.fetch<T>(endpoint, { method: 'DELETE' });
   }
 
+  private async uploadInternal<T = any>(
+    endpoint: string,
+    formData: FormData,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+    try {
+      let response: Response;
+      try {
+        response = await fetch(`${this.baseURL}${endpoint}`, {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+          signal: controller.signal,
+          // ✅ NO Content-Type header for FormData (browser sets multipart/form-data)
+        });
+      } catch (err) {
+        throw classifyFetchFailure(err);
+      }
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: response.statusText }));
+        throw new ApiError(response.status, error.message || `HTTP ${response.status}`, error);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
   async upload<T = any>(endpoint: string, file: File): Promise<T> {
     const formData = new FormData();
     formData.append('file', file);
-
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
-      method: 'POST',
-      credentials: 'include', // ✅ CRITICAL
-      body: formData,
-      // ✅ NO Content-Type header for FormData (browser sets multipart/form-data)
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: response.statusText }));
-      throw new ApiError(response.status, error.message || 'Upload failed', error);
-    }
-
-    return response.json();
+    return this.uploadInternal<T>(endpoint, formData);
   }
 
   async uploadWithFields<T = any>(
@@ -168,19 +233,7 @@ class ApiClient {
         if (v !== undefined && v !== null && v !== '') formData.append(k, v);
       }
     }
-
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
-      method: 'POST',
-      credentials: 'include',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: response.statusText }));
-      throw new ApiError(response.status, error.message || 'Upload failed', error);
-    }
-
-    return response.json();
+    return this.uploadInternal<T>(endpoint, formData);
   }
 }
 

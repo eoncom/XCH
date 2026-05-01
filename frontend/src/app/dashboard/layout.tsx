@@ -37,6 +37,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { ShieldAlert } from 'lucide-react';
 import { GlobalSearch } from '@/components/layout/GlobalSearch';
 import { NotificationInbox } from '@/components/layout/NotificationInbox';
+import { OfflineBanner } from '@/components/layout/OfflineBanner';
 import { rightLabel } from '@/lib/labels';
 import { AppearanceProvider } from '@/components/AppearanceProvider';
 
@@ -342,6 +343,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        <OfflineBanner />
         {/* Mobile header */}
         <div className="flex h-16 items-center justify-between border-b bg-card px-4 lg:hidden">
           <div className="flex items-center min-w-0 flex-1">
