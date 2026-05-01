@@ -20,6 +20,7 @@ import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Plus, Search, FileImage, MapPin, Layers, LayoutGrid, List, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { FloorPlan, Site } from '@/types';
@@ -71,7 +72,7 @@ export default function FloorPlansPage() {
   // Reset page when filters change
   useEffect(() => { setPage(1); }, [siteFilter]);
 
-  const { data: response, isLoading } = useQuery({
+  const { data: response, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['floor-plans', siteFilter, page, pageSize],
     queryFn: () => floorPlansApi.getAllPaginated({
       siteId: siteFilter !== 'all' ? siteFilter : undefined,
@@ -142,6 +143,16 @@ export default function FloorPlansPage() {
 
   if (isLoading) {
     return <div className="text-center">Chargement des plans...</div>;
+  }
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Impossible de charger les plans"
+        error={error}
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   return (
