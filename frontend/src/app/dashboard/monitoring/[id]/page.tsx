@@ -75,9 +75,14 @@ export default function MonitorDetailPage({ params }: { params: Promise<{ id: st
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const { data: check } = useQuery({
+  const { data: check, error, isLoading } = useQuery({
     queryKey: ['monitor', id],
     queryFn: () => monitorsApi.getById(id),
+    retry: (failureCount, err: any) => {
+      const status = err?.response?.status ?? err?.status;
+      if (status === 404 || status === 403) return false;
+      return failureCount < 2;
+    },
   });
 
   const { data: summary } = useQuery({
@@ -176,6 +181,28 @@ export default function MonitorDetailPage({ params }: { params: Promise<{ id: st
       ? `${check.target}:${check.targetPort}`
       : check?.target ?? '';
   const probeLabel = check ? KIND_LABELS[check.kind] : '';
+
+  if (isLoading) {
+    return <div className="text-center py-12">Chargement...</div>;
+  }
+
+  if (error || !check) {
+    // ADR-021 — 404 cross-delegation ou ressource supprimée.
+    return (
+      <div className="text-center py-12 space-y-3">
+        <p className="text-muted-foreground">
+          Sonde introuvable ou inaccessible. Le lien que vous avez suivi est
+          peut-être périmé, ou cette sonde appartient à une délégation à
+          laquelle vous n'avez pas accès.
+        </p>
+        <Button variant="outline" asChild>
+          <Link href="/dashboard/monitoring">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste
+          </Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

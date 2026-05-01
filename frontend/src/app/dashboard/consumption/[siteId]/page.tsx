@@ -1,8 +1,9 @@
 // @ts-nocheck
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,21 +14,36 @@ import { formatCurrency } from '@/lib/currency';
 
 export default function SiteConsumptionPage({ params }: { params: Promise<{ siteId: string }> }) {
   const { siteId } = use(params);
-  const [data, setData] = useState<SiteConsumption | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    consumptionApi.site(siteId)
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, [siteId]);
+  const { data, error, isLoading } = useQuery<SiteConsumption>({
+    queryKey: ['consumption', 'site', siteId],
+    queryFn: () => consumptionApi.site(siteId),
+    retry: (failureCount, err: any) => {
+      const status = err?.response?.status ?? err?.status;
+      if (status === 404 || status === 403) return false;
+      return failureCount < 2;
+    },
+  });
 
-  if (loading) {
-    return <div className="flex justify-center items-center h-64">Chargement...</div>;
+  if (isLoading) {
+    return <div className="text-center py-12">Chargement...</div>;
   }
-  if (!data) {
-    return <p className="text-muted-foreground">Impossible de charger les données.</p>;
+  if (error || !data) {
+    // ADR-021 — 404 cross-delegation ou ressource supprimée.
+    return (
+      <div className="text-center py-12 space-y-3">
+        <p className="text-muted-foreground">
+          Site introuvable ou inaccessible. Le lien que vous avez suivi est
+          peut-être périmé, ou ce site appartient à une délégation à laquelle
+          vous n'avez pas accès.
+        </p>
+        <Button variant="outline" asChild>
+          <Link href="/dashboard/consumption">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste
+          </Link>
+        </Button>
+      </div>
+    );
   }
 
   const byTypeEntries = Object.entries(data.byType || {}).sort((a, b) => b[1].watts - a[1].watts);
