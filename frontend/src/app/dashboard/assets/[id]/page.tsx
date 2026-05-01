@@ -846,7 +846,9 @@ export default function AssetDetailPage({
             <CardContent className="space-y-4">
               {qrCodeData || asset.qrCodeUrl ? (
                 <div className="flex flex-col items-center space-y-4">
-                  <div className="bg-white p-4 rounded-lg border">
+                  {/* QR codes need a light background for camera scanning — keep white in both themes,
+                      but add a ring in dark mode so the swatch reads against the dark canvas. */}
+                  <div className="bg-white p-4 rounded-lg border dark:ring-1 dark:ring-border">
                     {qrCodeData ? (
                       <Image
                         src={qrCodeData.qrCodeDataUrl}
