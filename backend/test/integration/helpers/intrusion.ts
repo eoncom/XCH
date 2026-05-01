@@ -37,8 +37,10 @@ export async function bootTestApp(): Promise<INestApplication> {
 }
 
 export interface AuthenticatedAgent {
-  /** Wraps a supertest request that already includes the auth cookie. */
-  request: () => request.SuperTest<request.Test>;
+  /** Wraps a supertest request that already includes the auth cookie.
+   *  Typed via ReturnType<typeof request.agent> for resilience to
+   *  supertest type renames (SuperTest -> TestAgent in @types/supertest 6.0.3). */
+  request: () => ReturnType<typeof request.agent>;
   /** Cookie string for explicit `.set('Cookie', cookie)` if needed. */
   cookie: string;
 }

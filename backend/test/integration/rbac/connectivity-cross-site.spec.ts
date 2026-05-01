@@ -138,6 +138,7 @@ describe('ConnectivityLink — RBAC cross-site (ADR-021)', () => {
         delegationId: seed.delegations.a,
         body: {
           siteId: seed.sites.b,
+          role: 'PRIMARY',
           provider: 'Smuggled',
           type: 'FIBER',
         },

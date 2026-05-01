@@ -17,9 +17,5 @@
   },
   "author": "XCH Team",
   "license": "UNLICENSED",
-  "private": true,
-  "workspaces": [
-    "backend",
-    "frontend"
-  ]
+  "private": true
 }
