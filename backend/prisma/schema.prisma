@@ -572,7 +572,7 @@ model Asset {
   tenantId     String
   tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   delegationId String?
-  delegation   Delegation? @relation(fields: [delegationId], references: [id])
+  delegation   Delegation? @relation(fields: [delegationId], references: [id], onDelete: Restrict)
   siteId       String?
   site         Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
   type         String // was AssetType enum — dynamic via EnumLabel
@@ -585,7 +585,7 @@ model Asset {
 
   // Model & pricing
   assetModelId     String?
-  assetModel       AssetModel? @relation(fields: [assetModelId], references: [id])
+  assetModel       AssetModel? @relation(fields: [assetModelId], references: [id], onDelete: SetNull)
   acquisitionPrice Decimal?    @db.Decimal(10, 2) // purchase price
   monthlyPrice     Decimal?    @db.Decimal(10, 2) // monthly rental/lease
   priceCurrency    String      @default("EUR")
@@ -1008,10 +1008,10 @@ model Contact {
   // Rattachement organisationnel (R3)
   // delegationId=null → global (super admin only, visible en lecture partout)
   delegationId String?
-  delegation   Delegation? @relation(fields: [delegationId], references: [id])
+  delegation   Delegation? @relation(fields: [delegationId], references: [id], onDelete: SetNull)
   // siteId optionnel — validation R1 : site.delegationId must match delegationId
   siteId       String?
-  site         Site?       @relation(fields: [siteId], references: [id])
+  site         Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -1291,10 +1291,10 @@ model BillingEntity {
   // Rattachement organisationnel (R1, R2)
   // delegationId=null → global (super admin, visible partout en lecture)
   delegationId String?
-  delegation   Delegation? @relation(fields: [delegationId], references: [id])
+  delegation   Delegation? @relation(fields: [delegationId], references: [id], onDelete: Restrict)
   // siteId optionnel — validation R1 : site.delegationId must match delegationId
   siteId       String?
-  site         Site?       @relation(fields: [siteId], references: [id])
+  site         Site?       @relation(fields: [siteId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1413,9 +1413,9 @@ model Budget {
   tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   label           String
   delegationId    String?
-  delegation      Delegation?    @relation(fields: [delegationId], references: [id])
+  delegation      Delegation?    @relation(fields: [delegationId], references: [id], onDelete: Restrict)
   siteId          String?
-  site            Site?          @relation(fields: [siteId], references: [id])
+  site            Site?          @relation(fields: [siteId], references: [id], onDelete: Restrict)
   // Phase 6.7 (D1, 2026-04-21): a budget can be scoped to a specific centre
   // de coût (BillingEntity). When set, it only matches expenses whose
   // bearerId == billingEntityId. Hierarchy is typically:
