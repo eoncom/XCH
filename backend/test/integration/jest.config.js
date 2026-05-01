@@ -15,6 +15,15 @@ module.exports = {
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },
+  // @scure/* and @noble/* (transitive of otplib via @otplib/plugin-base32-scure
+  // and @otplib/plugin-crypto-noble) are ESM-only — Jest's default
+  // transformIgnorePatterns excludes node_modules from transformation,
+  // so we whitelist these scopes to be transpiled by ts-jest.
+  // The `.*` in the lookahead matches both top-level paths
+  // (node_modules/@scure/...) and nested ones
+  // (node_modules/@otplib/plugin-crypto-noble/node_modules/@noble/...) — npm
+  // hoisting may install nested copies on version conflicts.
+  transformIgnorePatterns: ['/node_modules/(?!.*(@scure|@noble)/)'],
   testEnvironment: 'node',
   testTimeout: 30000,
   // ts-jest needs to know where the backend tsconfig is — point at the
