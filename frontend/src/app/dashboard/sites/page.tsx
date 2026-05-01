@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, MapPin, Search, List, Map, LayoutGrid, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import { useState, useMemo, useEffect } from 'react';
@@ -78,7 +79,7 @@ export default function SitesPage() {
   const effectivePageSize = activeTab === 'map' ? 200 : pageSize;
   const effectivePage = activeTab === 'map' ? 1 : page;
 
-  const { data: response, isLoading } = useQuery<{ data: Site[]; meta: PaginationMeta }>({
+  const { data: response, isLoading, isError, error, refetch } = useQuery<{ data: Site[]; meta: PaginationMeta }>({
     queryKey: ['sites', { search, filterDelegationId, filterStatus, page: effectivePage, pageSize: effectivePageSize }],
     queryFn: () => sitesApi.getAllPaginated({
       search: search || undefined,
@@ -184,6 +185,16 @@ export default function SitesPage() {
 
   if (isLoading) {
     return <div className="text-center">Chargement des sites...</div>;
+  }
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Impossible de charger les sites"
+        error={error}
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   return (

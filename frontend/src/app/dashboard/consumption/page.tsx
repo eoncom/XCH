@@ -1,34 +1,43 @@
 // @ts-nocheck
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ErrorState } from '@/components/ui/error-state';
 import { Zap, Server, Euro, TrendingUp, Info } from 'lucide-react';
 import { consumptionApi, type ConsumptionSummary } from '@/lib/api/consumption';
 import { assetStatusLabels } from '@/lib/asset-labels';
 import { formatCurrency } from '@/lib/currency';
 
 export default function ConsumptionPage() {
-  const [data, setData] = useState<ConsumptionSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  // S6 PR4 — was useState+useEffect with a silent .catch(setData(null))
+  // that displayed a static "Impossible de charger les données" with no
+  // retry. Now properly surfaces network errors via <ErrorState>.
+  const { data, isLoading, isError, error, refetch } = useQuery<ConsumptionSummary>({
+    queryKey: ['consumption-summary'],
+    queryFn: () => consumptionApi.summary(),
+  });
 
-  useEffect(() => {
-    consumptionApi.summary()
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
   }
 
+  if (isError) {
+    return (
+      <ErrorState
+        title="Impossible de charger les consommations"
+        error={error}
+        onRetry={() => refetch()}
+      />
+    );
+  }
+
   if (!data) {
-    return <p className="text-muted-foreground">Impossible de charger les données.</p>;
+    return <p className="text-muted-foreground">Aucune donnée de consommation disponible.</p>;
   }
 
   const { totals, sites } = data;

@@ -14,6 +14,7 @@ import { organizationApi, type Delegation } from '@/lib/api/organization';
 import { ScopeBadge } from '@/components/ui/scope-selector';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
+import { ErrorState } from '@/components/ui/error-state';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -83,7 +84,7 @@ function CostsPage() {
   // Reset page when filters change
   useEffect(() => { setPage(1); }, [filterType, filterBearerId]);
 
-  const { data: response, isLoading } = useQuery({
+  const { data: response, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['expenses', filterType, filterBearerId, page, pageSize],
     queryFn: () => expensesApi.getAllPaginated({
       type: filterType || undefined,
@@ -178,6 +179,16 @@ function CostsPage() {
   };
 
   if (isLoading) return <div className="text-center">Chargement...</div>;
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Impossible de charger les coûts"
+        error={error}
+        onRetry={() => refetch()}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">

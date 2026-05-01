@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/error-state';
 import { sitesApi } from '@/lib/api/sites';
 import { assetsApi } from '@/lib/api/assets';
 import { racksApi } from '@/lib/api/racks';
@@ -40,22 +41,22 @@ interface DashboardStats {
 
 export default function DashboardPage() {
   // Fetch real data from APIs
-  const { data: sites = [], isLoading: sitesLoading } = useQuery({
+  const { data: sites = [], isLoading: sitesLoading, isError: sitesIsError, error: sitesError, refetch: sitesRefetch } = useQuery({
     queryKey: ['sites'],
     queryFn: sitesApi.getAll,
   });
 
-  const { data: assets = [], isLoading: assetsLoading } = useQuery({
+  const { data: assets = [], isLoading: assetsLoading, isError: assetsIsError, error: assetsError, refetch: assetsRefetch } = useQuery({
     queryKey: ['assets'],
     queryFn: () => assetsApi.getAll(),
   });
 
-  const { data: racks = [], isLoading: racksLoading } = useQuery({
+  const { data: racks = [], isLoading: racksLoading, isError: racksIsError, error: racksError, refetch: racksRefetch } = useQuery({
     queryKey: ['racks'],
     queryFn: () => racksApi.getAll(),
   });
 
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+  const { data: tasks = [], isLoading: tasksLoading, isError: tasksIsError, error: tasksError, refetch: tasksRefetch } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => tasksApi.getAll(),
   });
@@ -221,6 +222,14 @@ export default function DashboardPage() {
   }, [tasks, assets, sites, nativeMonitors, warrantyThresholds]);
 
   const isLoading = sitesLoading || assetsLoading || racksLoading || tasksLoading;
+  const isError = sitesIsError || assetsIsError || racksIsError || tasksIsError;
+  const error = sitesError ?? assetsError ?? racksError ?? tasksError;
+  const refetchAll = () => {
+    sitesRefetch();
+    assetsRefetch();
+    racksRefetch();
+    tasksRefetch();
+  };
   const router = useRouter();
 
   // Handle site click on map
@@ -235,6 +244,16 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return <div className="text-center py-8">Chargement des données...</div>;
+  }
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Impossible de charger le tableau de bord"
+        error={error}
+        onRetry={refetchAll}
+      />
+    );
   }
 
   return (

@@ -6,6 +6,10 @@ import Link from 'next/link';
 import { Bell, CheckCheck, X, Loader2 } from 'lucide-react';
 import { notificationsInboxApi, type UserNotification } from '@/lib/api/notifications-inbox';
 import { cn } from '@/lib/utils';
+import { showToast } from '@/lib/toast';
+import { mapApiErrorToFr } from '@/lib/error-messages';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { ApiError } from '@/lib/api-client';
 
 const POLL_INTERVAL_MS = 120_000; // 2 min — reduces background re-renders
 
@@ -28,6 +32,10 @@ export function NotificationInbox() {
   const [items, setItems] = useState<UserNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const online = useOnlineStatus();
+  // S6 PR4 — notify the user once per network outage instead of silently
+  // dropping every poll. Reset when the next refresh succeeds.
+  const networkErrorActiveRef = useRef(false);
 
   const refresh = async () => {
     try {
@@ -37,8 +45,19 @@ export function NotificationInbox() {
       ]);
       setUnread(count.count || 0);
       setItems(list || []);
-    } catch {
-      /* ignore */
+      if (networkErrorActiveRef.current) {
+        networkErrorActiveRef.current = false;
+        showToast.success('Connexion rétablie');
+      }
+    } catch (err) {
+      // Only surface network/timeout errors here — auth (401) is handled by
+      // the api-client refresh, and 4xx leaks would just spam the bell user.
+      const isNetwork =
+        err instanceof ApiError && (err.kind === 'network' || err.kind === 'timeout');
+      if (isNetwork && !networkErrorActiveRef.current) {
+        networkErrorActiveRef.current = true;
+        showToast.error(mapApiErrorToFr(err));
+      }
     }
   };
 
@@ -46,7 +65,17 @@ export function NotificationInbox() {
     refresh();
     const id = setInterval(refresh, POLL_INTERVAL_MS);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When the OS reports the device is back online, immediately refresh
+  // instead of waiting for the next poll tick (up to 2 min).
+  useEffect(() => {
+    if (online && networkErrorActiveRef.current) {
+      refresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online]);
 
   // Click outside to close
   useEffect(() => {

@@ -29,6 +29,7 @@ import { WarrantyBadge } from '@/components/ui/warranty-badge';
 import { getWarrantyStatus, useWarrantyThresholds, type WarrantyStatus } from '@/lib/warranty';
 import { Pagination, type PaginationMeta } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import { assetTypeLabels, assetStatusLabels, assetStatusColors } from '@/lib/asset-labels';
@@ -71,7 +72,7 @@ export default function AssetsPage() {
     setBatchSiteId('');
   }, []);
 
-  const { data: response, isLoading } = useQuery<{ data: Asset[]; meta: PaginationMeta }>({
+  const { data: response, isLoading, isError, error, refetch } = useQuery<{ data: Asset[]; meta: PaginationMeta }>({
     queryKey: ['assets', { status: statusFilter, type: typeFilter, siteId: siteFilter, search, page, pageSize }],
     queryFn: () =>
       assetsApi.getAllPaginated({
@@ -302,6 +303,16 @@ export default function AssetsPage() {
 
     exportAssets(exportData, format);
   };
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Impossible de charger les équipements"
+        error={error}
+        onRetry={() => refetch()}
+      />
+    );
+  }
 
   if (isLoading) {
     return (

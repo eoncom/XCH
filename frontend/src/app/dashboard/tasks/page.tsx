@@ -25,6 +25,9 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ExportMenu } from '@/components/ui/export-menu';
 import { exportTasks } from '@/lib/export-utils';
 import { usePermissions } from '@/hooks/usePermissions';
+import { showToast } from '@/lib/toast';
+import { mapApiErrorToFr } from '@/lib/error-messages';
+import { ErrorState } from '@/components/ui/error-state';
 import Link from 'next/link';
 import type { Task, TaskStatus, TaskPriority, Site } from '@/types';
 
@@ -214,7 +217,7 @@ export default function TasksPage() {
   const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
 
-  const { data: response, isLoading } = useQuery<{ data: Task[]; meta: PaginationMeta }>({
+  const { data: response, isLoading, isError, error, refetch } = useQuery<{ data: Task[]; meta: PaginationMeta }>({
     queryKey: ['tasks', { page, pageSize, status: statusFilter, priority: priorityFilter, siteId: siteFilter, assignedTo: assignedFilter, search }],
     queryFn: () => tasksApi.getAllPaginated({
       page,
@@ -319,7 +322,29 @@ export default function TasksPage() {
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
       tasksApi.update(id, { status }),
-    onSuccess: () => {
+    // S6 PR4 — optimistic Kanban: move the card immediately, rollback on
+    // server failure. Multiple cached query variants (page/filter combos)
+    // need the same patch to avoid the card snapping back when the user
+    // changes filters during the inflight request.
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ['tasks'] });
+      const snapshots = queryClient.getQueriesData<{ data: Task[]; meta: PaginationMeta }>({
+        queryKey: ['tasks'],
+      });
+      snapshots.forEach(([key, old]) => {
+        if (!old?.data) return;
+        queryClient.setQueryData(key, {
+          ...old,
+          data: old.data.map((t) => (t.id === id ? { ...t, status } : t)),
+        });
+      });
+      return { snapshots };
+    },
+    onError: (err, _vars, ctx) => {
+      ctx?.snapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data));
+      showToast.error(mapApiErrorToFr(err));
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
@@ -357,6 +382,16 @@ export default function TasksPage() {
 
   if (isLoading) {
     return <div className="text-center">Chargement des tâches...</div>;
+  }
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Impossible de charger les tâches"
+        error={error}
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   return (

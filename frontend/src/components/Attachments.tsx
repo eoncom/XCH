@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { Upload, Download, Trash2, FileIcon, Loader2 } from 'lucide-react';
 import { showToast } from '@/lib/toast';
+import { mapApiErrorToFr } from '@/lib/error-messages';
 
 interface Attachment {
   id: string;
@@ -62,8 +63,10 @@ export function Attachments({ entityId, entityType, apiModule }: AttachmentsProp
       const fileInput = document.getElementById('attachment-file') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
     },
-    onError: () => {
-      showToast.error('Erreur lors de l\'upload du fichier');
+    onError: (err) => {
+      // mapApiErrorToFr distinguishes 413 ("Fichier trop volumineux"),
+      // timeout, network, and trusts server-provided messages.
+      showToast.error(mapApiErrorToFr(err));
     },
   });
 
@@ -74,8 +77,8 @@ export function Attachments({ entityId, entityType, apiModule }: AttachmentsProp
       queryClient.invalidateQueries({ queryKey: [entityType, entityId, 'attachments'] });
       showToast.success('Fichier supprimé avec succès');
     },
-    onError: () => {
-      showToast.error('Erreur lors de la suppression du fichier');
+    onError: (err) => {
+      showToast.error(mapApiErrorToFr(err));
     },
   });
 
