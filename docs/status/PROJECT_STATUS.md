@@ -1,6 +1,6 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-05-01 16:03:53 (Auto-update)
+**Dernière mise à jour :** 2026-05-01 16:13:02 (Auto-update)
 **Version actuelle :** 1.8.0 (taguée 2026-04-30)
 **Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + Sessions 1-4 finalization v2 livrées + RBAC universel ADR-021 (14/15 modules fixés, ~85 attaques d'intrusion bloquantes en CI)
 
@@ -26,7 +26,7 @@
 | 2 | Chiffrement secrets at-rest (4 cibles : clientSecret SSO, netboxToken, totpSecret, teams.webhookUrl) + bonus hash invite/reset tokens | ADR-019 | v1.6.2 | ✅ Livrée 2026-04-29 |
 | 3 | NotificationConfig refacto (Channel + Rule, pas de Digest YAGNI) + Worker générique BullMQ + walker JSON retiré | ADR-020 | v1.7.0 | ✅ Livrée 2026-04-29 |
 | 4 | RBAC universel + tests d'intrusion bloquants (réorienté depuis perf/intégrité DB après audit RBAC découvrant 14/15 modules incohérents) | ADR-021 | v1.8.0 | ✅ Livrée 2026-04-30 |
-| 5 | Performance & intégrité DB (indexes, FK CHECK, query plans) — déplacé depuis Session 4 originale + UX deep-link 404 résiduelle | — | intermédiaire | ⏳ |
+| 5 | Performance & intégrité DB (indexes, FK CHECK, query plans) + UX deep-link 404 résiduelle (monitoring/[id], consumption/[siteId]) | — | v1.8.1 | ✅ Livrée 2026-05-01 |
 | 6 | UX dark canvas + erreurs réseau + tap targets (cible laptop/iPad/tablette, pas mobile) | — | intermédiaire | ⏳ |
 | 7 | Refonte E2E Playwright (30-40 specs critical paths) | — | v1.8.0 | ⏳ |
 | 8 | (Optionnelle) Sentry / error tracking | — | — | 🔮 |
