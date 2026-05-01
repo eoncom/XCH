@@ -2,6 +2,7 @@
 
 import { Stage, Layer, Rect, Text, Group } from 'react-konva';
 import type { Rack, Asset } from '@/types';
+import { useThemeColors } from '@/hooks/useThemeColors';
 
 export interface OccupyingAssetInfo {
   id: string;
@@ -28,6 +29,7 @@ export default function RackVisualization({
   onUnitClick,
   selectedUnit,
 }: RackVisualizationProps) {
+  const colors = useThemeColors();
   const totalHeight = rack.heightU * UNIT_HEIGHT + PADDING * 2;
 
   // Create a map of occupied units
@@ -63,9 +65,9 @@ export default function RackVisualization({
               ? '#3b82f6'
               : isOccupied
               ? '#10b981'
-              : '#f3f4f6'
+              : colors.muted
           }
-          stroke={isSelected ? '#2563eb' : '#d1d5db'}
+          stroke={isSelected ? '#2563eb' : colors.border}
           strokeWidth={isSelected ? 3 : 1}
           onClick={() => {
             const occupying = asset ? {
@@ -101,7 +103,7 @@ export default function RackVisualization({
           text={`U${u}`}
           fontSize={14}
           fontFamily="monospace"
-          fill={isOccupied || isSelected ? '#ffffff' : '#6b7280'}
+          fill={isOccupied || isSelected ? '#ffffff' : colors.mutedForeground}
         />
 
         {/* Asset label (only on first unit of asset) */}
@@ -122,8 +124,8 @@ export default function RackVisualization({
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden bg-white">
-      <Stage width={RACK_WIDTH + PADDING * 2} height={totalHeight}>
+    <div className="border rounded-lg overflow-hidden bg-card">
+      <Stage key={colors.theme} width={RACK_WIDTH + PADDING * 2} height={totalHeight}>
         <Layer>
           {/* Rack frame */}
           <Rect
@@ -131,8 +133,8 @@ export default function RackVisualization({
             y={0}
             width={RACK_WIDTH + PADDING * 2}
             height={totalHeight}
-            fill="#ffffff"
-            stroke="#9ca3af"
+            fill={colors.card}
+            stroke={colors.border}
             strokeWidth={2}
           />
 
@@ -143,7 +145,7 @@ export default function RackVisualization({
             text={rack.name}
             fontSize={16}
             fontStyle="bold"
-            fill="#111827"
+            fill={colors.foreground}
           />
 
           {units}
@@ -154,7 +156,7 @@ export default function RackVisualization({
       <div className="p-4 border-t bg-muted/20">
         <div className="flex items-center gap-6 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded" />
+            <div className="w-4 h-4 bg-muted border border-border rounded" />
             <span>Disponible</span>
           </div>
           <div className="flex items-center gap-2">

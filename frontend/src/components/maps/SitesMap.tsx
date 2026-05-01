@@ -3,7 +3,18 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useTheme } from 'next-themes';
 import type { Site } from '@/types';
+
+const OSM_TILES = {
+  url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+};
+const CARTODB_DARK_TILES = {
+  url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  attribution:
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+};
 
 // Fix for default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -31,20 +42,14 @@ export default function SitesMap({
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const { resolvedTheme } = useTheme();
 
-  // Initialize map
+  // Initialize map (once)
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    // Create map centered on France
     const map = L.map(mapContainerRef.current).setView([46.603354, 1.888334], 6);
-
-    // Add OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
-    }).addTo(map);
-
     mapRef.current = map;
     markersLayerRef.current = L.layerGroup().addTo(map);
 
@@ -52,9 +57,25 @@ export default function SitesMap({
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
+        tileLayerRef.current = null;
       }
     };
   }, []);
+
+  // Swap tile layer when theme changes (CartoDB Dark Matter in dark mode,
+  // OSM in light). Markers, popups and viewport persist.
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const tiles = resolvedTheme === 'dark' ? CARTODB_DARK_TILES : OSM_TILES;
+
+    if (tileLayerRef.current) {
+      mapRef.current.removeLayer(tileLayerRef.current);
+    }
+    tileLayerRef.current = L.tileLayer(tiles.url, {
+      attribution: tiles.attribution,
+      maxZoom: 19,
+    }).addTo(mapRef.current);
+  }, [resolvedTheme]);
 
   // Update markers when sites change
   useEffect(() => {
