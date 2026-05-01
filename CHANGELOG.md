@@ -7,6 +7,102 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.8.2] - 2026-05-01 — UX dark canvas + erreurs réseau + tap targets (Session 6 du plan v2 finalization)
+
+Cible utilisateur explicite : **laptop / iPad / tablette** (validée 2026-04-26 dans `XCH_TARGET_DEVICES`). Pas mobile-first téléphone. Tous les changements sont frontend, aucun changement backend (le bump version backend est cosmétique pour aligner le tag git sur l'état projet, pas un release backend séparé).
+
+### Added (fondations erreurs réseau — PR1)
+
+- **`ApiError.kind`** discriminator (`'http' | 'timeout' | 'network' | 'aborted' | 'unknown'`) sur [`frontend/src/lib/api-client.ts`](frontend/src/lib/api-client.ts). Backwards-compatible : `status`+`message` existants conservés, `kind` défaut `'http'`.
+- **`AbortController` timeout** 30s sur `fetch()`, 120s sur `upload()`. `AbortError` → `kind:'timeout'`, `TypeError` (fetch network failure) → `kind:'network'`.
+- **`mapApiErrorToFr(err)`** ([`frontend/src/lib/error-messages.ts`](frontend/src/lib/error-messages.ts)) — central FR helper. Trust server-provided messages (NestJS validation déjà FR), fallback sur HTTP code mapping (400/401/403/404/413/429/5xx), réécriture timeout/network en copy actionnable.
+- **`useOnlineStatus()`** ([`frontend/src/hooks/useOnlineStatus.ts`](frontend/src/hooks/useOnlineStatus.ts)) wrap `navigator.onLine` avec **debounce 1s intégré dans le hook** pour absorber les flaps réseau de chantier sans spammer les consumers.
+- **`<ErrorState>`** ([`frontend/src/components/ui/error-state.tsx`](frontend/src/components/ui/error-state.tsx)) — modèle `<EmptyState>`, props `{title, description, error, onRetry, variant}`. Lit `mapApiErrorToFr` si `error` fourni.
+- **`<OfflineBanner>`** ([`frontend/src/components/layout/OfflineBanner.tsx`](frontend/src/components/layout/OfflineBanner.tsx)) sticky top dans `dashboard/layout.tsx`.
+- **`app/error.tsx` + `app/dashboard/error.tsx`** — Next.js segment boundaries avec fallback FR.
+- **TanStack Query retry strategy** kind-aware sur [`frontend/src/app/providers.tsx`](frontend/src/app/providers.tsx) : 5xx → 2 retries backoff exp 8s cap, network down → 1 retry, 4xx / timeout / aborted → no retry.
+
+### Added (fondations dark canvas — PR2 + PR2b)
+
+- **`useThemeColors()`** ([`frontend/src/hooks/useThemeColors.ts`](frontend/src/hooks/useThemeColors.ts)) — résout les CSS vars HSL shadcn (`--card`, `--muted`, `--border`, etc.) en hex pour Konva/Leaflet vanilla. Expose `theme: 'light' | 'dark'` pour `key={theme}` re-mount Konva sur switch.
+- **`RackVisualization`** Konva — Stage frame, U slots, texte adaptés via tokens. Stage `key={colors.theme}` re-mount au switch.
+- **`SitesMap`** Leaflet vanilla — tile layer dynamique : OSM en light, **CartoDB Dark Matter** en dark, swap via `useEffect` dépendant de `resolvedTheme`. Markers + popups + viewport persistent.
+- **CSP `img-src`** (PR2b) — ajout de `https://*.basemaps.cartocdn.com` à la directive `img-src` dans [`frontend/next.config.mjs`](frontend/next.config.mjs). Sans ce patch, les tuiles dark étaient bloquées par CSP (bug observé en smoke prod, corrigé avant tag).
+
+### Fixed (dark mode patches résiduels — PR3)
+
+- `dashboard/page.tsx` : SitesMap loader/empty `bg-gray-50` → `bg-muted` (token thème-aware).
+- `assets/[id]/page.tsx` QR container : `bg-white` conservé (scan caméra) + `dark:ring-1 dark:ring-border` pour démarquage en dark.
+- `settings/page.tsx` logo preview : même pattern QR (white kept + ring dark).
+- `settings/page.tsx` 3 swatches theme picker (Clair/Sombre/Système) : hardcodés conservés intentionnellement (preview du thème nommé) + commentaire `// intentional` pour le prochain reviewer.
+- `sites/new/page.tsx` + `sites/[id]/edit/page.tsx` wizard step indicator (3-step + 6-step) : migration complète vers tokens semantic (`bg-card / border-border / text-muted-foreground / bg-border`) avec `dark:ring-blue-900` + `dark:text-blue-400` sur active state.
+
+### Fixed (bugs critiques erreurs réseau — PR4)
+
+- **`dashboard/notifications/page.tsx`** : était `useState`+`useEffect` avec `catch{ setItems([]) }` silent qui affichait "Aucune notification" même quand `/api/notifications/inbox` 500'd. Refactorisé `useQuery` + `<ErrorState>`. `markRead` / `markAll` / `remove` migrés en `useMutation` avec `onError → showToast.error(mapApiErrorToFr)`.
+- **`NotificationInbox.tsx`** poll 2 min : émettait silence sur chaque erreur. Maintenant émet toast FR **une fois par outage** (`networkErrorActiveRef` de-dup), puis "Connexion rétablie" au refresh suivant. `useOnlineStatus` consommé pour refresh immédiat sur événement online OS (au lieu d'attendre la prochaine tick 2 min).
+- **`tasks/page.tsx`** Kanban `updateStatusMutation` : était fire-and-forget invalidate-on-success. Ajouté `onMutate` optimistic patch sur **toutes les queries cached** (page/filter combos), `onError` rollback complet + toast FR, `onSettled` invalidate. La carte bouge immédiatement au drop et snap back si serveur 500.
+- **`Attachments.tsx`** upload + delete `onError` : "Erreur lors de l'upload du fichier" générique → `mapApiErrorToFr(err)` qui distingue 413 ("Fichier trop volumineux"), timeout, network, messages serveur.
+- **`consumption/page.tsx`** : `useState`+`useEffect` avec `.catch(setData(null))` silent → `useQuery` + `<ErrorState>`.
+
+### Added (rollout `isError` pattern — PR4 top 10 pages)
+
+Pattern `if (isError) return <ErrorState error={error} onRetry={refetch} />` ajouté juste après le `if (isLoading)` existant sur :
+
+| Page | Note |
+|---|---|
+| `dashboard/page.tsx` | 4 useQuery agrégées (`sitesIsError \|\| ...`) + `refetchAll` |
+| `sites/page.tsx` | sites principal query |
+| `assets/page.tsx` | assets principal query (paginated) |
+| `tasks/page.tsx` | tasks principal query (en plus du Kanban mutation rollback) |
+| `racks/page.tsx` | racks principal query |
+| `floor-plans/page.tsx` | plans principal query |
+| `costs/page.tsx` | expenses principal query |
+| `consumption/page.tsx` | refactor profond (cf. ci-dessus) |
+| `notifications/page.tsx` | refactor profond (cf. ci-dessus) |
+| `monitoring/page.tsx` | wrapper `<NativeMonitorsList/>` ; isError hors scope du wrapper |
+
+### Changed (tap targets pour iPad/tablette — PR5)
+
+Stratégie : **pas de bump des sizes par défaut** des primitives shadcn (sinon shift layouts desktop). Override hit-area via `@media (pointer: coarse)` dans [`frontend/src/app/globals.css`](frontend/src/app/globals.css). Laptop+souris (`pointer: fine`) → aucun changement visuel. Tablette / iPad / Surface en mode tactile (`pointer: coarse`) → 44pt+ effectif. Distinction Type A (override conditionnel, pixel-identique souris) vs Type B (bump direct assumé) gravée dans `XCH_UX_PRIMITIVE_CHANGE_TAXONOMY` pour réutilisation future.
+
+**Type A (override conditionnel @media coarse, pixel-identique souris)** :
+- `globals.css` bloc `@media (pointer: coarse)` : `min-height: 44px` sur button/role=button/role=tab/role=menuitem ; `min-height + min-width: 44px` sur `button[data-size="icon|sm"]` ; pseudo-element `::before inset: -14px` sur checkbox/switch pour étendre hit-area sans changer le visuel.
+- `button.tsx` ajoute `data-size={size ?? 'default'}` pour cibler en CSS sans toucher cva.
+- `FloorPlanViewer.tsx` Konva pins : `<Rect>` 44×44 transparent au début de chaque `<Group>` pour étendre la hit-area sans changer la pin visuelle.
+
+**Type B (bump direct assumé, dette visuelle acceptée même en souris)** :
+- `pagination.tsx` SelectTrigger + 4 nav icon buttons `h-8 → h-9`.
+- `tabs.tsx` TabsList `h-10 → h-11`, TabsTrigger `py-1.5 → py-2`.
+- `NotificationInbox.tsx` bell button `w-9 h-9 → w-10 h-10`.
+- `FloorPlanViewer.tsx` 3 zoom buttons `w-9 h-9 → w-10 h-10`.
+- `RackVisualization.tsx` `UNIT_HEIGHT 30 → 36`.
+
+### Verification (smoke prod xch.eoncom.io)
+
+- ✅ Carte Sites dark → CartoDB Dark Matter (bug CSP corrigé par PR2b)
+- ✅ RackVisualization Konva dark theme-aware
+- ✅ Wizard sites/new step indicator dark
+- ✅ Assets QR ring dark (white preserved + dark:ring border)
+- ✅ Theme picker swatches Apparence intentional hardcodé respecté
+- ✅ Tabs Settings 12 onglets sans overflow (Type B alignement propre)
+- ✅ Tap targets : `pointer: coarse = false` souris ; règle CSS `@media (pointer: coarse)` chargée mais inactive ; data-size attribute injecté → **promesse Type A tenue**
+- ✅ ErrorState observé en vrai (dashboard "Invalid delegation" déclenche `<ErrorState>` propre + bouton Réessayer)
+- ⚠️ Tests iPad-spécifiques (NotificationInbox de-dup airplane mode 2s, Kanban optimistic backend-down, vrai tap pointer-coarse) à valider sur device réel — non couverts via Chrome MCP
+
+### Hors-scope explicite (à traiter Sessions futures)
+
+- **~70 pages encore en pattern legacy `isLoading + data` sans `isError`** — top 10 critiques migrées dans PR4. Le reste est dette résiduelle. **Idée Session 7+** : lint custom ESLint qui vérifie que tout consommateur de `useQuery` extrait `isError` (pas juste `isLoading + data`). Force tout nouveau code à respecter le pattern et met une pression progressive sur l'héritage. Pattern équivalent au lint custom ts-morph noté pour `findOne` en Session 5.
+- **Check CI frontend (typecheck + lint)** — actuellement le required check `Backend integration` passe trivialement sur tout PR frontend pur. À ajouter Session 7 pour catch les régressions TS/Tailwind avant merge.
+- **WiFi heatmap physique-aware** — `WifiHeatmapLayer` actuel est générique, ne consomme pas les caractéristiques modèle équipement (standard WiFi, fréquences, MIMO, gain). Session indépendante dédiée notée dans MCP `XCH_WIFI_HEATMAP_PHYSICS_AWARE` (Log-Distance Path Loss, multi-bandes, hors-scope obstacles manuels / vision algorithmique / interférences). À déclencher quand la masse critique de catalogue est saisie.
+- **Konva pins floor-plan radius bumped à 14 + hitStrokeWidth 20** : déféré de PR2 à PR5, finalement fait via Rect 44×44 invisible plus simple. Le bump radius pin natif reste hors scope.
+
+### Infra (PR2b — patch CSP appliqué avant tag)
+
+- `next.config.mjs` `img-src` whitelist élargie à `https://*.basemaps.cartocdn.com` pour autoriser les tuiles CartoDB Dark Matter. Comment-catalogue ajouté indiquant le rôle de chaque provider (OSM / CartoDB / unpkg / raw.githubusercontent) pour le prochain reviewer.
+
+---
+
 ## [1.8.1] - 2026-05-01 — Performance & intégrité DB + UX deep-link 404 résiduelle (Session 5 du plan v2 finalization)
 
 ### Fixed (UX 404 deep-link résiduelle — PR1)
