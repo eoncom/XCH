@@ -33,7 +33,11 @@ const securityHeaders = [
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com https://raw.githubusercontent.com",
+      // Tile providers we serve directly to <img> (Leaflet TileLayer):
+      //   - tile.openstreetmap.org (default light theme)
+      //   - basemaps.cartocdn.com  (Dark Matter, used in dark theme — S6 PR2)
+      // unpkg.com + raw.githubusercontent.com host the Leaflet marker icons.
+      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://raw.githubusercontent.com",
       // APIs called from the browser; same-origin + NetBox/Uptime Kuma typically proxied.
       // nominatim.openstreetmap.org is whitelisted explicitly because the "Actualiser
       // GPS" button (sites/new + sites/[id]/edit) calls its /search endpoint directly
