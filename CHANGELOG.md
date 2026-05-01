@@ -7,6 +7,59 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.8.1] - 2026-05-01 — Performance & intégrité DB + UX deep-link 404 résiduelle (Session 5 du plan v2 finalization)
+
+### Fixed (UX 404 deep-link résiduelle — PR1)
+
+Clôture du chantier amorcé en S4/PR6 (4 pages alignées : sites/[id], assets/[id], tasks/[id], floor-plans/[id]). Les 2 pages restantes documentées comme tech debt mineure sont alignées sur le même pattern :
+
+- **`/dashboard/monitoring/[id]`** : retry désactivé sur 403/404 (le scope ne change pas en cours de session) + garde inline « Sonde introuvable ou inaccessible » + bouton « Retour à la liste ».
+- **`/dashboard/consumption/[siteId]`** : migration du pattern legacy `useState/useEffect` vers `useQuery` + retry + garde inline.
+
+### Added (intégrité DB — PR2 + PR3)
+
+**Migration `8_fk_ondelete_and_checks` :**
+- 5 FK Restrict harmonisation : `assets.delegationId`, `billing_entities.delegationId/siteId`, `budgets.delegationId/siteId` passent de `SET NULL` (default Prisma 5 silencieux) à `RESTRICT`. Forcer le réassignement explicite avant suppression d'une délégation/site, plus de NULL silencieux qui orpheline assets/CdC/budgets.
+- 3 schema.prisma `onDelete: SetNull` explicites (no-op DB) sur `Asset.assetModelId`, `Contact.delegationId/siteId` pour empêcher tout drift schema/db futur.
+- 3 CHECK constraints SQL : `racks.heightU > 0`, `assets.dutyCyclePercent BETWEEN 0 AND 100`, `assets.rackPositionU > 0` si non NULL.
+
+**Migration `9_perf_indexes` :**
+- `tasks(tenantId, status, dueDate)` — Kanban dashboard hot path.
+- `expenses(tenantId, delegationId, dateIncurred DESC)` — budget threshold + filtres récents par délégation.
+- Documentation EXPLAIN ANALYZE avant/après dans [`docs/perf/SESSION-05-explain-analyze.md`](docs/perf/SESSION-05-explain-analyze.md) — capturé sur xch-deploy avec rationale "à volume réel attendu" pour traçabilité 6-12 mois.
+
+### Changed (performance — PR4)
+
+**Monitor history : pagination keyset (BREAKING interne API)**
+- `GET /api/monitors/:id/history` : `offset` retiré, `cursor` ajouté (input). `total` retiré du retour, `nextCursor` + `hasNext` ajoutés (output).
+- Frontend XCH unique consommateur documenté → pas de bump major nécessaire.
+- Avant : `findMany skip:offset + count` séparés, scan inutile à page profonde, count = full scan. Après : 1 query Index Range Scan sur `(checkId, checkedAt DESC)`, O(limit) peu importe la profondeur.
+- `monitoring/[id]/page.tsx` adapté (pile `cursorStack` pour Précédent/Suivant sans recalcul).
+
+**Budget threshold : N+1 → 1 batch findMany**
+- `checkThresholdsForExpense` (hook post-create/update expense) faisait 3-4 queries DB par budget candidat (`getStatus(b.id)` redondant). 50 candidats = 150-200 queries.
+- Maintenant : 1 `expense.findMany` global qui couvre la fenêtre + critères de tous les candidats, puis filter+compute en mémoire via `computeCdcSpentSync` / `computeDelegationSpentSync` (math identique aux versions async).
+
+### Tests
+
+- 10 nouveaux unit tests avec assertions quantitatives **EXACTES** sur le nombre de queries Prisma — pas `< N`, le chiffre exact garantit que le refactor délivre le gain perf attendu (un refactor qui passerait fonctionnellement mais ferait toujours N queries doit faire échouer ces tests).
+- Backend : 141 tests verts (13 suites), aucune régression.
+
+### Hors-scope explicite (Session 5b future)
+
+- 3 FK `Expense` (`delegationId`, `siteId`, `bearerId`) sans `onDelete:` explicite découvertes pendant l'audit — pas incluses pour ne pas étendre le scope d'un PR approuvé.
+- 3 refactors lourds extraits volontairement : expenses projection en SQL `GENERATE_SERIES`, audit `enrichWithEntityLabels` DataLoader, expenses `reportByBearer/Target` group-by SQL.
+- R3 du plan initial (Consumption double-iter) drop : audit Phase 1 incorrect, le code itère déjà chaque asset une seule fois.
+
+### Infra (PR0 hotfix)
+
+- `backend/package-lock.json` resync avec `package.json` (l'ancien lockfile était figé à xch-backend@1.0.0).
+- `workspaces` retiré du root `package.json` (déclaration non utilisée — tous les scripts root et CI workflows utilisent `cd backend|frontend && npm ci`). `package-lock.json` racine orphelin supprimé.
+- `intrusion.ts` test helper adapté à `@types/supertest@6.0.3` (`SuperTest<Test>` → `TestAgent<Test>`).
+- Jest `transformIgnorePatterns` whitelist `@scure/*` + `@noble/*` (ESM-only, transitive de `otplib` via plugins crypto-noble + base32-scure).
+
+---
+
 ## [1.8.0] - 2026-04-30 — RBAC universel + tests d'intrusion bloquants en CI (Session 4 du plan v2 finalization)
 
 ### Security (BREAKING — shape d'erreur HTTP)
