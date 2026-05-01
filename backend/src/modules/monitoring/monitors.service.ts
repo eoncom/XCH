@@ -13,6 +13,31 @@ import { MONITOR_QUEUE, JOB_PROBE } from './monitor.scheduler';
 import { PermissionService } from '../../common/services/permission.service';
 import { CallerCtx } from '../../common/types/caller-ctx.interface';
 
+// S5 PR4 R1 — Keyset cursor encode/decode pour MonitorResult history.
+// Format : base64url("<iso checkedAt>|<id>"). Opaque côté client.
+export function encodeHistoryCursor(checkedAt: Date, id: string): string {
+  return Buffer.from(`${checkedAt.toISOString()}|${id}`, 'utf8').toString(
+    'base64url',
+  );
+}
+
+export function decodeHistoryCursor(
+  cursor: string,
+): { checkedAt: Date; id: string } | null {
+  try {
+    const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+    const sep = decoded.lastIndexOf('|');
+    if (sep < 0) return null;
+    const isoAt = decoded.slice(0, sep);
+    const id = decoded.slice(sep + 1);
+    const checkedAt = new Date(isoAt);
+    if (Number.isNaN(checkedAt.getTime()) || !id) return null;
+    return { checkedAt, id };
+  } catch {
+    return null;
+  }
+}
+
 // Includes the parent's site too — needed by the UI to group / display
 // "Site Tour Alto" even when the check is rattaché to an asset or a link.
 const CHECK_INCLUDE = {
@@ -312,24 +337,64 @@ export class MonitorsService {
   // ─────────────────────────────────────────────────────────────────────────
   // HISTORY
   // ─────────────────────────────────────────────────────────────────────────
+  // S5 PR4 R1 — Keyset pagination (remplace OFFSET).
+  //
+  // Avant : findMany skip:offset + count séparés. À 1M rows monitor_results
+  //   et page 100 (offset=5000), Postgres devait scanner 5000 lignes
+  //   inutilement avant le LIMIT. count() faisait un full scan en plus.
+  //
+  // Maintenant : keyset cursor sur (checkedAt DESC, id DESC). Le client
+  //   passe le dernier `(checkedAt, id)` vu en cursor opaque base64. Une
+  //   seule findMany Index Range Scan, plus de count, terminée en O(limit)
+  //   peu importe la profondeur de pagination.
+  //
+  // L'index (checkId, checkedAt DESC) existe déjà — couvre exactement la
+  // query avec ordering.
+  //
+  // Breaking interne sur l'API : `offset` retiré, `cursor` ajouté.
+  // `total` retiré du retour, `nextCursor` + `hasNext` ajoutés. Frontend
+  // XCH unique consommateur documenté → pas de bump major.
   async history(tenantId: string, id: string, query: HistoryQueryDto) {
     await this.assertCheckTenantOwnership(tenantId, id);
     const limit = query.limit ?? 50;
-    const offset = query.offset ?? 0;
     const where: Prisma.MonitorResultWhereInput = { checkId: id };
     if (query.status && Object.values(MonitorStatus).includes(query.status as MonitorStatus)) {
       where.status = query.status as MonitorStatus;
     }
-    const [items, total] = await Promise.all([
-      this.prisma.monitorResult.findMany({
-        where,
-        orderBy: { checkedAt: 'desc' },
-        skip: offset,
-        take: limit,
-      }),
-      this.prisma.monitorResult.count({ where }),
-    ]);
-    return { items, total, limit, offset };
+
+    if (query.cursor) {
+      const decoded = decodeHistoryCursor(query.cursor);
+      if (!decoded) {
+        throw new BadRequestException('Invalid history cursor');
+      }
+      // Strictement APRÈS (= plus ancien que) le cursor : (checkedAt, id) < (cursorAt, cursorId)
+      where.AND = [
+        {
+          OR: [
+            { checkedAt: { lt: decoded.checkedAt } },
+            {
+              AND: [
+                { checkedAt: decoded.checkedAt },
+                { id: { lt: decoded.id } },
+              ],
+            },
+          ],
+        },
+      ];
+    }
+
+    // +1 pour détecter hasNext sans query supplémentaire
+    const items = await this.prisma.monitorResult.findMany({
+      where,
+      orderBy: [{ checkedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+    const hasNext = items.length > limit;
+    if (hasNext) items.pop();
+    const last = items[items.length - 1];
+    const nextCursor =
+      hasNext && last ? encodeHistoryCursor(last.checkedAt, last.id) : null;
+    return { items, limit, nextCursor, hasNext };
   }
 
   // ─────────────────────────────────────────────────────────────────────────

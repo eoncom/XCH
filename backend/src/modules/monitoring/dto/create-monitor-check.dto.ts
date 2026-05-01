@@ -136,12 +136,15 @@ export class HistoryQueryDto {
   @Max(500)
   limit?: number;
 
-  @ApiPropertyOptional({ default: 0, minimum: 0 })
+  // S5 PR4 R1 — keyset pagination (remplace offset). Le client passe le
+  // cursor opaque renvoyé par la page précédente. Format interne :
+  // base64("<isoCheckedAt>|<id>"). Breaking interne sur l'API
+  // GET /monitors/:id/history — pas de consommateur externe documenté,
+  // pas de bump major nécessaire.
+  @ApiPropertyOptional({ description: 'Opaque cursor for keyset pagination (from previous page)' })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  offset?: number;
+  @IsString()
+  cursor?: string;
 
   @ApiPropertyOptional({ description: 'Filter by status: UP | DOWN | UNKNOWN' })
   @IsOptional()

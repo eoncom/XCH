@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { CreateBudgetDto, UpdateBudgetDto, FilterBudgetDto } from './dto/create-budget.dto';
 import { buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { UserNotificationService } from '../notifications/user-notification.service';
@@ -498,17 +498,184 @@ export class BudgetsService {
         : Promise.resolve([] as any[]),
     ]);
     const candidateBudgets = [...nonCdcCandidates, ...cdcCandidates];
+    if (candidateBudgets.length === 0) return;
+
+    // S5 PR4 R2 — N+1 → 1 batch :
+    // Avant : `for (b of candidates) { getStatus(b.id) }` faisait 3-4 queries
+    // par budget candidat (findFirst budget redondant + computeSpent avec
+    // findMany expenses + listMatchingExpenses redondante). Avec N=50
+    // candidats sur 1 expense créée → 150-200 queries DB.
+    //
+    // Maintenant : 1 expense.findMany global qui couvre la fenêtre de tous
+    // les candidats + tous leurs critères de matching, puis filter+compute
+    // en mémoire. La math de contribution (CdC vs délégation) reste
+    // identique — juste lue depuis une liste pré-fetchée au lieu de la DB.
+    const globalStart = new Date(
+      Math.min(...candidateBudgets.map((b) => b.startDate.getTime())),
+    );
+    const globalEnd = new Date(
+      Math.max(...candidateBudgets.map((b) => b.endDate.getTime())),
+    );
+    const allCdcIds = Array.from(
+      new Set(
+        candidateBudgets
+          .filter((b) => b.billingEntityId)
+          .map((b) => b.billingEntityId as string),
+      ),
+    );
+    const nonCdcBudgets = candidateBudgets.filter((b) => !b.billingEntityId);
+    const nonCdcDelegationIds = Array.from(
+      new Set(nonCdcBudgets.map((b) => b.delegationId).filter(Boolean) as string[]),
+    );
+    const hasGlobalNonCdc = nonCdcBudgets.some((b) => !b.delegationId);
+
+    const orClauses: Prisma.ExpenseWhereInput[] = [];
+    // Non-CdC budgets : couvre les délégations explicites + le scope global
+    // (delegationId=null sur le budget = match toutes les délégations).
+    if (hasGlobalNonCdc) {
+      // Si au moins un budget non-CdC est global, on prend tous les expenses
+      // de la fenêtre globale (pas de filtre delegationId côté DB) — le
+      // matching final filtrera en mémoire.
+      orClauses.push({});
+    } else if (nonCdcDelegationIds.length > 0) {
+      orClauses.push({ delegationId: { in: nonCdcDelegationIds } });
+    }
+    // CdC budgets : expense où la CdC est bearer OU cible d'allocation.
+    if (allCdcIds.length > 0) {
+      orClauses.push({ bearerId: { in: allCdcIds } });
+      orClauses.push({
+        allocations: { some: { targetId: { in: allCdcIds } } },
+      });
+    }
+    if (orClauses.length === 0) return;
+
+    const allRelevant = await this.prisma.expense.findMany({
+      where: {
+        tenantId,
+        dateIncurred: { gte: globalStart, lte: globalEnd },
+        OR: orClauses,
+      },
+      select: {
+        id: true,
+        totalAmount: true,
+        frequency: true,
+        dateStart: true,
+        dateEnd: true,
+        dateIncurred: true,
+        delegationId: true,
+        siteId: true,
+        type: true,
+        bearerId: true,
+        allocations: { select: { targetId: true, percentage: true, amount: true } },
+      },
+    });
 
     for (const b of candidateBudgets) {
       try {
-        const status = await this.getStatus(tenantId, b.id);
-        if (!status.thresholdReached) continue;
+        const spent = b.billingEntityId
+          ? this.computeCdcSpentSync(b, allRelevant)
+          : this.computeDelegationSpentSync(b, allRelevant);
+        const budgeted = Number(b.amount);
+        const progressPct = budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0;
+        const overBudget = spent > budgeted;
+        const thresholdReached =
+          b.alertsEnabled && progressPct >= b.alertThresholdPct;
+        if (!thresholdReached) continue;
 
-        await this.notifyThresholdCrossed(tenantId, b, status.progressPct, status.overBudget);
+        await this.notifyThresholdCrossed(tenantId, b, progressPct, overBudget);
       } catch (err: any) {
         this.logger.warn(`Budget threshold check failed for ${b.id}: ${err?.message}`);
       }
     }
+  }
+
+  // S5 PR4 R2 — version sync de computeCdcSpent qui filtre une liste
+  // pré-fetchée d'expenses au lieu de relancer une query DB. Math
+  // identique à computeCdcSpent (bearer net + allocations reçues, ×
+  // facteur de récurrence × mois couverts).
+  private computeCdcSpentSync(
+    budget: {
+      billingEntityId: string | null;
+      siteId: string | null;
+      expenseType: string | null;
+      startDate: Date;
+      endDate: Date;
+    },
+    allExpenses: Array<{
+      totalAmount: any;
+      frequency: string;
+      dateStart: Date | null;
+      dateEnd: Date | null;
+      dateIncurred: Date;
+      siteId: string | null;
+      type: string | null;
+      bearerId: string;
+      allocations: Array<{ targetId: string; percentage: number; amount: any }>;
+    }>,
+  ): number {
+    const X = budget.billingEntityId as string;
+    let total = 0;
+    for (const exp of allExpenses) {
+      if (exp.dateIncurred < budget.startDate) continue;
+      if (exp.dateIncurred > budget.endDate) continue;
+      const touchesCdc =
+        exp.bearerId === X || exp.allocations.some((a) => a.targetId === X);
+      if (!touchesCdc) continue;
+      if (budget.siteId && exp.siteId !== budget.siteId) continue;
+      if (budget.expenseType && exp.type !== budget.expenseType) continue;
+      const contribution = this.expenseContributionForCdc(exp, X);
+      if (contribution === 0) continue;
+      if (exp.frequency === 'ONE_TIME') {
+        total += contribution;
+      } else {
+        const months = this.monthsForRecurring(exp, budget.startDate, budget.endDate);
+        if (months === 0) continue;
+        total += contribution * this.frequencyFactor(exp.frequency) * months;
+      }
+    }
+    return total;
+  }
+
+  // S5 PR4 R2 — version sync de computeDelegationSpent. Applique
+  // buildExpenseWhere en mémoire (delegationId / siteId / type) + somme
+  // ONE_TIME + récurrent comme l'original.
+  private computeDelegationSpentSync(
+    budget: {
+      delegationId: string | null;
+      siteId: string | null;
+      expenseType: string | null;
+      startDate: Date;
+      endDate: Date;
+    },
+    allExpenses: Array<{
+      totalAmount: any;
+      frequency: string;
+      dateStart: Date | null;
+      dateEnd: Date | null;
+      dateIncurred: Date;
+      delegationId: string | null;
+      siteId: string | null;
+      type: string | null;
+    }>,
+  ): number {
+    let oneTimeTotal = 0;
+    let recurringTotal = 0;
+    for (const exp of allExpenses) {
+      if (exp.dateIncurred < budget.startDate) continue;
+      if (exp.dateIncurred > budget.endDate) continue;
+      if (budget.delegationId && exp.delegationId !== budget.delegationId) continue;
+      if (budget.siteId && exp.siteId !== budget.siteId) continue;
+      if (budget.expenseType && exp.type !== budget.expenseType) continue;
+      if (exp.frequency === 'ONE_TIME') {
+        oneTimeTotal += Number(exp.totalAmount);
+      } else {
+        const months = this.monthsForRecurring(exp, budget.startDate, budget.endDate);
+        if (months === 0) continue;
+        recurringTotal +=
+          Number(exp.totalAmount) * this.frequencyFactor(exp.frequency) * months;
+      }
+    }
+    return oneTimeTotal + recurringTotal;
   }
 
   /**

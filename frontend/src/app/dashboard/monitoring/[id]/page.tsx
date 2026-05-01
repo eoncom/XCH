@@ -70,7 +70,13 @@ export default function MonitorDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [page, setPage] = useState(0);
+  // S5 PR4 R1 — Keyset pagination (remplace offset).
+  //   cursorStack[i] = cursor pour aller à la page i+1.
+  //   Page 1 = stack vide. Page 2 = stack avec [nextCursor de page 1]. Etc.
+  //   Permet le bouton Précédent (pop) sans recalculer côté serveur.
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
+  const currentCursor = cursorStack[cursorStack.length - 1];
+  const pageNumber = cursorStack.length + 1;
   const [statusFilter, setStatusFilter] = useState<'all' | MonitorStatus>('all');
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -98,11 +104,11 @@ export default function MonitorDetailPage({ params }: { params: Promise<{ id: st
   });
 
   const { data: history } = useQuery({
-    queryKey: ['monitor', id, 'history', page, statusFilter],
+    queryKey: ['monitor', id, 'history', currentCursor ?? '', statusFilter],
     queryFn: () =>
       monitorsApi.history(id, {
         limit: PAGE_SIZE,
-        offset: page * PAGE_SIZE,
+        cursor: currentCursor,
         status: statusFilter === 'all' ? undefined : statusFilter,
       }),
     placeholderData: (previousData) => previousData,
@@ -140,7 +146,10 @@ export default function MonitorDetailPage({ params }: { params: Promise<{ id: st
     onError: (e: any) => toast.error(e.message || 'Échec de la suppression'),
   });
 
-  const totalPages = history ? Math.max(1, Math.ceil(history.total / PAGE_SIZE)) : 1;
+  // S5 PR4 R1 — keyset n'expose pas un total. Pagination "Précédent /
+  // Suivant" sans "Page X de Y".
+  const hasNextPage = history?.hasNext ?? false;
+  const isFirstPage = cursorStack.length === 0;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Parent context derivation (ADR-016)
@@ -341,14 +350,16 @@ export default function MonitorDetailPage({ params }: { params: Promise<{ id: st
           <div>
             <CardTitle className="text-base">Historique détaillé</CardTitle>
             <CardDescription>
-              {history ? `${history.total} vérification${history.total > 1 ? 's' : ''}` : '…'}
+              {history
+                ? `${history.items.length} vérification${history.items.length > 1 ? 's' : ''} sur cette page`
+                : '…'}
             </CardDescription>
           </div>
           <Select
             value={statusFilter}
             onValueChange={(v) => {
               setStatusFilter(v as any);
-              setPage(0);
+              setCursorStack([]); // reset à la page 1 quand le filtre change
             }}
           >
             <SelectTrigger className="w-[180px]">
@@ -399,24 +410,28 @@ export default function MonitorDetailPage({ params }: { params: Promise<{ id: st
             </TableBody>
           </Table>
 
-          {totalPages > 1 && (
+          {(hasNextPage || !isFirstPage) && (
             <div className="flex items-center justify-between mt-4">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
+                onClick={() => setCursorStack((s) => s.slice(0, -1))}
+                disabled={isFirstPage}
               >
                 Précédent
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {page + 1} / {totalPages}
+                Page {pageNumber}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={page >= totalPages - 1}
+                onClick={() => {
+                  if (history?.nextCursor) {
+                    setCursorStack((s) => [...s, history.nextCursor as string]);
+                  }
+                }}
+                disabled={!hasNextPage}
               >
                 Suivant
               </Button>
