@@ -102,8 +102,17 @@ export interface FilterMonitorCheck {
 
 export interface HistoryQuery {
   limit?: number;
-  offset?: number;
+  // S5 PR4 R1 — keyset pagination (remplace offset). Le client passe le
+  // cursor opaque renvoyé par la page précédente.
+  cursor?: string;
   status?: MonitorStatus;
+}
+
+export interface HistoryPage {
+  items: MonitorResult[];
+  limit: number;
+  nextCursor: string | null;
+  hasNext: boolean;
 }
 
 function buildParams(filters?: Record<string, any>): string {
@@ -133,7 +142,7 @@ export const monitorsApi = {
     apiClient.delete<{ deleted: boolean }>(`/api/monitors/${id}`),
 
   history: (id: string, query?: HistoryQuery) =>
-    apiClient.get<{ items: MonitorResult[]; total: number; limit: number; offset: number }>(
+    apiClient.get<HistoryPage>(
       `/api/monitors/${id}/history${buildParams(query)}`,
     ),
 
