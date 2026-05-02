@@ -1,0 +1,114 @@
+name: Frontend Checks (typecheck + lint)
+
+# S7 PR0 — workflow en MODE MESURE.
+#
+# Le check NE FAIT PAS échouer la CI : `continue-on-error: true` sur les
+# steps typecheck et lint, et `exit 0` final. L'objectif PR0 est de
+# capturer un diagnostic chiffré des violations TypeScript / ESLint
+# présentes sur main au moment de l'audit, pas d'enforcer immédiatement
+# (cf XCH_ENGINEERING_PRINCIPLES — "mesurer avant d'enforcer").
+#
+# Décision DURANT la PR0 (utilisateur arbitrera quand chiffres connus) :
+#   (a) corriger toutes les violations dans la même PR0 si volume <10 fichiers
+#   (b) configurer mode warn avec baseline non-régression (interdit que
+#       les nouveaux PRs aggravent le compteur ; dette legacy traitée
+#       progressivement)
+#
+# Le passage en check requis (ferait échouer la CI) est différé à la PR
+# suivante (PR1 ou PR5) selon l'arbitrage utilisateur.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  frontend-checks:
+    name: Frontend typecheck + lint (mesure)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck (mesure — ne fait pas échouer la CI)
+        id: typecheck
+        working-directory: frontend
+        continue-on-error: true
+        run: |
+          echo "=== TypeScript typecheck (mode mesure S7 PR0) ==="
+          npm run typecheck 2>&1 | tee typecheck.log
+          echo ""
+          echo "=== Diagnostic chiffré ==="
+          ERRORS=$(grep -cE "error TS[0-9]+" typecheck.log || echo 0)
+          FILES=$(grep -oE "^[^:(]+\.tsx?(\([0-9]+,[0-9]+\))?: error" typecheck.log | sed -E 's/[(:].*//' | sort -u | wc -l || echo 0)
+          echo "Total errors: $ERRORS"
+          echo "Files affected: $FILES"
+          echo "typecheck_errors=$ERRORS" >> $GITHUB_OUTPUT
+          echo "typecheck_files=$FILES" >> $GITHUB_OUTPUT
+
+      - name: Lint (mesure — ne fait pas échouer la CI)
+        id: lint
+        working-directory: frontend
+        continue-on-error: true
+        run: |
+          echo "=== ESLint (mode mesure S7 PR0) ==="
+          npm run lint -- --max-warnings=99999 2>&1 | tee lint.log
+          echo ""
+          echo "=== Diagnostic chiffré ==="
+          WARNINGS=$(grep -cE "warning" lint.log || echo 0)
+          ERRORS=$(grep -cE "error" lint.log || echo 0)
+          FILES=$(grep -oE "^[^:]+\.tsx?$" lint.log | sort -u | wc -l || echo 0)
+          echo "Warnings: $WARNINGS"
+          echo "Errors: $ERRORS"
+          echo "Files affected: $FILES"
+          echo "lint_warnings=$WARNINGS" >> $GITHUB_OUTPUT
+          echo "lint_errors=$ERRORS" >> $GITHUB_OUTPUT
+          echo "lint_files=$FILES" >> $GITHUB_OUTPUT
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-checks-diagnostic
+          path: |
+            frontend/typecheck.log
+            frontend/lint.log
+          retention-days: 30
+
+      - name: Summary (mode mesure)
+        if: always()
+        run: |
+          echo "## Frontend Checks — MODE MESURE (S7 PR0)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Ce workflow ne fait PAS échouer la CI** — diagnostic seulement." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### TypeScript typecheck" >> $GITHUB_STEP_SUMMARY
+          echo "- Errors: ${{ steps.typecheck.outputs.typecheck_errors }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Files affected: ${{ steps.typecheck.outputs.typecheck_files }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ESLint" >> $GITHUB_STEP_SUMMARY
+          echo "- Warnings: ${{ steps.lint.outputs.lint_warnings }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Errors: ${{ steps.lint.outputs.lint_errors }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Files affected: ${{ steps.lint.outputs.lint_files }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📥 Logs détaillés disponibles dans l'artifact \`frontend-checks-diagnostic\`." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Décision attendue (S7 PR0)" >> $GITHUB_STEP_SUMMARY
+          echo "Selon le volume mesuré ci-dessus :" >> $GITHUB_STEP_SUMMARY
+          echo "- **(a)** Corriger toutes les violations dans la même PR0 si volume <10 fichiers." >> $GITHUB_STEP_SUMMARY
+          echo "- **(b)** Configurer mode warn avec baseline non-régression (interdit aggraver compteur)." >> $GITHUB_STEP_SUMMARY
