@@ -19,7 +19,15 @@ import { test, expect } from '../../fixtures/auth.fixture';
  * pour chaque PR — détecte tôt les casses majeures avant merge.
  */
 
-test.describe.serial('@smoke Full user journey', () => {
+// SKIP: validation manuelle non faite, voir S7.5 (Validation E2E réelle).
+// Cette spec a été écrite en PR4 sur supposition du code (sélecteurs h1/h2,
+// boutons "Nouveau", endpoint /api/auth/session) sans avoir validé visuellement
+// l'app actuelle. Le pattern XCH_E2E_SCAFFOLDING_VS_VALIDATION (gravé en MCP)
+// impose : pas d'annonce "régression bloquante" sans validation réelle.
+//
+// La describe sera réactivée en S7.5 après validation Chrome MCP spec par spec.
+// Tag v1.9.0 différé jusque-là (cf XCH_PLAN_V2_FINALIZATION mémoire).
+test.describe.serial.skip('@smoke Full user journey (SKIPPED — voir S7.5)', () => {
   test('1. Login admin redirige vers /dashboard', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin();
     await expect(page).toHaveURL(/\/dashboard/);
