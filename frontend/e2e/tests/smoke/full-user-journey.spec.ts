@@ -93,7 +93,12 @@ test.describe.serial('@smoke Full user journey', () => {
     await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('10. API /api/auth/me retourne user authentifié', async ({ page, loginAsAdmin, request }) => {
+  test('10. API /api/auth/session retourne user authentifié', async ({ page, loginAsAdmin, request }) => {
+    // S7 PR5b — fix endpoint : /api/auth/me n'existe PAS backend (404).
+    // Les endpoints auth réels sont /api/auth/session, /api/auth/profile,
+    // /api/auth/my-permissions (cf backend/src/modules/auth/auth.controller.ts).
+    // /api/auth/session retourne { user: {...} } pour l'utilisateur courant
+    // identifié par le cookie accessToken.
     await loginAsAdmin();
 
     const cookies = await page.context().cookies();
@@ -101,12 +106,15 @@ test.describe.serial('@smoke Full user journey', () => {
     expect(accessToken).toBeTruthy();
 
     const apiUrl = process.env.PLAYWRIGHT_API_URL || 'http://localhost:3002';
-    const response = await request.get(`${apiUrl}/api/auth/me`, {
+    const response = await request.get(`${apiUrl}/api/auth/session`, {
       headers: { Cookie: `accessToken=${accessToken!.value}` },
     });
 
     expect(response.ok()).toBeTruthy();
-    const user = await response.json();
-    expect(user.email).toBe('admin@xch.demo');
+    const data = await response.json();
+    // L'endpoint /api/auth/session retourne soit { user, ... } soit user directement
+    // selon la version (cf auth.controller.ts handler). Tolérant aux deux shapes.
+    const userEmail = data.user?.email || data.email;
+    expect(userEmail).toBe('admin@xch.demo');
   });
 });
