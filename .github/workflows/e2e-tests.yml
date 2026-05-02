@@ -1,24 +1,20 @@
 name: E2E Smoke Tests
 
-# S7 PR5b — workflow refondu : exécute UNIQUEMENT la spec smoke
-# `@full-user-journey` (10 tests sériels) au lieu du full E2E.
-# Rationale : ~50 tests skip TODO + sélecteurs UI à confirmer = scope
-# trop large pour PR5 release ; le smoke valide la régression
-# bloquante annoncée dans le CHANGELOG v1.9.0 sans bloquer sur des
-# specs encore à finaliser.
+# S7.5 PR5h/10 — workflow refondu pour cibler xch.eoncom.io directement.
+# Single-origin (NPM reverse proxy unifie API+UI sur même hostname) =
+# pas d'issue cookie cross-port. Reproduit le comportement prod réel.
 #
-# Le full E2E (~210 tests) reste à activer en mini-session post-S7
-# une fois les ~50 skip TODO levés (cf entité MCP
-# XCH_E2E_SKIP_TODO_TRACKING — prioriser catégorie 6 polling env
-# override, puis catégorie 1 sélecteurs UI).
+# Architecture précédente (PR5b/c/d/e/f/g) : setup CI 2-process local
+# (frontend localhost:3001 + backend localhost:3002). Cross-origin
+# artificiel cassait checkSession() côté layout (cookie SameSite=Lax
+# ne se propage pas en cross-port même via Next.js rewrites).
 #
-# Ce workflow était `disabled_manually` avant PR5b (bug latent
-# critique : la régression bloquante annoncée n'était jamais exécutée
-# côté CI). Réactivé via `gh workflow enable` après merge PR5b.
+# Décision utilisateur 2026-05-02 (Option 1 du ping iter 9) : pointer
+# CI vers xch-deploy = environnement TEST officiel (cf DEPLOY_WORKFLOW
+# obs[19][20] : mutations OK, cleanup endpoints scoped en place).
 #
-# Cf XCH_E2E_SMOKE_AUTHORITY_VALIDATION pour le pattern : un filet
-# de sécurité CI doit être ACTIVÉ + EXÉCUTÉ + RÉFÉRENCER endpoints
-# RÉELS pour mériter son nom.
+# Cf XCH_E2E_AUTH_STORAGE_STATE_PATTERN + XCH_E2E_SMOKE_AUTHORITY_VALIDATION
+# + XCH_ITERATION_THRESHOLD_PRINCIPLE (3 entités gravées MCP S7.5).
 
 on:
   push:
@@ -31,50 +27,7 @@ jobs:
   e2e-tests:
     name: Playwright E2E Smoke (@full-user-journey)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    services:
-      # S7 PR0 — DB e2e isolée xch_e2e (au lieu de xch_dev partagée)
-      postgres:
-        image: postgis/postgis:15-3.4
-        env:
-          POSTGRES_DB: xch_e2e
-          POSTGRES_USER: xch_e2e_user
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_E2E_PASSWORD || 'xch_e2e_password' }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      # S7 PR5d — MinIO retiré complètement du workflow E2E Smoke.
-      # Cause racine bloquante : (1) image minio/minio nécessite CMD
-      # `server /data` non spécifiable dans GitHub Actions `services:`,
-      # (2) image bitnami/minio:latest n'existe plus (Bitnami a déprécié
-      # ses images Docker Hub publiques en septembre 2025).
-      #
-      # Solution : la spec smoke @full-user-journey ne touche PAS au
-      # stockage MinIO (juste login + nav 7 sections + API auth/session).
-      # Le backend démarre avec STORAGE_TYPE=filesystem (cf
-      # backend/src/common/services/storage.service.ts ligne 25)
-      # → init MinIO skippé, fichiers locaux dans backend/uploads.
-      #
-      # Si une future spec a besoin de MinIO (ex: upload pièce jointe
-      # en flow E2E complet activé en mini-session post-S7), ajouter
-      # un step `docker run -d minio/minio server /data` ou utiliser
-      # un container action custom — pas via `services:`.
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -86,63 +39,8 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
-            backend/package-lock.json
             frontend/package-lock.json
 
-      #
-      # Backend Setup
-      #
-      - name: Install Backend Dependencies
-        working-directory: backend
-        run: npm ci
-
-      - name: Generate Prisma Client
-        working-directory: backend
-        run: npx prisma generate
-
-      - name: Run Database Migrations
-        working-directory: backend
-        env:
-          DATABASE_URL: postgresql://xch_e2e_user:xch_e2e_password@localhost:5432/xch_e2e
-        run: npx prisma migrate deploy
-
-      # S7 PR5c/4 — step "Seed Database" original supprimé. Il
-      # exécutait `npm run prisma:seed` qui n'existe pas dans
-      # backend/package.json (cf scripts ligne 22-26 : seul
-      # prisma:generate, prisma:studio, db:migrate:* existent). Le seed
-      # masquait silencieusement le fail via `|| echo "Seed may have
-      # failed, continuing..."` → DB vide → admin@xch.demo inexistant
-      # → login smoke fail.
-      #
-      # Seed démo réel se fait via POST /api/setup/initialize avec
-      # loadDemoData=true (cf DEPLOY_WORKFLOW gravé). Voir step
-      # "Initialize App + Demo Data" après "Wait for Backend Health
-      # Check" ci-dessous.
-
-      - name: Start Backend
-        working-directory: backend
-        env:
-          # S7 PR5c/3 — PORT=3002 explicit (sinon Nest default 3000),
-          # cohérent avec PLAYWRIGHT_API_URL=http://localhost:3002
-          # côté tests + frontend NEXT_PUBLIC_API_URL.
-          PORT: 3002
-          DATABASE_URL: postgresql://xch_e2e_user:xch_e2e_password@localhost:5432/xch_e2e
-          REDIS_URL: redis://localhost:6379
-          # STORAGE_TYPE=filesystem skip init MinIO (cf
-          # storage.service.ts ligne 25 : minio init seulement si
-          # STORAGE_TYPE === 'minio'). Smoke @full-user-journey ne
-          # touche pas au stockage donc filesystem suffit.
-          STORAGE_TYPE: filesystem
-          JWT_SECRET: e2e-test-jwt-secret-key
-          NODE_ENV: test
-        run: |
-          npm run build
-          npm run start:prod &
-          echo $! > backend.pid
-
-      #
-      # Frontend Setup
-      #
       - name: Install Frontend Dependencies
         working-directory: frontend
         run: npm ci
@@ -151,102 +49,22 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Build Frontend
-        working-directory: frontend
-        env:
-          # S7.5 PR5h/9 — `NEXT_PUBLIC_API_URL=''` pour que le frontend
-          # client fasse des fetch relatifs (`/api/...`). Next.js rewrites
-          # (cf next.config.mjs) proxie vers BACKEND_INTERNAL_URL en
-          # server-side. Garantit same-origin pour les cookies cross-port :
-          # frontend localhost:3001 ↔ /api/* (proxied to localhost:3002)
-          # → cookies SameSite=Lax sont sent normalement.
-          NEXT_PUBLIC_API_URL: ''
-          NEXT_PUBLIC_APP_URL: http://localhost:3001
-          # S7.5 PR5g — fix Cat. 6 polling env override (cf
-          # XCH_E2E_SKIP_TODO_TRACKING). Le polling notifications par
-          # défaut est 60s prod, trop long pour CI E2E. À 2s les tests
-          # `notifications-polling.spec.ts` peuvent observer un round-trip
-          # complet en < 30s sans timeout.
-          NEXT_PUBLIC_NOTIFICATION_POLL_INTERVAL: 2000
-        run: npm run build
-
-      - name: Start Frontend
-        working-directory: frontend
-        env:
-          NEXT_PUBLIC_API_URL: ''
-          NEXT_PUBLIC_APP_URL: http://localhost:3001
-          # S7.5 PR5h/9 — proxy backend pour les rewrites Next.js
-          # (cf frontend/next.config.mjs `rewrites()` qui utilise
-          # `BACKEND_INTERNAL_URL`). En CI : pas de container Docker,
-          # backend est sur localhost:3002.
-          BACKEND_INTERNAL_URL: http://localhost:3002
-        run: |
-          npm run start &
-          echo $! > frontend.pid
-
       #
-      # Wait for Services
+      # Run E2E Tests against xch.eoncom.io (single-origin)
       #
-      - name: Wait for Backend Health Check
-        run: |
-          echo "Waiting for backend to be ready..."
-          # S7 PR5c/3 — wait-on tcp: au lieu de http://.../health.
-          # Pas de endpoint /health global au root backend (seul
-          # /api/integrations/netbox/health existe, sous-controller
-          # avec auth). tcp: vérifie juste que le port écoute, c'est
-          # suffisant pour s'assurer que le backend a bind sur 3002.
-          # Test fonctionnel des endpoints fait après par la spec
-          # smoke elle-même.
-          npx wait-on tcp:localhost:3002 -t 60000 || (echo "Backend failed to start (port 3002 not listening)" && exit 1)
-
-      - name: Initialize App + Load Demo Data
-        run: |
-          # S7 PR5c/5 — payload corrigé avec :
-          # - adminName (requis non-empty cf SetupDto ligne 42)
-          # - adminPassword Demo1234 respecte regex policy
-          #   (1 maj + 1 min + 1 chiffre, min 8 chars)
-          # - adminEmail admin@demo.fr (cohérent avec emails seed
-          #   démo @demo.fr, pas @xch.demo qui était une erreur fixture)
-          #
-          # Le SeedService.loadDemo ensuite crée les autres users démo
-          # (manager@demo.fr, technicien@demo.fr, viewer@demo.fr,
-          # multi@demo.fr) avec password demo123. L'admin créé par
-          # setup wizard préserve son password Demo1234 (cf
-          # seed.service.ts ligne 537 : passwordHash conservé si
-          # existing.passwordHash est truthy).
-          echo "POST /api/setup/initialize avec loadDemoData=true..."
-          curl -X POST http://localhost:3002/api/setup/initialize \
-            -H "Content-Type: application/json" \
-            -d '{
-              "organizationName": "XCH E2E Test",
-              "subdomain": "xch-e2e",
-              "adminName": "Admin Démo",
-              "adminEmail": "admin@demo.fr",
-              "adminPassword": "Demo1234",
-              "loadDemoData": true
-            }' \
-            --fail-with-body \
-            --max-time 120 || (echo "Setup initialize failed" && exit 1)
-          echo ""
-          echo "Setup OK"
-
-      - name: Wait for Frontend
-        run: |
-          echo "Waiting for frontend to be ready..."
-          npx wait-on http://localhost:3001 -t 60000 || (echo "Frontend failed to start" && exit 1)
-
-      #
-      # Run E2E Tests
+      # Pas de setup local (frontend/backend/postgres) — tout est sur
+      # xch-deploy. Mutations smoke = quasi-nulles (login API + nav
+      # read-only + 1 GET /api/auth/session) donc pas de cleanup
+      # nécessaire. Pour les futures specs E2E qui mutent (sites/assets/
+      # expenses), prévoir cleanup via /api/seed/reset/:domain en
+      # afterAll (cf S7 PR0 endpoints scoped).
       #
       - name: Run Playwright Smoke Tests (@full-user-journey)
         working-directory: frontend
         env:
-          PLAYWRIGHT_BASE_URL: http://localhost:3001
-          PLAYWRIGHT_API_URL: http://localhost:3002
+          PLAYWRIGHT_BASE_URL: https://xch.eoncom.io
+          PLAYWRIGHT_API_URL: https://xch.eoncom.io
           CI: true
-        # S7 PR5b — limiter au scope smoke (10 tests sériels). Le full
-        # E2E (~210 tests, ~50 skip TODO) sera activé en mini-session
-        # post-S7 quand la catégorie 1 sélecteurs UI sera levée.
         run: npx playwright test --grep "@smoke" --project=chromium --reporter=html,junit
 
       #
@@ -275,12 +93,3 @@ jobs:
           name: test-screenshots
           path: frontend/playwright-report/screenshots/
           retention-days: 7
-
-      #
-      # Cleanup
-      #
-      - name: Stop Services
-        if: always()
-        run: |
-          [ -f backend/backend.pid ] && kill $(cat backend/backend.pid) || true
-          [ -f frontend/frontend.pid ] && kill $(cat frontend/frontend.pid) || true
