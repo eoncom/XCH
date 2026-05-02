@@ -31,7 +31,7 @@ test.describe('RBAC - VIEWER Role', () => {
     await page.goto('/dashboard/sites');
     await page.waitForLoadState('networkidle');
 
-    const createButton = page.locator('button:has-text("Nouveau site")');
+    const createButton = page.locator('a[href="/dashboard/sites/new"]');
     const buttonExists = await createButton.isVisible().catch(() => false);
     expect(buttonExists).toBe(false);
   });
@@ -105,7 +105,7 @@ test.describe('RBAC - VIEWER Role', () => {
     await page.goto('/dashboard/tasks');
     await page.waitForLoadState('networkidle');
 
-    const createTaskButton = page.locator('button:has-text("Nouvelle tâche")');
+    const createTaskButton = page.locator('a[href="/dashboard/tasks/new"]');
     const buttonExists = await createTaskButton.isVisible().catch(() => false);
     expect(buttonExists).toBe(false);
   });

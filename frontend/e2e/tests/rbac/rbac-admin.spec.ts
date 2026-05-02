@@ -41,16 +41,16 @@ test.describe('RBAC - Admin Role', () => {
 
   test('should allow full CRUD on all modules', async ({ page }) => {
     await page.goto('/dashboard/sites');
-    await expect(page.locator('button:has-text("Nouveau site")')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('a[href="/dashboard/sites/new"]')).toBeVisible({ timeout: 5000 });
 
     await page.goto('/dashboard/assets');
-    await expect(page.locator('button:has-text("Nouvel équipement")')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('a[href="/dashboard/assets/new"]')).toBeVisible({ timeout: 5000 });
 
     await page.goto('/dashboard/tasks');
-    await expect(page.locator('button:has-text("Nouvelle tâche")')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('a[href="/dashboard/tasks/new"]')).toBeVisible({ timeout: 5000 });
 
     await page.goto('/dashboard/racks');
-    await expect(page.locator('button:has-text("Nouvelle baie")')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('a[href="/dashboard/racks/new"]')).toBeVisible({ timeout: 5000 });
   });
 
   test('should allow access to all dashboard features', async ({ page }) => {

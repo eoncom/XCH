@@ -27,7 +27,7 @@ test.describe('Tasks - Checklist Functionality', () => {
 
     if (!taskExists) {
       // Si pas de tâches, créer une tâche de test
-      await page.click('button:has-text("Nouvelle tâche")');
+      await page.click('a[href="/dashboard/tasks/new"]');
       await page.waitForSelector('form, [role="dialog"]');
 
       await page.fill('[name="title"]', 'Task E2E Checklist Test');
@@ -50,7 +50,7 @@ test.describe('Tasks - Checklist Functionality', () => {
     const firstTask = page.locator('a[href^="/dashboard/tasks/"]').first();
     await firstTask.click().catch(async () => {
       // Créer tâche si aucune existe
-      await page.click('button:has-text("Nouvelle tâche")');
+      await page.click('a[href="/dashboard/tasks/new"]');
       await page.fill('[name="title"]', 'Task with Checklist');
       await page.click('button[type="submit"]');
       await page.waitForURL(/\/dashboard\/tasks\/[a-z0-9-]+$/);
@@ -73,7 +73,7 @@ test.describe('Tasks - Checklist Functionality', () => {
   test('should add new checklist item', async ({ page }) => {
     // Ouvrir tâche
     await page.click('a[href^="/dashboard/tasks/"]').first().catch(async () => {
-      await page.click('button:has-text("Nouvelle tâche")');
+      await page.click('a[href="/dashboard/tasks/new"]');
       await page.fill('[name="title"]', 'Task for Checklist Add Test');
       await page.click('button[type="submit"]');
     });
@@ -112,7 +112,7 @@ test.describe('Tasks - Checklist Functionality', () => {
   test('should toggle checklist item (check/uncheck)', async ({ page }) => {
     // Ouvrir tâche avec checklist
     await page.click('a[href^="/dashboard/tasks/"]').first().catch(async () => {
-      await page.click('button:has-text("Nouvelle tâche")');
+      await page.click('a[href="/dashboard/tasks/new"]');
       await page.fill('[name="title"]', 'Task for Toggle Test');
       await page.click('button[type="submit"]');
     });
@@ -159,7 +159,7 @@ test.describe('Tasks - Checklist Functionality', () => {
   test('should delete checklist item', async ({ page }) => {
     // Ouvrir tâche
     await page.click('a[href^="/dashboard/tasks/"]').first().catch(async () => {
-      await page.click('button:has-text("Nouvelle tâche")');
+      await page.click('a[href="/dashboard/tasks/new"]');
       await page.fill('[name="title"]', 'Task for Delete Test');
       await page.click('button[type="submit"]');
     });
@@ -195,7 +195,7 @@ test.describe('Tasks - Checklist Functionality', () => {
 
   test('should display empty state if no checklist items', async ({ page }) => {
     // Créer nouvelle tâche (pas de checklist par défaut)
-    await page.click('button:has-text("Nouvelle tâche")');
+    await page.click('a[href="/dashboard/tasks/new"]');
     await page.waitForSelector('form, [role="dialog"]');
 
     await page.fill('[name="title"]', 'Task Empty Checklist');
@@ -219,7 +219,7 @@ test.describe('Tasks - Checklist Functionality', () => {
   test('should show checklist progress if implemented', async ({ page }) => {
     // Ouvrir tâche avec checklist
     await page.click('a[href^="/dashboard/tasks/"]').first().catch(async () => {
-      await page.click('button:has-text("Nouvelle tâche")');
+      await page.click('a[href="/dashboard/tasks/new"]');
       await page.fill('[name="title"]', 'Task with Progress');
       await page.click('button[type="submit"]');
     });
@@ -239,7 +239,7 @@ test.describe('Tasks - Checklist Functionality', () => {
 
   test('should handle multiple checklist items', async ({ page }) => {
     // Créer tâche avec plusieurs items
-    await page.click('button:has-text("Nouvelle tâche")');
+    await page.click('a[href="/dashboard/tasks/new"]');
     await page.fill('[name="title"]', 'Task Multi Checklist');
     await page.click('button[type="submit"]');
     await page.waitForURL(/\/dashboard\/tasks\/[a-z0-9-]+$/);
