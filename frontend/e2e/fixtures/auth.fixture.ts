@@ -158,7 +158,35 @@ async function login(page: Page, user: AuthUser): Promise<void> {
     );
   }
 
-  // Vérifier que le cookie est bien posé dans le browser context
+  // S7.5 PR5h/6 — workaround cross-origin cookie : extraire les
+  // tokens du Set-Cookie response et les re-set sur le domain frontend.
+  // Sans ça en CI, les cookies sont posés sur localhost:3002 mais le
+  // page.goto('/dashboard') va sur localhost:3001 → middleware ne voit
+  // pas le cookie → redirect /login.
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3001';
+  const frontendUrl = new URL(baseURL);
+
+  const setCookieHeaders = response.headersArray().filter((h) => h.name.toLowerCase() === 'set-cookie');
+  const cookiesToAdd: Array<{ name: string; value: string; domain: string; path: string; httpOnly: boolean; secure: boolean; sameSite: 'Lax' | 'Strict' | 'None' }> = [];
+  for (const header of setCookieHeaders) {
+    const match = header.value.match(/^([^=]+)=([^;]+)/);
+    if (match) {
+      cookiesToAdd.push({
+        name: match[1].trim(),
+        value: match[2].trim(),
+        domain: frontendUrl.hostname,
+        path: '/',
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+      });
+    }
+  }
+  if (cookiesToAdd.length > 0) {
+    await page.context().addCookies(cookiesToAdd);
+  }
+
+  // Vérifier que accessToken est bien posé
   const cookies = await page.context().cookies();
   const accessTokenCookie = cookies.find((c) => c.name === 'accessToken');
 
