@@ -7192,3 +7192,24 @@ fix(e2e): smoke skip individual tests pour exit 0 sur grep @smoke (S7.5 PR5d/1)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-02
+
+**Date:** 2026-05-02 21:12:46
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 3
+
+**Commit message:**
+```
+feat(e2e): SELECTORS_STRATEGY.md + alpha testids login/sidebar/delegation (S7.5 PR5d/2)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

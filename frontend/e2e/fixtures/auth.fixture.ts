@@ -118,17 +118,18 @@ export const test = base.extend<AuthFixture>({
  * couvrir le hop SSR → CSR + checkSession() côté Zustand.
  */
 async function login(page: Page, user: AuthUser): Promise<void> {
+  // S7.5 PR5d — testids α login form (cf SELECTORS_STRATEGY.md zone α #1).
   await page.goto('/login');
-  await page.waitForSelector('form');
-  await page.fill('#email', user.email);
-  await page.fill('#password', user.password);
+  await page.waitForSelector('[data-testid="login-form"]');
+  await page.fill('[data-testid="login-email"]', user.email);
+  await page.fill('[data-testid="login-password"]', user.password);
 
   await Promise.all([
     page.waitForResponse(
       (r) => r.url().includes('/api/auth/login') && r.status() === 200,
       { timeout: 10000 },
     ),
-    page.click('button[type="submit"]'),
+    page.click('[data-testid="login-submit"]'),
   ]);
 
   await page.waitForURL('/dashboard', { timeout: 15000 });
