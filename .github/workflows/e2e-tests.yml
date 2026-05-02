@@ -115,12 +115,16 @@ jobs:
       - name: Start Backend
         working-directory: backend
         env:
+          # S7 PR5c/3 — PORT=3002 explicit (sinon Nest default 3000),
+          # cohérent avec PLAYWRIGHT_API_URL=http://localhost:3002
+          # côté tests + frontend NEXT_PUBLIC_API_URL.
+          PORT: 3002
           DATABASE_URL: postgresql://xch_e2e_user:xch_e2e_password@localhost:5432/xch_e2e
           REDIS_URL: redis://localhost:6379
-          # S7 PR5d — STORAGE_TYPE=filesystem skip init MinIO
-          # (cf storage.service.ts ligne 25 : minio init seulement
-          # si STORAGE_TYPE === 'minio'). Le smoke @full-user-journey
-          # ne touche pas au stockage donc filesystem suffit.
+          # STORAGE_TYPE=filesystem skip init MinIO (cf
+          # storage.service.ts ligne 25 : minio init seulement si
+          # STORAGE_TYPE === 'minio'). Smoke @full-user-journey ne
+          # touche pas au stockage donc filesystem suffit.
           STORAGE_TYPE: filesystem
           JWT_SECRET: e2e-test-jwt-secret-key
           NODE_ENV: test
@@ -162,7 +166,14 @@ jobs:
       - name: Wait for Backend Health Check
         run: |
           echo "Waiting for backend to be ready..."
-          npx wait-on http://localhost:3002/health -t 60000 || (echo "Backend failed to start" && cat backend/logs/*.log && exit 1)
+          # S7 PR5c/3 — wait-on tcp: au lieu de http://.../health.
+          # Pas de endpoint /health global au root backend (seul
+          # /api/integrations/netbox/health existe, sous-controller
+          # avec auth). tcp: vérifie juste que le port écoute, c'est
+          # suffisant pour s'assurer que le backend a bind sur 3002.
+          # Test fonctionnel des endpoints fait après par la spec
+          # smoke elle-même.
+          npx wait-on tcp:localhost:3002 -t 60000 || (echo "Backend failed to start (port 3002 not listening)" && exit 1)
 
       - name: Wait for Frontend
         run: |
