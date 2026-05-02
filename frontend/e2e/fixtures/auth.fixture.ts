@@ -118,32 +118,49 @@ export const test = base.extend<AuthFixture>({
  * couvrir le hop SSR → CSR + checkSession() côté Zustand.
  */
 async function login(page: Page, user: AuthUser): Promise<void> {
-  // S7.5 PR5d — testids α login form (cf SELECTORS_STRATEGY.md zone α #1).
-  await page.goto('/login');
-  await page.waitForSelector('[data-testid="login-form"]');
-  await page.fill('[data-testid="login-email"]', user.email);
-  await page.fill('[data-testid="login-password"]', user.password);
+  // S7.5 PR5h/4 — login API direct (bypass UI form).
+  //
+  // Cause racine du timeout récurrent en CI (run 25260981957 + 2 retries) :
+  // `page.fill()` sur un Input contrôlé React 18 production build met le
+  // DOM value mais React state n'est pas appliqué avant le click submit
+  // (batching / concurrent mode). handleSubmit lit `email`/`password`
+  // vides depuis useState → POST /api/auth/login JAMAIS envoyé →
+  // waitForResponse timeout. Reproductible via Chrome MCP en local :
+  // `form.dispatchEvent(submitEvent)` après reset state n'envoyait pas
+  // de requête, alors que setter natif + 'input' event + dispatch
+  // submit le faisait.
+  //
+  // La login UI elle-même est testée par `auth/login.spec.ts` (10 tests
+  // dédiés) avec ses propres specs. Le smoke @full-user-journey n'a
+  // pas besoin de re-tester la submission form, juste l'authentification.
+  // Solution : POST /api/auth/login direct via page.request, le
+  // Set-Cookie est propagé automatiquement au browser context (cf
+  // Playwright docs : "request fixtures share storage state with the
+  // BrowserContext"). Économie 2-3s par test (pas de form submission +
+  // SSR/CSR hop).
+  const apiUrl = process.env.PLAYWRIGHT_API_URL || 'http://localhost:3002';
+  const response = await page.request.post(`${apiUrl}/api/auth/login`, {
+    data: { email: user.email, password: user.password },
+  });
 
-  await Promise.all([
-    // S7.5 PR5h/3 — accepter TOUTE réponse à /api/auth/login (pas de filtre
-    // status). En CI, le timeout du filtre 2xx persistait, suggérant que
-    // soit le request ne partait pas, soit le filtre regex ne matchait pas
-    // l'URL exacte. En diagnostic : si timeout persiste sans filtre = pas
-    // de request. Si passe = le filtre était trop strict.
-    page.waitForResponse((r) => r.url().includes('/api/auth/login'), {
-      timeout: 10000,
-    }),
-    page.click('[data-testid="login-submit"]'),
-  ]);
+  if (!response.ok()) {
+    throw new Error(
+      `Login API failed: HTTP ${response.status()} for user ${user.email}`,
+    );
+  }
 
-  await page.waitForURL('/dashboard', { timeout: 15000 });
-
+  // Vérifier que le cookie est bien posé dans le browser context
   const cookies = await page.context().cookies();
   const accessTokenCookie = cookies.find((c) => c.name === 'accessToken');
 
   if (!accessTokenCookie) {
-    throw new Error('Login failed: No accessToken cookie set');
+    throw new Error('Login failed: No accessToken cookie set in browser context');
   }
+
+  // Naviguer vers /dashboard pour cohérence avec l'ancien comportement
+  // UI login (qui faisait window.location.href = '/dashboard' post-success).
+  await page.goto('/dashboard');
+  await page.waitForURL(/\/dashboard/, { timeout: 15000 });
 }
 
 /**
