@@ -7,8 +7,11 @@ import { test, expect, TEST_USERS } from '../../fixtures/auth.fixture';
  * par rôle pour faciliter review + permettre l'exécution ciblée
  * (ex: `npx playwright test rbac/rbac-viewer`).
  *
- * VIEWER : lecture seule sur Sites/Assets/Tasks. Pas de Settings,
- * pas de Users management, pas de boutons CUD visibles.
+ * S7.5 PR5e — adapté à AUTH_MODEL_V2 (cf XCH_AUTH_MODEL_V2 mémoire).
+ * Nathalie Rousseau (viewer@demo.fr) : READ sur ses délégations.
+ * Lecture seule sur Sites/Assets/Tasks (pas de boutons CUD).
+ * Settings ACCESSIBLE (Profil/Sécurité/Apparence — tabs personnels
+ * disponibles à tous). Users management interdit (redirige).
  */
 
 const API_URL = () => process.env.PLAYWRIGHT_API_URL || 'http://localhost:3002';
@@ -20,7 +23,7 @@ test.describe('RBAC - VIEWER Role', () => {
 
   test('should allow read access to Sites list', async ({ page }) => {
     await page.goto('/dashboard/sites');
-    await expect(page.locator('h1')).toContainText(/Sites/i);
+    await expect(page.locator('h1:has-text("Sites")')).toBeVisible({ timeout: 5000 });
     await page.waitForLoadState('networkidle');
   });
 
@@ -65,16 +68,19 @@ test.describe('RBAC - VIEWER Role', () => {
     }
   });
 
-  test('should deny Settings access', async ({ page }) => {
+  test('should access Settings with personal tabs only (no admin/manager tabs)', async ({ page }) => {
+    // S7.5 PR5e — settings page est ACCESSIBLE aux viewers (modèle v2).
+    // Voient Profil/Sécurité/Apparence. Pas de Notifications (requiert
+    // isManagerOrAbove), pas de tabs admin (Tenant/SSO/Modules/etc).
     await page.goto('/dashboard/settings');
-    await page.waitForTimeout(2000);
+    await expect(page.locator('h1:has-text("Paramètres")')).toBeVisible({ timeout: 5000 });
 
-    const currentUrl = page.url();
-    if (!currentUrl.includes('/settings')) {
-      expect(currentUrl).not.toContain('/settings');
-    } else {
-      await expect(page.locator('text=/403|Accès refusé|Access denied/i')).toBeVisible();
-    }
+    await expect(page.getByRole('tab', { name: /^Profil$/i })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^S.curit.$/i })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Apparence$/i })).toBeVisible();
+
+    await expect(page.getByRole('tab', { name: /^Notifications$/i })).not.toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Tenant$/i })).not.toBeVisible();
   });
 
   test('should deny Users management access', async ({ page }) => {
@@ -87,12 +93,12 @@ test.describe('RBAC - VIEWER Role', () => {
 
   test('should allow read access to Assets', async ({ page }) => {
     await page.goto('/dashboard/assets');
-    await expect(page.locator('h1')).toContainText(/Assets|Équipements/i);
+    await expect(page.locator('h1:has-text("Équipements")')).toBeVisible({ timeout: 5000 });
   });
 
   test('should allow read access to Tasks', async ({ page }) => {
     await page.goto('/dashboard/tasks');
-    await expect(page.locator('h1')).toContainText(/Tâches|Tasks/i);
+    await expect(page.locator('h1:has-text("Tâches")')).toBeVisible({ timeout: 5000 });
   });
 
   test('should deny create Task (button not visible)', async ({ page }) => {
