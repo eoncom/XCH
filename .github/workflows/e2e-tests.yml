@@ -154,7 +154,13 @@ jobs:
       - name: Build Frontend
         working-directory: frontend
         env:
-          NEXT_PUBLIC_API_URL: http://localhost:3002
+          # S7.5 PR5h/9 — `NEXT_PUBLIC_API_URL=''` pour que le frontend
+          # client fasse des fetch relatifs (`/api/...`). Next.js rewrites
+          # (cf next.config.mjs) proxie vers BACKEND_INTERNAL_URL en
+          # server-side. Garantit same-origin pour les cookies cross-port :
+          # frontend localhost:3001 ↔ /api/* (proxied to localhost:3002)
+          # → cookies SameSite=Lax sont sent normalement.
+          NEXT_PUBLIC_API_URL: ''
           NEXT_PUBLIC_APP_URL: http://localhost:3001
           # S7.5 PR5g — fix Cat. 6 polling env override (cf
           # XCH_E2E_SKIP_TODO_TRACKING). Le polling notifications par
@@ -167,8 +173,13 @@ jobs:
       - name: Start Frontend
         working-directory: frontend
         env:
-          NEXT_PUBLIC_API_URL: http://localhost:3002
+          NEXT_PUBLIC_API_URL: ''
           NEXT_PUBLIC_APP_URL: http://localhost:3001
+          # S7.5 PR5h/9 — proxy backend pour les rewrites Next.js
+          # (cf frontend/next.config.mjs `rewrites()` qui utilise
+          # `BACKEND_INTERNAL_URL`). En CI : pas de container Docker,
+          # backend est sur localhost:3002.
+          BACKEND_INTERNAL_URL: http://localhost:3002
         run: |
           npm run start &
           echo $! > frontend.pid
