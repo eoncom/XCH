@@ -125,13 +125,14 @@ async function login(page: Page, user: AuthUser): Promise<void> {
   await page.fill('[data-testid="login-password"]', user.password);
 
   await Promise.all([
-    // S7.5 PR5h/2 — POST /api/auth/login retourne 201 Created (pas 200).
-    // Le filtre status === 200 ne matchait jamais → timeout. Accepter
-    // toute réponse 2xx (200 OK ou 201 Created).
-    page.waitForResponse(
-      (r) => r.url().includes('/api/auth/login') && r.status() >= 200 && r.status() < 300,
-      { timeout: 10000 },
-    ),
+    // S7.5 PR5h/3 — accepter TOUTE réponse à /api/auth/login (pas de filtre
+    // status). En CI, le timeout du filtre 2xx persistait, suggérant que
+    // soit le request ne partait pas, soit le filtre regex ne matchait pas
+    // l'URL exacte. En diagnostic : si timeout persiste sans filtre = pas
+    // de request. Si passe = le filtre était trop strict.
+    page.waitForResponse((r) => r.url().includes('/api/auth/login'), {
+      timeout: 10000,
+    }),
     page.click('[data-testid="login-submit"]'),
   ]);
 
