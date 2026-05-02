@@ -161,7 +161,7 @@ export function SyncPanel({
         {!lastResult && !isSyncing && (
           <div className="rounded-lg border border-dashed p-4 text-center">
             <p className="text-sm text-muted-foreground">
-              Cliquez sur "Synchroniser" pour importer les {entityLabel} depuis NetBox
+              Cliquez sur &quot;Synchroniser&quot; pour importer les {entityLabel} depuis NetBox
             </p>
           </div>
         )}

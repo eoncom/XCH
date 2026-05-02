@@ -1,9 +1,38 @@
-# Docker Compose pour tests E2E
-# Lance les tests Playwright dans un container Docker
+# Docker Compose pour tests E2E Playwright
+#
+# S7 PR0 — DB e2e isolée :
+# Ajout d'un service postgres-e2e dédié (port 5433, DB xch_e2e) pour ne plus
+# polluer la xch_dev partagée DEV+CI. Le backend démarré pour E2E doit
+# pointer sur DATABASE_URL_E2E (postgresql://...:5433/xch_e2e) au lieu de
+# DATABASE_URL (xch_dev). En CI, le service postgres-e2e ci-dessous est
+# orchestré par e2e-tests.yml ; en local, lancer
+# `docker compose -f docker-compose.e2e.yml up -d postgres-e2e` puis
+# `DATABASE_URL=$DATABASE_URL_E2E npm run start:dev` côté backend.
 
 version: '3.8'
 
 services:
+  # PostgreSQL isolé pour les tests E2E (port 5433, DB xch_e2e)
+  postgres-e2e:
+    image: postgis/postgis:15-3.4-alpine
+    container_name: xch-postgres-e2e
+    environment:
+      POSTGRES_DB: xch_e2e
+      POSTGRES_USER: xch_e2e_user
+      POSTGRES_PASSWORD: xch_e2e_password
+    ports:
+      - '5433:5432'
+    networks:
+      - xch-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U xch_e2e_user -d xch_e2e']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-e2e-data:/var/lib/postgresql/data
+    restart: 'no'
+
   # Service de tests E2E
   playwright-tests:
     build:
@@ -24,7 +53,7 @@ services:
       - ./frontend/playwright-report-host:/app/playwright-report
       - ./frontend/test-results-host:/app/test-results
     # Ne pas redémarrer automatiquement (run once)
-    restart: "no"
+    restart: 'no'
     # Options Playwright
     command: >
       npx playwright test
@@ -38,3 +67,6 @@ networks:
   xch-network:
     external: true
     name: xch_xch-network
+
+volumes:
+  postgres-e2e-data:

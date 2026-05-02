@@ -552,8 +552,8 @@ export default function NewSitePage() {
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    💡 Les coordonnées GPS se remplissent automatiquement depuis l'adresse.
-                    Vous pouvez les modifier manuellement ou cliquer sur "Actualiser GPS" pour forcer une nouvelle recherche.
+                    💡 Les coordonnées GPS se remplissent automatiquement depuis l&apos;adresse.
+                    Vous pouvez les modifier manuellement ou cliquer sur &quot;Actualiser GPS&quot; pour forcer une nouvelle recherche.
                   </p>
                 </div>
 
@@ -936,7 +936,7 @@ export default function NewSitePage() {
                     <div className="space-y-2">
                       <Label htmlFor="serverInfo.accessRightsUrl" className="flex items-center gap-2">
                         <Shield className="h-4 w-4 text-muted-foreground" />
-                        URL droits d'accès serveur
+                        URL droits d&apos;accès serveur
                       </Label>
                       <Input
                         id="serverInfo.accessRightsUrl"
@@ -963,10 +963,10 @@ export default function NewSitePage() {
 
                 {/* Access Notes */}
                 <div className="border-t pt-6">
-                  <h3 className="text-lg font-semibold mb-4">Notes d'Accès</h3>
+                  <h3 className="text-lg font-semibold mb-4">Notes d&apos;Accès</h3>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Horaires d'accès</Label>
+                      <Label>Horaires d&apos;accès</Label>
                       <Textarea
                         placeholder="Lun-Ven 8h-18h, Sam 9h-12h..."
                         rows={2}
@@ -984,7 +984,7 @@ export default function NewSitePage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Procédures d'entrée</Label>
+                      <Label>Procédures d&apos;entrée</Label>
                       <Textarea
                         placeholder="1. S'enregistrer à l'accueil&#10;2. Récupérer badge..."
                         rows={2}

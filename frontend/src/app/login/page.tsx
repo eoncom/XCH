@@ -257,7 +257,7 @@ export default function LoginPage() {
                 <ShieldCheck className="h-12 w-12 text-primary" />
               </div>
               <p className="text-sm text-center text-muted-foreground">
-                Entrez le code à 6 chiffres depuis votre application d'authentification.
+                Entrez le code à 6 chiffres depuis votre application d&apos;authentification.
               </p>
 
               <div className="space-y-2">

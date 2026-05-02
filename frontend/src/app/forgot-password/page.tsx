@@ -51,7 +51,7 @@ export default function ForgotPasswordPage() {
             <div className="flex flex-col items-center gap-4 text-center">
               <Mail className="h-12 w-12 text-primary" />
               <p className="text-sm text-muted-foreground">
-                Si un compte existe avec l'adresse <strong>{email}</strong>, un email de réinitialisation a été envoyé.
+                Si un compte existe avec l&apos;adresse <strong>{email}</strong>, un email de réinitialisation a été envoyé.
                 Vérifiez votre boîte de réception.
               </p>
               <Button onClick={() => router.push('/login')} variant="outline" className="w-full">

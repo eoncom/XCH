@@ -255,7 +255,7 @@ export default function EditUserPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
-        <h1 className="text-3xl font-bold">Modifier l'utilisateur</h1>
+        <h1 className="text-3xl font-bold">Modifier l&apos;utilisateur</h1>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -410,7 +410,7 @@ export default function EditUserPage() {
               {deleteMutation.isPending ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Suppression...</>
               ) : (
-                <><Trash2 className="mr-2 h-4 w-4" />Supprimer l'utilisateur</>
+                <><Trash2 className="mr-2 h-4 w-4" />Supprimer l&apos;utilisateur</>
               )}
             </Button>
           ) : (
@@ -433,10 +433,10 @@ export default function EditUserPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Délégations d'accès
+            Délégations d&apos;accès
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Définit les délégations auxquelles l'utilisateur a accès et son droit dans chacune.
+            Définit les délégations auxquelles l&apos;utilisateur a accès et son droit dans chacune.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -482,7 +482,7 @@ export default function EditUserPage() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Aucune délégation. L'utilisateur n'a accès à aucun site.
+              Aucune délégation. L&apos;utilisateur n&apos;a accès à aucun site.
             </p>
           )}
 
@@ -556,7 +556,7 @@ export default function EditUserPage() {
             Accès par exception
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Exceptions d'accès par site (ALLOW/DENY). Permettent d'accorder ou retirer l'accès à des ressources spécifiques.
+            Exceptions d&apos;accès par site (ALLOW/DENY). Permettent d&apos;accorder ou retirer l&apos;accès à des ressources spécifiques.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -606,7 +606,7 @@ export default function EditUserPage() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Aucune exception d'accès. Les délégations ci-dessus suffisent pour la plupart des cas.
+              Aucune exception d&apos;accès. Les délégations ci-dessus suffisent pour la plupart des cas.
             </p>
           )}
 
@@ -709,7 +709,7 @@ export default function EditUserPage() {
           ) : (
             <Button variant="outline" size="sm" onClick={() => setShowAddOverride(true)}>
               <Plus className="mr-1 h-4 w-4" />
-              Ajouter une exception d'accès
+              Ajouter une exception d&apos;accès
             </Button>
           )}
         </CardContent>
@@ -719,10 +719,10 @@ export default function EditUserPage() {
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer l'utilisateur</AlertDialogTitle>
+            <AlertDialogTitle>Supprimer l&apos;utilisateur</AlertDialogTitle>
             <AlertDialogDescription>
               Êtes-vous sûr de vouloir supprimer <strong>{user?.name}</strong> ({user?.email}) ?
-              Cette action est irréversible. Toutes les portées d'accès et les données associées seront supprimées.
+              Cette action est irréversible. Toutes les portées d&apos;accès et les données associées seront supprimées.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -750,14 +750,14 @@ export default function EditUserPage() {
               {(user as any)?.isSuperAdmin ? (
                 <>
                   Êtes-vous sûr de vouloir retirer le statut super administrateur de <strong>{user?.name}</strong> ?
-                  L'utilisateur perdra l'accès à la configuration globale. Ses délégations actuelles seront conservées
+                  L&apos;utilisateur perdra l&apos;accès à la configuration globale. Ses délégations actuelles seront conservées
                   mais pourront être modifiées.
                 </>
               ) : (
                 <>
                   Êtes-vous sûr de vouloir promouvoir <strong>{user?.name}</strong> en super administrateur ?
-                  L'utilisateur obtiendra automatiquement le rôle <strong>ADMIN</strong> sur toutes les délégations
-                  et l'accès à la configuration globale de la plateforme.
+                  L&apos;utilisateur obtiendra automatiquement le rôle <strong>ADMIN</strong> sur toutes les délégations
+                  et l&apos;accès à la configuration globale de la plateforme.
                 </>
               )}
             </AlertDialogDescription>

@@ -1335,14 +1335,14 @@ model Expense {
 
   // Who pays (bearer)
   bearerId String
-  bearer   BillingEntity @relation("bearer", fields: [bearerId], references: [id])
+  bearer   BillingEntity @relation("bearer", fields: [bearerId], references: [id], onDelete: Restrict)
 
   // Rattachement organisationnel (R1, R2 — delegationId OBLIGATOIRE)
   delegationId String
-  delegation   Delegation @relation(fields: [delegationId], references: [id])
+  delegation   Delegation @relation(fields: [delegationId], references: [id], onDelete: Restrict)
   // siteId optionnel — validation R1
   siteId       String?
-  site         Site?      @relation(fields: [siteId], references: [id])
+  site         Site?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
   // Optional links to XCH entities
   assetId     String?

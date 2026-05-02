@@ -1257,7 +1257,7 @@ export default function FloorPlanViewer({
     };
 
     onExportReady(exportFn);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [onExportReady]); // Only re-run when callback identity changes - data is read from refs
 
   // Responsive stage sizing via ResizeObserver

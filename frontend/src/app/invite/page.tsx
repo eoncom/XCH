@@ -37,9 +37,9 @@ function InvitePageContent() {
           <CardContent className="pt-6">
             <div className="flex flex-col items-center gap-4 text-center">
               <AlertTriangle className="h-12 w-12 text-destructive" />
-              <p className="text-lg font-semibold">Lien d'invitation invalide</p>
+              <p className="text-lg font-semibold">Lien d&apos;invitation invalide</p>
               <p className="text-sm text-muted-foreground">
-                Le lien d'invitation est incomplet ou invalide. Veuillez contacter votre administrateur.
+                Le lien d&apos;invitation est incomplet ou invalide. Veuillez contacter votre administrateur.
               </p>
               <Button onClick={() => router.push('/login')} variant="outline">
                 Retour à la connexion

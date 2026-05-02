@@ -926,7 +926,7 @@ function BudgetsPage() {
             <AlertDialogTitle>Supprimer ce budget ?</AlertDialogTitle>
             <AlertDialogDescription>
               Cette action est irréversible. Si le budget a des sous-budgets, détachez-les ou
-              supprimez-les d'abord.
+              supprimez-les d&apos;abord.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

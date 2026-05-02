@@ -236,7 +236,7 @@ export default function NetBoxConfigPage() {
                   NetBox non connecte
                 </p>
                 <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                  Configurez l'URL et le token API dans les parametres pour activer l'integration.
+                  Configurez l&apos;URL et le token API dans les parametres pour activer l&apos;integration.
                 </p>
               </div>
             </div>

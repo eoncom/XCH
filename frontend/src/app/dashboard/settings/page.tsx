@@ -102,7 +102,7 @@ function ModulesTabContent() {
           Modules applicatifs
         </CardTitle>
         <CardDescription>
-          Activez ou désactivez les modules de l'application. Les modules désactivés sont masqués de la navigation et leurs API retournent une erreur 403.
+          Activez ou désactivez les modules de l&apos;application. Les modules désactivés sont masqués de la navigation et leurs API retournent une erreur 403.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -278,7 +278,7 @@ function EnumLabelsTabContent() {
           Personnalisation des types
         </CardTitle>
         <CardDescription>
-          Personnalisez les labels et couleurs des types d'équipement, statuts et repères.
+          Personnalisez les labels et couleurs des types d&apos;équipement, statuts et repères.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -492,7 +492,7 @@ function EnumLabelsTabContent() {
         <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
           <p className="flex items-center gap-2">
             <Info className="h-4 w-4 shrink-0" />
-            Les labels personnalisés s'affichent partout dans l'application. Les valeurs internes (code) ne changent pas.
+            Les labels personnalisés s&apos;affichent partout dans l&apos;application. Les valeurs internes (code) ne changent pas.
           </p>
         </div>
       </CardContent>
@@ -733,7 +733,7 @@ function SsoConfigSection() {
                 onChange={(e) => setIssuer(e.target.value)}
                 placeholder="https://login.microsoftonline.com/tenant-id/v2.0"
               />
-              <p className="text-xs text-muted-foreground">L'URL de découverte de votre fournisseur d'identité</p>
+              <p className="text-xs text-muted-foreground">L&apos;URL de découverte de votre fournisseur d&apos;identité</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="ssoCallbackUrl">Callback URL</Label>
@@ -1105,7 +1105,7 @@ function SecurityTabContent() {
               <div className="p-4 border rounded-lg space-y-4">
                 <h4 className="font-medium">1. Scannez le QR code</h4>
                 <p className="text-sm text-muted-foreground">
-                  Ouvrez votre application d'authentification et scannez le QR code ci-dessous.
+                  Ouvrez votre application d&apos;authentification et scannez le QR code ci-dessous.
                 </p>
                 <div className="flex justify-center">
                   {qrCodeDataUrl && (
@@ -1156,7 +1156,7 @@ function SecurityTabContent() {
                   <h4 className="font-medium">Double authentification activée !</h4>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Sauvegardez ces codes de récupération dans un endroit sûr. Chaque code ne peut être utilisé qu'une seule fois.
+                  Sauvegardez ces codes de récupération dans un endroit sûr. Chaque code ne peut être utilisé qu&apos;une seule fois.
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {backupCodes.map((code, i) => (
@@ -1167,7 +1167,7 @@ function SecurityTabContent() {
                   <Copy className="mr-2 h-4 w-4" /> Copier les codes
                 </Button>
               </div>
-              <Button onClick={() => setSetupStep('done')}>J'ai sauvegardé mes codes</Button>
+              <Button onClick={() => setSetupStep('done')}>J&apos;ai sauvegardé mes codes</Button>
             </div>
           )}
 
@@ -1319,7 +1319,7 @@ function WarrantyThresholdsSection({ tenantData, setTenantData }: { tenantData: 
           Alertes garantie
         </CardTitle>
         <CardDescription>
-          Configurez les seuils d'alerte pour la fin de garantie des équipements. Les alertes apparaissent sur le dashboard, la liste et le détail des équipements.
+          Configurez les seuils d&apos;alerte pour la fin de garantie des équipements. Les alertes apparaissent sur le dashboard, la liste et le détail des équipements.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -1581,8 +1581,8 @@ function AssetModelsTabContent() {
       <CardHeader>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" />Modèles d'équipement</CardTitle>
-            <CardDescription>Catalogue de modèles avec prix pré-définis. Lors de la création d'un asset, sélectionner un modèle pré-remplit les champs.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" />Modèles d&apos;équipement</CardTitle>
+            <CardDescription>Catalogue de modèles avec prix pré-définis. Lors de la création d&apos;un asset, sélectionner un modèle pré-remplit les champs.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <VendorCatalogImportMenu onImported={loadModels} />
@@ -1736,7 +1736,7 @@ function AssetModelsTabContent() {
         )}
 
         {models.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">Aucun modèle d'équipement. Cliquez sur "Ajouter un modèle" pour commencer.</p>
+          <p className="text-center text-muted-foreground py-8">Aucun modèle d&apos;équipement. Cliquez sur &quot;Ajouter un modèle&quot; pour commencer.</p>
         ) : (() => {
           // Manufacturers & types derived from the current catalog for the filter dropdowns
           const manufacturers = Array.from(new Set(models.map(m => m.manufacturer).filter(Boolean) as string[])).sort();
@@ -2303,7 +2303,7 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-3xl font-bold">Paramètres</h1>
         <p className="text-muted-foreground">
-          Gérez votre profil et les paramètres de l'application
+          Gérez votre profil et les paramètres de l&apos;application
         </p>
       </div>
 
@@ -2489,7 +2489,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-6">
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Choisissez le thème de l'interface utilisateur
+                  Choisissez le thème de l&apos;interface utilisateur
                 </p>
                 <div className="grid grid-cols-3 gap-4">
                   <button
@@ -2661,9 +2661,9 @@ export default function SettingsPage() {
         <TabsContent value="tenant" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Informations de l'organisation</CardTitle>
+              <CardTitle>Informations de l&apos;organisation</CardTitle>
               <CardDescription>
-                Ces informations sont utilisées dans les exports PDF, les en-têtes et l'identification de votre espace.
+                Ces informations sont utilisées dans les exports PDF, les en-têtes et l&apos;identification de votre espace.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2674,7 +2674,7 @@ export default function SettingsPage() {
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="orgName" className="flex items-center gap-2">
-                        Nom de l'organisation
+                        Nom de l&apos;organisation
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -2725,7 +2725,7 @@ export default function SettingsPage() {
                               <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p className="text-xs">Affecte l'affichage des dates et heures dans l'application</p>
+                              <p className="text-xs">Affecte l&apos;affichage des dates et heures dans l&apos;application</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -2753,14 +2753,14 @@ export default function SettingsPage() {
                   <div className="border-t pt-4 space-y-2">
                     <Label htmlFor="logoUrl" className="flex items-center gap-2">
                       <Image className="h-4 w-4" />
-                      Logo de l'organisation
+                      Logo de l&apos;organisation
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p className="text-xs">Affiché dans les exports PDF et l'en-tête de l'application. URL vers une image (PNG, JPG, SVG).</p>
+                            <p className="text-xs">Affiché dans les exports PDF et l&apos;en-tête de l&apos;application. URL vers une image (PNG, JPG, SVG).</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -2801,7 +2801,7 @@ export default function SettingsPage() {
                       </TooltipProvider>
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      Ces rappels apparaissent dans l'info-bulle de sécurité près des "Informations d'accès" sur chaque site.
+                      Ces rappels apparaissent dans l&apos;info-bulle de sécurité près des &quot;Informations d&apos;accès&quot; sur chaque site.
                     </p>
                     <div className="space-y-2">
                       {securityReminders.map((reminder, idx) => (
@@ -2898,7 +2898,7 @@ export default function SettingsPage() {
                   <div>
                     <h4 className="font-medium mb-2">Charger données démo</h4>
                     <p className="text-sm text-muted-foreground mb-3">
-                      Charge un jeu de données complet (sites, assets, racks, tasks) pour tester l'application.
+                      Charge un jeu de données complet (sites, assets, racks, tasks) pour tester l&apos;application.
                       Opération idempotente (peut être relancée sans risque).
                     </p>
                     <Button
@@ -3017,7 +3017,7 @@ export default function SettingsPage() {
                 Single Sign-On (SSO)
               </CardTitle>
               <CardDescription>
-                Configurez l'authentification SSO via OpenID Connect pour permettre à vos utilisateurs de se connecter avec leur compte existant.
+                Configurez l&apos;authentification SSO via OpenID Connect pour permettre à vos utilisateurs de se connecter avec leur compte existant.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -3038,7 +3038,7 @@ export default function SettingsPage() {
                   Créer une sauvegarde
                 </CardTitle>
                 <CardDescription>
-                  Sauvegardez l'intégralité de votre base de données ou exportez un site spécifique.
+                  Sauvegardez l&apos;intégralité de votre base de données ou exportez un site spécifique.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">

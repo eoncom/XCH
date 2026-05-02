@@ -128,7 +128,7 @@ export function ConnectivityLinksManager({ siteId, initialLinks = [], canEdit }:
             label: expensePayload.label || undefined,
           });
         } catch (e) {
-          // eslint-disable-next-line no-console
+           
           console.warn('Inline expense generation failed', e);
         }
       }

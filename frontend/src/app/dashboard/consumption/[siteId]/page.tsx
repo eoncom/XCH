@@ -35,7 +35,7 @@ export default function SiteConsumptionPage({ params }: { params: Promise<{ site
         <p className="text-muted-foreground">
           Site introuvable ou inaccessible. Le lien que vous avez suivi est
           peut-être périmé, ou ce site appartient à une délégation à laquelle
-          vous n'avez pas accès.
+          vous n&apos;avez pas accès.
         </p>
         <Button variant="outline" asChild>
           <Link href="/dashboard/consumption">
@@ -106,7 +106,7 @@ export default function SiteConsumptionPage({ params }: { params: Promise<{ site
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Server className="h-5 w-5" /> Répartition par type d'asset
+            <Server className="h-5 w-5" /> Répartition par type d&apos;asset
           </CardTitle>
         </CardHeader>
         <CardContent>

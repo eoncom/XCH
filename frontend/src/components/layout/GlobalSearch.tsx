@@ -147,7 +147,7 @@ export function GlobalSearch() {
                 </div>
               ) : hits.length === 0 && !loading ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">
-                  Aucun résultat pour "{q}"
+                  Aucun résultat pour &quot;{q}&quot;
                 </div>
               ) : (
                 <div className="py-2">

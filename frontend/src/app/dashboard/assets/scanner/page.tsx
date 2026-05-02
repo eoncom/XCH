@@ -163,8 +163,8 @@ export default function QRScannerPage() {
 
             <div className="text-center text-sm text-muted-foreground max-w-md">
               <p>
-                Placez le QR Code de l'équipement devant la caméra pour le scanner.
-                Vous serez automatiquement redirigé vers la page de l'équipement.
+                Placez le QR Code de l&apos;équipement devant la caméra pour le scanner.
+                Vous serez automatiquement redirigé vers la page de l&apos;équipement.
               </p>
             </div>
           </div>

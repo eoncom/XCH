@@ -173,7 +173,7 @@ function CostsPage() {
       const filename = `xch-depenses-${new Date().toISOString().slice(0, 10)}.csv`;
       saveAs(blob, filename);
     } catch (err: any) {
-      // eslint-disable-next-line no-alert
+       
       alert(`Erreur export : ${err?.message ?? 'inconnue'}`);
     }
   };

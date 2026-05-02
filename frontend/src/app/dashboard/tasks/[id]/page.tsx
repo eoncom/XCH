@@ -305,7 +305,7 @@ export default function TaskDetailPage({
         <p className="text-muted-foreground">
           Tâche introuvable ou inaccessible. Le lien que vous avez suivi est
           peut-être périmé, ou cette tâche appartient à un site auquel vous
-          n'avez pas accès.
+          n&apos;avez pas accès.
         </p>
         <Button variant="outline" asChild>
           <Link href="/dashboard/tasks">

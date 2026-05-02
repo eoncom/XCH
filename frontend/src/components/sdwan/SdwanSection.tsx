@@ -246,7 +246,7 @@ export function SdwanSection({ siteId, canEdit }: Props) {
             <AlertDialogDescription>
               La configuration sera supprimée ainsi que tous les firewalls qui y sont
               attachés ({config?.firewalls.length ?? 0}). Les équipements eux-mêmes ne
-              sont pas supprimés — seule l'attache à la config SD-WAN l'est.
+              sont pas supprimés — seule l&apos;attache à la config SD-WAN l&apos;est.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -283,7 +283,7 @@ export function SdwanSection({ siteId, canEdit }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Détacher ce firewall ?</AlertDialogTitle>
             <AlertDialogDescription>
-              L'équipement n'est pas supprimé, juste retiré de la configuration SD-WAN.
+              L&apos;équipement n&apos;est pas supprimé, juste retiré de la configuration SD-WAN.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

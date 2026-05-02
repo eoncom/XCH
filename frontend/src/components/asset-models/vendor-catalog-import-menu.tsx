@@ -143,7 +143,7 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
       );
       if (res.errors.length) {
         toast.error(`${res.errors.length} erreur(s) — voir la console`, { duration: 6000 });
-        // eslint-disable-next-line no-console
+         
         console.table(res.errors);
       }
       refreshAll();
@@ -173,7 +173,7 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
       );
       if (res.errors.length) {
         toast.error(`${res.errors.length} erreur(s) — voir la console`, { duration: 6000 });
-        // eslint-disable-next-line no-console
+         
         console.table(res.errors);
       }
       refreshAll();

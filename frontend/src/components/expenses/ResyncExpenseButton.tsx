@@ -97,9 +97,9 @@ export function ResyncExpenseButton({
             <AlertDialogTitle>Synchroniser la dépense liée ?</AlertDialogTitle>
             <AlertDialogDescription>
               Le montant de la dépense sera recalculé depuis la valeur actuelle de
-              l'entité source. Les autres champs (centre de coût, libellé, dates)
+              l&apos;entité source. Les autres champs (centre de coût, libellé, dates)
               restent inchangés. Cette opération est immédiate et tracée dans
-              l'audit log.
+              l&apos;audit log.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
