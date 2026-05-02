@@ -115,6 +115,6 @@ test.describe.serial('@smoke Full user journey', () => {
     // L'endpoint /api/auth/session retourne soit { user, ... } soit user directement
     // selon la version (cf auth.controller.ts handler). Tolérant aux deux shapes.
     const userEmail = data.user?.email || data.email;
-    expect(userEmail).toBe('admin@xch.demo');
+    expect(userEmail).toBe('admin@demo.fr');
   });
 });

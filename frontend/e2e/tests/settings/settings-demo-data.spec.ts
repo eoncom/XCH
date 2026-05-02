@@ -131,8 +131,8 @@ test.describe('Settings - Demo Data Management', () => {
     await expect(page).toHaveURL('/login');
 
     // Essayer de se reconnecter avec admin
-    await page.fill('#email', 'admin@xch.demo');
-    await page.fill('#password', 'admin123');
+    await page.fill('#email', 'admin@demo.fr');
+    await page.fill('#password', 'Demo1234');
     await page.click('button[type="submit"]');
 
     // Vérifier que login fonctionne (admin toujours présent)
