@@ -98,29 +98,37 @@ export const test = base.extend<AuthFixture>({
 });
 
 /**
- * Fonction helper pour login
- * ✅ Utilise cookies HTTP-only (automatiques Playwright)
+ * Fonction helper pour login.
+ *
+ * S7 PR0 Option A — résolution Known Issue SSR/CSR cookies E2E :
+ * On attend explicitement la réponse 200 du POST /api/auth/login AVANT de
+ * waitForURL('/dashboard'). Sans ce wait, le browser cliquait submit puis
+ * suivait la redirection client-side avant que le Set-Cookie ait été
+ * propagé au context Playwright. Le middleware Next.js voyait alors une
+ * requête sans cookie et renvoyait sur /login → timeout sur waitForURL.
+ *
+ * Le Promise.all garantit que le listener waitForResponse est armé AVANT
+ * que le click ne déclenche le POST. Timeout dashboard étendu à 15s pour
+ * couvrir le hop SSR → CSR + checkSession() côté Zustand.
  */
 async function login(page: Page, user: AuthUser): Promise<void> {
-  // Naviguer vers page login
   await page.goto('/login');
-
-  // Attendre que le formulaire soit visible
   await page.waitForSelector('form');
-
-  // Remplir le formulaire
   await page.fill('#email', user.email);
   await page.fill('#password', user.password);
 
-  // Soumettre
-  await page.click('button[type="submit"]');
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes('/api/auth/login') && r.status() === 200,
+      { timeout: 10000 },
+    ),
+    page.click('button[type="submit"]'),
+  ]);
 
-  // Attendre redirection vers dashboard (backend set cookies automatiquement)
-  await page.waitForURL('/dashboard', { timeout: 10000 });
+  await page.waitForURL('/dashboard', { timeout: 15000 });
 
-  // ✅ Vérifier que le cookie accessToken existe (HTTP-only)
   const cookies = await page.context().cookies();
-  const accessTokenCookie = cookies.find(c => c.name === 'accessToken');
+  const accessTokenCookie = cookies.find((c) => c.name === 'accessToken');
 
   if (!accessTokenCookie) {
     throw new Error('Login failed: No accessToken cookie set');
