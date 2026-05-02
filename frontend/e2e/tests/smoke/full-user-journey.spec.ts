@@ -36,8 +36,6 @@ let sharedCookies: Cookie[] = [];
 test.describe.serial('@smoke Full user journey', () => {
   test.beforeAll(async ({ browser }) => {
     const apiUrl = process.env.PLAYWRIGHT_API_URL || 'http://localhost:3002';
-    const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3001';
-    const frontendUrl = new URL(baseURL);
 
     // Setup context unique pour login one-shot
     const setupContext = await browser.newContext();
@@ -55,34 +53,16 @@ test.describe.serial('@smoke Full user journey', () => {
       );
     }
 
-    // Extraire Set-Cookie headers + reformater en Playwright Cookie
-    // sur le domain frontend (cf retex S7.5 PR5h/6 cross-origin).
-    const setCookieHeaders = response
-      .headersArray()
-      .filter((h) => h.name.toLowerCase() === 'set-cookie');
-
-    sharedCookies = setCookieHeaders
-      .map((h) => {
-        const match = h.value.match(/^([^=]+)=([^;]+)/);
-        if (!match) return null;
-        return {
-          name: match[1].trim(),
-          value: match[2].trim(),
-          domain: frontendUrl.hostname,
-          path: '/',
-          httpOnly: true,
-          secure: false,
-          sameSite: 'Lax' as const,
-          expires: -1,
-        };
-      })
-      .filter((c): c is Cookie => c !== null);
-
+    // S7.5 PR5h/8 — utiliser context.cookies() direct (pas parsing Set-Cookie
+    // manuel). Les cookies retournés par Playwright sont en format authentique
+    // (domain/path/expires correctement résolus depuis Set-Cookie). Évite les
+    // bugs de parsing manuel (sameSite mal détecté, expires=-1 forcé, etc.).
+    sharedCookies = await setupContext.cookies();
     await setupContext.close();
 
     if (sharedCookies.length === 0 || !sharedCookies.some((c) => c.name === 'accessToken')) {
       throw new Error(
-        `Smoke beforeAll: Login OK mais pas d'accessToken cookie extrait. Set-Cookie raw: ${setCookieHeaders.map((h) => h.value).join(' || ')}`,
+        `Smoke beforeAll: Login OK mais pas d'accessToken cookie extrait. Cookies: ${JSON.stringify(sharedCookies)}`,
       );
     }
   });
