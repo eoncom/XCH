@@ -184,29 +184,32 @@ jobs:
 
       - name: Initialize App + Load Demo Data
         run: |
-          # S7 PR5c/4 — POST /api/setup/initialize avec loadDemoData=true
-          # crée l'organisation/tenant + admin configurateur + appelle
-          # SeedService.loadDemo qui crée les 4 users démo
-          # (admin@xch.demo, manager@xch.demo, tech@xch.demo,
-          # inviter@xch.demo) avec passwords admin123/manager123/
-          # tech1234/invit123 (cf TEST_USERS dans
-          # frontend/e2e/fixtures/auth.fixture.ts).
+          # S7 PR5c/5 — payload corrigé avec :
+          # - adminName (requis non-empty cf SetupDto ligne 42)
+          # - adminPassword Demo1234 respecte regex policy
+          #   (1 maj + 1 min + 1 chiffre, min 8 chars)
+          # - adminEmail admin@demo.fr (cohérent avec emails seed
+          #   démo @demo.fr, pas @xch.demo qui était une erreur fixture)
           #
-          # Échouera avec 409 si l'app est déjà setup (théoriquement
-          # impossible en CI E2E sur DB fraîche, mais tolérant via
-          # `|| true` au cas où).
+          # Le SeedService.loadDemo ensuite crée les autres users démo
+          # (manager@demo.fr, technicien@demo.fr, viewer@demo.fr,
+          # multi@demo.fr) avec password demo123. L'admin créé par
+          # setup wizard préserve son password Demo1234 (cf
+          # seed.service.ts ligne 537 : passwordHash conservé si
+          # existing.passwordHash est truthy).
           echo "POST /api/setup/initialize avec loadDemoData=true..."
           curl -X POST http://localhost:3002/api/setup/initialize \
             -H "Content-Type: application/json" \
             -d '{
               "organizationName": "XCH E2E Test",
               "subdomain": "xch-e2e",
-              "adminEmail": "admin@xch.demo",
-              "adminPassword": "admin123",
+              "adminName": "Admin Démo",
+              "adminEmail": "admin@demo.fr",
+              "adminPassword": "Demo1234",
               "loadDemoData": true
             }' \
             --fail-with-body \
-            --max-time 60 || (echo "Setup initialize failed" && exit 1)
+            --max-time 120 || (echo "Setup initialize failed" && exit 1)
           echo ""
           echo "Setup OK"
 

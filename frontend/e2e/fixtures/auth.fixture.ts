@@ -12,26 +12,32 @@ export interface AuthUser {
   role: 'ADMIN' | 'MANAGER' | 'TECHNICIEN' | 'VIEWER';
 }
 
-// Utilisateurs de test (correspondent aux seed data en production)
+// S7 PR5c/5 — Utilisateurs de test alignés sur le SEED DÉMO RÉEL
+// (cf backend/src/modules/seed/seed.service.ts createUsers ligne 470+).
+// Bug historique : les anciens emails @xch.demo + passwords admin123/
+// manager123/tech1234/invit123 ne correspondaient à AUCUN user en DB.
+// Le seed démo crée @demo.fr avec passwords demo123 (pour les non-admin)
+// et l'admin reçoit son password depuis /setup/initialize (Demo1234
+// par convention, cf project_prod_access mémoire).
 export const TEST_USERS = {
   admin: {
-    email: 'admin@xch.demo',
-    password: 'admin123',
+    email: 'admin@demo.fr',
+    password: 'Demo1234',
     role: 'ADMIN' as const,
   },
   manager: {
-    email: 'manager@xch.demo',
-    password: 'manager123',
+    email: 'manager@demo.fr',
+    password: 'demo123',
     role: 'MANAGER' as const,
   },
   technicien: {
-    email: 'tech@xch.demo',
-    password: 'tech1234',
+    email: 'technicien@demo.fr',
+    password: 'demo123',
     role: 'TECHNICIEN' as const,
   },
   viewer: {
-    email: 'inviter@xch.demo',
-    password: 'invit123',
+    email: 'viewer@demo.fr',
+    password: 'demo123',
     role: 'VIEWER' as const,
   },
 };
