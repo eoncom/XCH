@@ -1,4 +1,24 @@
-name: E2E Tests
+name: E2E Smoke Tests
+
+# S7 PR5b — workflow refondu : exécute UNIQUEMENT la spec smoke
+# `@full-user-journey` (10 tests sériels) au lieu du full E2E.
+# Rationale : ~50 tests skip TODO + sélecteurs UI à confirmer = scope
+# trop large pour PR5 release ; le smoke valide la régression
+# bloquante annoncée dans le CHANGELOG v1.9.0 sans bloquer sur des
+# specs encore à finaliser.
+#
+# Le full E2E (~210 tests) reste à activer en mini-session post-S7
+# une fois les ~50 skip TODO levés (cf entité MCP
+# XCH_E2E_SKIP_TODO_TRACKING — prioriser catégorie 6 polling env
+# override, puis catégorie 1 sélecteurs UI).
+#
+# Ce workflow était `disabled_manually` avant PR5b (bug latent
+# critique : la régression bloquante annoncée n'était jamais exécutée
+# côté CI). Réactivé via `gh workflow enable` après merge PR5b.
+#
+# Cf XCH_E2E_SMOKE_AUTHORITY_VALIDATION pour le pattern : un filet
+# de sécurité CI doit être ACTIVÉ + EXÉCUTÉ + RÉFÉRENCER endpoints
+# RÉELS pour mériter son nom.
 
 on:
   push:
@@ -9,9 +29,9 @@ on:
 
 jobs:
   e2e-tests:
-    name: Playwright E2E Tests
+    name: Playwright E2E Smoke (@full-user-journey)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     services:
       # S7 PR0 — DB e2e isolée xch_e2e (au lieu de xch_dev partagée)
@@ -151,13 +171,16 @@ jobs:
       #
       # Run E2E Tests
       #
-      - name: Run Playwright E2E Tests
+      - name: Run Playwright Smoke Tests (@full-user-journey)
         working-directory: frontend
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3001
           PLAYWRIGHT_API_URL: http://localhost:3002
           CI: true
-        run: npm run test:e2e
+        # S7 PR5b — limiter au scope smoke (10 tests sériels). Le full
+        # E2E (~210 tests, ~50 skip TODO) sera activé en mini-session
+        # post-S7 quand la catégorie 1 sélecteurs UI sera levée.
+        run: npx playwright test --grep "@smoke" --project=chromium --reporter=html,junit
 
       #
       # Upload Artifacts
