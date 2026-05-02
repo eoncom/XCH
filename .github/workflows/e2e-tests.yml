@@ -50,6 +50,20 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       #
+      # Diagnostic : valider connectivité CI → xch-deploy avant Playwright
+      #
+      - name: Smoke connectivity check
+        run: |
+          echo "Testing connectivity to xch.eoncom.io..."
+          curl -sS -o /dev/null -w "HTTP %{http_code} (%{time_total}s) size=%{size_download}b\n" --max-time 10 https://xch.eoncom.io/login || (echo "❌ CI cannot reach xch.eoncom.io — likely firewall/WAF blocking GitHub Actions IPs" && exit 1)
+          echo "Testing API endpoint..."
+          curl -sS -X POST https://xch.eoncom.io/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"smoke-connectivity-check@invalid.test","password":"Test1234"}' \
+            --max-time 10 \
+            -w "\nHTTP %{http_code} (%{time_total}s)\n" || (echo "❌ API endpoint timed out" && exit 1)
+
+      #
       # Run E2E Tests against xch.eoncom.io (single-origin)
       #
       # Pas de setup local (frontend/backend/postgres) — tout est sur
