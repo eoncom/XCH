@@ -106,11 +106,18 @@ jobs:
           DATABASE_URL: postgresql://xch_e2e_user:xch_e2e_password@localhost:5432/xch_e2e
         run: npx prisma migrate deploy
 
-      - name: Seed Database
-        working-directory: backend
-        env:
-          DATABASE_URL: postgresql://xch_e2e_user:xch_e2e_password@localhost:5432/xch_e2e
-        run: npm run prisma:seed || echo "Seed may have failed, continuing..."
+      # S7 PR5c/4 — step "Seed Database" original supprimé. Il
+      # exécutait `npm run prisma:seed` qui n'existe pas dans
+      # backend/package.json (cf scripts ligne 22-26 : seul
+      # prisma:generate, prisma:studio, db:migrate:* existent). Le seed
+      # masquait silencieusement le fail via `|| echo "Seed may have
+      # failed, continuing..."` → DB vide → admin@xch.demo inexistant
+      # → login smoke fail.
+      #
+      # Seed démo réel se fait via POST /api/setup/initialize avec
+      # loadDemoData=true (cf DEPLOY_WORKFLOW gravé). Voir step
+      # "Initialize App + Demo Data" après "Wait for Backend Health
+      # Check" ci-dessous.
 
       - name: Start Backend
         working-directory: backend
@@ -174,6 +181,34 @@ jobs:
           # Test fonctionnel des endpoints fait après par la spec
           # smoke elle-même.
           npx wait-on tcp:localhost:3002 -t 60000 || (echo "Backend failed to start (port 3002 not listening)" && exit 1)
+
+      - name: Initialize App + Load Demo Data
+        run: |
+          # S7 PR5c/4 — POST /api/setup/initialize avec loadDemoData=true
+          # crée l'organisation/tenant + admin configurateur + appelle
+          # SeedService.loadDemo qui crée les 4 users démo
+          # (admin@xch.demo, manager@xch.demo, tech@xch.demo,
+          # inviter@xch.demo) avec passwords admin123/manager123/
+          # tech1234/invit123 (cf TEST_USERS dans
+          # frontend/e2e/fixtures/auth.fixture.ts).
+          #
+          # Échouera avec 409 si l'app est déjà setup (théoriquement
+          # impossible en CI E2E sur DB fraîche, mais tolérant via
+          # `|| true` au cas où).
+          echo "POST /api/setup/initialize avec loadDemoData=true..."
+          curl -X POST http://localhost:3002/api/setup/initialize \
+            -H "Content-Type: application/json" \
+            -d '{
+              "organizationName": "XCH E2E Test",
+              "subdomain": "xch-e2e",
+              "adminEmail": "admin@xch.demo",
+              "adminPassword": "admin123",
+              "loadDemoData": true
+            }' \
+            --fail-with-body \
+            --max-time 60 || (echo "Setup initialize failed" && exit 1)
+          echo ""
+          echo "Setup OK"
 
       - name: Wait for Frontend
         run: |
