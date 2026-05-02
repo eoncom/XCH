@@ -7,6 +7,78 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.9.0] - 2026-05-02 — Refonte E2E Playwright + mini-dette traversale (Session 7 du plan v2 finalization)
+
+Session 7 livrée en **5 PRs autonomes mergées sans incident** (PR0/1/2/3/4) + PR5 release. Couverture **10/10 critical paths** atteinte. Pattern de merge autonome utilisateur (`XCH_AUTONOMOUS_MERGE_PATTERN_S7`) validé sur 4 PRs consécutives sans casse. Plus 1 spec smoke `@full-user-journey` régression bloquante CI sur toutes futures PR.
+
+### Added (PR0 — mini-dette traversale + fondations E2E)
+
+- **Migration `10_fk_expense_ondelete`** — 3 FK Expense (`delegationId`, `siteId`, `bearerId`) reçoivent `onDelete:` explicite (RESTRICT pour les NOT NULL, SetNull no-op DB pour `siteId` nullable). Cohérent avec migration 8 (S5 PR2).
+- **Résolution Known Issue SSR/CSR cookies E2E** (Option A retenue par utilisateur) : [`frontend/e2e/fixtures/auth.fixture.ts`](frontend/e2e/fixtures/auth.fixture.ts) `Promise.all([waitForResponse, click])` garantit que le listener du POST /api/auth/login est armé AVANT le submit. + [`frontend/middleware.ts`](frontend/src/middleware.ts) fallback CSR si `referer=/login` (laisse passer la 1ʳᵉ navigation, Zustand `auth-store.checkSession()` valide côté client).
+- **DB e2e isolée `xch_e2e`** — service `postgres-e2e` (port 5433) dans [`docker-compose.e2e.yml`](docker-compose.e2e.yml) + workflow [`e2e-tests.yml`](.github/workflows/e2e-tests.yml) renommé `xch_dev` → `xch_e2e`. Plus de pollution dev local.
+- **Endpoints reset scoped par domaine** — `POST /api/seed/reset/:domain` (sites/assets/racks/expenses/monitors/notifications). Garde `TestEnvOnlyGuard` (refus si `NODE_ENV=production`). Permet aux specs E2E d'isoler leur domaine sans reset global.
+- **Codemod `react/no-unescaped-entities`** — script Python conservé [`frontend/scripts/codemod-unescaped-entities.py`](frontend/scripts/codemod-unescaped-entities.py) avec fallback UTF-16 ESLint vs codepoint Python (emoji 💡 surrogate pair). 163 erreurs → **0**.
+- **Lockfile régénéré** — `frontend/package-lock.json` (manquant depuis commit `0cc9211` antique). 569 packages résolus, restauration `npm ci` + cache deps dans tous les workflows.
+- **Workflow baseline non-régression** — [`frontend-checks.yml`](.github/workflows/frontend-checks.yml) compare compteurs courants vs [`baselines/frontend-checks.json`](.github/baselines/frontend-checks.json) versionné. Fail explicite si régression OU CAPTURE INVALIDE (4 cas : stable / amélioration / régression / capture invalide). Validé par test négatif (run 25249322588 fail attendu, retour vert run 25249527769).
+- **Lint custom ESLint useQuery isError** — règle `no-restricted-syntax` qui flag `ObjectPattern` destructurant `isLoading` SANS `isError` ni `error` (pattern S6 PR4). Mode warn baseline 38 warnings / 32 fichiers legacy acceptés.
+
+### Added (PR1 — auth + délégation foundations)
+
+- **Split `rbac.spec.ts`** monolithique (27 tests) en **4 fichiers par rôle** : `rbac-{viewer,tech,manager,admin}.spec.ts`. Review par scope, exécution ciblée (`npx playwright test rbac/rbac-viewer`).
+- **`delegation.fixture.ts`** — helpers `setActiveDelegation(context, id)` (via `addInitScript` localStorage), `switchActiveDelegationViaUI(page, code)`, `getDelegationIdByCode(page, code)`. Test fixture étend `authTest`.
+- **`auth/oidc-simulated.spec.ts`** (1 actif + 4 skip TODO mock OIDC backend).
+- **`auth/delegation-switch.spec.ts`** (2 actifs + 4 skip TODO sélecteurs UI badge délégation).
+
+### Added (PR2 — CRUD entités sites/assets/racks)
+
+- **`helpers/konva.ts`** — interactions Konva canvas via boundingBox + relX/relY (pas de coords pixel figées). Helpers : `getKonvaCanvas`, `clickKonvaAt`, `dragKonvaFromTo`, `uPositionToRelY`. Réutilisé en PR4.
+- **`sites/sites-create-wizard.spec.ts`** (5 actifs + 1 skip) — wizard 2-step réel (vs "3-step" du brief original — découverte plan v2 à mettre à jour).
+- **`sites/sites-edit-wizard.spec.ts`** (5 actifs + 2 skip) — édition 2-step + deeplink `?step=2`.
+- **`sites/sites-sections.spec.ts`** : +2 tests délégation scope filter (header `X-Delegation-Id` vérifié sur `GET /api/sites`).
+- **`assets/assets-edit-network.spec.ts`** (2 actifs + 3 skip) — validation S/N + WiFi/MAC/multi-tag.
+- **`racks/racks-mount-konva.spec.ts`** (4 actifs + 3 skip) — Konva basics + canvas interactions.
+
+### Added (PR3 — flows métier expenses/budgets/monitor)
+
+- **`expenses/expenses-create.spec.ts`** (3 actifs + 4 skip) — création + bearer + validation montant + pièce jointe.
+- **`expenses/budgets-threshold.spec.ts`** (3 actifs + 4 skip) — seuils 80% (`BUDGET_WARNING`) + 100% (`BUDGET_EXCEEDED`) + reset mensuel.
+- **`monitor/probes-icmp.spec.ts`** (2 actifs + 4 skip) — lifecycle PENDING → SUCCESS via `run-now`.
+- **`monitor/probes-http-tcp.spec.ts`** (1 actif + 6 skip) — HTTP status code + content match + TCP port + failure threshold + auto-disabled.
+
+### Added (PR4 — UI complexes + smoke régression bloquante)
+
+- **`smoke/full-user-journey.spec.ts`** — **10 tests actifs en mode `test.describe.serial`** + tag `@smoke`. Login → dashboard → 7 sections (sites/assets/racks/tasks/costs/monitoring/notifications) → API `/api/auth/me`. **Régression bloquante automatique sur toutes futures PR** (filet de sécurité).
+- **`racks/racks-mount-konva-advanced.spec.ts`** (1 actif + 5 skip) — multi-mount stack + resize 1U → 4U + rotation + export PNG + drag&drop position U.
+- **`tasks/tasks-kanban-rollback.spec.ts`** (1 actif + 4 skip) — validation S6 PR4 : `page.route()` mock backend 500 → optimistic rollback.
+- **`qr/qr-generate-scan.spec.ts`** (2 actifs + 3 skip) — generate + scan webcam mock (helper getUserMedia ~2h différé).
+- **`notifications/notifications-inbox.spec.ts`** (3 actifs + 4 skip) — cloche + page + endpoint `count-unread`.
+- **`notifications/notifications-polling.spec.ts`** (1 actif + 4 skip) — polling check + de-dup + SSE fallback.
+
+### Removed (PR4)
+
+- **`common/status-badges.spec.ts`** (12 tests low value, pure styling).
+
+### Changed
+
+- **CHANGELOG, PROJECT_STATUS, ADR-007** mis à jour (cf PR5).
+- **Backend + frontend** version bumps `1.8.2` → `1.9.0` (cohérence S6 gravée).
+
+### Notes patterns gravés (mémoire MCP)
+
+- **`XCH_AUTONOMOUS_MERGE_PATTERN_S7`** — 4 règles merge autonome validées par 4 PRs consécutives sans casse (CI vert + baseline stable + pas de dette + pas modif schéma/ADR/architecture). Ping obligatoire avant tag release.
+- **`XCH_CI_SCRIPT_DEFENSIVE_PATTERNS`** — 4 règles capture/validation/fail explicite/test négatif. Bug évité : `grep -c PATTERN file || echo 0` corrompait `$GITHUB_OUTPUT` silencieusement quand compteur = 0 (cas amélioration spontanée). Détecté avant merge via observation logs réels — le check baseline serait passé "vert" avec compteurs vides.
+- **`XCH_LOCKFILE_DRIFT_PATTERN`** — 2 incidents en 2 sessions (S5 PR0 backend + S7 PR0 frontend). Proposer check CI bloquant `lockfile-integrity.yml` en S9.
+- **`XCH_E2E_SKIP_TODO_TRACKING`** — registre 57 skip TODO catégorisés (sélecteurs UI à confirmer / mock OIDC / Konva drag&drop / webcam mock / Kanban rollback mock / polling env override / floorplans pré-existants). Évite que les skip oubliés deviennent dette opaque.
+
+### Métriques
+
+- **~210 tests Playwright** (vs 152 à l'ouverture S7 et 57 documenté obsolète) répartis sur 19 fichiers spec actifs.
+- **57 skip TODO** tracés exhaustivement dans `XCH_E2E_SKIP_TODO_TRACKING`.
+- **Baseline non-régression frontend** stable 5/5 sur les 5 PRs (60 typecheck err / 16 fichiers / 0 lint err / 38 useQuery warnings / 32 fichiers).
+- **0 régression** introduite, **0 conflit non trivial** au rebase (stratégie d'évitement parallèle PR0/PR1 validée).
+
+---
+
 ## [1.8.2] - 2026-05-01 — UX dark canvas + erreurs réseau + tap targets (Session 6 du plan v2 finalization)
 
 Cible utilisateur explicite : **laptop / iPad / tablette** (validée 2026-04-26 dans `XCH_TARGET_DEVICES`). Pas mobile-first téléphone. Tous les changements sont frontend, aucun changement backend (le bump version backend est cosmétique pour aligner le tag git sur l'état projet, pas un release backend séparé).

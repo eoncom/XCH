@@ -1,8 +1,8 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-05-02 13:19:36 (Auto-update)
-**Version actuelle :** 1.8.0 (taguée 2026-04-30)
-**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + Sessions 1-4 finalization v2 livrées + RBAC universel ADR-021 (14/15 modules fixés, ~85 attaques d'intrusion bloquantes en CI)
+**Dernière mise à jour :** 2026-05-02 13:32:39 (Auto-update)
+**Version actuelle :** 1.9.0 (taguée 2026-05-02)
+**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + **Sessions 1-7 finalization v2 livrées** + 10/10 critical paths E2E couverts + smoke @full-user-journey régression bloquante automatisée
 
 ## 🚦 Plan v2 vers v1.6 (sessions S0 → S11)
 
@@ -18,7 +18,7 @@
 
 **Tag :** **v1.6.0** posé 2026-04-28 (Asset/Tenant/Site refactor JSON → typed Prisma, smoke complet validé sur xch-deploy).
 
-## 🚦 Plan finalization v2 vers v1.8 (post-v1.6.0)
+## 🚦 Plan finalization v2 vers v1.9 (post-v1.6.0)
 
 | Session | Description | ADR prévue | Tag cible | Statut |
 |---|---|---|---|---|
@@ -28,12 +28,17 @@
 | 4 | RBAC universel + tests d'intrusion bloquants (réorienté depuis perf/intégrité DB après audit RBAC découvrant 14/15 modules incohérents) | ADR-021 | v1.8.0 | ✅ Livrée 2026-04-30 |
 | 5 | Performance & intégrité DB (indexes, FK CHECK, query plans) + UX deep-link 404 résiduelle (monitoring/[id], consumption/[siteId]) | — | v1.8.1 | ✅ Livrée 2026-05-01 |
 | 6 | UX dark canvas + erreurs réseau + tap targets (cible laptop/iPad/tablette, pas mobile) | — | v1.8.2 | ✅ Livrée 2026-05-01 |
-| 7 | Refonte E2E Playwright (30-40 specs critical paths) | — | v1.9.0 | ⏳ |
-| 8 | (Optionnelle) Sentry / error tracking | — | — | 🔮 |
+| **7** | **Refonte E2E Playwright (~210 tests, 10/10 critical paths) + mini-dette traversale (FK Expense onDelete + baseline non-régression frontend + codemod 163 lint + lockfile + DB e2e isolée + reset scoped) + smoke @full-user-journey régression bloquante CI** | **ADR-007 amend** | **v1.9.0** | **✅ Livrée 2026-05-02** |
+| 8 | Sentry / error tracking (prérequis pilotes externes confirmé) | — | — | 🔮 |
+| 9 | Hardening tail (CSP nonce dynamique + DTOs structurés sur 30+ endpoints, 60-80 fichiers backend, 25-30 nouveaux Response DTOs) | — | — | 🔮 |
+| 5b | Heavy SQL refactors (3 refactors GENERATE_SERIES + DataLoader + group-by) | — | — | 🔮 |
+| Mini | Mini-session typecheck cleanup pré-v2.0.0 (résidu post-S9 : TS7006 implicit any + TS2769 + TS2322) | — | — | 🔮 |
 
-Rationale : S2/S3/S4 indépendantes, S5 dépend de S2+S3 (drift doc), S7
-dépend de tout (E2E sur app stable). Détail dans l'entité MCP
-`XCH_PLAN_V2_FINALIZATION`.
+**Tag :** **v1.9.0** posé 2026-05-02 (Session 7 — Refonte E2E + mini-dette traversale, 5 PRs autonomes mergées sans incident, baseline non-régression validée).
+
+**Ordre confirmé du reste du plan v2** : S9 → S8 → S5b → mini-session typecheck cleanup → tag final v2.0.0.
+
+Rationale : S2/S3/S4 indépendantes, S5 dépend de S2+S3 (drift doc), S7 dépendait de tout (E2E sur app stable, livrée). S9 avant S8 (Sentry rouge à chaque déploiement S9 sinon impossible distinguer vrai bug de régression refactor). S5b en dernier (refactors gain marginal validés mieux avec Sentry posé). Détail dans l'entité MCP `XCH_PLAN_V2_FINALIZATION`.
 
 ## 🆕 v1.4.0 (2026-04-18) — Post audit + Apparence
 
@@ -67,7 +72,7 @@ Backend      ████████████████████ 100% (
 Frontend     ████████████████████ 100% (18 sections dashboard, 53 pages, 57 composants)
 DB schema    ████████████████████ 100% (48 modèles Prisma + 22 enums, 5 migrations versionnées)
 Docs         ████████████████████ 100% (18 ADRs, AUTH_MODEL v2, INSTALL dev + prod)
-Tests        ███░░░░░░░░░░░░░░░░░  15% (80 tests Jest backend, 2/57 E2E Playwright)
+Tests        ██████░░░░░░░░░░░░░░  30% (80+ tests Jest backend, ~210 E2E Playwright sur 19 fichiers spec actifs, 10/10 critical paths, smoke @full-user-journey régression bloquante CI, baseline non-régression frontend stable)
 CI/CD        ██████████░░░░░░░░░░  50% (GitHub Actions workflow, pas de quality gates)
 Deploy       ████████████████████ 100% (Docker Compose prod, nginx, MinIO)
 

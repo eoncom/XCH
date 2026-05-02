@@ -1,6 +1,6 @@
 {
   "name": "xch-backend",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "XCH Backend API - NestJS",
   "author": "XCH Team",
   "license": "MIT",
