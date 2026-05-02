@@ -1,17 +1,16 @@
 name: E2E Smoke Tests
 
-# S7.5 PR5h/10 — workflow refondu pour cibler xch.eoncom.io directement.
-# Single-origin (NPM reverse proxy unifie API+UI sur même hostname) =
-# pas d'issue cookie cross-port. Reproduit le comportement prod réel.
+# S7.5 PR5h/12 — workflow refondu pour single-origin via nginx en CI.
 #
-# Architecture précédente (PR5b/c/d/e/f/g) : setup CI 2-process local
-# (frontend localhost:3001 + backend localhost:3002). Cross-origin
-# artificiel cassait checkSession() côté layout (cookie SameSite=Lax
-# ne se propage pas en cross-port même via Next.js rewrites).
+# Architecture précédente (iters 1-11) :
+# - 2-process local localhost:3001/3002 = cross-origin artificiel cassait
+#   layout checkSession() (SameSite=Lax bloque cross-port fetch)
+# - xch.eoncom.io direct = firewall/WAF block IPs GitHub Actions runners
 #
-# Décision utilisateur 2026-05-02 (Option 1 du ping iter 9) : pointer
-# CI vers xch-deploy = environnement TEST officiel (cf DEPLOY_WORKFLOW
-# obs[19][20] : mutations OK, cleanup endpoints scoped en place).
+# Architecture S7.5 PR5h/12 (option 3 user choice 2026-05-02) :
+# docker-compose.ci.yml lance nginx (port 8080) + frontend + backend +
+# postgres + redis + minio dans un réseau Docker. Single-origin via
+# nginx reverse proxy reproduit le NPM de prod.
 #
 # Cf XCH_E2E_AUTH_STORAGE_STATE_PATTERN + XCH_E2E_SMOKE_AUTHORITY_VALIDATION
 # + XCH_ITERATION_THRESHOLD_PRINCIPLE (3 entités gravées MCP S7.5).
@@ -21,13 +20,13 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   e2e-tests:
     name: Playwright E2E Smoke (@full-user-journey)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout code
@@ -41,7 +40,7 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
 
-      - name: Install Frontend Dependencies
+      - name: Install Frontend Dependencies (host — pour Playwright)
         working-directory: frontend
         run: npm ci
 
@@ -50,36 +49,85 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       #
-      # Diagnostic : valider connectivité CI → xch-deploy avant Playwright
+      # Build + start docker-compose CI single-origin
       #
-      - name: Smoke connectivity check
+      - name: Build and start CI stack
         run: |
-          echo "Testing connectivity to xch.eoncom.io..."
-          curl -sS -o /dev/null -w "HTTP %{http_code} (%{time_total}s) size=%{size_download}b\n" --max-time 10 https://xch.eoncom.io/login || (echo "❌ CI cannot reach xch.eoncom.io — likely firewall/WAF blocking GitHub Actions IPs" && exit 1)
-          echo "Testing API endpoint..."
-          curl -sS -X POST https://xch.eoncom.io/api/auth/login \
-            -H "Content-Type: application/json" \
-            -d '{"email":"smoke-connectivity-check@invalid.test","password":"Test1234"}' \
-            --max-time 10 \
-            -w "\nHTTP %{http_code} (%{time_total}s)\n" || (echo "❌ API endpoint timed out" && exit 1)
+          echo "Building docker-compose.ci.yml stack (nginx + frontend + backend + postgres + redis + minio)..."
+          docker compose -f docker-compose.ci.yml up -d --build
+          echo "Stack started. Containers:"
+          docker compose -f docker-compose.ci.yml ps
 
-      #
-      # Run E2E Tests against xch.eoncom.io (single-origin)
-      #
-      # Pas de setup local (frontend/backend/postgres) — tout est sur
-      # xch-deploy. Mutations smoke = quasi-nulles (login API + nav
-      # read-only + 1 GET /api/auth/session) donc pas de cleanup
-      # nécessaire. Pour les futures specs E2E qui mutent (sites/assets/
-      # expenses), prévoir cleanup via /api/seed/reset/:domain en
-      # afterAll (cf S7 PR0 endpoints scoped).
-      #
+      - name: Wait for nginx ready
+        run: |
+          echo "Waiting for nginx on port 8080..."
+          npx wait-on http://localhost:8080/health -t 90000 || (echo "nginx not ready" && docker compose -f docker-compose.ci.yml logs && exit 1)
+          echo "✅ nginx ready"
+
+      - name: Wait for backend ready (via nginx proxy)
+        run: |
+          echo "Waiting for backend via nginx /api proxy..."
+          # Le backend init prend du temps (prisma migrate deploy + dist/main start)
+          for i in $(seq 1 30); do
+            if curl -sS -o /dev/null -w "%{http_code}" http://localhost:8080/api/setup/status | grep -q "200\|404"; then
+              echo "✅ Backend ready (iter $i)"
+              break
+            fi
+            echo "Backend not ready yet (iter $i/30)..."
+            sleep 5
+          done
+          curl -sS http://localhost:8080/api/setup/status | head -c 300 || true
+          echo ""
+
+      - name: Initialize App + Load Demo Data
+        run: |
+          echo "POST /api/setup/initialize via nginx (single-origin)..."
+          curl -X POST http://localhost:8080/api/setup/initialize \
+            -H "Content-Type: application/json" \
+            -d '{
+              "organizationName": "XCH CI Test",
+              "subdomain": "xch-ci",
+              "adminName": "Admin Démo",
+              "adminEmail": "admin@demo.fr",
+              "adminPassword": "Demo1234",
+              "loadDemoData": true
+            }' \
+            --fail-with-body \
+            --max-time 120 \
+            -w "\nHTTP %{http_code} (%{time_total}s)\n" || (echo "❌ Setup initialize failed" && docker compose -f docker-compose.ci.yml logs backend && exit 1)
+          echo "✅ Setup OK"
+
+      - name: Smoke connectivity check (sanity)
+        run: |
+          echo "Login API check..."
+          curl -sS -X POST http://localhost:8080/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"admin@demo.fr","password":"Demo1234"}' \
+            --max-time 10 \
+            -w "\nHTTP %{http_code} (%{time_total}s)\n" -o /tmp/login.json || (echo "❌ Login API failed" && exit 1)
+          head -c 200 /tmp/login.json
+          echo ""
+
       - name: Run Playwright Smoke Tests (@full-user-journey)
         working-directory: frontend
         env:
-          PLAYWRIGHT_BASE_URL: https://xch.eoncom.io
-          PLAYWRIGHT_API_URL: https://xch.eoncom.io
+          PLAYWRIGHT_BASE_URL: http://localhost:8080
+          PLAYWRIGHT_API_URL: http://localhost:8080
           CI: true
         run: npx playwright test --grep "@smoke" --project=chromium --reporter=html,junit
+
+      #
+      # Diagnostic — logs containers en cas de fail
+      #
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          echo "=== nginx logs ==="
+          docker compose -f docker-compose.ci.yml logs nginx | tail -50 || true
+          echo "=== backend logs ==="
+          docker compose -f docker-compose.ci.yml logs backend | tail -100 || true
+          echo "=== frontend logs ==="
+          docker compose -f docker-compose.ci.yml logs frontend | tail -50 || true
 
       #
       # Upload Artifacts
@@ -107,3 +155,7 @@ jobs:
           name: test-screenshots
           path: frontend/playwright-report/screenshots/
           retention-days: 7
+
+      - name: Stop CI stack
+        if: always()
+        run: docker compose -f docker-compose.ci.yml down -v

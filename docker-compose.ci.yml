@@ -1,0 +1,121 @@
+# Docker Compose pour CI E2E Smoke (S7.5 PR5h/12 single-origin via nginx)
+#
+# Cause iter 11 fail : runner GitHub Actions ne peut pas joindre xch.eoncom.io
+# (firewall/WAF). Cause iters 1-10 : setup local 2-process artificial cross-origin.
+# Solution validée par utilisateur 2026-05-02 (Option 3) : docker-compose CI
+# avec nginx en front pour single-origin (reproduit prod via NPM).
+#
+# Architecture :
+#   nginx (port 8080 sur host) → / : frontend:3001
+#                              → /api/* : backend:3000
+#   backend (NestJS interne 3000) ← postgres:5432 / redis:6379 / minio:9000
+#   frontend (Next.js interne 3001) ← API_URL='' (relative URLs same-origin)
+#
+# Tous les fetch frontend → /api/... → nginx proxy → backend. Cookies
+# SameSite=Lax fonctionnent natively (single-origin localhost:8080).
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:15-3.4-alpine
+    environment:
+      POSTGRES_DB: xch_dev
+      POSTGRES_USER: xch_user
+      POSTGRES_PASSWORD: ci_test_password_change_me
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U xch_user -d xch_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ci_minio_user
+      MINIO_ROOT_PASSWORD: ci_minio_password_change_me
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set xch http://minio:9000 ci_minio_user ci_minio_password_change_me;
+      mc mb xch/xch-storage --ignore-existing;
+      mc mb xch/plans --ignore-existing;
+      mc mb xch/photos --ignore-existing;
+      mc mb xch/exports --ignore-existing;
+      mc mb xch/qrcodes --ignore-existing;
+      mc anonymous set download xch/xch-storage;
+      mc anonymous set download xch/qrcodes;
+      exit 0;
+      "
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://xch_user:ci_test_password_change_me@postgres:5432/xch_dev
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ci-jwt-secret-key-do-not-use-in-prod
+      JWT_REFRESH_SECRET: ci-jwt-refresh-secret-key
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: 'false'
+      MINIO_ACCESS_KEY: ci_minio_user
+      MINIO_SECRET_KEY: ci_minio_password_change_me
+      MINIO_BUCKET: xch-storage
+      STORAGE_TYPE: minio
+      NODE_ENV: test
+      PORT: 3000
+      NEXT_PUBLIC_APP_URL: http://localhost:8080
+      BACKEND_URL: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_API_URL='' au build → fetches relatifs same-origin
+        NEXT_PUBLIC_API_URL: ''
+        NEXT_PUBLIC_APP_URL: http://localhost:8080
+    environment:
+      NEXT_PUBLIC_API_URL: ''
+      NEXT_PUBLIC_APP_URL: http://localhost:8080
+      BACKEND_INTERNAL_URL: http://backend:3000
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - '8080:80'
+    volumes:
+      - ./docker/nginx/nginx.ci.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
