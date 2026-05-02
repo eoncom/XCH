@@ -12,26 +12,32 @@ export interface AuthUser {
   role: 'ADMIN' | 'MANAGER' | 'TECHNICIEN' | 'VIEWER';
 }
 
-// Utilisateurs de test (correspondent aux seed data en production)
+// S7 PR5c/5 — Utilisateurs de test alignés sur le SEED DÉMO RÉEL
+// (cf backend/src/modules/seed/seed.service.ts createUsers ligne 470+).
+// Bug historique : les anciens emails @xch.demo + passwords admin123/
+// manager123/tech1234/invit123 ne correspondaient à AUCUN user en DB.
+// Le seed démo crée @demo.fr avec passwords demo123 (pour les non-admin)
+// et l'admin reçoit son password depuis /setup/initialize (Demo1234
+// par convention, cf project_prod_access mémoire).
 export const TEST_USERS = {
   admin: {
-    email: 'admin@xch.demo',
-    password: 'admin123',
+    email: 'admin@demo.fr',
+    password: 'Demo1234',
     role: 'ADMIN' as const,
   },
   manager: {
-    email: 'manager@xch.demo',
-    password: 'manager123',
+    email: 'manager@demo.fr',
+    password: 'demo123',
     role: 'MANAGER' as const,
   },
   technicien: {
-    email: 'tech@xch.demo',
-    password: 'tech1234',
+    email: 'technicien@demo.fr',
+    password: 'demo123',
     role: 'TECHNICIEN' as const,
   },
   viewer: {
-    email: 'inviter@xch.demo',
-    password: 'invit123',
+    email: 'viewer@demo.fr',
+    password: 'demo123',
     role: 'VIEWER' as const,
   },
 };
@@ -112,17 +118,18 @@ export const test = base.extend<AuthFixture>({
  * couvrir le hop SSR → CSR + checkSession() côté Zustand.
  */
 async function login(page: Page, user: AuthUser): Promise<void> {
+  // S7.5 PR5d — testids α login form (cf SELECTORS_STRATEGY.md zone α #1).
   await page.goto('/login');
-  await page.waitForSelector('form');
-  await page.fill('#email', user.email);
-  await page.fill('#password', user.password);
+  await page.waitForSelector('[data-testid="login-form"]');
+  await page.fill('[data-testid="login-email"]', user.email);
+  await page.fill('[data-testid="login-password"]', user.password);
 
   await Promise.all([
     page.waitForResponse(
       (r) => r.url().includes('/api/auth/login') && r.status() === 200,
       { timeout: 10000 },
     ),
-    page.click('button[type="submit"]'),
+    page.click('[data-testid="login-submit"]'),
   ]);
 
   await page.waitForURL('/dashboard', { timeout: 15000 });

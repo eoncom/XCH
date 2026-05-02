@@ -46,6 +46,10 @@ export async function setActiveDelegation(
 /**
  * Switch via UI (clic dans Settings → Ma délégation).
  * À utiliser pour tester le flow user, pas en setup.
+ *
+ * S7.5 PR5d : utilise testid α `delegation-option-${code}` (cf
+ * frontend/e2e/SELECTORS_STRATEGY.md zone α #3). Fallback historique
+ * `[data-delegation-code]` conservé pour compat ascendante.
  */
 export async function switchActiveDelegationViaUI(
   page: Page,
@@ -56,7 +60,9 @@ export async function switchActiveDelegationViaUI(
   await page.click(`button:has-text("Ma délégation")`).catch(() => {
     // tab déjà ouverte ou nom différent — ignorer
   });
-  await page.click(`button:has-text("${delegationCode}"), [data-delegation-code="${delegationCode}"]`);
+  await page.click(
+    `[data-testid="delegation-option-${delegationCode}"], [data-delegation-code="${delegationCode}"]`,
+  );
   await page.waitForTimeout(500);
 }
 

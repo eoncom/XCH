@@ -19,13 +19,13 @@ test.describe('Authentification - Login', () => {
   });
 
   test('devrait afficher le formulaire de login', async ({ page }) => {
-    // Vérifier présence du formulaire
-    await expect(page.locator('form')).toBeVisible();
-    await expect(page.locator('#email')).toBeVisible();
-    await expect(page.locator('#password')).toBeVisible();
-    await expect(page.locator('button[type="submit"]')).toBeVisible();
+    // S7.5 PR5d — testids α login form (cf SELECTORS_STRATEGY.md zone α #1).
+    await expect(page.locator('[data-testid="login-form"]')).toBeVisible();
+    await expect(page.locator('[data-testid="login-email"]')).toBeVisible();
+    await expect(page.locator('[data-testid="login-password"]')).toBeVisible();
+    await expect(page.locator('[data-testid="login-submit"]')).toBeVisible();
 
-    // Vérifier labels
+    // Labels htmlFor= conservés côté composant pour A11y, restent stables.
     await expect(page.locator('label[for="email"]')).toBeVisible();
     await expect(page.locator('label[for="password"]')).toBeVisible();
   });
@@ -58,9 +58,9 @@ test.describe('Authentification - Login', () => {
   });
 
   test('devrait échouer avec email invalide', async ({ page }) => {
-    await page.fill('#email', 'invalid@email.com');
-    await page.fill('#password', 'WrongPassword123!');
-    await page.click('button[type="submit"]');
+    await page.fill('[data-testid="login-email"]', 'invalid@email.com');
+    await page.fill('[data-testid="login-password"]', 'WrongPassword123!');
+    await page.click('[data-testid="login-submit"]');
 
     // Attendre message d'erreur (div avec classe destructive ou texte erreur)
     await expect(page.locator('.bg-destructive\\/10, [role="alert"]')).toBeVisible({ timeout: 5000 });
@@ -70,9 +70,9 @@ test.describe('Authentification - Login', () => {
   });
 
   test('devrait échouer avec mot de passe invalide', async ({ page }) => {
-    await page.fill('#email', TEST_USERS.admin.email);
-    await page.fill('#password', 'WrongPassword!');
-    await page.click('button[type="submit"]');
+    await page.fill('[data-testid="login-email"]', TEST_USERS.admin.email);
+    await page.fill('[data-testid="login-password"]', 'WrongPassword!');
+    await page.click('[data-testid="login-submit"]');
 
     // Message d'erreur
     await expect(page.locator('.bg-destructive\\/10, [role="alert"]')).toBeVisible({ timeout: 5000 });
@@ -81,11 +81,11 @@ test.describe('Authentification - Login', () => {
 
   test('devrait valider les champs requis', async ({ page }) => {
     // Soumettre formulaire vide
-    await page.click('button[type="submit"]');
+    await page.click('[data-testid="login-submit"]');
 
     // Vérifier validation HTML5
-    const emailInput = page.locator('#email');
-    const passwordInput = page.locator('#password');
+    const emailInput = page.locator('[data-testid="login-email"]');
+    const passwordInput = page.locator('[data-testid="login-password"]');
 
     // Au moins un champ doit être en erreur (HTML5 validation)
     const emailInvalid = await emailInput.evaluate((el: HTMLInputElement) => !el.validity.valid);
