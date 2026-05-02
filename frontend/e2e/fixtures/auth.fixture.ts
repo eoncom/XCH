@@ -118,6 +118,15 @@ export const test = base.extend<AuthFixture>({
  * couvrir le hop SSR → CSR + checkSession() côté Zustand.
  */
 async function login(page: Page, user: AuthUser): Promise<void> {
+  // S7.5 PR5h/5 — court-circuit si déjà authentifié (test.describe.serial
+  // partage le browser context → cookie persiste entre tests). Évite
+  // rate limit 429 du backend après ~5 logins serial.
+  if (await isAuthenticated(page)) {
+    await page.goto('/dashboard');
+    await page.waitForURL(/\/dashboard/, { timeout: 15000 });
+    return;
+  }
+
   // S7.5 PR5h/4 — login API direct (bypass UI form).
   //
   // Cause racine du timeout récurrent en CI (run 25260981957 + 2 retries) :
