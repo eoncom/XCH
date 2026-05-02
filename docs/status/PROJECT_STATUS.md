@@ -1,6 +1,6 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-05-02 12:50:59 (Auto-update)
+**Dernière mise à jour :** 2026-05-02 12:51:37 (Auto-update)
 **Version actuelle :** 1.8.0 (taguée 2026-04-30)
 **Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + Sessions 1-4 finalization v2 livrées + RBAC universel ADR-021 (14/15 modules fixés, ~85 attaques d'intrusion bloquantes en CI)
 
