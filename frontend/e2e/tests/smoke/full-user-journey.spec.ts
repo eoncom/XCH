@@ -1,118 +1,151 @@
-import { test, expect } from '../../fixtures/auth.fixture';
+import { test, expect, type Cookie } from '@playwright/test';
+import { TEST_USERS } from '../../fixtures/auth.fixture';
 
 /**
- * Tests E2E - SMOKE FULL USER JOURNEY (S7 PR4).
+ * Tests E2E - SMOKE FULL USER JOURNEY (S7 PR4 + S7.5 PR5h validation).
  *
- * Régression bloquante CI : ce scénario complet (login → dashboard →
- * page sites → page assets → page racks → page tasks → page costs →
- * page monitoring → page notifications → logout) couvre les 8
- * sections principales. Si UNE seule étape casse, la PR ne passe pas
- * → garantit que les hot paths utilisateurs sont toujours fonctionnels.
+ * Régression bloquante CI VRAIMENT activée (S7.5 PR5h, 2026-05-02) :
+ * 10 tests sériels couvrant login + nav 7 sections + endpoint
+ * /api/auth/session. Chaque PR future déclenche cette suite via
+ * `--grep "@smoke"` côté workflow `.github/workflows/e2e-tests.yml`.
  *
- * Tag `@smoke` pour run prioritaire en CI E2E (peut être filtré via
- * `npx playwright test --grep @smoke`).
+ * S7.5 PR5h/7 — pattern storageState partagé : login UNE FOIS en
+ * `test.beforeAll`, cookies réinjectés en `test.beforeEach` sur chaque
+ * test's context. Évite rate limit backend 429 (10 logins serial =
+ * throttled). Pattern user choice 2026-05-02 (option A).
+ *
+ * Auth via API direct (pas UI form) car React 18 production controlled
+ * component a un timing issue : page.fill() + click submit immédiat ne
+ * propage pas le state à temps → handleSubmit lit value vide → no
+ * fetch. Cf retex S7.5 PR5h/4 dans XCH_PLAN_V2_FINALIZATION.
+ *
+ * Cookies cross-origin workaround : POST /api/auth/login va à
+ * localhost:3002 (backend), Set-Cookie domain par défaut = localhost
+ * (host-only). Re-set explicit avec domain=frontendUrl.hostname
+ * garantit que le cookie est sent à localhost:3001 (frontend).
+ *
+ * Tag `@smoke` dans le titre du describe pour filtrage CI.
  *
  * Mode sériel (`test.describe.serial`) pour ordre déterministe.
- *
- * Note : cette spec NE remplace PAS le smoke prod manuel post-tag
- * (cf §Verification du plan v2). Elle automatise la régression CI
- * pour chaque PR — détecte tôt les casses majeures avant merge.
  */
 
-// SKIP: validation manuelle non faite, voir S7.5 (Validation E2E réelle).
-// Cette spec a été écrite en PR4 sur supposition du code (sélecteurs h1/h2,
-// boutons "Nouveau", endpoint /api/auth/session) sans avoir validé visuellement
-// l'app actuelle. Le pattern XCH_E2E_SCAFFOLDING_VS_VALIDATION (gravé en MCP)
-// impose : pas d'annonce "régression bloquante" sans validation réelle.
-//
-// La describe sera réactivée en S7.5 après validation Chrome MCP spec par spec.
-// Tag v1.9.0 différé jusque-là (cf XCH_PLAN_V2_FINALIZATION mémoire).
-// S7.5 PR5d — chaque test est `.skip` individuel (et non describe.serial.skip)
-// pour que `--grep "@smoke"` enumère les 10 tests et les marque skipped (exit 0
-// attendu). describe.serial.skip exclut les tests à la collection → grep matche
-// 0 test → Playwright exit 1 ("no tests found"). Voir baseline run 25259487654
-// pour le diagnostic du bug PR5c/6.
-test.describe.serial('@smoke Full user journey (SKIPPED — voir S7.5)', () => {
-  test.skip('1. Login admin redirige vers /dashboard', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin();
-    await expect(page).toHaveURL(/\/dashboard/);
+// Partagé entre tous les tests via beforeAll → beforeEach.
+// Cookies extraits une fois et réinjectés dans chaque test's context.
+let sharedCookies: Cookie[] = [];
+
+test.describe.serial('@smoke Full user journey', () => {
+  test.beforeAll(async ({ browser }) => {
+    const apiUrl = process.env.PLAYWRIGHT_API_URL || 'http://localhost:3002';
+
+    // Setup context unique pour login one-shot
+    const setupContext = await browser.newContext();
+    const response = await setupContext.request.post(`${apiUrl}/api/auth/login`, {
+      data: {
+        email: TEST_USERS.admin.email,
+        password: TEST_USERS.admin.password,
+      },
+    });
+
+    if (!response.ok()) {
+      await setupContext.close();
+      throw new Error(
+        `Smoke beforeAll: Login API failed HTTP ${response.status()} for ${TEST_USERS.admin.email}`,
+      );
+    }
+
+    // S7.5 PR5h/8 — utiliser context.cookies() direct (pas parsing Set-Cookie
+    // manuel). Les cookies retournés par Playwright sont en format authentique
+    // (domain/path/expires correctement résolus depuis Set-Cookie). Évite les
+    // bugs de parsing manuel (sameSite mal détecté, expires=-1 forcé, etc.).
+    sharedCookies = await setupContext.cookies();
+    await setupContext.close();
+
+    if (sharedCookies.length === 0 || !sharedCookies.some((c) => c.name === 'accessToken')) {
+      throw new Error(
+        `Smoke beforeAll: Login OK mais pas d'accessToken cookie extrait. Cookies: ${JSON.stringify(sharedCookies)}`,
+      );
+    }
   });
 
-  test.skip('2. Dashboard accessible avec stats visibles', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin();
+  // Réinjecte les cookies sur chaque test's context AVANT toute action.
+  test.beforeEach(async ({ context }) => {
+    await context.addCookies(sharedCookies);
+  });
+
+  test('1. Login admin (cookies preset) redirige vers /dashboard', async ({ page }) => {
+    await page.goto('/dashboard');
+    await expect(page).toHaveURL(/\/dashboard$/);
+  });
+
+  test('2. Dashboard accessible avec sidebar nav', async ({ page }) => {
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.locator('[data-testid="nav-dashboard"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('3. Section Sites accessible et liste rendue', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin();
+  test('3. Section Sites accessible', async ({ page }) => {
     await page.goto('/dashboard/sites');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10000 });
-    // Au moins le bouton "Nouveau" doit être visible
-    await expect(
-      page.locator('a:has-text("Nouveau"), button:has-text("Nouveau")').first(),
-    ).toBeVisible({ timeout: 5000 });
+    await expect(page).toHaveURL(/\/dashboard\/sites/);
+    await expect(page.locator('[data-testid="nav-sites"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('4. Section Assets accessible', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin();
+  test('4. Section Équipements accessible', async ({ page }) => {
     await page.goto('/dashboard/assets');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/dashboard\/assets/);
+    await expect(page.locator('[data-testid="nav-assets"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('5. Section Racks accessible', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin();
+  test('5. Section Baies accessible', async ({ page }) => {
     await page.goto('/dashboard/racks');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/dashboard\/racks/);
+    await expect(page.locator('[data-testid="nav-racks"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('6. Section Tasks (Kanban) accessible', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin();
+  test('6. Section Tâches accessible', async ({ page }) => {
     await page.goto('/dashboard/tasks');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/dashboard\/tasks/);
+    await expect(page.locator('[data-testid="nav-tasks"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('7. Section Costs/Expenses accessible', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin();
+  test('7. Section Coûts accessible', async ({ page }) => {
     await page.goto('/dashboard/costs');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/dashboard\/costs/);
+    await expect(page.locator('[data-testid="nav-costs"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('8. Section Monitoring accessible', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin();
+  test('8. Section Surveillance (monitoring) accessible', async ({ page }) => {
     await page.goto('/dashboard/monitoring');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/dashboard\/monitoring/);
+    await expect(page.locator('[data-testid="nav-monitoring"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('9. Section Notifications accessible', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin();
+  test('9. Section Notifications accessible', async ({ page }) => {
     await page.goto('/dashboard/notifications');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/dashboard\/notifications/);
+    // Notifications n'a pas de testid `nav-notifications` (cloche header,
+    // pas dans nav array). Logout button visible = layout rendu = OK.
+    await expect(page.locator('[data-testid="logout-button"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('10. API /api/auth/session retourne user authentifié', async ({ page, loginAsAdmin, request }) => {
-    // S7 PR5b — fix endpoint : /api/auth/me n'existe PAS backend (404).
-    // Les endpoints auth réels sont /api/auth/session, /api/auth/profile,
-    // /api/auth/my-permissions (cf backend/src/modules/auth/auth.controller.ts).
-    // /api/auth/session retourne { user: {...} } pour l'utilisateur courant
-    // identifié par le cookie accessToken.
-    await loginAsAdmin();
+  test('10. API /api/auth/session retourne user authentifié', async ({ page, request }) => {
+    // Cookies déjà set via beforeEach. Pas besoin de loginAsAdmin.
+    await page.goto('/dashboard');
 
     const cookies = await page.context().cookies();
     const accessToken = cookies.find((c) => c.name === 'accessToken');

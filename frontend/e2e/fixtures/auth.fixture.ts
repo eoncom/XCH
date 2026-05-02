@@ -118,28 +118,86 @@ export const test = base.extend<AuthFixture>({
  * couvrir le hop SSR → CSR + checkSession() côté Zustand.
  */
 async function login(page: Page, user: AuthUser): Promise<void> {
-  // S7.5 PR5d — testids α login form (cf SELECTORS_STRATEGY.md zone α #1).
-  await page.goto('/login');
-  await page.waitForSelector('[data-testid="login-form"]');
-  await page.fill('[data-testid="login-email"]', user.email);
-  await page.fill('[data-testid="login-password"]', user.password);
+  // S7.5 PR5h/5 — court-circuit si déjà authentifié (test.describe.serial
+  // partage le browser context → cookie persiste entre tests). Évite
+  // rate limit 429 du backend après ~5 logins serial.
+  if (await isAuthenticated(page)) {
+    await page.goto('/dashboard');
+    await page.waitForURL(/\/dashboard/, { timeout: 15000 });
+    return;
+  }
 
-  await Promise.all([
-    page.waitForResponse(
-      (r) => r.url().includes('/api/auth/login') && r.status() === 200,
-      { timeout: 10000 },
-    ),
-    page.click('[data-testid="login-submit"]'),
-  ]);
+  // S7.5 PR5h/4 — login API direct (bypass UI form).
+  //
+  // Cause racine du timeout récurrent en CI (run 25260981957 + 2 retries) :
+  // `page.fill()` sur un Input contrôlé React 18 production build met le
+  // DOM value mais React state n'est pas appliqué avant le click submit
+  // (batching / concurrent mode). handleSubmit lit `email`/`password`
+  // vides depuis useState → POST /api/auth/login JAMAIS envoyé →
+  // waitForResponse timeout. Reproductible via Chrome MCP en local :
+  // `form.dispatchEvent(submitEvent)` après reset state n'envoyait pas
+  // de requête, alors que setter natif + 'input' event + dispatch
+  // submit le faisait.
+  //
+  // La login UI elle-même est testée par `auth/login.spec.ts` (10 tests
+  // dédiés) avec ses propres specs. Le smoke @full-user-journey n'a
+  // pas besoin de re-tester la submission form, juste l'authentification.
+  // Solution : POST /api/auth/login direct via page.request, le
+  // Set-Cookie est propagé automatiquement au browser context (cf
+  // Playwright docs : "request fixtures share storage state with the
+  // BrowserContext"). Économie 2-3s par test (pas de form submission +
+  // SSR/CSR hop).
+  const apiUrl = process.env.PLAYWRIGHT_API_URL || 'http://localhost:3002';
+  const response = await page.request.post(`${apiUrl}/api/auth/login`, {
+    data: { email: user.email, password: user.password },
+  });
 
-  await page.waitForURL('/dashboard', { timeout: 15000 });
+  if (!response.ok()) {
+    throw new Error(
+      `Login API failed: HTTP ${response.status()} for user ${user.email}`,
+    );
+  }
 
+  // S7.5 PR5h/6 — workaround cross-origin cookie : extraire les
+  // tokens du Set-Cookie response et les re-set sur le domain frontend.
+  // Sans ça en CI, les cookies sont posés sur localhost:3002 mais le
+  // page.goto('/dashboard') va sur localhost:3001 → middleware ne voit
+  // pas le cookie → redirect /login.
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3001';
+  const frontendUrl = new URL(baseURL);
+
+  const setCookieHeaders = response.headersArray().filter((h) => h.name.toLowerCase() === 'set-cookie');
+  const cookiesToAdd: Array<{ name: string; value: string; domain: string; path: string; httpOnly: boolean; secure: boolean; sameSite: 'Lax' | 'Strict' | 'None' }> = [];
+  for (const header of setCookieHeaders) {
+    const match = header.value.match(/^([^=]+)=([^;]+)/);
+    if (match) {
+      cookiesToAdd.push({
+        name: match[1].trim(),
+        value: match[2].trim(),
+        domain: frontendUrl.hostname,
+        path: '/',
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+      });
+    }
+  }
+  if (cookiesToAdd.length > 0) {
+    await page.context().addCookies(cookiesToAdd);
+  }
+
+  // Vérifier que accessToken est bien posé
   const cookies = await page.context().cookies();
   const accessTokenCookie = cookies.find((c) => c.name === 'accessToken');
 
   if (!accessTokenCookie) {
-    throw new Error('Login failed: No accessToken cookie set');
+    throw new Error('Login failed: No accessToken cookie set in browser context');
   }
+
+  // Naviguer vers /dashboard pour cohérence avec l'ancien comportement
+  // UI login (qui faisait window.location.href = '/dashboard' post-success).
+  await page.goto('/dashboard');
+  await page.waitForURL(/\/dashboard/, { timeout: 15000 });
 }
 
 /**
