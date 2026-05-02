@@ -1,0 +1,15 @@
+{
+  "_comment": "S7 PR0 baseline — frontend-checks.yml refuse toute PR qui aggrave ces compteurs. Décrémenter au fur et à mesure de la résolution (cf. mini-session typecheck cleanup pré-v2.0.0 dans XCH_PLAN_V2_FINALIZATION). Voir frontend-checks.yml pour la logique de comparaison.",
+  "_captured_at": "2026-05-02",
+  "_captured_on_commit": "claude/session-7-pr0 (post codemod react/no-unescaped-entities)",
+  "_arbitrage_user": "Q1 baseline non-régression (typecheck) + Q2 baseline legacy useQuery isError (32 fichiers acceptés)",
+
+  "typecheck_errors": 60,
+  "typecheck_files": 16,
+
+  "lint_errors": 0,
+  "lint_warnings_total": 69,
+
+  "useQuery_isError_warnings": 38,
+  "useQuery_isError_files": 32
+}

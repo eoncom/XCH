@@ -1,21 +1,21 @@
-name: Frontend Checks (typecheck + lint)
+name: Frontend Checks (typecheck + lint + baseline)
 
-# S7 PR0 — workflow en MODE MESURE.
+# S7 PR0 — workflow check non-régression versionné.
 #
-# Le check NE FAIT PAS échouer la CI : `continue-on-error: true` sur les
-# steps typecheck et lint, et `exit 0` final. L'objectif PR0 est de
-# capturer un diagnostic chiffré des violations TypeScript / ESLint
-# présentes sur main au moment de l'audit, pas d'enforcer immédiatement
-# (cf XCH_ENGINEERING_PRINCIPLES — "mesurer avant d'enforcer").
+# Arbitrage utilisateur 2026-05-02 (cf XCH_PLAN_V2_FINALIZATION) :
+#   Q1 typecheck + lint général : approche mixte
+#     - codemod immédiat react/no-unescaped-entities (163 erreurs → 0)
+#     - baseline non-régression sur typecheck (60 erreurs / 16 fichiers)
+#     - 31 warnings restants (react-hooks/exhaustive-deps + img + alt)
+#       en warn libre, pas de baseline
+#   Q2 useQuery isError : baseline legacy 32 fichiers + enforce nouveaux
 #
-# Décision DURANT la PR0 (utilisateur arbitrera quand chiffres connus) :
-#   (a) corriger toutes les violations dans la même PR0 si volume <10 fichiers
-#   (b) configurer mode warn avec baseline non-régression (interdit que
-#       les nouveaux PRs aggravent le compteur ; dette legacy traitée
-#       progressivement)
+# Le check FAIT échouer la CI si l'un des compteurs courants dépasse
+# le baseline figé dans .github/baselines/frontend-checks.json. La
+# baseline doit décroître (jamais croître) au fil des PRs.
 #
-# Le passage en check requis (ferait échouer la CI) est différé à la PR
-# suivante (PR1 ou PR5) selon l'arbitrage utilisateur.
+# Mini-session typecheck cleanup pré-v2.0.0 traitera le résidu typecheck
+# post-S9 (cf entité MCP XCH_PLAN_V2_FINALIZATION).
 
 on:
   push:
@@ -26,7 +26,7 @@ on:
 
 jobs:
   frontend-checks:
-    name: Frontend typecheck + lint (mesure)
+    name: Frontend typecheck + lint + baseline
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -38,51 +38,105 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # Note S7 PR0 : frontend/package-lock.json est manquant
-          # (supprimé par commit 0cc9211). Pas de cache deps tant qu'il
-          # n'est pas régénéré. Dette à traiter en S7 PR1 (chore).
-          # cache: 'npm'
-          # cache-dependency-path: frontend/package-lock.json
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install Frontend Dependencies
         working-directory: frontend
-        # npm install (au lieu de npm ci) car package-lock.json manquant.
-        run: npm install --no-audit --no-fund
+        run: npm ci
 
-      - name: Typecheck (mesure — ne fait pas échouer la CI)
+      - name: Typecheck
         id: typecheck
         working-directory: frontend
         continue-on-error: true
         run: |
-          echo "=== TypeScript typecheck (mode mesure S7 PR0) ==="
-          npm run typecheck 2>&1 | tee typecheck.log
+          echo "=== TypeScript typecheck ==="
+          npm run typecheck 2>&1 | tee typecheck.log || true
           echo ""
           echo "=== Diagnostic chiffré ==="
           ERRORS=$(grep -cE "error TS[0-9]+" typecheck.log || echo 0)
-          FILES=$(grep -oE "^[^:(]+\.tsx?(\([0-9]+,[0-9]+\))?: error" typecheck.log | sed -E 's/[(:].*//' | sort -u | wc -l || echo 0)
+          FILES=$(grep -oE "^src/[^:(]+\.tsx?" typecheck.log | sort -u | wc -l || echo 0)
           echo "Total errors: $ERRORS"
           echo "Files affected: $FILES"
           echo "typecheck_errors=$ERRORS" >> $GITHUB_OUTPUT
           echo "typecheck_files=$FILES" >> $GITHUB_OUTPUT
 
-      - name: Lint (mesure — ne fait pas échouer la CI)
+      - name: Lint
         id: lint
         working-directory: frontend
         continue-on-error: true
         run: |
-          echo "=== ESLint (mode mesure S7 PR0) ==="
-          npm run lint -- --max-warnings=99999 2>&1 | tee lint.log
+          echo "=== ESLint ==="
+          npm run lint -- --max-warnings=99999 2>&1 | tee lint.log || true
           echo ""
           echo "=== Diagnostic chiffré ==="
-          WARNINGS=$(grep -cE "warning" lint.log || echo 0)
-          ERRORS=$(grep -cE "error" lint.log || echo 0)
-          FILES=$(grep -oE "^[^:]+\.tsx?$" lint.log | sort -u | wc -l || echo 0)
-          echo "Warnings: $WARNINGS"
+          ERRORS=$(grep -cE "  Error: " lint.log || echo 0)
+          WARNINGS=$(grep -cE "  Warning: " lint.log || echo 0)
+          USEQUERY_WARNINGS=$(grep -c "S6 PR4 pattern" lint.log || echo 0)
+          USEQUERY_FILES=$(grep "S6 PR4 pattern" lint.log -B1 | grep -E "^\./" | sort -u | wc -l || echo 0)
           echo "Errors: $ERRORS"
-          echo "Files affected: $FILES"
-          echo "lint_warnings=$WARNINGS" >> $GITHUB_OUTPUT
+          echo "Warnings (total): $WARNINGS"
+          echo "useQuery isError warnings: $USEQUERY_WARNINGS"
+          echo "useQuery isError files: $USEQUERY_FILES"
           echo "lint_errors=$ERRORS" >> $GITHUB_OUTPUT
-          echo "lint_files=$FILES" >> $GITHUB_OUTPUT
+          echo "lint_warnings_total=$WARNINGS" >> $GITHUB_OUTPUT
+          echo "useQuery_isError_warnings=$USEQUERY_WARNINGS" >> $GITHUB_OUTPUT
+          echo "useQuery_isError_files=$USEQUERY_FILES" >> $GITHUB_OUTPUT
+
+      - name: Baseline non-regression check
+        id: baseline
+        run: |
+          echo "=== Baseline non-régression check (S7 PR0) ==="
+          BASELINE_FILE=".github/baselines/frontend-checks.json"
+          if [ ! -f "$BASELINE_FILE" ]; then
+            echo "::error::Baseline file $BASELINE_FILE missing — refuser le merge."
+            exit 1
+          fi
+
+          # Compteurs baseline (figés)
+          B_TC_ERR=$(jq '.typecheck_errors' "$BASELINE_FILE")
+          B_TC_FILES=$(jq '.typecheck_files' "$BASELINE_FILE")
+          B_LINT_ERR=$(jq '.lint_errors' "$BASELINE_FILE")
+          B_USEQ_WARN=$(jq '.useQuery_isError_warnings' "$BASELINE_FILE")
+          B_USEQ_FILES=$(jq '.useQuery_isError_files' "$BASELINE_FILE")
+
+          # Compteurs courants (depuis steps précédents)
+          C_TC_ERR=${{ steps.typecheck.outputs.typecheck_errors }}
+          C_TC_FILES=${{ steps.typecheck.outputs.typecheck_files }}
+          C_LINT_ERR=${{ steps.lint.outputs.lint_errors }}
+          C_USEQ_WARN=${{ steps.lint.outputs.useQuery_isError_warnings }}
+          C_USEQ_FILES=${{ steps.lint.outputs.useQuery_isError_files }}
+
+          echo ""
+          echo "| Métrique                       | Baseline | Courant | Statut |"
+          echo "|--------------------------------|----------|---------|--------|"
+          FAIL=0
+
+          check() {
+            local label=$1 baseline=$2 current=$3
+            if [ "$current" -gt "$baseline" ]; then
+              echo "| $label | $baseline | $current | ❌ RÉGRESSION |"
+              FAIL=1
+            elif [ "$current" -lt "$baseline" ]; then
+              echo "| $label | $baseline | $current | ✅ AMÉLIORATION (penser à décrémenter baseline) |"
+            else
+              echo "| $label | $baseline | $current | ✅ stable |"
+            fi
+          }
+
+          check "typecheck errors            " "$B_TC_ERR" "$C_TC_ERR"
+          check "typecheck files             " "$B_TC_FILES" "$C_TC_FILES"
+          check "lint errors                 " "$B_LINT_ERR" "$C_LINT_ERR"
+          check "useQuery isError warnings   " "$B_USEQ_WARN" "$C_USEQ_WARN"
+          check "useQuery isError files      " "$B_USEQ_FILES" "$C_USEQ_FILES"
+
+          echo ""
+          if [ "$FAIL" = "1" ]; then
+            echo "::error::Régression détectée — un ou plusieurs compteurs ont augmenté vs baseline."
+            echo "::error::Soit corriger la régression, soit (si justifié) update .github/baselines/frontend-checks.json dans le même PR."
+            exit 1
+          fi
+          echo "✅ Aucune régression détectée."
 
       - name: Upload diagnostic logs
         if: always()
@@ -94,25 +148,28 @@ jobs:
             frontend/lint.log
           retention-days: 30
 
-      - name: Summary (mode mesure)
+      - name: Summary
         if: always()
         run: |
-          echo "## Frontend Checks — MODE MESURE (S7 PR0)" >> $GITHUB_STEP_SUMMARY
+          BASELINE_FILE=".github/baselines/frontend-checks.json"
+          B_TC_ERR=$(jq '.typecheck_errors' "$BASELINE_FILE" 2>/dev/null || echo "?")
+          B_TC_FILES=$(jq '.typecheck_files' "$BASELINE_FILE" 2>/dev/null || echo "?")
+          B_LINT_ERR=$(jq '.lint_errors' "$BASELINE_FILE" 2>/dev/null || echo "?")
+          B_USEQ_WARN=$(jq '.useQuery_isError_warnings' "$BASELINE_FILE" 2>/dev/null || echo "?")
+          B_USEQ_FILES=$(jq '.useQuery_isError_files' "$BASELINE_FILE" 2>/dev/null || echo "?")
+
+          echo "## Frontend Checks — Baseline non-régression" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Ce workflow ne fait PAS échouer la CI** — diagnostic seulement." >> $GITHUB_STEP_SUMMARY
+          echo "Baseline figée dans \`.github/baselines/frontend-checks.json\` — fail la CI si compteur courant > baseline." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### TypeScript typecheck" >> $GITHUB_STEP_SUMMARY
-          echo "- Errors: ${{ steps.typecheck.outputs.typecheck_errors }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Files affected: ${{ steps.typecheck.outputs.typecheck_files }}" >> $GITHUB_STEP_SUMMARY
+          echo "| Métrique | Baseline | Courant |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Typecheck errors | $B_TC_ERR | ${{ steps.typecheck.outputs.typecheck_errors }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Typecheck files | $B_TC_FILES | ${{ steps.typecheck.outputs.typecheck_files }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint errors | $B_LINT_ERR | ${{ steps.lint.outputs.lint_errors }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| useQuery isError warnings | $B_USEQ_WARN | ${{ steps.lint.outputs.useQuery_isError_warnings }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| useQuery isError files | $B_USEQ_FILES | ${{ steps.lint.outputs.useQuery_isError_files }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ESLint" >> $GITHUB_STEP_SUMMARY
-          echo "- Warnings: ${{ steps.lint.outputs.lint_warnings }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Errors: ${{ steps.lint.outputs.lint_errors }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Files affected: ${{ steps.lint.outputs.lint_files }}" >> $GITHUB_STEP_SUMMARY
+          echo "Note : les warnings non-tracked (react-hooks/exhaustive-deps, next/no-img-element, alt-text) restent libres en warn — pas de baseline." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📥 Logs détaillés disponibles dans l'artifact \`frontend-checks-diagnostic\`." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Décision attendue (S7 PR0)" >> $GITHUB_STEP_SUMMARY
-          echo "Selon le volume mesuré ci-dessus :" >> $GITHUB_STEP_SUMMARY
-          echo "- **(a)** Corriger toutes les violations dans la même PR0 si volume <10 fichiers." >> $GITHUB_STEP_SUMMARY
-          echo "- **(b)** Configurer mode warn avec baseline non-régression (interdit aggraver compteur)." >> $GITHUB_STEP_SUMMARY
+          echo "📥 Logs détaillés dans l'artifact \`frontend-checks-diagnostic\`." >> $GITHUB_STEP_SUMMARY
