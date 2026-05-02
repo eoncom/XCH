@@ -7,9 +7,88 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.9.0] - 2026-05-02 — Refonte E2E Playwright + mini-dette traversale (Session 7 du plan v2 finalization)
+## [1.9.0] - 2026-05-03 — Refonte E2E Playwright + mini-dette traversale + validation E2E réelle (Sessions 7 + 7.5 du plan v2 finalization)
 
-Session 7 livrée en **5 PRs autonomes mergées sans incident** (PR0/1/2/3/4) + PR5 release. Couverture **10/10 critical paths** atteinte. Pattern de merge autonome utilisateur (`XCH_AUTONOMOUS_MERGE_PATTERN_S7`) validé sur 4 PRs consécutives sans casse. Plus 1 spec smoke `@full-user-journey` régression bloquante CI sur toutes futures PR.
+**Tag posé après validation S7.5 réelle.** Le smoke `@full-user-journey` 10/10 RÉELLEMENT vert sur conditions CI (docker-compose single-origin nginx, run [25263200317](https://github.com/eoncom/XCH/actions/runs/25263200317), 21s tests).
+
+### Session 7 (PR0-PR5, 2026-05-02) = scaffolding + mini-dette traversale
+
+Session 7 livrée en **5 PRs autonomes mergées sans incident** (PR0/1/2/3/4) + PR5 release. **30 specs E2E structurées par domaine + helpers + fixtures + ~210 tests scaffoldés**. Pattern merge autonome (`XCH_AUTONOMOUS_MERGE_PATTERN_S7`) validé sur 4 PRs consécutives.
+
+Distinction critique gravée MCP (`XCH_E2E_SCAFFOLDING_VS_VALIDATION`) : **scaffolding ≠ testing**. Les specs PR1-PR4 ont été écrites en lisant le code, pas en validant visuellement l'app actuelle. Le tag v1.9.0 a été reporté de 12h pour livrer une vraie validation (S7.5).
+
+### Session 7.5 (PR5d-PR5h, 2026-05-03) = validation E2E réelle
+
+12 itérations PR5h pour faire passer le smoke 10/10 vraiment vert sur CI :
+
+- **PR5d** (cherry-pick PR5c #21 fixes infra workflow + α testids login/sidebar/delegation + SELECTORS_STRATEGY.md hybride β/α) — 8 commits sur main
+- **PR5e** (alignement specs RBAC sur AUTH_MODEL_V2 — 3 drifts conceptuels Casbin retiré : manager has MANAGE ≠ "lecture seule sites", tech/viewer ACCEDE settings tabs personnels ≠ "denied", admin demo data dans tab Tenant `?tab=tenant`)
+- **PR5f** (sites-sections.spec.ts skip 4 mutations obsolètes wizard schema ADR-018, fix h1 selectors généralisés via `:has-text()`)
+- **PR5g** (codemod button:has-text → a[href] sur 4 specs CTAs Next.js Link, env override polling `NEXT_PUBLIC_NOTIFICATION_POLL_INTERVAL=2000`)
+- **PR5h** (smoke @full-user-journey activation 10/10 vert via 12 itérations diagnostiques) — voir détail ci-dessous
+
+### PR5h — 12 itérations diagnostiques (retex anti-pattern important)
+
+Cause racine progressive identifiée :
+1. iter 1 : `describe.serial.skip` + `--grep @smoke` = exit 1 "no tests found" — fix par `test.skip()` individuels
+2. iter 2-3 : status filter 200 vs 201 (login retourne 201 Created) — fix `>= 200 && < 300`
+3. iter 4 : React 18 controlled component + `page.fill()` ne propage pas state → form submit avec values vides → no fetch — bypass via API direct `page.request.post('/api/auth/login')`
+4. iter 5 : login API + isAuthenticated check pour éviter rate limit 429 sur 10 logins serial
+5. iter 6 : cross-origin cookie workaround (re-set cookies sur frontend domain via context.addCookies)
+6. iter 7 : pattern `test.beforeAll` + `test.beforeEach addCookies` (storageState partagé)
+7. iter 8 : utiliser `context.cookies()` direct au lieu de parsing manuel Set-Cookie
+8. iter 9 : `NEXT_PUBLIC_API_URL=''` + `BACKEND_INTERNAL_URL` Next.js rewrites
+9. iter 10 : workflow ciblait xch.eoncom.io single-origin
+10. iter 11 : diagnostic — GitHub Actions runner ne peut pas joindre xch.eoncom.io (firewall/WAF block)
+11. iter 12 : **docker-compose.ci.yml single-origin nginx** dans le runner — 10/10 vert
+
+3 patterns réutilisables gravés MCP pour S8/S9/S5b/futures sessions :
+- **`XCH_E2E_AUTH_STORAGE_STATE_PATTERN`** — `test.beforeAll` + `test.beforeEach addCookies` pour partager storageState, évite rate limit + reproduit comportement utilisateur réel
+- **`XCH_E2E_SMOKE_AUTHORITY_VALIDATION`** — workflow ACTIVÉ + EXÉCUTÉ + endpoints RÉELS (3 conditions cumulatives pour mériter "filet de sécurité CI")
+- **`XCH_ITERATION_THRESHOLD_PRINCIPLE`** — au-delà de 3 itérations sur le même symptôme, agent ping user obligatoire avec options stratégiques (vs brute force scope creep). Le coût d'une réarchitecture posée vaut souvent moins que celui de N itérations.
+
+### Added (Session 7 PR0 — mini-dette traversale + fondations E2E)
+
+- **Migration `10_fk_expense_ondelete`** — 3 FK Expense (`delegationId`, `siteId`, `bearerId`) reçoivent `onDelete:` explicite (RESTRICT pour les NOT NULL, SetNull no-op DB pour `siteId` nullable). Cohérent avec migration 8 (S5 PR2).
+- **Résolution Known Issue SSR/CSR cookies E2E** (Option A retenue par utilisateur) : [`frontend/e2e/fixtures/auth.fixture.ts`](frontend/e2e/fixtures/auth.fixture.ts) `Promise.all([waitForResponse, click])` garantit que le listener du POST /api/auth/login est armé AVANT le submit. + [`frontend/middleware.ts`](frontend/src/middleware.ts) fallback CSR si `referer=/login` (laisse passer la 1ʳᵉ navigation, Zustand `auth-store.checkSession()` valide côté client).
+- **DB e2e isolée `xch_e2e`** — service `postgres-e2e` (port 5433) dans [`docker-compose.e2e.yml`](docker-compose.e2e.yml) + workflow [`e2e-tests.yml`](.github/workflows/e2e-tests.yml) renommé `xch_dev` → `xch_e2e`. Plus de pollution dev local.
+- **Endpoints reset scoped par domaine** — `POST /api/seed/reset/:domain` (sites/assets/racks/expenses/monitors/notifications). Garde `TestEnvOnlyGuard` (refus si `NODE_ENV=production`). Permet aux specs E2E d'isoler leur domaine sans reset global.
+- **Codemod `react/no-unescaped-entities`** — script Python conservé [`frontend/scripts/codemod-unescaped-entities.py`](frontend/scripts/codemod-unescaped-entities.py) avec fallback UTF-16 ESLint vs codepoint Python (emoji 💡 surrogate pair). 163 erreurs → **0**.
+- **Lockfile régénéré** — `frontend/package-lock.json` (manquant depuis commit `0cc9211` antique). 569 packages résolus, restauration `npm ci` + cache deps dans tous les workflows.
+- **Workflow baseline non-régression** — [`frontend-checks.yml`](.github/workflows/frontend-checks.yml) compare compteurs courants vs [`baselines/frontend-checks.json`](.github/baselines/frontend-checks.json) versionné. Fail explicite si régression OU CAPTURE INVALIDE (4 cas : stable / amélioration / régression / capture invalide). Validé par test négatif (run 25249322588 fail attendu, retour vert run 25249527769).
+- **Lint custom ESLint useQuery isError** — règle `no-restricted-syntax` qui flag `ObjectPattern` destructurant `isLoading` SANS `isError` ni `error` (pattern S6 PR4). Mode warn baseline 38 warnings / 32 fichiers legacy acceptés.
+
+### Added (Session 7.5 PR5d — bootstrap)
+
+- **`frontend/e2e/SELECTORS_STRATEGY.md`** — décision hybride β/α gravée pour éviter dérive future
+- **Zone α testids** : login form (`login-form|email|password|submit`), sidebar nav (16 testids `nav-{slug}` via helper déterministe), delegation switch (`delegation-switcher-card`, `delegation-option-{code}`)
+- **Cherry-pick 5 commits PR5c** : drop MinIO + STORAGE_TYPE=filesystem, PORT=3002, wait-on tcp, seed via `/api/setup/initialize`, TEST_USERS @demo.fr alignés sur seed démo réel
+
+### Added (Session 7.5 PR5h — smoke activation finale)
+
+- **`docker-compose.ci.yml`** + **`docker/nginx/nginx.ci.conf`** — stack CI single-origin self-contained (nginx port 8080 + frontend + backend + postgres + redis + minio). Reproduit prod NPM sans dépendre de xch-deploy.
+- **Workflow `e2e-tests.yml` refondu** — docker-compose CI avec build/wait/initialize/smoke run/logs dump/cleanup. ~6 min total CI.
+- **Smoke spec activée** : `test.describe.serial` + `test.beforeAll` (login API one-shot) + `test.beforeEach` (addCookies sharedCookies) + 10 tests serial. Assertions sidebar nav-{X} testid (plus stable que h1 page heading qui varie selon copie FR + état seed).
+
+### Métriques
+
+- **30 specs E2E** structurées par domaine (auth/sites/assets/racks/tasks/expenses/monitor/notifications/qr/dashboard/rbac/settings/smoke/floorplans)
+- **~210 tests** dont smoke `@full-user-journey` **10/10 réellement vert** sur CI
+- **57 skip TODO** tracés exhaustivement dans `XCH_E2E_SKIP_TODO_TRACKING` (catégorisés Cat. 1-7 pour activation future)
+- **Baseline non-régression frontend** stable 5/5 sur les 5 PRs Session 7
+- **0 régression** introduite, **0 conflit non trivial** au rebase
+- **PR5c #21 fermée** post-cherry-pick (mapping SHA original → nouveau documenté en commentaire de fermeture)
+
+### Notes patterns gravés MCP (réutilisables S9/S8/S5b/futures sessions)
+
+- `XCH_AUTONOMOUS_MERGE_PATTERN_S7` — 4 règles merge autonome (CI vert + baseline stable + pas de dette + pas modif schéma/ADR/architecture)
+- `XCH_CI_SCRIPT_DEFENSIVE_PATTERNS` — 4 règles capture/validation/fail explicite/test négatif
+- `XCH_E2E_SCAFFOLDING_VS_VALIDATION` — scaffolding ≠ testing, validation visuelle obligatoire avant tag
+- `XCH_E2E_SMOKE_AUTHORITY_VALIDATION` — filet CI = workflow ACTIVÉ + EXÉCUTÉ + endpoints RÉELS
+- `XCH_E2E_SKIP_TODO_TRACKING` — registre 57 skip catégorisés
+- `XCH_LOCKFILE_DRIFT_PATTERN` — 2 incidents 2 sessions, check CI bloquant proposé S9
+- `XCH_E2E_AUTH_STORAGE_STATE_PATTERN` — beforeAll + storageState partagé (NOUVEAU S7.5)
+- `XCH_ITERATION_THRESHOLD_PRINCIPLE` — ping user après 3 itérations sur même symptôme (NOUVEAU S7.5)
 
 ### Added (PR0 — mini-dette traversale + fondations E2E)
 
