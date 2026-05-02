@@ -15,12 +15,15 @@ test.describe('RBAC - Admin Role', () => {
   });
 
   test('should allow full access including demo data', async ({ page }) => {
-    await page.goto('/dashboard/settings');
+    // S7.5 PR5e — la section "Données de démonstration" est dans le tab
+    // "Tenant" (super-admin only). Navigation directe via `?tab=tenant`
+    // (le settings page lit ce query param via useSearchParams).
+    await page.goto('/dashboard/settings?tab=tenant');
     await expect(page.locator('h1:has-text("Paramètres")')).toBeVisible({ timeout: 5000 });
 
     await expect(page.locator('text=Données de démonstration')).toBeVisible();
-    await expect(page.locator('button:has-text("Charger données démo")')).toBeVisible();
-    await expect(page.locator('button:has-text("Réinitialiser")')).toBeVisible();
+    await expect(page.locator('[data-testid="load-demo-data-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="reset-data-btn"]')).toBeVisible();
   });
 
   test('should allow Users management', async ({ page }) => {
