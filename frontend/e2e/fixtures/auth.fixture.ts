@@ -125,8 +125,11 @@ async function login(page: Page, user: AuthUser): Promise<void> {
   await page.fill('[data-testid="login-password"]', user.password);
 
   await Promise.all([
+    // S7.5 PR5h/2 — POST /api/auth/login retourne 201 Created (pas 200).
+    // Le filtre status === 200 ne matchait jamais → timeout. Accepter
+    // toute réponse 2xx (200 OK ou 201 Created).
     page.waitForResponse(
-      (r) => r.url().includes('/api/auth/login') && r.status() === 200,
+      (r) => r.url().includes('/api/auth/login') && r.status() >= 200 && r.status() < 300,
       { timeout: 10000 },
     ),
     page.click('[data-testid="login-submit"]'),
