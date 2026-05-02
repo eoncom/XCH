@@ -28,13 +28,14 @@
 | 4 | RBAC universel + tests d'intrusion bloquants (réorienté depuis perf/intégrité DB après audit RBAC découvrant 14/15 modules incohérents) | ADR-021 | v1.8.0 | ✅ Livrée 2026-04-30 |
 | 5 | Performance & intégrité DB (indexes, FK CHECK, query plans) + UX deep-link 404 résiduelle (monitoring/[id], consumption/[siteId]) | — | v1.8.1 | ✅ Livrée 2026-05-01 |
 | 6 | UX dark canvas + erreurs réseau + tap targets (cible laptop/iPad/tablette, pas mobile) | — | v1.8.2 | ✅ Livrée 2026-05-01 |
-| **7** | **Refonte E2E Playwright (~210 tests, 10/10 critical paths) + mini-dette traversale (FK Expense onDelete + baseline non-régression frontend + codemod 163 lint + lockfile + DB e2e isolée + reset scoped) + smoke @full-user-journey régression bloquante CI** | **ADR-007 amend** | **v1.9.0** | **✅ Livrée 2026-05-02** |
+| **7** | **Refonte E2E Playwright scaffolding ~210 tests + mini-dette traversale (FK Expense onDelete + baseline non-régression frontend + codemod 163 lint + lockfile + DB e2e isolée + reset scoped)** | **ADR-007 amend** | (intermédiaire) | **✅ Livrée 2026-05-02** |
+| **7.5** | **Validation E2E réelle (alignement specs RBAC sur AUTH_MODEL_V2 + drift fixes wizard schema + α testids login/sidebar/delegation + docker-compose CI single-origin nginx + smoke @full-user-journey 10/10 RÉELLEMENT vert sur CI)** | — | **v1.9.0** | **✅ Livrée 2026-05-03** |
 | 8 | Sentry / error tracking (prérequis pilotes externes confirmé) | — | — | 🔮 |
 | 9 | Hardening tail (CSP nonce dynamique + DTOs structurés sur 30+ endpoints, 60-80 fichiers backend, 25-30 nouveaux Response DTOs) | — | — | 🔮 |
 | 5b | Heavy SQL refactors (3 refactors GENERATE_SERIES + DataLoader + group-by) | — | — | 🔮 |
 | Mini | Mini-session typecheck cleanup pré-v2.0.0 (résidu post-S9 : TS7006 implicit any + TS2769 + TS2322) | — | — | 🔮 |
 
-**Tag :** **v1.9.0** posé 2026-05-02 (Session 7 — Refonte E2E + mini-dette traversale, 5 PRs autonomes mergées sans incident, baseline non-régression validée).
+**Tag :** **v1.9.0** posé 2026-05-03 après S7 + S7.5 (smoke `@full-user-journey` 10/10 RÉELLEMENT vert sur CI run [25263200317](https://github.com/eoncom/XCH/actions/runs/25263200317), 21s tests). Session 7 a livré scaffolding + mini-dette traversale (5 PRs autonomes mergées sans incident). Session 7.5 a livré validation E2E réelle en 5 PRs (PR5d-PR5h) après 12 itérations diagnostiques sur l'activation smoke (cf retex CHANGELOG entry [1.9.0] + entités MCP `XCH_E2E_AUTH_STORAGE_STATE_PATTERN` + `XCH_ITERATION_THRESHOLD_PRINCIPLE` gravées).
 
 **Ordre confirmé du reste du plan v2** : S9 → S8 → S5b → mini-session typecheck cleanup → tag final v2.0.0.
 
