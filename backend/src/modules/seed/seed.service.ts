@@ -61,6 +61,71 @@ export class SeedService {
     };
   }
 
+  /**
+   * S7 PR0 — Reset scoped par domaine pour les suites E2E.
+   * DELETE-only (pas de reseed) : la spec qui veut repeupler appelle
+   * ensuite POST /api/seed/demo. Permet d'isoler les domaines CRUD
+   * destructifs sans subir le coût d'un reset global entre suites.
+   *
+   * Garde sur process.env via TestEnvOnlyGuard côté contrôleur — pas de
+   * double check ici (fail-fast au handler).
+   */
+  async resetDomain(
+    tenantId: string,
+    domain: 'sites' | 'assets' | 'racks' | 'expenses' | 'monitors' | 'notifications',
+  ) {
+    this.logger.warn(`Reset scoped domain="${domain}" for tenant ${tenantId}`);
+
+    switch (domain) {
+      case 'expenses':
+        await this.prisma.costAllocation.deleteMany({ where: { expense: { tenantId } } });
+        await this.prisma.expense.deleteMany({ where: { tenantId } });
+        return { domain, message: 'Expenses (+ allocations) wiped.' };
+
+      case 'assets':
+        await this.prisma.assetMovement.deleteMany({ where: { tenantId } });
+        // Pin → asset is optional FK ; détacher avant delete asset.
+        await this.prisma.pin.updateMany({
+          where: { floorPlan: { site: { tenantId } } },
+          data: { assetId: null },
+        });
+        await this.prisma.asset.deleteMany({ where: { tenantId } });
+        return { domain, message: 'Assets (+ movements, pins detached) wiped.' };
+
+      case 'racks':
+        // Détacher les assets montés avant delete des racks.
+        await this.prisma.asset.updateMany({
+          where: { tenantId, rackId: { not: null } },
+          data: { rackId: null, rackPositionU: null },
+        });
+        await this.prisma.rack.deleteMany({ where: { tenantId } });
+        return { domain, message: 'Racks (+ mounted assets detached) wiped.' };
+
+      case 'monitors':
+        await this.prisma.monitorResult.deleteMany({ where: { check: { tenantId } } });
+        await this.prisma.monitorHttpConfig.deleteMany({ where: { check: { tenantId } } });
+        await this.prisma.monitorCheck.deleteMany({ where: { tenantId } });
+        return { domain, message: 'Monitor checks (+ http configs, results) wiped.' };
+
+      case 'notifications':
+        await this.prisma.userNotification.deleteMany({ where: { tenantId } });
+        return { domain, message: 'User notifications wiped.' };
+
+      case 'sites':
+        // Sites est le scope le plus large : casserait beaucoup de FK Restrict
+        // (Expense, BillingEntity, Budget, Asset.delegation indirect…). Pour
+        // éviter une cascade complexe et fragile, on délègue au reset global.
+        // Une spec qui a besoin de wiper les sites doit appeler
+        // POST /api/seed/reset puis POST /api/seed/demo.
+        throw new Error(
+          'Domain "sites" reset is not supported — use POST /api/seed/reset (global) instead, then /api/seed/demo to repopulate.',
+        );
+
+      default:
+        throw new Error(`Unknown reset domain: ${domain as string}`);
+    }
+  }
+
   async resetData(tenantId: string, adminUserId: string) {
     this.logger.warn(`Resetting all data for tenant ${tenantId} (preserving admin ${adminUserId})`);
 
