@@ -156,6 +156,12 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost:3002
           NEXT_PUBLIC_APP_URL: http://localhost:3001
+          # S7.5 PR5g — fix Cat. 6 polling env override (cf
+          # XCH_E2E_SKIP_TODO_TRACKING). Le polling notifications par
+          # défaut est 60s prod, trop long pour CI E2E. À 2s les tests
+          # `notifications-polling.spec.ts` peuvent observer un round-trip
+          # complet en < 30s sans timeout.
+          NEXT_PUBLIC_NOTIFICATION_POLL_INTERVAL: 2000
         run: npm run build
 
       - name: Start Frontend

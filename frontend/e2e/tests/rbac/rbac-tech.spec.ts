@@ -27,14 +27,14 @@ test.describe('RBAC - Technicien Role', () => {
     await page.goto('/dashboard/tasks');
     await page.waitForLoadState('networkidle');
 
-    const createTaskButton = page.locator('button:has-text("Nouvelle tâche")');
+    const createTaskButton = page.locator('a[href="/dashboard/tasks/new"]');
     await expect(createTaskButton).toBeVisible({ timeout: 5000 });
   });
 
   test('should allow edit own Task', async ({ page }) => {
     await page.goto('/dashboard/tasks');
 
-    await page.click('button:has-text("Nouvelle tâche")');
+    await page.click('a[href="/dashboard/tasks/new"]');
     await page.waitForSelector('form, [role="dialog"]');
 
     await page.fill('[name="title"]', 'USER Task Test');
@@ -70,7 +70,7 @@ test.describe('RBAC - Technicien Role', () => {
     await page.goto('/dashboard/sites');
     await page.waitForLoadState('networkidle');
 
-    const createSiteButton = page.locator('button:has-text("Nouveau site")');
+    const createSiteButton = page.locator('a[href="/dashboard/sites/new"]');
     const buttonExists = await createSiteButton.isVisible().catch(() => false);
     expect(buttonExists).toBe(false);
   });
@@ -79,7 +79,7 @@ test.describe('RBAC - Technicien Role', () => {
     await page.goto('/dashboard/assets');
     await page.waitForLoadState('networkidle');
 
-    const createAssetButton = page.locator('button:has-text("Nouvel équipement")');
+    const createAssetButton = page.locator('a[href="/dashboard/assets/new"]');
     const buttonExists = await createAssetButton.isVisible().catch(() => false);
     expect(buttonExists).toBe(true);
   });
