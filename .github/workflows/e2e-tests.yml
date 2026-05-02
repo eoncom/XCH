@@ -59,8 +59,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      # S7 PR5c — image bitnami/minio (CMD par défaut `minio server /data`)
+      # au lieu de minio/minio (qui nécessite `server /data` en CMD,
+      # pas spécifiable dans GitHub Actions `services:` field). Cause
+      # racine du fail "Failed to initialize container minio/minio:latest"
+      # observé sur run 25251557631 (S7 PR5b validation). Bug latent
+      # depuis l'origine du workflow — le commentaire "MinIO needs command
+      # to start server / Will be handled in steps" reconnaissait le
+      # problème mais aucune handling step ne couvrait ce cas.
       minio:
-        image: minio/minio:latest
+        image: bitnami/minio:latest
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
@@ -68,12 +76,11 @@ jobs:
           - 9000:9000
           - 9001:9001
         options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 30s
-          --health-timeout 20s
-          --health-retries 3
-        # Note: MinIO needs command to start server
-        # Will be handled in steps
+          --health-cmd "mc ready local || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
 
     steps:
       - name: Checkout code
