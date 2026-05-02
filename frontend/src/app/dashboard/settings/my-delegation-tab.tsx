@@ -112,7 +112,7 @@ export function MyDelegationTab() {
     <div className="space-y-6">
       {/* Switcher when the user manages >1 delegation */}
       {manageableDelegations.length > 1 && (
-        <Card>
+        <Card data-testid="delegation-switcher-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Mes délégations ({manageableDelegations.length})</CardTitle>
             <CardDescription>
@@ -127,6 +127,9 @@ export function MyDelegationTab() {
                 return (
                   <Button
                     key={d.delegationId}
+                    data-testid={`delegation-option-${d.delegation.code}`}
+                    data-delegation-code={d.delegation.code}
+                    data-delegation-active={isActive ? 'true' : 'false'}
                     variant={isActive ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => switchDelegation(d.delegationId)}

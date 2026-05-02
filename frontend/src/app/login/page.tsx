@@ -162,13 +162,15 @@ export default function LoginPage() {
           {/* Step 1: Credentials */}
           {step === 'credentials' && (
             <>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
                 <div className="space-y-2">
                   <label htmlFor="email" className="text-sm font-medium text-foreground">
                     Email
                   </label>
                   <Input
                     id="email"
+                    name="email"
+                    data-testid="login-email"
                     type="email"
                     placeholder="email@example.com"
                     value={email}
@@ -185,6 +187,8 @@ export default function LoginPage() {
                   </label>
                   <Input
                     id="password"
+                    name="password"
+                    data-testid="login-password"
                     type="password"
                     placeholder="••••••••"
                     value={password}
@@ -203,6 +207,7 @@ export default function LoginPage() {
 
                 <Button
                   type="submit"
+                  data-testid="login-submit"
                   className="w-full h-11 text-base font-medium press-effect"
                   disabled={isLoading}
                 >

@@ -41,6 +41,11 @@ import { OfflineBanner } from '@/components/layout/OfflineBanner';
 import { rightLabel } from '@/lib/labels';
 import { AppearanceProvider } from '@/components/AppearanceProvider';
 
+// S7.5 PR5d — testid déterministe pour sidebar nav (zone α SELECTORS_STRATEGY).
+// Dérivé du dernier segment de href : /dashboard → nav-dashboard,
+// /dashboard/sites → nav-sites, /tv → nav-tv, /dashboard/admin/audit → nav-audit.
+const navTestId = (href: string) => `nav-${href.split('/').filter(Boolean).pop() || 'dashboard'}`;
+
 // Navigation items with optional moduleKey for feature-flag filtering
 // permResource: if set, requires can(permResource, 'read') to show
 // external: if true, opens in a new tab
@@ -231,6 +236,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.name}
                   href={item.href}
+                  data-testid={navTestId(item.href)}
                   {...linkProps}
                   className={cn(
                     'group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
@@ -265,6 +271,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                     <Link
                       key={item.name}
                       href={item.href}
+                      data-testid={navTestId(item.href)}
                       className={cn(
                         'group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
                         isActive
@@ -297,6 +304,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.name}
                   href={item.href}
+                  data-testid={navTestId(item.href)}
                   className={cn(
                     'group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
                     isActive
