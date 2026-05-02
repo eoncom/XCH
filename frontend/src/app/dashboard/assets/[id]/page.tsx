@@ -188,7 +188,7 @@ export default function AssetDetailPage({
         <p className="text-muted-foreground">
           Équipement introuvable ou inaccessible. Le lien que vous avez suivi est
           peut-être périmé, ou cet équipement appartient à un site auquel vous
-          n'avez pas accès.
+          n&apos;avez pas accès.
         </p>
         <Button variant="outline" asChild>
           <Link href="/dashboard/assets">
@@ -397,7 +397,7 @@ export default function AssetDetailPage({
               {asset.purchaseDate && (
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
-                    Date d'achat
+                    Date d&apos;achat
                   </label>
                   <p className="text-lg">
                     {new Date(asset.purchaseDate).toLocaleDateString('fr-FR')}
@@ -730,7 +730,7 @@ export default function AssetDetailPage({
                 </div>
                 <p className="text-xs text-muted-foreground mt-3">
                   Le montant des dépenses est figé à la création (ADR-011).
-                  Cliquez « Sync » pour réaligner sur le prix actuel de l'équipement.
+                  Cliquez « Sync » pour réaligner sur le prix actuel de l&apos;équipement.
                 </p>
               </CardContent>
             </Card>
@@ -841,7 +841,7 @@ export default function AssetDetailPage({
         <TabsContent value="qr">
           <Card>
             <CardHeader>
-              <CardTitle>QR Code de l'équipement</CardTitle>
+              <CardTitle>QR Code de l&apos;équipement</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {qrCodeData || asset.qrCodeUrl ? (
@@ -868,7 +868,7 @@ export default function AssetDetailPage({
                   <div className="text-center space-y-2">
                     <p className="text-sm text-muted-foreground">
                       Scannez ce QR code pour accéder aux informations de
-                      l'équipement
+                      l&apos;équipement
                     </p>
                     <div className="flex items-center gap-2 justify-center">
                       <Button onClick={handleDownloadQR}>
@@ -937,7 +937,7 @@ export default function AssetDetailPage({
                   <History className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                   <p className="text-muted-foreground">Aucun mouvement enregistré</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    L'historique des déplacements et changements de statut apparaîtra ici
+                    L&apos;historique des déplacements et changements de statut apparaîtra ici
                   </p>
                 </div>
               )}
@@ -952,7 +952,7 @@ export default function AssetDetailPage({
           <DialogHeader>
             <DialogTitle>Confirmer la suppression</DialogTitle>
             <DialogDescription>
-              Êtes-vous sûr de vouloir supprimer l'équipement &quot;{asset.manufacturer}{' '}
+              Êtes-vous sûr de vouloir supprimer l&apos;équipement &quot;{asset.manufacturer}{' '}
               {asset.model}&quot; ? Cette action est irréversible.
             </DialogDescription>
           </DialogHeader>

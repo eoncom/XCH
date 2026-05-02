@@ -29,7 +29,7 @@ export default function Error({
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Une erreur s'est produite lors du chargement des détails de la baie.
+              Une erreur s&apos;est produite lors du chargement des détails de la baie.
             </p>
             {error.message && (
               <p className="text-sm font-mono bg-muted p-3 rounded-md">

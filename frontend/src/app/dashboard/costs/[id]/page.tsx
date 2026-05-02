@@ -196,7 +196,7 @@ function ExpenseDetailPage() {
                   href={`/dashboard/assets/${e.assetId}`}
                   className="text-blue-600 hover:underline inline-flex items-center gap-1"
                 >
-                  Voir l'équipement <ExternalLink className="h-3 w-3" />
+                  Voir l&apos;équipement <ExternalLink className="h-3 w-3" />
                 </Link>
               </div>
             )}

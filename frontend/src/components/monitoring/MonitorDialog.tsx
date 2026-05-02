@@ -156,7 +156,7 @@ export function MonitorDialog(props: MonitorDialogProps) {
             {isEdit ? 'Modifier la surveillance' : 'Nouvelle surveillance'}
           </DialogTitle>
           <DialogDescription>
-            Surveillance active de l'objet — choisissez le type de sonde adapté.
+            Surveillance active de l&apos;objet — choisissez le type de sonde adapté.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

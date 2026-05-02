@@ -278,7 +278,7 @@ export default function EditAssetPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
-        <h1 className="text-3xl font-bold">Modifier l'équipement</h1>
+        <h1 className="text-3xl font-bold">Modifier l&apos;équipement</h1>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -286,7 +286,7 @@ export default function EditAssetPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Modèle d'équipement
+              Modèle d&apos;équipement
               <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
             </CardTitle>
           </CardHeader>
@@ -387,7 +387,7 @@ export default function EditAssetPage() {
                   {...register('name')}
                   placeholder="Ex: Switch Salle Serveur"
                 />
-                <p className="text-xs text-muted-foreground">Nom libre pour identifier facilement l'équipement</p>
+                <p className="text-xs text-muted-foreground">Nom libre pour identifier facilement l&apos;équipement</p>
               </div>
 
               <div className="space-y-2">
@@ -424,7 +424,7 @@ export default function EditAssetPage() {
                   {...register('inventoryTag')}
                   placeholder="Ex: INV-2024-0042"
                 />
-                <p className="text-xs text-muted-foreground">Numéro d'inventaire interne</p>
+                <p className="text-xs text-muted-foreground">Numéro d&apos;inventaire interne</p>
               </div>
             </div>
           </CardContent>
@@ -437,7 +437,7 @@ export default function EditAssetPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label>Type d'affectation</Label>
+              <Label>Type d&apos;affectation</Label>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {[
                   { v: 'SITE', label: 'Site spécifique', desc: 'Rattaché à un site unique' },
@@ -464,7 +464,7 @@ export default function EditAssetPage() {
             <div className="grid md:grid-cols-2 gap-4">
               {locationScope === 'SITE' && (
                 <div className="space-y-2">
-                  <Label htmlFor="siteId">Site d'affectation</Label>
+                  <Label htmlFor="siteId">Site d&apos;affectation</Label>
                   <GroupedSiteSelector
                     value={siteId || ''}
                     onValueChange={(value) => setValue('siteId', value)}
@@ -495,14 +495,14 @@ export default function EditAssetPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    L'équipement s'appliquera à l'ensemble des sites de cette délégation.
+                    L&apos;équipement s&apos;appliquera à l&apos;ensemble des sites de cette délégation.
                   </p>
                 </div>
               )}
 
               {locationScope === 'UNASSIGNED' && (
                 <div className="text-sm text-muted-foreground border rounded-md p-3 bg-muted/30">
-                  L'équipement ne sera rattaché à aucun site ni délégation (stock / hors service).
+                  L&apos;équipement ne sera rattaché à aucun site ni délégation (stock / hors service).
                 </div>
               )}
 
@@ -582,7 +582,7 @@ export default function EditAssetPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ExternalLink className="h-5 w-5" />
-              Liens d'administration
+              Liens d&apos;administration
               <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">Optionnel</span>
             </CardTitle>
           </CardHeader>
@@ -640,7 +640,7 @@ export default function EditAssetPage() {
                 Ajouter un lien
               </Button>
               <p className="text-xs text-muted-foreground">
-                Liens rapides vers les interfaces d'administration de l'équipement (console web, SSH, etc.)
+                Liens rapides vers les interfaces d&apos;administration de l&apos;équipement (console web, SSH, etc.)
               </p>
             </div>
           </CardContent>
@@ -691,11 +691,11 @@ export default function EditAssetPage() {
                   {...register('dutyCyclePercent', { valueAsNumber: true })}
                   placeholder="100"
                 />
-                <p className="text-xs text-muted-foreground">% d'usage effectif pour estimation de consommation</p>
+                <p className="text-xs text-muted-foreground">% d&apos;usage effectif pour estimation de consommation</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="purchaseDate">Date d'achat</Label>
+                <Label htmlFor="purchaseDate">Date d&apos;achat</Label>
                 <Input id="purchaseDate" type="date" {...register('purchaseDate')} />
               </div>
 
@@ -749,7 +749,7 @@ export default function EditAssetPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="wifiAntennaType">Type d'antenne</Label>
+                  <Label htmlFor="wifiAntennaType">Type d&apos;antenne</Label>
                   <select
                     id="wifiAntennaType"
                     {...register('wifiAntennaType')}
@@ -763,7 +763,7 @@ export default function EditAssetPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="wifiTxPowerDbm">Puissance d'émission (dBm)</Label>
+                  <Label htmlFor="wifiTxPowerDbm">Puissance d&apos;émission (dBm)</Label>
                   <Input
                     id="wifiTxPowerDbm"
                     type="number"
@@ -788,7 +788,7 @@ export default function EditAssetPage() {
           <CardContent>
             <div className="grid md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="acquisitionPrice">Prix d'achat</Label>
+                <Label htmlFor="acquisitionPrice">Prix d&apos;achat</Label>
                 <Input
                   id="acquisitionPrice"
                   type="number"

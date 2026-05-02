@@ -733,7 +733,7 @@ export default function RackDetailPage({
       <Dialog open={showMoveDialog} onOpenChange={setShowMoveDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Déplacer l'équipement</DialogTitle>
+            <DialogTitle>Déplacer l&apos;équipement</DialogTitle>
             <DialogDescription>
               {moveAsset && (
                 <>Déplacer <strong>{moveAsset.name || `${moveAsset.manufacturer || ''} ${moveAsset.model || ''}`.trim()}</strong> ({moveAsset.rackHeightU}U) vers une nouvelle position</>

@@ -250,7 +250,7 @@ export default function SetupPage() {
                 ))}
               </div>
               <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-sm text-blue-700 dark:text-blue-300">
-                Aucun tenant n'est configuré. Cliquez sur &quot;Commencer&quot; pour créer votre organisation.
+                Aucun tenant n&apos;est configuré. Cliquez sur &quot;Commencer&quot; pour créer votre organisation.
               </div>
             </CardContent>
           </>
@@ -267,7 +267,7 @@ export default function SetupPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="orgName">Nom de l'organisation *</Label>
+                <Label htmlFor="orgName">Nom de l&apos;organisation *</Label>
                 <Input
                   id="orgName"
                   value={formData.organizationName}
@@ -349,7 +349,7 @@ export default function SetupPage() {
             <CardHeader>
               <CardTitle>Compte administrateur</CardTitle>
               <CardDescription>
-                Ce sera le premier compte avec un accès total à l'application.
+                Ce sera le premier compte avec un accès total à l&apos;application.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -429,7 +429,7 @@ export default function SetupPage() {
               </div>
 
               <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-sm text-amber-700 dark:text-amber-300">
-                Ce compte sera le seul administrateur initial. Vous pourrez en ajouter d'autres après la configuration.
+                Ce compte sera le seul administrateur initial. Vous pourrez en ajouter d&apos;autres après la configuration.
               </div>
             </CardContent>
           </>
@@ -456,7 +456,7 @@ export default function SetupPage() {
                     Charger les données de démonstration
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Crée 6 sites, 100+ équipements, des tâches et contacts pour découvrir l'application.
+                    Crée 6 sites, 100+ équipements, des tâches et contacts pour découvrir l&apos;application.
                     Supprimable à tout moment depuis les paramètres.
                   </p>
                 </div>
@@ -537,7 +537,7 @@ export default function SetupPage() {
               </div>
               <CardTitle>Configuration terminée !</CardTitle>
               <CardDescription>
-                Votre instance XCH est prête à l'emploi.
+                Votre instance XCH est prête à l&apos;emploi.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

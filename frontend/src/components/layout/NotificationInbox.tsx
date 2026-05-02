@@ -65,7 +65,7 @@ export function NotificationInbox() {
     refresh();
     const id = setInterval(refresh, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // When the OS reports the device is back online, immediately refresh
@@ -74,7 +74,7 @@ export function NotificationInbox() {
     if (online && networkErrorActiveRef.current) {
       refresh();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [online]);
 
   // Click outside to close

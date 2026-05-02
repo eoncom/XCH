@@ -114,12 +114,12 @@ export function GenerateExpenseToggle({
             {!canWrite && (
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Lock className="h-3 w-3" />
-                Vous n'avez pas le droit de créer des dépenses sur cette délégation.
+                Vous n&apos;avez pas le droit de créer des dépenses sur cette délégation.
               </p>
             )}
             {canWrite && defaultAmount <= 0 && (
               <p className="text-xs text-muted-foreground">
-                Renseignez un prix sur l'entité pour activer la création de dépense.
+                Renseignez un prix sur l&apos;entité pour activer la création de dépense.
               </p>
             )}
           </div>

@@ -1263,7 +1263,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
         <p className="text-muted-foreground">
           Site introuvable ou inaccessible. Le lien que vous avez suivi est
           peut-être périmé, ou ce site appartient à une délégation à laquelle
-          vous n'avez pas accès.
+          vous n&apos;avez pas accès.
         </p>
         <Button variant="outline" asChild>
           <Link href="/dashboard/sites">

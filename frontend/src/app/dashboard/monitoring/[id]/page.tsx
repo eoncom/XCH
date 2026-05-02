@@ -202,7 +202,7 @@ export default function MonitorDetailPage({ params }: { params: Promise<{ id: st
         <p className="text-muted-foreground">
           Sonde introuvable ou inaccessible. Le lien que vous avez suivi est
           peut-être périmé, ou cette sonde appartient à une délégation à
-          laquelle vous n'avez pas accès.
+          laquelle vous n&apos;avez pas accès.
         </p>
         <Button variant="outline" asChild>
           <Link href="/dashboard/monitoring">
@@ -456,7 +456,7 @@ export default function MonitorDetailPage({ params }: { params: Promise<{ id: st
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer cette surveillance ?</AlertDialogTitle>
             <AlertDialogDescription>
-              L'historique des {history?.total ?? 0} vérification(s) sera également supprimé.
+              L&apos;historique des {history?.total ?? 0} vérification(s) sera également supprimé.
               Cette action est irréversible.
             </AlertDialogDescription>
           </AlertDialogHeader>

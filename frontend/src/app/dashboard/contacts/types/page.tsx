@@ -495,7 +495,7 @@ export default function ContactTypesPage() {
                 placeholder="Ex: phone, building, wrench..."
               />
               <p className="text-xs text-muted-foreground">
-                Nom d'icone Lucide (optionnel)
+                Nom d&apos;icone Lucide (optionnel)
               </p>
             </div>
 

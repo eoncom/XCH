@@ -299,7 +299,7 @@ export function NotificationsConfigPanel({ embedded = false }: { embedded?: bool
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Périmètre de configuration</CardTitle>
           <CardDescription>
-            Une délégation hérite de la configuration globale tant qu'elle n'a pas son propre override.
+            Une délégation hérite de la configuration globale tant qu&apos;elle n&apos;a pas son propre override.
           </CardDescription>
         </CardHeader>
         <CardContent>

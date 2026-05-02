@@ -472,7 +472,7 @@ export default function FloorPlanDetailPage({
       <div className="text-center py-12 space-y-3">
         <p className="text-muted-foreground">
           Plan introuvable ou inaccessible. Le lien que vous avez suivi est
-          peut-être périmé, ou ce plan appartient à un site auquel vous n'avez
+          peut-être périmé, ou ce plan appartient à un site auquel vous n&apos;avez
           pas accès.
         </p>
         <Button variant="outline" asChild>
@@ -623,7 +623,7 @@ export default function FloorPlanDetailPage({
 
               {floorPlan.uploadedAt && (
                 <div>
-                  <p className="text-sm font-medium">Date d'upload</p>
+                  <p className="text-sm font-medium">Date d&apos;upload</p>
                   <p className="text-sm text-muted-foreground">
                     {new Date(floorPlan.uploadedAt).toLocaleDateString('fr-FR')}
                   </p>

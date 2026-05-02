@@ -77,7 +77,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 <div>
                   <CardTitle className="text-xl">Une erreur est survenue</CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
-                    L'application a rencontré un problème inattendu
+                    L&apos;application a rencontré un problème inattendu
                   </p>
                 </div>
               </div>
@@ -106,7 +106,7 @@ export class ErrorBoundary extends Component<Props, State> {
               {process.env.NODE_ENV === 'production' && (
                 <div className="rounded-lg bg-gray-100 p-4">
                   <p className="text-sm text-gray-600">
-                    Nous nous excusons pour la gêne occasionnée. L'erreur a été
+                    Nous nous excusons pour la gêne occasionnée. L&apos;erreur a été
                     enregistrée et notre équipe technique en a été informée.
                   </p>
                 </div>
@@ -120,7 +120,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 </Button>
                 <Button onClick={this.handleGoHome}>
                   <Home className="mr-2 h-4 w-4" />
-                  Retour à l'accueil
+                  Retour à l&apos;accueil
                 </Button>
               </div>
 
@@ -128,7 +128,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <div className="text-sm text-muted-foreground border-t pt-4">
                 <p>
                   Si le problème persiste, veuillez contacter le support technique
-                  avec le code d'erreur ci-dessus.
+                  avec le code d&apos;erreur ci-dessus.
                 </p>
               </div>
             </CardContent>

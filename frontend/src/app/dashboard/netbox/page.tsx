@@ -378,7 +378,7 @@ export default function NetBoxPage() {
                   NetBox non connecté
                 </p>
                 <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                  Renseignez l'URL et le token API ci-dessus, puis cliquez sur "Tester la connexion" pour vérifier la connectivité.
+                  Renseignez l&apos;URL et le token API ci-dessus, puis cliquez sur &quot;Tester la connexion&quot; pour vérifier la connectivité.
                 </p>
               </div>
             </div>

@@ -180,7 +180,7 @@ function UsersPageInner() {
               <DialogHeader>
                 <DialogTitle>Inviter un utilisateur</DialogTitle>
                 <DialogDescription>
-                  Un email d'invitation sera envoyé pour activer le compte.
+                  Un email d&apos;invitation sera envoyé pour activer le compte.
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleInvite} className="space-y-4">
@@ -231,7 +231,7 @@ function UsersPageInner() {
                     ) : (
                       <>
                         <Send className="mr-2 h-4 w-4" />
-                        Envoyer l'invitation
+                        Envoyer l&apos;invitation
                       </>
                     )}
                   </Button>
@@ -435,7 +435,7 @@ function UsersPageInner() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer l'utilisateur</AlertDialogTitle>
+            <AlertDialogTitle>Supprimer l&apos;utilisateur</AlertDialogTitle>
             <AlertDialogDescription>
               Êtes-vous sûr de vouloir supprimer <strong>{deleteTarget?.name}</strong> ({deleteTarget?.email}) ?
               Cette action est irréversible.

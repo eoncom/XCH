@@ -117,7 +117,7 @@ export function MyDelegationTab() {
             <CardTitle className="text-base">Mes délégations ({manageableDelegations.length})</CardTitle>
             <CardDescription>
               Vous êtes administrateur local sur plusieurs délégations. Cliquez pour basculer
-              — le choix s'applique aussi aux autres pages (Sites, Équipements, Utilisateurs…).
+              — le choix s&apos;applique aussi aux autres pages (Sites, Équipements, Utilisateurs…).
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -308,7 +308,7 @@ export default function EditTaskPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dueDate">Date d'échéance</Label>
+                <Label htmlFor="dueDate">Date d&apos;échéance</Label>
                 <Input id="dueDate" type="date" {...register('dueDate')} />
               </div>
               <div className="space-y-2">
