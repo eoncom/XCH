@@ -59,28 +59,22 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-      # S7 PR5c — image bitnami/minio (CMD par défaut `minio server /data`)
-      # au lieu de minio/minio (qui nécessite `server /data` en CMD,
-      # pas spécifiable dans GitHub Actions `services:` field). Cause
-      # racine du fail "Failed to initialize container minio/minio:latest"
-      # observé sur run 25251557631 (S7 PR5b validation). Bug latent
-      # depuis l'origine du workflow — le commentaire "MinIO needs command
-      # to start server / Will be handled in steps" reconnaissait le
-      # problème mais aucune handling step ne couvrait ce cas.
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports:
-          - 9000:9000
-          - 9001:9001
-        options: >-
-          --health-cmd "mc ready local || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-          --health-start-period 30s
+      # S7 PR5d — MinIO retiré complètement du workflow E2E Smoke.
+      # Cause racine bloquante : (1) image minio/minio nécessite CMD
+      # `server /data` non spécifiable dans GitHub Actions `services:`,
+      # (2) image bitnami/minio:latest n'existe plus (Bitnami a déprécié
+      # ses images Docker Hub publiques en septembre 2025).
+      #
+      # Solution : la spec smoke @full-user-journey ne touche PAS au
+      # stockage MinIO (juste login + nav 7 sections + API auth/session).
+      # Le backend démarre avec STORAGE_TYPE=filesystem (cf
+      # backend/src/common/services/storage.service.ts ligne 25)
+      # → init MinIO skippé, fichiers locaux dans backend/uploads.
+      #
+      # Si une future spec a besoin de MinIO (ex: upload pièce jointe
+      # en flow E2E complet activé en mini-session post-S7), ajouter
+      # un step `docker run -d minio/minio server /data` ou utiliser
+      # un container action custom — pas via `services:`.
 
     steps:
       - name: Checkout code
@@ -123,11 +117,11 @@ jobs:
         env:
           DATABASE_URL: postgresql://xch_e2e_user:xch_e2e_password@localhost:5432/xch_e2e
           REDIS_URL: redis://localhost:6379
-          MINIO_ENDPOINT: localhost
-          MINIO_PORT: 9000
-          MINIO_ACCESS_KEY: minioadmin
-          MINIO_SECRET_KEY: minioadmin
-          MINIO_USE_SSL: false
+          # S7 PR5d — STORAGE_TYPE=filesystem skip init MinIO
+          # (cf storage.service.ts ligne 25 : minio init seulement
+          # si STORAGE_TYPE === 'minio'). Le smoke @full-user-journey
+          # ne touche pas au stockage donc filesystem suffit.
+          STORAGE_TYPE: filesystem
           JWT_SECRET: e2e-test-jwt-secret-key
           NODE_ENV: test
         run: |
