@@ -14,12 +14,13 @@ jobs:
     timeout-minutes: 30
 
     services:
+      # S7 PR0 — DB e2e isolée xch_e2e (au lieu de xch_dev partagée)
       postgres:
         image: postgis/postgis:15-3.4
         env:
-          POSTGRES_DB: xch_dev
-          POSTGRES_USER: xch_user
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'xch_dev_password' }}
+          POSTGRES_DB: xch_e2e
+          POSTGRES_USER: xch_e2e_user
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_E2E_PASSWORD || 'xch_e2e_password' }}
         ports:
           - 5432:5432
         options: >-
@@ -81,19 +82,19 @@ jobs:
       - name: Run Database Migrations
         working-directory: backend
         env:
-          DATABASE_URL: postgresql://xch_user:xch_dev_password@localhost:5432/xch_dev
+          DATABASE_URL: postgresql://xch_e2e_user:xch_e2e_password@localhost:5432/xch_e2e
         run: npx prisma migrate deploy
 
       - name: Seed Database
         working-directory: backend
         env:
-          DATABASE_URL: postgresql://xch_user:xch_dev_password@localhost:5432/xch_dev
+          DATABASE_URL: postgresql://xch_e2e_user:xch_e2e_password@localhost:5432/xch_e2e
         run: npm run prisma:seed || echo "Seed may have failed, continuing..."
 
       - name: Start Backend
         working-directory: backend
         env:
-          DATABASE_URL: postgresql://xch_user:xch_dev_password@localhost:5432/xch_dev
+          DATABASE_URL: postgresql://xch_e2e_user:xch_e2e_password@localhost:5432/xch_e2e
           REDIS_URL: redis://localhost:6379
           MINIO_ENDPOINT: localhost
           MINIO_PORT: 9000
