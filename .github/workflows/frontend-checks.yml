@@ -38,12 +38,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          # Note S7 PR0 : frontend/package-lock.json est manquant
+          # (supprimé par commit 0cc9211). Pas de cache deps tant qu'il
+          # n'est pas régénéré. Dette à traiter en S7 PR1 (chore).
+          # cache: 'npm'
+          # cache-dependency-path: frontend/package-lock.json
 
       - name: Install Frontend Dependencies
         working-directory: frontend
-        run: npm ci
+        # npm install (au lieu de npm ci) car package-lock.json manquant.
+        run: npm install --no-audit --no-fund
 
       - name: Typecheck (mesure — ne fait pas échouer la CI)
         id: typecheck
