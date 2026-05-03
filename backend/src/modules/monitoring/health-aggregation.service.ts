@@ -9,12 +9,23 @@ import { PrismaClient, MonitorStatus, HealthStatus } from '@prisma/client';
  * give it a siteId and it loads everything, aggregates, persists, and
  * returns the breakdown.
  *
- * Rules (unchanged from the legacy ADR-014 era — only the data source moves):
+ * Rules (post-v1.9.0 fix : SD-WAN équipement critique escaladé en CRITICAL) :
  *  1. CRITICAL : ALL connectivity links are DOWN (total connectivity loss)
- *  2. WARNING  : a primary link DOWN (backup OK), or SD-WAN degraded,
- *                or any monitored equipment DOWN. Equipment never causes CRITICAL.
+ *                OR SD-WAN tous firewalls DOWN (perte d'accès Internet
+ *                  via SD-WAN — équipement critique du site)
+ *                OR n'importe quel composant marqué `impact: 'critical'`
+ *                  (single-link total loss déjà couvert ici, etc.)
+ *  2. WARNING  : a primary link DOWN (backup OK), SD-WAN degraded,
+ *                ou n'importe quel équipement monitoré DOWN avec impact='warning'.
  *  3. HEALTHY  : at least one component UP and nothing in WARNING/CRITICAL
  *  4. UNKNOWN  : no monitor configured anywhere on the site, or all unknown
+ *
+ * IMPORTANT — pré-fix bug : un équipement SD-WAN down faisait passer le
+ * site en WARNING au lieu de CRITICAL. La condition `hasWarning` mélangeait
+ * `impact='warning'` ET `impact='critical'` → impact 'critical' n'était
+ * jamais distingué. Les liens non monitorés ne sont PAS une preuve que tout
+ * va bien — c'est absence d'info, ne dégrade pas la sévérité venant des
+ * équipements critiques.
  *
  * Per-entity aggregation: an asset / link / site can have multiple
  * MonitorCheck rows. Worst-case wins — any DOWN → DOWN, else any UP → UP,
@@ -130,8 +141,11 @@ export class HealthAggregationService {
         let sdwanImpact: HealthComponent['impact'] = 'none';
         if (upCount === total) sdwanStatus = 'up';
         else if (upCount === 0) {
+          // Post-v1.9.0 fix : tous firewalls SD-WAN down = perte d'accès
+          // Internet via SD-WAN = équipement critique du site → CRITICAL.
+          // Avant : 'warning' lumpé avec autres équipements down (bug).
           sdwanStatus = 'down';
-          sdwanImpact = 'warning';
+          sdwanImpact = 'critical';
         } else {
           sdwanStatus = 'degraded';
           sdwanImpact = 'warning';
@@ -249,17 +263,30 @@ function assetImpact(status: Triplet): HealthComponent['impact'] {
   return 'warning';
 }
 
-function computeOverall(components: HealthComponent[]): HealthStatus {
+export function computeOverall(components: HealthComponent[]): HealthStatus {
   if (components.length === 0) return HealthStatus.UNKNOWN;
   if (components.every((c) => c.status === 'unknown')) return HealthStatus.UNKNOWN;
 
+  // 1. Total connectivity loss : tous les liens monitorés sont down.
   const links = components.filter((c) => c.type === 'link');
   if (links.length > 0 && links.every((l) => l.status === 'down')) return HealthStatus.CRITICAL;
 
-  const hasWarning = components.some((c) => c.impact === 'warning' || c.impact === 'critical');
+  // 2. Post-v1.9.0 fix : tout composant `impact: 'critical'` fait passer
+  // le site en CRITICAL. Couvre :
+  //   - SD-WAN tous firewalls down (perte accès Internet, équipement critique)
+  //   - Lien single down sur site mono-lien (linkImpact totalLinks <= 1)
+  //   - Future : autres équipements critiques (UPS, core switch…) si on
+  //     les marque `impact: 'critical'` côté assetImpact.
+  // Les liens non monitorés (zéro composant link 'down') ne dégradent pas
+  // — c'est absence d'info, pas preuve que tout va bien.
+  if (components.some((c) => c.impact === 'critical')) return HealthStatus.CRITICAL;
+
+  // 3. WARNING : impact='warning' OU n'importe quel composant degraded.
+  const hasWarning = components.some((c) => c.impact === 'warning');
   const hasDegraded = components.some((c) => c.status === 'degraded');
   if (hasWarning || hasDegraded) return HealthStatus.WARNING;
 
+  // 4. HEALTHY si au moins un composant UP et rien en WARNING/CRITICAL.
   if (components.some((c) => c.status === 'up')) return HealthStatus.HEALTHY;
   return HealthStatus.UNKNOWN;
 }
