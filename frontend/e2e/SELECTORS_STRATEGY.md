@@ -37,6 +37,7 @@ Pattern : `nav-{slug}` calculé depuis `item.href`. Les 11 entrées du `navigati
 | NetBox              | `nav-netbox`         |
 | Dashboard TV        | `nav-tv`             |
 | Alertes             | `nav-alerts`         |
+| Notifications       | `nav-notifications`  |
 | Consommation        | `nav-consumption`    |
 | Utilisateurs (admin)| `nav-users`          |
 | Coûts (admin)       | `nav-costs`          |

@@ -21,6 +21,7 @@ import {
   Database,
   Receipt,
   Zap,
+  Inbox,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -68,6 +69,11 @@ const navigation: Array<{
   { name: 'NetBox', href: '/dashboard/netbox', icon: Database, moduleKey: 'integrations_netbox', permResource: 'netbox' },
   { name: 'Dashboard TV', href: '/tv', icon: Monitor, external: true },
   { name: 'Alertes', href: '/dashboard/alerts', icon: AlertTriangle, moduleKey: 'alerts' },
+  // Post-v1.9.0 — accès direct sidebar à la page Notifications complète.
+  // Garde la cloche header pour preview rapide + compteur unread (cf
+  // NotificationInbox component). Pas de moduleKey : notifications
+  // utilisateur disponibles à tout user authentifié.
+  { name: 'Notifications', href: '/dashboard/notifications', icon: Inbox },
   // "Coûts" moved to adminNavigation below — MANAGE local OR super-admin only
   // (decision 2026-04-21: cost data sensitivity doesn't match READ/WRITE scope).
   { name: 'Consommation', href: '/dashboard/consumption', icon: Zap, moduleKey: 'consumption' },

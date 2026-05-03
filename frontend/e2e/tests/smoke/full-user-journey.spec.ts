@@ -138,9 +138,9 @@ test.describe.serial('@smoke Full user journey', () => {
     await page.waitForLoadState('networkidle');
 
     await expect(page).toHaveURL(/\/dashboard\/notifications/);
-    // Notifications n'a pas de testid `nav-notifications` (cloche header,
-    // pas dans nav array). Logout button visible = layout rendu = OK.
-    await expect(page.locator('[data-testid="logout-button"]')).toBeVisible({ timeout: 10000 });
+    // Post-v1.9.0 : Notifications a maintenant son entrée sidebar
+    // (testid nav-notifications). Cf SELECTORS_STRATEGY.md zone α #2.
+    await expect(page.locator('[data-testid="nav-notifications"]')).toBeVisible({ timeout: 10000 });
   });
 
   test('10. API /api/auth/session retourne user authentifié', async ({ page, request }) => {
