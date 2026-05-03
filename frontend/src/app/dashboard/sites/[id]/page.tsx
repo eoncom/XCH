@@ -1545,8 +1545,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                               {comp.detail && <span className="text-xs text-muted-foreground ml-1">({comp.detail})</span>}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {comp.type === 'link' ? (comp.role === 'primary' ? 'Lien pri.' : 'Backup') :
-                               comp.type === 'sdwan' ? (comp.status === 'degraded' ? 'Dégradé' : 'SD-WAN') : 'Équip.'}
+                              {comp.type === 'link' ? (String(comp.role).toUpperCase() === 'PRIMARY' ? 'Lien pri.' : 'Backup') :
+                               comp.type === 'sdwan' ? (comp.status === 'degraded' ? 'Dégradé' : 'SD-WAN') :
+                               comp.type === 'site-monitor' ? 'Surveillance' : 'Équip.'}
                             </span>
                           </div>
                           {comp.impact !== 'none' && (
@@ -1785,8 +1786,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                             {comp.detail && <span className="text-xs text-muted-foreground ml-1">({comp.detail})</span>}
                           </span>
                           <Badge variant="outline" className="text-xs">
-                            {comp.type === 'link' ? (comp.role === 'primary' ? 'Lien primaire' : 'Lien backup') :
-                             comp.type === 'sdwan' ? (comp.status === 'degraded' ? 'SD-WAN Dégradé' : 'SD-WAN') : 'Équipement'}
+                            {comp.type === 'link' ? (String(comp.role).toUpperCase() === 'PRIMARY' ? 'Lien primaire' : 'Lien backup') :
+                             comp.type === 'sdwan' ? (comp.status === 'degraded' ? 'SD-WAN Dégradé' : 'SD-WAN') :
+                             comp.type === 'site-monitor' ? 'Surveillance' : 'Équipement'}
                           </Badge>
                         </div>
                         <div className="flex items-center gap-2">

@@ -49,6 +49,17 @@ const asset = (
   impact,
 });
 
+const siteMonitor = (
+  status: HealthComponent['status'],
+  impact: HealthComponent['impact'],
+): HealthComponent => ({
+  type: 'site-monitor',
+  id: `site-check-${Math.random()}`,
+  name: 'Surveillance site (test)',
+  status,
+  impact,
+});
+
 describe('computeOverall', () => {
   describe('cas dégénérés', () => {
     it('aucun composant → UNKNOWN', () => {
@@ -152,6 +163,38 @@ describe('computeOverall', () => {
       expect(
         computeOverall([link('up', 'none'), asset('unknown', 'none')]),
       ).toBe(HealthStatus.HEALTHY);
+    });
+  });
+
+  describe('site-monitor type (post-v1.9.1 fix UI label)', () => {
+    it('site-monitor up seul → HEALTHY', () => {
+      expect(computeOverall([siteMonitor('up', 'none')])).toBe(HealthStatus.HEALTHY);
+    });
+
+    it('site-monitor down seul → WARNING (impact warning, pas critical)', () => {
+      // Un site-monitor down (ping public DNS, HTTP tiers, TCP service)
+      // ne fait JAMAIS escalader le site en CRITICAL — c'est un signal
+      // contextuel, pas une perte de service du site lui-même. Reste en
+      // WARNING comme un asset down standard.
+      expect(computeOverall([siteMonitor('down', 'warning')])).toBe(HealthStatus.WARNING);
+    });
+
+    it('site-monitor up + lien up + asset up → HEALTHY', () => {
+      expect(
+        computeOverall([
+          link('up', 'none'),
+          siteMonitor('up', 'none'),
+          asset('up', 'none'),
+        ]),
+      ).toBe(HealthStatus.HEALTHY);
+    });
+
+    it('site-monitor down + 0 lien monitoré → WARNING (pas CRITICAL)', () => {
+      // Si aucun lien n'a de monitor (ou tous unknown), le site-monitor
+      // down seul fait juste WARNING. Pas d'escalade CRITICAL car aucun
+      // composant impact='critical' (les site-monitor ne sont jamais
+      // marqués critical par assetImpact).
+      expect(computeOverall([siteMonitor('down', 'warning')])).toBe(HealthStatus.WARNING);
     });
   });
 
