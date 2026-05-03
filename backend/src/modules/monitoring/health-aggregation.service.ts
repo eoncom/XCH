@@ -33,7 +33,7 @@ import { PrismaClient, MonitorStatus, HealthStatus } from '@prisma/client';
  */
 
 export interface HealthComponent {
-  type: 'link' | 'sdwan' | 'asset';
+  type: 'link' | 'sdwan' | 'asset' | 'site-monitor';
   id: string;
   name: string;
   status: 'up' | 'down' | 'degraded' | 'unknown';
@@ -176,12 +176,20 @@ export class HealthAggregationService {
       });
     }
 
-    // 4. Site-level checks (rare — surveillance d'un service global du site).
-    // Surfaced as pseudo-components keyed on the check itself.
+    // 4. Site-level checks (surveillance d'un service global du site,
+    // ex: ping vers DNS public, HTTP vers service tiers, TCP vers
+    // ressource externe). Pas attaché à un asset ni à un lien.
+    //
+    // Post-v1.9.1 : `type: 'site-monitor'` au lieu de `'asset'` pour
+    // distinguer ces checks des équipements (différent label UI :
+    // "Surveillance" vs "Équip."). Aggrégation logique inchangée :
+    // `assetImpact()` continue de mapper status → impact 'warning'
+    // ou 'none' (jamais 'critical' pour un site-monitor seul ;
+    // l'escalade CRITICAL passe par les liens ou les firewalls SD-WAN).
     for (const check of site.monitorChecks) {
       const triplet = monitorStatusToTriplet(check.lastStatus);
       components.push({
-        type: 'asset',
+        type: 'site-monitor',
         id: `site-check-${check.id}`,
         name: `Surveillance site (${check.target})`,
         status: triplet,
