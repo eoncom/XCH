@@ -10,6 +10,7 @@ import { BullModule } from '@nestjs/bull';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './config/database.module';
 import { CryptoModule } from './common/crypto/crypto.module';
+import { ObservabilityModule } from './common/observability/observability.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
@@ -74,6 +75,11 @@ import { MonitorsApiModule } from './modules/monitoring/monitors-api.module';
     // Crypto (ADR-019 secrets at-rest + token hashing) — @Global, doit
     // être importé avant les modules qui l'injectent.
     CryptoModule,
+
+    // Observability (BullMQ structured event logging) — @Global, also
+    // imported by MonitoringModule + NotificationsModule for self-containment
+    // (cf XCH_NESTJS_GLOBAL_MODULE_TRAP).
+    ObservabilityModule,
 
     // Core modules
     AuthModule,
