@@ -1,4 +1,4 @@
-import { Process, Processor, OnQueueFailed } from '@nestjs/bull';
+import { Process, Processor, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
 import {
@@ -19,6 +19,7 @@ import {
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationEventType } from '../notifications/notification-events';
 import { HealthAggregationService } from './health-aggregation.service';
+import { WorkerEventLogger } from '../../common/observability/worker-event-logger.service';
 
 const TRANSIENT_ERROR_CODES = new Set([
   'ENOTFOUND',
@@ -55,6 +56,7 @@ export class MonitorProcessor {
     private readonly health: MonitorWorkerHealthService,
     private readonly notifications: NotificationService,
     private readonly aggregator: HealthAggregationService,
+    private readonly events: WorkerEventLogger,
   ) {}
 
   @Process(JOB_HEARTBEAT)
@@ -100,12 +102,36 @@ export class MonitorProcessor {
     await this.persistResult(check, result);
   }
 
+  @OnQueueCompleted()
+  onCompleted(job: Job) {
+    // Skip heartbeat noise — emitted every 60s, ~1440 events/day per worker.
+    if (job.name === JOB_HEARTBEAT) return;
+    const duration_ms = computeDurationMs(job);
+    this.events.jobCompleted(
+      MONITOR_QUEUE,
+      String(job.id),
+      job.name,
+      duration_ms,
+      job.attemptsMade + 1,
+      { check_id: job.data?.checkId },
+    );
+  }
+
   @OnQueueFailed()
   onFailed(job: Job, err: Error) {
-    // BullMQ retries are normal flow control here — only log the final fail.
-    if (job.attemptsMade >= (job.opts.attempts ?? 1)) {
-      this.logger.warn(`job ${job.id} (${job.name}) exhausted retries: ${err.message}`);
-    }
+    // BullMQ retries are normal flow control. We only emit a final structured
+    // event when retries are exhausted — the retry attempts themselves are
+    // visible in `attempts` field of the eventual completed/failed event.
+    if (job.attemptsMade < (job.opts.attempts ?? 1)) return;
+    const duration_ms = computeDurationMs(job);
+    this.events.jobFailed(
+      MONITOR_QUEUE,
+      String(job.id),
+      job.name,
+      err,
+      job.attemptsMade,
+      { check_id: job.data?.checkId, duration_ms },
+    );
   }
 
   private async dispatchProbe(
@@ -226,4 +252,15 @@ function isTransientError(result: ProbeResult): boolean {
   // Error format is `${code}: ${message}` — match the leading code token.
   const code = result.error.split(':')[0]?.trim();
   return TRANSIENT_ERROR_CODES.has(code);
+}
+
+/**
+ * Wall-clock duration of a Bull job from its `processedOn` (set when the
+ * worker picks it up) to now. Returns 0 if `processedOn` is missing —
+ * Bull always sets it before invoking the handler so 0 only on edge
+ * paths (sync error before pickup).
+ */
+function computeDurationMs(job: Job): number {
+  if (!job.processedOn) return 0;
+  return Math.max(0, Date.now() - job.processedOn);
 }

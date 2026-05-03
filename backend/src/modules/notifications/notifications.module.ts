@@ -2,6 +2,7 @@ import { Module, Global } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bull';
 import { CryptoModule } from '../../common/crypto/crypto.module';
+import { ObservabilityModule } from '../../common/observability/observability.module';
 import { NotificationService } from './notification.service';
 import { NotificationSettingsService } from './notification-settings.service';
 import { NotificationController } from './notification.controller';
@@ -28,6 +29,7 @@ import { UserNotificationController } from './user-notification.controller';
   imports: [
     ConfigModule,
     CryptoModule,
+    ObservabilityModule,
     BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE }),
   ],
   controllers: [NotificationController, UserNotificationController],

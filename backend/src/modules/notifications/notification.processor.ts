@@ -1,4 +1,4 @@
-import { Process, Processor, OnQueueFailed } from '@nestjs/bull';
+import { Process, Processor, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
 import { PrismaClient, NotificationChannelKind } from '@prisma/client';
@@ -7,6 +7,7 @@ import { EmailChannel } from './channels/email.channel';
 import { TeamsChannel } from './channels/teams.channel';
 import { INotificationChannel } from './channels/channel.interface';
 import { NotificationPayload, RuntimeChannelConfig } from './notification-events';
+import { WorkerEventLogger } from '../../common/observability/worker-event-logger.service';
 
 export const NOTIFICATIONS_QUEUE = 'notifications';
 export const JOB_DISPATCH = 'notification-dispatch';
@@ -36,6 +37,7 @@ export class NotificationProcessor {
     private settingsService: NotificationSettingsService,
     private emailChannel: EmailChannel,
     private teamsChannel: TeamsChannel,
+    private events: WorkerEventLogger,
   ) {
     this.channelMap = new Map<NotificationChannelKind, INotificationChannel>([
       [NotificationChannelKind.EMAIL, this.emailChannel],
@@ -124,10 +126,42 @@ export class NotificationProcessor {
     return { sent, failed };
   }
 
+  @OnQueueCompleted()
+  onCompleted(
+    job: Job<NotificationPayload>,
+    result: { sent: number; failed: number } | undefined,
+  ) {
+    const duration_ms = job.processedOn ? Math.max(0, Date.now() - job.processedOn) : 0;
+    this.events.jobCompleted(
+      NOTIFICATIONS_QUEUE,
+      String(job.id),
+      job.name,
+      duration_ms,
+      job.attemptsMade + 1,
+      {
+        tenant_id: job.data?.tenantId,
+        event_type: job.data?.eventType,
+        channels_sent: result?.sent,
+        channels_failed: result?.failed,
+      },
+    );
+  }
+
   @OnQueueFailed()
   onFailed(job: Job<NotificationPayload>, err: Error) {
-    this.logger.error(
-      `Job ${job.id} ${job.name} failed after ${job.attemptsMade} attempt(s) : ${err.message}`,
+    if (job.attemptsMade < (job.opts.attempts ?? 1)) return;
+    const duration_ms = job.processedOn ? Math.max(0, Date.now() - job.processedOn) : 0;
+    this.events.jobFailed(
+      NOTIFICATIONS_QUEUE,
+      String(job.id),
+      job.name,
+      err,
+      job.attemptsMade,
+      {
+        tenant_id: job.data?.tenantId,
+        event_type: job.data?.eventType,
+        duration_ms,
+      },
     );
   }
 

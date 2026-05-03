@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './config/database.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
+import { ObservabilityModule } from './common/observability/observability.module';
 
 /**
  * Worker bootstrap module (ADR-014).
@@ -29,6 +30,7 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module';
     }),
     ScheduleModule.forRoot(),
     DatabaseModule,
+    ObservabilityModule,
     NotificationsModule,
     MonitoringModule,
   ],
