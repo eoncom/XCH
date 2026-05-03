@@ -86,7 +86,7 @@ export default function FloorPlansPage() {
 
   const { data: sites } = useQuery<Site[]>({
     queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
+    queryFn: () => sitesApi.getAll(),
   });
 
   // Deduplicate: show only latest version per plan group

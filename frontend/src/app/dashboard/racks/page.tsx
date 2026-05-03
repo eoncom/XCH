@@ -110,7 +110,7 @@ export default function RacksPage() {
       : <ArrowDown className="ml-1 h-3 w-3" />;
   };
 
-  const handleExport = (format: 'excel' | 'pdf' | 'csv') => {
+  const handleExport = (format: 'excel' | 'pdf' | 'csv' | 'json') => {
     if (!filteredRacks) return;
 
     const exportData = filteredRacks.map((rack) => {

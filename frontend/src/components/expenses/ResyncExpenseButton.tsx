@@ -41,7 +41,7 @@ interface ResyncExpenseButtonProps {
   /** Size of the underlying Button. */
   size?: 'sm' | 'default' | 'lg' | 'icon';
   /** Optional cache keys to invalidate after a successful resync. */
-  invalidateKeys?: string[][];
+  invalidateKeys?: ReadonlyArray<readonly unknown[]>;
   /** Children override for the button label. Defaults to "Synchroniser dépense". */
   children?: React.ReactNode;
 }

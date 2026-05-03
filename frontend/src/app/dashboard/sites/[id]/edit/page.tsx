@@ -442,16 +442,16 @@ function EditSitePage({
     return {
       ...cleanedData,
       // accessNotes split into 4 scalar columns
-      accessSchedules:  accessNotes.schedules  || null,
-      accessBadges:     accessNotes.badges     || null,
-      accessProcedures: accessNotes.procedures || null,
-      accessSafety:     accessNotes.safety     || null,
+      accessSchedules:  accessNotes.schedules  || undefined,
+      accessBadges:     accessNotes.badges     || undefined,
+      accessProcedures: accessNotes.procedures || undefined,
+      accessSafety:     accessNotes.safety     || undefined,
       // serverInfo split into 4 URL columns + notes (existing column)
-      smbPath:         serverInfo.smbPath         || null,
-      sharepointUrl:   serverInfo.sharepointUrl   || null,
-      gedUrl:          serverInfo.gedUrl          || null,
-      accessRightsUrl: serverInfo.accessRightsUrl || null,
-      notes: serverInfo.notes || cleanedData.notes || null,
+      smbPath:         serverInfo.smbPath         || undefined,
+      sharepointUrl:   serverInfo.sharepointUrl   || undefined,
+      gedUrl:          serverInfo.gedUrl          || undefined,
+      accessRightsUrl: serverInfo.accessRightsUrl || undefined,
+      notes: serverInfo.notes || cleanedData.notes || undefined,
     };
   };
 

@@ -18,7 +18,8 @@ import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { Task, Asset, Site } from '@/types';
+import type { Task, Asset, Site, Rack } from '@/types';
+import type { MonitorCheck } from '@/lib/api/monitors';
 import { computeAlerts } from '@/lib/alerts';
 import { getWarrantyStatus, getWarrantyDaysLeft, useWarrantyThresholds, type WarrantyStatus } from '@/lib/warranty';
 
@@ -41,27 +42,27 @@ interface DashboardStats {
 
 export default function DashboardPage() {
   // Fetch real data from APIs
-  const { data: sites = [], isLoading: sitesLoading, isError: sitesIsError, error: sitesError, refetch: sitesRefetch } = useQuery({
+  const { data: sites = [], isLoading: sitesLoading, isError: sitesIsError, error: sitesError, refetch: sitesRefetch } = useQuery<Site[]>({
     queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
+    queryFn: () => sitesApi.getAll(),
   });
 
-  const { data: assets = [], isLoading: assetsLoading, isError: assetsIsError, error: assetsError, refetch: assetsRefetch } = useQuery({
+  const { data: assets = [], isLoading: assetsLoading, isError: assetsIsError, error: assetsError, refetch: assetsRefetch } = useQuery<Asset[]>({
     queryKey: ['assets'],
     queryFn: () => assetsApi.getAll(),
   });
 
-  const { data: racks = [], isLoading: racksLoading, isError: racksIsError, error: racksError, refetch: racksRefetch } = useQuery({
+  const { data: racks = [], isLoading: racksLoading, isError: racksIsError, error: racksError, refetch: racksRefetch } = useQuery<Rack[]>({
     queryKey: ['racks'],
     queryFn: () => racksApi.getAll(),
   });
 
-  const { data: tasks = [], isLoading: tasksLoading, isError: tasksIsError, error: tasksError, refetch: tasksRefetch } = useQuery({
+  const { data: tasks = [], isLoading: tasksLoading, isError: tasksIsError, error: tasksError, refetch: tasksRefetch } = useQuery<Task[]>({
     queryKey: ['tasks'],
     queryFn: () => tasksApi.getAll(),
   });
 
-  const { data: nativeMonitors = [] } = useQuery({
+  const { data: nativeMonitors = [] } = useQuery<MonitorCheck[]>({
     queryKey: ['monitors', 'all'],
     queryFn: () => monitorsApi.getAll(),
     refetchInterval: 30_000,

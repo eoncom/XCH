@@ -176,8 +176,6 @@ export default function SitesPage() {
       postalCode: (site as any).postalCode || '',
       address: site.address || '',
       healthStatus: site.healthStatus,
-      assetsCount: '',
-      tasksCount: '',
       connectivity: summarizeConnectivity(site.connectivity),
     }));
     exportSites(exportData, format);

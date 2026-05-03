@@ -63,10 +63,11 @@ const checklistItemSchema = z.object({
 });
 
 // Use centralized labels from status-labels.ts
+type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'error';
 const taskStatusLabels = centralTaskStatusLabels as Record<TaskStatus, string>;
-const taskStatusColors = centralTaskStatusColors as Record<TaskStatus, string>;
+const taskStatusColors = centralTaskStatusColors as Record<TaskStatus, BadgeVariant>;
 const taskPriorityLabels = centralTaskPriorityLabels as Record<TaskPriority, string>;
-const taskPriorityColors = centralTaskPriorityColors as Record<TaskPriority, string>;
+const taskPriorityColors = centralTaskPriorityColors as Record<TaskPriority, BadgeVariant>;
 
 function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
