@@ -220,4 +220,165 @@ describe('computeOverall', () => {
       ).toBe(HealthStatus.CRITICAL);
     });
   });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Sémantique severity (ADR-022)
+  // ───────────────────────────────────────────────────────────────────────
+
+  describe('sémantique severity ADR-022', () => {
+    it('PRIMARY link DOWN (severity=CRITICAL via flag) + BACKUP UP → CRITICAL', () => {
+      // Cas refonte : avant ADR-022, ce scénario tombait WARNING
+      // (linkImpact totalLinks > 1 → 'warning'). Après : le flag severity
+      // sur le check du PRIMARY le marque CRITICAL → site CRITICAL.
+      expect(
+        computeOverall([link('down', 'critical'), link('up', 'none')]),
+      ).toBe(HealthStatus.CRITICAL);
+    });
+
+    it('BACKUP link DOWN seul (severity=WARNING) + PRIMARY UP → WARNING', () => {
+      // Le BACKUP DOWN dégrade la redondance mais le service nominal couvre.
+      expect(
+        computeOverall([link('up', 'none'), link('down', 'warning')]),
+      ).toBe(HealthStatus.WARNING);
+    });
+
+    it('asset CRITICAL down (admin override) → CRITICAL', () => {
+      // Override admin : un core switch ou UPS marqué CRITICAL via UI.
+      // Same shape qu'un PRIMARY link DOWN.
+      expect(computeOverall([asset('down', 'critical')])).toBe(HealthStatus.CRITICAL);
+    });
+
+    it('check INFO down → HEALTHY si rien d\'autre escalade', () => {
+      // INFO impact = soft signal, ne dégrade pas (forward-compat).
+      // Ici site-monitor avec impact='info' down + 1 link UP → HEALTHY.
+      expect(
+        computeOverall([
+          link('up', 'none'),
+          siteMonitor('down', 'info'),
+        ]),
+      ).toBe(HealthStatus.HEALTHY);
+    });
+
+    it('check INFO down isolé (rien d\'autre monitoré) → UNKNOWN-like fallback', () => {
+      // INFO ne crée pas d'escalade. Un check INFO down isolé est
+      // équivalent à pas de signal positif (unknown-ish). Le fallback
+      // UNKNOWN s'applique car aucun composant up.
+      expect(computeOverall([siteMonitor('down', 'info')])).toBe(HealthStatus.UNKNOWN);
+    });
+
+    it('matrice complète : CRITICAL down + WARNING down + INFO down → CRITICAL', () => {
+      expect(
+        computeOverall([
+          asset('down', 'critical'),
+          asset('down', 'warning'),
+          siteMonitor('down', 'info'),
+        ]),
+      ).toBe(HealthStatus.CRITICAL);
+    });
+
+    it('matrice : WARNING down + INFO down + UP component → WARNING (INFO ignoré)', () => {
+      expect(
+        computeOverall([
+          asset('down', 'warning'),
+          siteMonitor('down', 'info'),
+          link('up', 'none'),
+        ]),
+      ).toBe(HealthStatus.WARNING);
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Couverture partielle (cf XCH_HEALTH_AGGREGATION_SEMANTICS DEF-01)
+  // ───────────────────────────────────────────────────────────────────────
+
+  describe('couverture partielle — non-monitoré ne dégrade pas', () => {
+    it('1 lien UP + 1 lien sans monitor (filtré au load, absent du composants) → HEALTHY', () => {
+      // Au moment du computeOverall, un link sans monitor n'apparaît PAS
+      // dans la liste components (filtré dans recomputeSite step 1).
+      // Reste : 1 link UP → HEALTHY.
+      expect(computeOverall([link('up', 'none')])).toBe(HealthStatus.HEALTHY);
+    });
+
+    it('site-level UP seul (0 lien, 0 asset monitoré) → HEALTHY', () => {
+      // Pas d'exigence cachée de couverture minimale par type de composant.
+      expect(computeOverall([siteMonitor('up', 'none')])).toBe(HealthStatus.HEALTHY);
+    });
+
+    it('rien monitoré du tout → UNKNOWN', () => {
+      expect(computeOverall([])).toBe(HealthStatus.UNKNOWN);
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// HealthAggregationService — tests d'intégration légers (race + queue)
+// ─────────────────────────────────────────────────────────────────────────
+
+import { HealthAggregationService } from './health-aggregation.service';
+
+describe('HealthAggregationService.enqueueRecompute()', () => {
+  const mkQueue = () => ({
+    add: jest.fn().mockResolvedValue({ id: 'job-1' }),
+  });
+  const mkPrisma = () => ({
+    site: { findUnique: jest.fn(), update: jest.fn() },
+    siteHealthSnapshot: { upsert: jest.fn() },
+    $transaction: jest.fn(),
+  });
+
+  it('passes jobId=siteId + delay=300 + removeOnComplete=true to queue.add', async () => {
+    const queue: any = mkQueue();
+    const prisma: any = mkPrisma();
+    const svc = new HealthAggregationService(prisma, queue);
+
+    await svc.enqueueRecompute('site-abc', 'probe:check-xyz');
+
+    expect(queue.add).toHaveBeenCalledTimes(1);
+    const [name, data, opts] = queue.add.mock.calls[0];
+    expect(name).toBe('recompute');
+    expect(data).toEqual({ siteId: 'site-abc', source: 'probe:check-xyz' });
+    expect(opts).toMatchObject({
+      jobId: 'site-abc',
+      delay: 300,
+      removeOnComplete: true,
+    });
+  });
+
+  it('multiple enqueues for same site each call queue.add with same jobId (Bull dedupe at runtime)', async () => {
+    const queue: any = mkQueue();
+    const prisma: any = mkPrisma();
+    const svc = new HealthAggregationService(prisma, queue);
+
+    await svc.enqueueRecompute('site-X', 'probe:1');
+    await svc.enqueueRecompute('site-X', 'probe:2');
+    await svc.enqueueRecompute('site-X', 'probe:3');
+
+    // Service-level : we always call queue.add — Bull is the one that
+    // dedupes via jobId + delay window (verified by integration / smoke).
+    expect(queue.add).toHaveBeenCalledTimes(3);
+    expect(queue.add.mock.calls.every((c: any[]) => c[2].jobId === 'site-X')).toBe(true);
+  });
+
+  it('different sites get different jobIds (no cross-site dedup)', async () => {
+    const queue: any = mkQueue();
+    const prisma: any = mkPrisma();
+    const svc = new HealthAggregationService(prisma, queue);
+
+    await svc.enqueueRecompute('site-A', 'probe:1');
+    await svc.enqueueRecompute('site-B', 'probe:2');
+
+    const jobIds = queue.add.mock.calls.map((c: any[]) => c[2].jobId);
+    expect(jobIds).toEqual(['site-A', 'site-B']);
+  });
+
+  it('swallows queue.add() failure (logs only — does not throw)', async () => {
+    const queue: any = mkQueue();
+    queue.add.mockRejectedValueOnce(new Error('redis flake'));
+    const prisma: any = mkPrisma();
+    const svc = new HealthAggregationService(prisma, queue);
+
+    // Should not throw — caller (probe handler) shouldn't fail because of
+    // an enqueue glitch. The 5-min cron rattrape.
+    await expect(svc.enqueueRecompute('site-Z', 'probe:1')).resolves.toBeUndefined();
+  });
 });

@@ -163,6 +163,7 @@ export function MonitorConfigSection({
             >
               <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
               <StatusBadge status={check.lastStatus} />
+              <SeverityBadge severity={check.severity} />
               <div className="flex-1 min-w-0">
                 <div className="font-mono text-xs truncate">{targetDisplay}</div>
                 <div className="text-xs text-muted-foreground">
@@ -266,6 +267,27 @@ function StatusBadge({ status }: { status: MonitorCheck['lastStatus'] }) {
   if (status === 'UP') return <Badge className="bg-green-600 hover:bg-green-600">UP</Badge>;
   if (status === 'DOWN') return <Badge variant="destructive">DOWN</Badge>;
   return <Badge variant="secondary">—</Badge>;
+}
+
+function SeverityBadge({ severity }: { severity: MonitorCheck['severity'] }) {
+  // ADR-022 — operational severity surfaced as a small contextual badge.
+  // Defaults are silent (WARNING) ; CRITICAL/INFO call attention.
+  if (severity === 'CRITICAL') {
+    return (
+      <Badge variant="outline" className="border-red-500 text-red-700" title="Critique : DOWN escalade le site en CRITICAL">
+        CRIT
+      </Badge>
+    );
+  }
+  if (severity === 'INFO') {
+    return (
+      <Badge variant="outline" className="border-blue-500 text-blue-700" title="Info : DOWN n'impacte pas la santé site">
+        INFO
+      </Badge>
+    );
+  }
+  // WARNING is the default — display silently to avoid badge clutter
+  return null;
 }
 
 // MonitorDialog extracted to ./MonitorDialog.tsx (ADR-016 follow-up) so it

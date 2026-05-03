@@ -8,6 +8,10 @@ import { TcpProbe } from './probes/tcp.probe';
 import { HttpProbe } from './probes/http.probe';
 import { IcmpProbe } from './probes/icmp.probe';
 import { HealthAggregationService } from './health-aggregation.service';
+import {
+  HealthRecomputeProcessor,
+  HEALTH_RECOMPUTE_QUEUE,
+} from './health-recompute.processor';
 import { ObservabilityModule } from '../../common/observability/observability.module';
 
 /**
@@ -23,7 +27,11 @@ import { ObservabilityModule } from '../../common/observability/observability.mo
  * module that imports MonitoringModule (worker / future test isolation).
  */
 @Module({
-  imports: [BullModule.registerQueue({ name: MONITOR_QUEUE }), ObservabilityModule],
+  imports: [
+    BullModule.registerQueue({ name: MONITOR_QUEUE }),
+    BullModule.registerQueue({ name: HEALTH_RECOMPUTE_QUEUE }),
+    ObservabilityModule,
+  ],
   providers: [
     MonitorScheduler,
     MonitorProcessor,
@@ -33,6 +41,7 @@ import { ObservabilityModule } from '../../common/observability/observability.mo
     HttpProbe,
     IcmpProbe,
     HealthAggregationService,
+    HealthRecomputeProcessor,
   ],
   exports: [BullModule, HealthAggregationService],
 })

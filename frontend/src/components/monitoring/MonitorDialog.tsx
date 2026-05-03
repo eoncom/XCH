@@ -26,6 +26,7 @@ import {
   monitorsApi,
   MonitorCheck,
   MonitorKind,
+  SeverityLevel,
   CreateMonitorCheckData,
   UpdateMonitorCheckData,
 } from '@/lib/api/monitors';
@@ -74,6 +75,7 @@ export function MonitorDialog(props: MonitorDialogProps) {
     editing?.targetPort != null ? String(editing.targetPort) : '80',
   );
   const [intervalSec, setIntervalSec] = useState<number>(editing?.intervalSec ?? 300);
+  const [severity, setSeverity] = useState<SeverityLevel>(editing?.severity ?? 'WARNING');
   const [expectedStatus, setExpectedStatus] = useState<string>(
     editing?.httpConfig?.expectedStatus != null
       ? String(editing.httpConfig.expectedStatus)
@@ -125,6 +127,7 @@ export function MonitorDialog(props: MonitorDialogProps) {
         kind,
         target: target.trim(),
         intervalSec,
+        severity,
         targetPort: (port ?? null) as any,
       };
       if (kind === 'HTTP') {
@@ -136,6 +139,7 @@ export function MonitorDialog(props: MonitorDialogProps) {
         kind,
         target: target.trim(),
         intervalSec,
+        severity,
         siteId: props.targetType === 'site' ? props.targetId : undefined,
         assetId: props.targetType === 'asset' ? props.targetId : undefined,
         linkId: props.targetType === 'link' ? props.targetId : undefined,
@@ -229,6 +233,40 @@ export function MonitorDialog(props: MonitorDialogProps) {
                     {p.label}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label>
+              Criticité{' '}
+              <span className="text-xs text-muted-foreground">
+                (impact sur la santé du site quand DOWN)
+              </span>
+            </Label>
+            <Select value={severity} onValueChange={(v) => setSeverity(v as SeverityLevel)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CRITICAL">
+                  <span className="font-medium text-red-600">Critique</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    DOWN = site CRITICAL (lien primaire, équipement majeur)
+                  </span>
+                </SelectItem>
+                <SelectItem value="WARNING">
+                  <span className="font-medium text-orange-600">Avertissement</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    DOWN = site WARNING (défaut — backup, asset générique)
+                  </span>
+                </SelectItem>
+                <SelectItem value="INFO">
+                  <span className="font-medium text-blue-600">Info</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    DOWN n&apos;impacte pas la santé site (signal mou)
+                  </span>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
