@@ -11,7 +11,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { MonitorKind, HttpMethod } from '@prisma/client';
+import { MonitorKind, HttpMethod, SeverityLevel } from '@prisma/client';
 
 export class CreateMonitorHttpConfigDto {
   @ApiPropertyOptional({ enum: HttpMethod, default: HttpMethod.GET })
@@ -89,6 +89,15 @@ export class CreateMonitorCheckDto {
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
+
+  @ApiPropertyOptional({
+    enum: SeverityLevel,
+    default: SeverityLevel.WARNING,
+    description: 'Operational severity (ADR-022) — drives Site.healthStatus aggregation',
+  })
+  @IsOptional()
+  @IsEnum(SeverityLevel)
+  severity?: SeverityLevel;
 
   @ApiPropertyOptional({ type: CreateMonitorHttpConfigDto, description: 'HTTP config — only when kind = HTTP' })
   @IsOptional()

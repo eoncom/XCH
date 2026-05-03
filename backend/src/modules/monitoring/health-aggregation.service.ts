@@ -1,35 +1,40 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaClient, MonitorStatus, HealthStatus } from '@prisma/client';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
+import {
+  PrismaClient,
+  MonitorStatus,
+  HealthStatus,
+  SeverityLevel,
+} from '@prisma/client';
+import {
+  HEALTH_RECOMPUTE_QUEUE,
+  JOB_RECOMPUTE,
+} from './health-recompute.constants';
 
 /**
- * Health Status Aggregation Engine — native edition (ADR-016).
+ * Health Status Aggregation Engine — refonte ADR-022.
  *
- * Computes Site.healthStatus from the structured `MonitorCheck.lastStatus`
- * column (single source of truth, no provider abstraction). Self-contained:
- * give it a siteId and it loads everything, aggregates, persists, and
- * returns the breakdown.
+ * Computes Site.healthStatus from MonitorCheck.lastStatus + MonitorCheck.severity.
+ * Self-contained : give it a siteId and it loads everything, aggregates,
+ * persists, and returns the breakdown.
  *
- * Rules (post-v1.9.0 fix : SD-WAN équipement critique escaladé en CRITICAL) :
- *  1. CRITICAL : ALL connectivity links are DOWN (total connectivity loss)
- *                OR SD-WAN tous firewalls DOWN (perte d'accès Internet
- *                  via SD-WAN — équipement critique du site)
- *                OR n'importe quel composant marqué `impact: 'critical'`
- *                  (single-link total loss déjà couvert ici, etc.)
- *  2. WARNING  : a primary link DOWN (backup OK), SD-WAN degraded,
- *                ou n'importe quel équipement monitoré DOWN avec impact='warning'.
- *  3. HEALTHY  : at least one component UP and nothing in WARNING/CRITICAL
- *  4. UNKNOWN  : no monitor configured anywhere on the site, or all unknown
+ * Sémantique cible (ADR-022, remplaçant les heuristiques v1.9.x) :
+ *   HEALTHY  : tout ce qui est monitoré est UP (peu importe la couverture).
+ *   CRITICAL : ≥ 1 check `severity=CRITICAL` est DOWN
+ *              — PRIMARY link DOWN, asset critique, override admin
+ *              — OU SD-WAN tous firewalls DOWN (cas spécial aggregator)
+ *   WARNING  : ≥ 1 check `severity=WARNING` DOWN (BACKUP, asset, site-level)
+ *   UNKNOWN  : aucun check actif (rien monitoré)
  *
- * IMPORTANT — pré-fix bug : un équipement SD-WAN down faisait passer le
- * site en WARNING au lieu de CRITICAL. La condition `hasWarning` mélangeait
- * `impact='warning'` ET `impact='critical'` → impact 'critical' n'était
- * jamais distingué. Les liens non monitorés ne sont PAS une preuve que tout
- * va bien — c'est absence d'info, ne dégrade pas la sévérité venant des
- * équipements critiques.
+ * Concurrence : `enqueueRecompute(siteId)` push un job sur la queue
+ * `health-recompute` avec `jobId=siteId` + `delay=300ms`. Bull dédupe →
+ * exécution sérialisée par site, coalesce de bursts en une seule recompute.
  *
- * Per-entity aggregation: an asset / link / site can have multiple
- * MonitorCheck rows. Worst-case wins — any DOWN → DOWN, else any UP → UP,
- * else UNKNOWN.
+ * Per-entity aggregation (worst-case wins) : un asset / link / site avec
+ * plusieurs MonitorCheck → si UN check est DOWN, l'entité est down. La
+ * severity reportée est celle du PIRE (CRITICAL > WARNING > INFO) parmi
+ * les checks DOWN.
  */
 
 export interface HealthComponent {
@@ -38,7 +43,14 @@ export interface HealthComponent {
   name: string;
   status: 'up' | 'down' | 'degraded' | 'unknown';
   role?: string;
-  impact: 'critical' | 'warning' | 'none';
+  /**
+   * Operational impact when this component is DOWN/degraded.
+   * - 'critical' : escalates Site.healthStatus to CRITICAL
+   * - 'warning'  : escalates Site.healthStatus to WARNING
+   * - 'info'     : soft signal, no escalation (forward-compat)
+   * - 'none'     : component is UP / unknown / unmonitored — no impact
+   */
+  impact: 'critical' | 'warning' | 'info' | 'none';
   detail?: string;
 }
 
@@ -50,18 +62,60 @@ export interface HealthBreakdown {
 
 type Triplet = 'up' | 'down' | 'unknown';
 
+/** Worst severity wins when aggregating across multiple checks for one entity. */
+const SEVERITY_RANK: Record<SeverityLevel, number> = {
+  CRITICAL: 3,
+  WARNING: 2,
+  INFO: 1,
+};
+
 @Injectable()
 export class HealthAggregationService {
   private readonly logger = new Logger(HealthAggregationService.name);
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    @InjectQueue(HEALTH_RECOMPUTE_QUEUE) private readonly recomputeQueue: Queue,
+  ) {}
 
   /**
-   * Recompute one site's health from current MonitorCheck.lastStatus values,
-   * persist it, and return the breakdown. Called by:
-   *  - MonitorProcessor on every UP↔DOWN transition (real-time, ≤1s latency)
-   *  - HealthSyncScheduler cron 5min (refresh garanti, filet de sécurité)
-   *  - Any explicit force-refresh (admin action)
+   * Async recompute trigger. Pushes a debounced job onto `health-recompute`
+   * queue. Multiple calls for the same siteId within 300 ms collapse to ONE
+   * processed recompute. Concurrent calls for the same siteId NEVER race :
+   * the active job's read-modify-write completes before any subsequent
+   * enqueue fires (Bull jobId dedup).
+   *
+   * Used by : MonitorProcessor (probe transition), HealthSyncScheduler
+   * (cron 5 min). Returns immediately (~ms).
+   */
+  async enqueueRecompute(siteId: string, source: string): Promise<void> {
+    try {
+      await this.recomputeQueue.add(
+        JOB_RECOMPUTE,
+        { siteId, source },
+        {
+          jobId: siteId,
+          delay: 300,
+          removeOnComplete: true,
+          removeOnFail: 50,
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 500 },
+        },
+      );
+    } catch (e: any) {
+      this.logger.warn(`enqueueRecompute(${siteId}) from ${source} failed: ${e.message}`);
+    }
+  }
+
+  /**
+   * Synchronous recompute. Loads site + checks, aggregates, persists,
+   * returns the breakdown. Called by :
+   *   - HealthRecomputeProcessor (worker — async path via enqueueRecompute)
+   *   - Tests (direct sync invocation)
+   *   - Future force-refresh admin actions (if added)
+   *
+   * NOT for direct probe-transition use — go through `enqueueRecompute()`
+   * to benefit from coalescing + per-site serialisation.
    */
   async recomputeSite(siteId: string): Promise<HealthBreakdown> {
     const site = await this.prisma.site.findUnique({
@@ -76,7 +130,7 @@ export class HealthAggregationService {
             provider: true,
             monitorChecks: {
               where: { enabled: true },
-              select: { lastStatus: true },
+              select: { lastStatus: true, severity: true },
             },
           },
         },
@@ -87,7 +141,7 @@ export class HealthAggregationService {
             type: true,
             monitorChecks: {
               where: { enabled: true },
-              select: { lastStatus: true },
+              select: { lastStatus: true, severity: true },
             },
           },
         },
@@ -100,7 +154,7 @@ export class HealthAggregationService {
         },
         monitorChecks: {
           where: { enabled: true },
-          select: { id: true, target: true, lastStatus: true },
+          select: { id: true, target: true, lastStatus: true, severity: true },
         },
       },
     });
@@ -111,9 +165,10 @@ export class HealthAggregationService {
 
     const components: HealthComponent[] = [];
 
-    // 1. Connectivity links — aggregate across multiple checks per link.
+    // 1. Connectivity links — aggregate status + severity across multiple checks per link.
     const linkComponents = site.connectivityLinks.map((link) => {
-      const status = aggregateChecks(link.monitorChecks);
+      const status = aggregateStatus(link.monitorChecks);
+      const severity = worstSeverityWhenDown(link.monitorChecks, status);
       const name = `${link.type || 'Lien'} ${link.provider || ''}`.trim();
       return {
         type: 'link' as const,
@@ -121,17 +176,25 @@ export class HealthAggregationService {
         name,
         status,
         role: link.role,
-        impact: linkImpact(link.role, status, site.connectivityLinks.length),
+        impact: severityToImpact(status, severity),
       };
     });
     components.push(...linkComponents);
 
-    // 2. SD-WAN — derive from attached firewalls' MonitorChecks.
+    // 2. SD-WAN — derive from attached firewalls' MonitorChecks. Special
+    // aggregator rule (per ADR-022 §"Cas spécial SD-WAN") :
+    //   - all firewalls DOWN → CRITICAL (perte accès Internet via SD-WAN)
+    //   - some DOWN → WARNING (degraded redundancy)
+    //   - all UP → no impact
+    // Individual firewall MonitorCheck.severity is NOT consulted for the
+    // SD-WAN aggregate impact (would conflate per-check intent with the
+    // network-level invariant). Admin override on a single firewall check
+    // can still escalate via its own component listing if attached.
     if (site.sdwanConfig?.enabled && site.sdwanConfig.firewalls.length > 0) {
       const firewallStatuses = site.sdwanConfig.firewalls
         .map((fw) => site.assets.find((a) => a.id === fw.assetId))
         .filter((a): a is NonNullable<typeof a> => !!a)
-        .map((a) => aggregateChecks(a.monitorChecks))
+        .map((a) => aggregateStatus(a.monitorChecks))
         .filter((s) => s !== 'unknown'); // Only monitored firewalls contribute.
 
       if (firewallStatuses.length > 0) {
@@ -141,9 +204,6 @@ export class HealthAggregationService {
         let sdwanImpact: HealthComponent['impact'] = 'none';
         if (upCount === total) sdwanStatus = 'up';
         else if (upCount === 0) {
-          // Post-v1.9.0 fix : tous firewalls SD-WAN down = perte d'accès
-          // Internet via SD-WAN = équipement critique du site → CRITICAL.
-          // Avant : 'warning' lumpé avec autres équipements down (bug).
           sdwanStatus = 'down';
           sdwanImpact = 'critical';
         } else {
@@ -166,34 +226,29 @@ export class HealthAggregationService {
     for (const asset of site.assets) {
       if (sdwanFirewallIds.has(asset.id)) continue;
       if (asset.monitorChecks.length === 0) continue; // Not monitored → not counted.
-      const status = aggregateChecks(asset.monitorChecks);
+      const status = aggregateStatus(asset.monitorChecks);
+      const severity = worstSeverityWhenDown(asset.monitorChecks, status);
       components.push({
         type: 'asset',
         id: asset.id,
         name: asset.name || asset.type,
         status,
-        impact: assetImpact(status),
+        impact: severityToImpact(status, severity),
       });
     }
 
     // 4. Site-level checks (surveillance d'un service global du site,
-    // ex: ping vers DNS public, HTTP vers service tiers, TCP vers
-    // ressource externe). Pas attaché à un asset ni à un lien.
-    //
-    // Post-v1.9.1 : `type: 'site-monitor'` au lieu de `'asset'` pour
-    // distinguer ces checks des équipements (différent label UI :
-    // "Surveillance" vs "Équip."). Aggrégation logique inchangée :
-    // `assetImpact()` continue de mapper status → impact 'warning'
-    // ou 'none' (jamais 'critical' pour un site-monitor seul ;
-    // l'escalade CRITICAL passe par les liens ou les firewalls SD-WAN).
+    // ex: ping vers DNS public, HTTP vers service tiers). Pas attaché à
+    // un asset ni à un lien.
     for (const check of site.monitorChecks) {
       const triplet = monitorStatusToTriplet(check.lastStatus);
+      const severity = triplet === 'down' ? check.severity : null;
       components.push({
         type: 'site-monitor',
         id: `site-check-${check.id}`,
         name: `Surveillance site (${check.target})`,
         status: triplet,
-        impact: assetImpact(triplet),
+        impact: severityToImpact(triplet, severity),
       });
     }
 
@@ -205,8 +260,7 @@ export class HealthAggregationService {
     };
 
     // Persist Site.healthStatus + lastHealthCheck (denormalised aggregates)
-    // and upsert the full SiteHealthSnapshot (ADR-018 — typed table replaces
-    // the former Site.metadata.healthBreakdown JSON).
+    // and upsert the full SiteHealthSnapshot (ADR-018).
     const computedAt = new Date();
     await this.prisma.$transaction([
       this.prisma.site.update({
@@ -247,10 +301,10 @@ function monitorStatusToTriplet(s: MonitorStatus): Triplet {
 }
 
 /**
- * Worst-case aggregation across N checks for a single entity.
+ * Worst-case status aggregation across N checks for a single entity.
  * Any DOWN → DOWN. Else any UP → UP. Else UNKNOWN.
  */
-function aggregateChecks(checks: Array<{ lastStatus: MonitorStatus }>): Triplet {
+function aggregateStatus(checks: Array<{ lastStatus: MonitorStatus }>): Triplet {
   if (checks.length === 0) return 'unknown';
   const triplets = checks.map((c) => monitorStatusToTriplet(c.lastStatus));
   if (triplets.includes('down')) return 'down';
@@ -258,17 +312,35 @@ function aggregateChecks(checks: Array<{ lastStatus: MonitorStatus }>): Triplet 
   return 'unknown';
 }
 
-function linkImpact(role: string, status: Triplet, totalLinks: number): HealthComponent['impact'] {
-  if (status === 'up' || status === 'unknown') return 'none';
-  // status === 'down'
-  if (totalLinks <= 1) return 'critical';
-  // Multiple links: degraded redundancy → warning. Total loss handled in computeOverall.
-  return 'warning';
+/**
+ * Highest severity among DOWN checks. Returns null if status is up/unknown
+ * (impact is 'none', severity irrelevant). When status is down/degraded,
+ * picks the worst severity among the checks that are actually DOWN.
+ */
+function worstSeverityWhenDown(
+  checks: Array<{ lastStatus: MonitorStatus; severity: SeverityLevel }>,
+  status: Triplet,
+): SeverityLevel | null {
+  if (status !== 'down') return null;
+  const downChecks = checks.filter((c) => c.lastStatus === 'DOWN');
+  if (downChecks.length === 0) return null;
+  let worst: SeverityLevel = downChecks[0].severity;
+  for (const c of downChecks) {
+    if (SEVERITY_RANK[c.severity] > SEVERITY_RANK[worst]) {
+      worst = c.severity;
+    }
+  }
+  return worst;
 }
 
-function assetImpact(status: Triplet): HealthComponent['impact'] {
-  if (status === 'up' || status === 'unknown') return 'none';
-  return 'warning';
+function severityToImpact(
+  status: Triplet,
+  severity: SeverityLevel | null,
+): HealthComponent['impact'] {
+  if (status !== 'down' || !severity) return 'none';
+  if (severity === 'CRITICAL') return 'critical';
+  if (severity === 'WARNING') return 'warning';
+  return 'info';
 }
 
 export function computeOverall(components: HealthComponent[]): HealthStatus {
@@ -276,17 +348,17 @@ export function computeOverall(components: HealthComponent[]): HealthStatus {
   if (components.every((c) => c.status === 'unknown')) return HealthStatus.UNKNOWN;
 
   // 1. Total connectivity loss : tous les liens monitorés sont down.
+  // Cas d'agrégat — escalade CRITICAL même si chaque lien individuel
+  // n'est que WARNING (BACKUP). « Plus aucun lien UP » = service site
+  // perdu globalement.
   const links = components.filter((c) => c.type === 'link');
   if (links.length > 0 && links.every((l) => l.status === 'down')) return HealthStatus.CRITICAL;
 
-  // 2. Post-v1.9.0 fix : tout composant `impact: 'critical'` fait passer
-  // le site en CRITICAL. Couvre :
-  //   - SD-WAN tous firewalls down (perte accès Internet, équipement critique)
-  //   - Lien single down sur site mono-lien (linkImpact totalLinks <= 1)
-  //   - Future : autres équipements critiques (UPS, core switch…) si on
-  //     les marque `impact: 'critical'` côté assetImpact.
-  // Les liens non monitorés (zéro composant link 'down') ne dégradent pas
-  // — c'est absence d'info, pas preuve que tout va bien.
+  // 2. ≥ 1 composant impact='critical' (ADR-022 sémantique severity).
+  // Couvre :
+  //   - PRIMARY link DOWN (severity=CRITICAL via backfill / config)
+  //   - SD-WAN tous firewalls DOWN (cas spécial aggregator)
+  //   - Asset / site-level explicitement marqué CRITICAL via override admin
   if (components.some((c) => c.impact === 'critical')) return HealthStatus.CRITICAL;
 
   // 3. WARNING : impact='warning' OU n'importe quel composant degraded.
@@ -294,7 +366,8 @@ export function computeOverall(components: HealthComponent[]): HealthStatus {
   const hasDegraded = components.some((c) => c.status === 'degraded');
   if (hasWarning || hasDegraded) return HealthStatus.WARNING;
 
-  // 4. HEALTHY si au moins un composant UP et rien en WARNING/CRITICAL.
+  // 4. HEALTHY si au moins un composant UP. Les `info` impacts ne dégradent
+  //    pas (forward-compat — soft signals).
   if (components.some((c) => c.status === 'up')) return HealthStatus.HEALTHY;
   return HealthStatus.UNKNOWN;
 }

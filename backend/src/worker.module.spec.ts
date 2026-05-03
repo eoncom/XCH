@@ -7,6 +7,8 @@ import { NotificationSettingsService } from './modules/notifications/notificatio
 import { CryptoService } from './common/crypto/crypto.service';
 import { NOTIFICATIONS_QUEUE } from './modules/notifications/notification.processor';
 import { MONITOR_QUEUE } from './modules/monitoring/monitor.scheduler';
+import { HEALTH_RECOMPUTE_QUEUE } from './modules/monitoring/health-recompute.processor';
+import { HealthAggregationService } from './modules/monitoring/health-aggregation.service';
 
 /**
  * Worker DI graph smoke test.
@@ -45,6 +47,8 @@ describe('WorkerModule DI graph', () => {
       .overrideProvider(getQueueToken(NOTIFICATIONS_QUEUE))
       .useValue({ add: jest.fn(), close: jest.fn() })
       .overrideProvider(getQueueToken(MONITOR_QUEUE))
+      .useValue({ add: jest.fn(), close: jest.fn(), getJobs: jest.fn().mockResolvedValue([]) })
+      .overrideProvider(getQueueToken(HEALTH_RECOMPUTE_QUEUE))
       .useValue({ add: jest.fn(), close: jest.fn() })
       .compile();
   });
@@ -70,5 +74,12 @@ describe('WorkerModule DI graph', () => {
   it('exposes CryptoService through @Global() activation in worker scope', () => {
     const crypto = testingModule.get(CryptoService);
     expect(crypto).toBeInstanceOf(CryptoService);
+  });
+
+  it('resolves HealthAggregationService with the new health-recompute queue', () => {
+    // ADR-022 — new BullMQ queue `health-recompute` for per-site debounced
+    // recomputes. Validate that DI wires it through MonitoringModule.
+    const svc = testingModule.get(HealthAggregationService);
+    expect(svc).toBeInstanceOf(HealthAggregationService);
   });
 });

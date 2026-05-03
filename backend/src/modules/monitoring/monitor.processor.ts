@@ -228,12 +228,13 @@ export class MonitorProcessor {
       })
       .catch((e) => this.logger.warn(`notification enqueue failed: ${e.message}`));
 
-    // ADR-016 — recompute Site.healthStatus in real-time on every transition.
-    // The 5-min cron HealthSyncScheduler still runs as a safety net.
+    // ADR-016 + ADR-022 — recompute Site.healthStatus on every transition,
+    // serialised via per-site BullMQ debounced queue (300ms coalesce). The
+    // 5-min cron HealthSyncScheduler still runs as a safety net.
     if (effectiveSiteId) {
-      this.aggregator
-        .recomputeSite(effectiveSiteId)
-        .catch((e) => this.logger.warn(`recomputeSite(${effectiveSiteId}) failed: ${e.message}`));
+      this.aggregator.enqueueRecompute(effectiveSiteId, `probe:${check.id}`).catch((e) =>
+        this.logger.warn(`enqueueRecompute(${effectiveSiteId}) failed: ${e.message}`),
+      );
     }
   }
 }

@@ -3,6 +3,13 @@ import { apiClient } from '../api-client';
 export type MonitorKind = 'ICMP' | 'HTTP' | 'TCP';
 export type MonitorStatus = 'UP' | 'DOWN' | 'UNKNOWN';
 export type HttpMethod = 'GET' | 'HEAD' | 'POST';
+/**
+ * Operational severity flag (ADR-022) — drives Site.healthStatus aggregation.
+ *  - CRITICAL : DOWN escalades site to CRITICAL (PRIMARY link, mission-critical asset)
+ *  - WARNING  : DOWN escalades site to WARNING only (BACKUP, generic asset, site-level)
+ *  - INFO     : DOWN does not impact site health (forward-compat — soft signals)
+ */
+export type SeverityLevel = 'CRITICAL' | 'WARNING' | 'INFO';
 
 export interface MonitorHttpConfig {
   id: string;
@@ -25,6 +32,7 @@ export interface MonitorCheck {
   targetPort: number | null;
   intervalSec: number;
   enabled: boolean;
+  severity: SeverityLevel;
   lastCheckedAt: string | null;
   nextCheckAt: string | null;
   lastStatus: MonitorStatus;
@@ -87,6 +95,7 @@ export interface CreateMonitorCheckData {
   targetPort?: number;
   intervalSec?: number;
   enabled?: boolean;
+  severity?: SeverityLevel;
   httpConfig?: CreateMonitorHttpConfigData;
 }
 

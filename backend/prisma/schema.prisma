@@ -1766,6 +1766,12 @@ enum MonitorStatus {
   UNKNOWN
 }
 
+enum SeverityLevel {
+  CRITICAL
+  WARNING
+  INFO
+}
+
 enum HttpMethod {
   GET
   HEAD
@@ -1795,6 +1801,13 @@ model MonitorCheck {
   lastCheckedAt DateTime?
   nextCheckAt   DateTime?
   lastStatus    MonitorStatus @default(UNKNOWN)
+
+  // Operational severity (ADR-022) — drives Site.healthStatus aggregation.
+  // CRITICAL : DOWN escalades site to CRITICAL (PRIMARY link, mission-critical asset)
+  // WARNING  : DOWN escalades site to WARNING only (BACKUP link, generic asset, site-level)
+  // INFO     : DOWN does not impact site health (forward-compat — soft signals)
+  // Default WARNING is the safe baseline ; per-check override via UI.
+  severity SeverityLevel @default(WARNING)
 
   // HTTP-specific config (1:0-1, zero JSON). Null for ICMP / TCP.
   httpConfig MonitorHttpConfig?

@@ -7,6 +7,7 @@ import { HealthAggregationService } from './health-aggregation.service';
 import { HealthSyncScheduler } from './health-sync.scheduler';
 import { MonitorReactionsService } from './monitor-reactions.service';
 import { MONITOR_QUEUE } from './monitor.scheduler';
+import { HEALTH_RECOMPUTE_QUEUE } from './health-recompute.processor';
 
 /**
  * API-side monitoring module (ADR-014). Loaded by AppModule.
@@ -16,11 +17,15 @@ import { MONITOR_QUEUE } from './monitor.scheduler';
  * BullMQ processor or the scheduler — those live in MonitoringModule and
  * run in the worker process only.
  *
- * Both modules call BullModule.registerQueue('monitor-check') — they share
- * the same Redis queue (one as producer, the other as consumer).
+ * Both API + worker call BullModule.registerQueue() on the shared queues
+ * (`monitor-check` for probes, `health-recompute` for site aggregation
+ * coalescing — ADR-022). API is producer, worker is consumer.
  */
 @Module({
-  imports: [BullModule.registerQueue({ name: MONITOR_QUEUE })],
+  imports: [
+    BullModule.registerQueue({ name: MONITOR_QUEUE }),
+    BullModule.registerQueue({ name: HEALTH_RECOMPUTE_QUEUE }),
+  ],
   controllers: [MonitorsController],
   providers: [
     MonitorsService,

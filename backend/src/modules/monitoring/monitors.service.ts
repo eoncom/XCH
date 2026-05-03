@@ -115,6 +115,7 @@ export class MonitorsService {
           targetPort: dto.targetPort ?? null,
           intervalSec: dto.intervalSec ?? 300,
           enabled: dto.enabled ?? true,
+          severity: dto.severity, // undefined → Prisma default (WARNING)
           createdById: userId,
           // First probe runs at next scheduler tick (≤ 30s).
           nextCheckAt: new Date(),
@@ -274,6 +275,7 @@ export class MonitorsService {
           targetPort: dto.targetPort,
           intervalSec: dto.intervalSec,
           enabled: dto.enabled,
+          severity: dto.severity, // undefined → unchanged (Prisma semantics)
         },
       });
 
