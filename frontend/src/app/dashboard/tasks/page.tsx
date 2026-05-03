@@ -238,7 +238,7 @@ export default function TasksPage() {
 
   const { data: sites } = useQuery<Site[]>({
     queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
+    queryFn: () => sitesApi.getAll(),
   });
 
   const { data: usersList = [] } = useQuery({

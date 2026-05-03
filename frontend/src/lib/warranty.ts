@@ -14,7 +14,8 @@ export const DEFAULT_THRESHOLDS: WarrantyThresholds = { warning: 90, critical: 3
 
 // ── Core utility ─────────────────────────────────────────────
 
-export function getWarrantyDaysLeft(warrantyEnd: string): number {
+export function getWarrantyDaysLeft(warrantyEnd?: string | null): number {
+  if (!warrantyEnd) return 0;
   return Math.ceil((new Date(warrantyEnd).getTime() - Date.now()) / 86_400_000);
 }
 

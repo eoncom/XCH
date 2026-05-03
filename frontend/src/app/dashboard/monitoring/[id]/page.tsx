@@ -456,7 +456,7 @@ export default function MonitorDetailPage({ params }: { params: Promise<{ id: st
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer cette surveillance ?</AlertDialogTitle>
             <AlertDialogDescription>
-              L&apos;historique des {history?.total ?? 0} vérification(s) sera également supprimé.
+              L&apos;historique des vérifications sera également supprimé.
               Cette action est irréversible.
             </AlertDialogDescription>
           </AlertDialogHeader>

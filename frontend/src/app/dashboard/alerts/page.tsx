@@ -15,6 +15,7 @@ import {
 import Link from 'next/link';
 import { useState, useMemo } from 'react';
 import type { Task, Asset, Site } from '@/types';
+import type { MonitorCheck } from '@/lib/api/monitors';
 import { useWarrantyThresholds } from '@/lib/warranty';
 import { computeAlerts, type AlertCategory, type AlertItem } from '@/lib/alerts';
 
@@ -35,10 +36,10 @@ const categories: { key: AlertCategory; label: string; icon: any }[] = [
 export default function AlertsPage() {
   const [filter, setFilter] = useState<AlertCategory>('all');
 
-  const { data: sites = [] } = useQuery({ queryKey: ['sites'], queryFn: sitesApi.getAll });
-  const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: () => assetsApi.getAll() });
-  const { data: tasks = [] } = useQuery({ queryKey: ['tasks'], queryFn: () => tasksApi.getAll() });
-  const { data: monitors = [] } = useQuery({
+  const { data: sites = [] } = useQuery<Site[]>({ queryKey: ['sites'], queryFn: () => sitesApi.getAll() });
+  const { data: assets = [] } = useQuery<Asset[]>({ queryKey: ['assets'], queryFn: () => assetsApi.getAll() });
+  const { data: tasks = [] } = useQuery<Task[]>({ queryKey: ['tasks'], queryFn: () => tasksApi.getAll() });
+  const { data: monitors = [] } = useQuery<MonitorCheck[]>({
     queryKey: ['monitors', 'all'],
     queryFn: () => monitorsApi.getAll(),
     refetchInterval: 30_000,

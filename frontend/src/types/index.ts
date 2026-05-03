@@ -184,6 +184,7 @@ export interface Site {
   connectivity?: SiteConnectivity;
   emplacements?: Array<{ id: string; type: 'SMB' | 'SHAREPOINT'; url: string; description?: string | null; order: number }>;
   healthSnapshot?: { siteId: string; overall: HealthStatus; componentsJson: any[]; computedAt: string } | null;
+  lastHealthCheck?: string | null;
   monitoringEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -702,6 +703,7 @@ export interface CreateAssetDto {
   weight?: number;
   powerConsumption?: number;
   notes?: string;
+  rackNotes?: string | null;
   connectivity?: any;
   metadata?: any;
   // Pricing (v1.3)

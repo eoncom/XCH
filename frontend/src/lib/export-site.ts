@@ -1070,6 +1070,7 @@ function generateSiteReportPdf(
     sharepointUrl:   (site as any).sharepointUrl   as string | undefined,
     gedUrl:          (site as any).gedUrl          as string | undefined,
     accessRightsUrl: (site as any).accessRightsUrl as string | undefined,
+    notes:           (site as any).notes           as string | undefined,
   };
   if (pdfSi.smbPath || pdfSi.sharepointUrl || pdfSi.gedUrl || pdfSi.accessRightsUrl) {
     if (y > pageH - 50) { doc.addPage(); y = 20; }

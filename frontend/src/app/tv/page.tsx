@@ -100,7 +100,7 @@ export default function TVDashboardPage() {
   // Fetch sites with configurable auto-refresh
   const { data: sites = [], isLoading, dataUpdatedAt } = useQuery<Site[]>({
     queryKey: ['sites'],
-    queryFn: sitesApi.getAll,
+    queryFn: () => sitesApi.getAll(),
     refetchInterval: refreshInterval * 1000,
   });
 

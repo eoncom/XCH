@@ -1412,9 +1412,9 @@ function ElectricityConfigTab() {
         costPerKwh: parseFloat(costPerKwh) || 0,
         currency,
       });
-      showToast.success('Configuration électricité mise à jour');
+      toast.success('Configuration électricité mise à jour');
     } catch {
-      showToast.error("Échec de l'enregistrement");
+      toast.error("Échec de l'enregistrement");
     } finally {
       setSaving(false);
     }

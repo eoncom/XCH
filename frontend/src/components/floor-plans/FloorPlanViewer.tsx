@@ -834,7 +834,7 @@ export default function FloorPlanViewer({
       }
 
       // --- Step 2: Build PDF ---
-      const planName = currentFloorPlan.name || currentFloorPlan.title || 'Plan';
+      const planName = currentFloorPlan.title || 'Plan';
       const isLandscape = currentImage.width > currentImage.height;
       const pdf = new jsPDF({
         orientation: isLandscape ? 'landscape' : 'portrait',
