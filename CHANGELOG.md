@@ -7,6 +7,27 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.10.0] - 2026-05-04
+
+### Added
+- Sélecteur de criticité (filtre CRIT/WARNING/INFO/HEALTHY).
+- Badge de criticité par site.
+
+### Changed
+- Agrégation basée sur le flag `severity` (voir ADR-022).
+- Backfill `severity` sur l'historique.
+
+### Internal
+- BullMQ queue par site (debounce 300ms, dédup).
+- Baseline typecheck frontend : 60/16 → 0/0.
+- Backend Jest 193/193.
+
+### PRs
+- #34 — Aggregation refonte
+- #35 — Typecheck cleanup
+
+---
+
 ## [1.9.0] - 2026-05-03 — Refonte E2E Playwright + mini-dette traversale + validation E2E réelle (Sessions 7 + 7.5 du plan v2 finalization)
 
 **Tag posé après validation S7.5 réelle.** Le smoke `@full-user-journey` 10/10 RÉELLEMENT vert sur conditions CI (docker-compose single-origin nginx, run [25263200317](https://github.com/eoncom/XCH/actions/runs/25263200317), 21s tests).
