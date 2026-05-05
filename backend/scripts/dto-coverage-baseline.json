@@ -22,7 +22,6 @@
     "backend/src/modules/seed/seed.controller.ts",
     "backend/src/modules/setup/setup.controller.ts",
     "backend/src/modules/tasks/tasks.controller.ts",
-    "backend/src/modules/user-delegations/user-delegations.controller.ts",
-    "backend/src/modules/users/users.controller.ts"
+    "backend/src/modules/user-delegations/user-delegations.controller.ts"
   ]
 }
