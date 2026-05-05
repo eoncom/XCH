@@ -405,6 +405,10 @@ export class MonitorsService {
   async summary(tenantId: string, id: string) {
     await this.assertCheckTenantOwnership(tenantId, id);
 
+    // S9 ADR-023 — return raw bigint rows from $queryRaw. The mapping to
+    // Number + uptime % is done by `toMonitorSummaryResponseDto` (Cas B
+    // helper, cf `dto/monitor-summary.response.dto.ts`) so the response
+    // shape is statically typed and Swagger-documented.
     const rows = await this.prisma.$queryRaw<
       Array<{ window: string; total: bigint; up: bigint }>
     >(Prisma.sql`
@@ -428,17 +432,7 @@ export class MonitorsService {
          AND "checkedAt" > now() - interval '30 days'
     `);
 
-    const out: Record<string, { total: number; up: number; uptime: number | null }> = {};
-    for (const r of rows) {
-      const total = Number(r.total);
-      const up = Number(r.up);
-      out[r.window] = {
-        total,
-        up,
-        uptime: total === 0 ? null : Math.round((up / total) * 10000) / 100,
-      };
-    }
-    return out;
+    return rows;
   }
 
   // ─────────────────────────────────────────────────────────────────────────

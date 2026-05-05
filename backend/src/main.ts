@@ -1,5 +1,5 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { ClassSerializerInterceptor, ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -108,6 +108,12 @@ async function bootstrapApi() {
       },
     }),
   );
+
+  // ADR-023 — global response serialization through @Expose()/@Exclude() on
+  // every *ResponseDto. Combined with `excludeExtraneousValues: true` (in
+  // `common/utils/to-response.util.ts`), this guarantees no Prisma raw column
+  // leaks into the API response unless the DTO explicitly opted-in.
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   // Swagger documentation
   if (configService.get('NODE_ENV') !== 'production') {

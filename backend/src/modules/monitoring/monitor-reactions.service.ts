@@ -46,7 +46,7 @@ export class MonitorReactionsService {
     action: string;
     entityType: string;
     entityId: string;
-    changes?: Record<string, any>;
+    changes?: Prisma.InputJsonObject;
   }) {
     await this.prisma.auditLog.create({
       data: {
@@ -185,7 +185,7 @@ export class MonitorReactionsService {
         id: d.id,
         target: d.target,
         targetPort: d.targetPort,
-        kind: d.kind as string,
+        kind: d.kind,
       })),
       acknowledged,
     };
