@@ -18,7 +18,6 @@
     "backend/src/modules/integrations/mapping/integration-mapping.controller.ts",
     "backend/src/modules/integrations/netbox/netbox.controller.ts",
     "backend/src/modules/organization/organization.controller.ts",
-    "backend/src/modules/racks/racks.controller.ts",
     "backend/src/modules/sdwan/sdwan.controller.ts",
     "backend/src/modules/search/search.controller.ts",
     "backend/src/modules/seed/seed.controller.ts",
