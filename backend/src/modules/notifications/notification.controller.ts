@@ -11,7 +11,12 @@ import {
   UseGuards,
   ForbiddenException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiOkResponse,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { NotificationSettingsService } from './notification-settings.service';
 import { NotificationService } from './notification.service';
@@ -23,6 +28,24 @@ import {
 import { NOTIFICATION_EVENTS_META } from './notification-events';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { RequireRead, RequireManage } from '../../common/decorators/require-right.decorator';
+import { AuthRequest } from '../../types/request.interface';
+import { toResponse } from '../../common/utils/to-response.util';
+import { NotificationSettingsResponseDto, NotificationAllSettingsResponseDto } from './dto/notification-settings.response.dto';
+import { NotificationResolvedSettingsResponseDto } from './dto/notification-resolved-settings.response.dto';
+import {
+  NotificationMetaResponseDto,
+  toNotificationMetaResponseDto,
+} from './dto/notification-meta.response.dto';
+import { NotificationLogPageResponseDto } from './dto/notification-log.response.dto';
+import {
+  NotificationDeleteSettingsResponseDto,
+  NotificationTestResultResponseDto,
+} from './dto/notification-action.response.dto';
+
+interface AuthUserLike {
+  tenantId: string;
+  isSuperAdmin?: boolean;
+}
 
 /**
  * Notification settings controller (ADR-020).
@@ -48,25 +71,28 @@ export class NotificationController {
   @SkipDelegation()
   @RequireRead()
   @ApiOperation({ summary: 'Get notification event types and channels metadata' })
-  getMeta() {
-    return {
+  @ApiOkResponse({ type: NotificationMetaResponseDto })
+  getMeta(): NotificationMetaResponseDto {
+    return toNotificationMetaResponseDto({
       events: NOTIFICATION_EVENTS_META,
       channels: this.notificationService.getAvailableChannels(),
-    };
+    });
   }
 
   /** Resolved (post-inheritance) view — used by the UI debug pane. */
   @Get('config/resolved')
   @RequireManage()
   @ApiOperation({ summary: 'Get resolved settings with inheritance for a delegation' })
+  @ApiOkResponse({ type: NotificationResolvedSettingsResponseDto })
   async getResolvedSettings(
     @Query('delegationId') delegationId: string | undefined,
-    @Request() req: any,
-  ) {
+    @Request() req: AuthRequest,
+  ): Promise<NotificationResolvedSettingsResponseDto> {
     const tenantId = req.user.tenantId;
     const delId = delegationId ?? null;
     this.enforceDelegationConsistency(req, delId);
-    return this.settingsService.resolveSettings(tenantId, delId);
+    const resolved = await this.settingsService.resolveSettings(tenantId, delId);
+    return toResponse(NotificationResolvedSettingsResponseDto, resolved);
   }
 
   /**
@@ -76,30 +102,34 @@ export class NotificationController {
   @Get('config/:delegationId')
   @RequireManage()
   @ApiOperation({ summary: 'Get settings for a delegation (use "global" for tenant-wide)' })
+  @ApiOkResponse({ type: NotificationSettingsResponseDto })
   async getSettingsByParam(
     @Param('delegationId') delegationIdParam: string,
-    @Request() req: any,
-  ) {
+    @Request() req: AuthRequest,
+  ): Promise<NotificationSettingsResponseDto> {
     const tenantId = req.user.tenantId;
     const delId = delegationIdParam === 'global' ? null : delegationIdParam;
     this.requireSuperAdminForGlobal(req.user, delId);
     this.enforceDelegationConsistency(req, delId);
-    return this.settingsService.getSettings(tenantId, delId);
+    const settings = await this.settingsService.getSettings(tenantId, delId);
+    return toResponse(NotificationSettingsResponseDto, settings);
   }
 
   /** Query-based variant kept for backward compat. */
   @Get('config')
   @RequireManage()
   @ApiOperation({ summary: 'Get settings via ?delegationId=…' })
+  @ApiOkResponse({ type: NotificationSettingsResponseDto })
   async getSettings(
     @Query('delegationId') delegationId: string | undefined,
-    @Request() req: any,
-  ) {
+    @Request() req: AuthRequest,
+  ): Promise<NotificationSettingsResponseDto> {
     const tenantId = req.user.tenantId;
     const delId = delegationId || null;
     this.requireSuperAdminForGlobal(req.user, delId);
     this.enforceDelegationConsistency(req, delId);
-    return this.settingsService.getSettings(tenantId, delId);
+    const settings = await this.settingsService.getSettings(tenantId, delId);
+    return toResponse(NotificationSettingsResponseDto, settings);
   }
 
   /**
@@ -110,25 +140,31 @@ export class NotificationController {
   @Put('config')
   @RequireManage()
   @ApiOperation({ summary: 'Save notification settings (channels + rules)' })
-  async saveSettings(@Body() dto: SaveNotificationSettingsDto, @Request() req: any) {
+  @ApiOkResponse({ type: NotificationSettingsResponseDto })
+  async saveSettings(
+    @Body() dto: SaveNotificationSettingsDto,
+    @Request() req: AuthRequest,
+  ): Promise<NotificationSettingsResponseDto> {
     const tenantId = req.user.tenantId;
     const delegationId = dto.delegationId ?? null;
     this.requireSuperAdminForGlobal(req.user, delegationId);
     this.enforceDelegationConsistency(req, delegationId);
-    return this.settingsService.saveSettings(tenantId, delegationId, {
+    const settings = await this.settingsService.saveSettings(tenantId, delegationId, {
       channels: dto.channels,
       rules: dto.rules,
     });
+    return toResponse(NotificationSettingsResponseDto, settings);
   }
 
   /** Delete every channel + rule at this scope (revert to inheritance). */
   @Delete('config/:delegationId')
   @RequireManage()
   @ApiOperation({ summary: 'Delete settings at this scope — "global" = tenant-wide' })
+  @ApiOkResponse({ type: NotificationDeleteSettingsResponseDto })
   async deleteSettings(
     @Param('delegationId') delegationIdParam: string,
-    @Request() req: any,
-  ) {
+    @Request() req: AuthRequest,
+  ): Promise<NotificationDeleteSettingsResponseDto> {
     const tenantId = req.user.tenantId;
     const delId = delegationIdParam === 'global' ? null : delegationIdParam;
     this.requireSuperAdminForGlobal(req.user, delId);
@@ -141,15 +177,20 @@ export class NotificationController {
   @SkipDelegation()
   @RequireManage()
   @ApiOperation({ summary: 'List all notification settings rows for the tenant (super admin)' })
-  async getAllSettings(@Request() req: any) {
-    return this.settingsService.getAllSettings(req.user.tenantId);
+  @ApiOkResponse({ type: NotificationAllSettingsResponseDto })
+  async getAllSettings(@Request() req: AuthRequest): Promise<NotificationAllSettingsResponseDto> {
+    const all = await this.settingsService.getAllSettings(req.user.tenantId);
+    return toResponse(NotificationAllSettingsResponseDto, all);
   }
 
   /** Synchronous channel test — UI affordance. */
   @Post('test')
   @RequireManage()
   @ApiOperation({ summary: 'Test a notification channel' })
-  async testChannel(@Body() dto: TestChannelDto) {
+  @ApiOkResponse({ type: NotificationTestResultResponseDto })
+  async testChannel(
+    @Body() dto: TestChannelDto,
+  ): Promise<NotificationTestResultResponseDto> {
     return this.notificationService.testChannel(dto.kind, {
       recipients: dto.recipients,
       webhookUrl: dto.webhookUrl,
@@ -160,11 +201,16 @@ export class NotificationController {
   @Get('logs')
   @RequireManage()
   @ApiOperation({ summary: 'Get notification logs' })
-  async getLogs(@Query() query: NotificationLogQueryDto, @Request() req: any) {
-    return this.settingsService.getLogs(req.user.tenantId, query);
+  @ApiOkResponse({ type: NotificationLogPageResponseDto })
+  async getLogs(
+    @Query() query: NotificationLogQueryDto,
+    @Request() req: AuthRequest,
+  ): Promise<NotificationLogPageResponseDto> {
+    const page = await this.settingsService.getLogs(req.user.tenantId, query);
+    return toResponse(NotificationLogPageResponseDto, page);
   }
 
-  private requireSuperAdminForGlobal(user: any, delegationId: string | null) {
+  private requireSuperAdminForGlobal(user: AuthUserLike, delegationId: string | null) {
     if (delegationId === null && !user.isSuperAdmin) {
       throw new ForbiddenException('Only super admins can manage global notification settings');
     }
@@ -181,10 +227,10 @@ export class NotificationController {
    * Skips when the param is null (handled by requireSuperAdminForGlobal)
    * or when the user is super admin (bypass).
    */
-  private enforceDelegationConsistency(req: any, paramOrDtoDelegationId: string | null) {
+  private enforceDelegationConsistency(req: AuthRequest, paramOrDtoDelegationId: string | null) {
     if (paramOrDtoDelegationId === null) return;
     if (req.user?.isSuperAdmin) return;
-    const headerDelegationId = req.delegationId ?? null;
+    const headerDelegationId = (req as unknown as { delegationId?: string | null }).delegationId ?? null;
     if (headerDelegationId !== paramOrDtoDelegationId) {
       throw new ForbiddenException(
         `Delegation mismatch : header X-Delegation-Id=${headerDelegationId ?? 'null'} ` +
