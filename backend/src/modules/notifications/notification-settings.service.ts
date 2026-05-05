@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import {
+  Prisma,
   PrismaClient,
   NotificationChannel as PrismaNotificationChannel,
   NotificationRule as PrismaNotificationRule,
@@ -253,7 +254,7 @@ export class NotificationSettingsService {
   ) {
     const page = params?.page || 1;
     const pageSize = params?.pageSize || 25;
-    const where: any = { tenantId };
+    const where: Prisma.NotificationLogWhereInput = { tenantId };
     if (params?.eventType) where.eventType = params.eventType;
 
     const [data, total] = await Promise.all([
