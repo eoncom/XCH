@@ -45,7 +45,19 @@ const BASELINE_PATH = path.join(__dirname, 'dto-coverage-baseline.json');
 const HTTP_DECORATOR_RE = /^\s*@(Get|Post|Put|Patch|Delete)\s*\(/;
 const RESPONSE_DECORATOR_RE = /@(ApiResponse|ApiOkResponse|ApiCreatedResponse)\s*\(/;
 const TYPE_PROP_RE = /\btype\s*:/;
-const ADJACENCY_WINDOW = 10;
+const RES_PARAM_RE = /@Res\s*\(/;
+// Window large enough to cover an `@Post` followed by a multi-line
+// `@UseInterceptors(FileInterceptor(...))` block before the `@ApiOkResponse`.
+// Tightening this rejects legitimate file-upload endpoints; loosening it
+// makes the script too permissive. 20 is calibrated on backup + assets.
+const ADJACENCY_WINDOW = 20;
+// Endpoints that stream binary content via @Res() write directly to the
+// Express response and have no JSON body. They still need an @ApiOkResponse
+// decorator (description for Swagger), but `type:` is not applicable —
+// the wire payload is `application/octet-stream` / `application/zip` etc.
+// We look up to N lines after the HTTP decorator to spot @Res() in the
+// method signature.
+const RES_LOOKAHEAD = 25;
 
 function listControllerFiles(dir: string): string[] {
   const out: string[] = [];
@@ -77,10 +89,33 @@ function findEndpoints(file: string): Endpoint[] {
   return endpoints;
 }
 
+function isBinaryStreamEndpoint(file: string, line: number): boolean {
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  // Look forward from the HTTP decorator until the opening method body
+  // (line containing `{`) or the lookahead window — whichever is shorter.
+  // If `@Res()` appears in that window, the endpoint streams a raw response
+  // and is exempt from the `type:` requirement.
+  const end = Math.min(lines.length - 1, line - 1 + RES_LOOKAHEAD);
+  for (let i = line - 1; i <= end; i++) {
+    const ln = lines[i] ?? '';
+    if (RES_PARAM_RE.test(ln)) return true;
+    if (ln.includes(') {')) break; // method body started
+  }
+  return false;
+}
+
 function hasResponseDtoCoverage(file: string, line: number): boolean {
   const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
   const start = Math.max(0, line - 1 - ADJACENCY_WINDOW);
   const end = Math.min(lines.length, line - 1 + ADJACENCY_WINDOW);
+  // Binary stream endpoints (@Res()) only need an @ApiOkResponse marker
+  // for Swagger documentation — `type:` is N/A.
+  if (isBinaryStreamEndpoint(file, line)) {
+    for (let i = start; i <= end; i++) {
+      if (RESPONSE_DECORATOR_RE.test(lines[i])) return true;
+    }
+    return false;
+  }
   for (let i = start; i <= end; i++) {
     const slice = lines[i];
     if (RESPONSE_DECORATOR_RE.test(slice) && TYPE_PROP_RE.test(slice)) {
