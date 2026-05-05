@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { ExpenseFrequency, ExpenseType, Prisma, PrismaClient } from '@prisma/client';
 import { MonitorReactionsService } from '../monitoring/monitor-reactions.service';
 import { PermissionService } from '../../common/services/permission.service';
 import { CallerCtx } from '../../common/types/caller-ctx.interface';
@@ -82,7 +82,7 @@ export class ConnectivityService {
     filters: FilterConnectivityLinkDto = {},
     callerCtx: CallerCtx,
   ) {
-    const where: any = { tenantId };
+    const where: Prisma.ConnectivityLinkWhereInput = { tenantId };
 
     // ADR-021 — automatic site scope. Non-super-admin users see only links
     // attached to a site they can read. Empty array short-circuits to [].
@@ -139,11 +139,28 @@ export class ConnectivityService {
       await this.validateAssetForSite(tenantId, dto.assetId, existing.siteId);
     }
 
-    const data: any = { ...dto };
-    if (dto.startDate !== undefined) data.startDate = dto.startDate ? new Date(dto.startDate) : null;
-    if (dto.endDate !== undefined) data.endDate = dto.endDate ? new Date(dto.endDate) : null;
-    // Explicit null → detach the current asset.
-    if (dto.assetId === null) data.assetId = null;
+    const data: Prisma.ConnectivityLinkUpdateInput = {
+      ...(dto.role !== undefined && { role: dto.role }),
+      ...(dto.provider !== undefined && { provider: dto.provider }),
+      ...(dto.type !== undefined && { type: dto.type }),
+      ...(dto.bandwidthDown !== undefined && { bandwidthDown: dto.bandwidthDown }),
+      ...(dto.bandwidthUp !== undefined && { bandwidthUp: dto.bandwidthUp }),
+      ...(dto.publicIp !== undefined && { publicIp: dto.publicIp }),
+      ...(dto.monthlyPrice !== undefined && { monthlyPrice: dto.monthlyPrice }),
+      ...(dto.currency !== undefined && { currency: dto.currency }),
+      ...(dto.contractRef !== undefined && { contractRef: dto.contractRef }),
+      ...(dto.notes !== undefined && { notes: dto.notes }),
+      ...(dto.startDate !== undefined && {
+        startDate: dto.startDate ? new Date(dto.startDate) : null,
+      }),
+      ...(dto.endDate !== undefined && {
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
+      }),
+      // Explicit null → detach the current asset (Prisma relation update).
+      ...(dto.assetId !== undefined && {
+        asset: dto.assetId === null ? { disconnect: true } : { connect: { id: dto.assetId } },
+      }),
+    };
 
     const updated = await this.prisma.connectivityLink.update({
       where: { id },
@@ -165,7 +182,7 @@ export class ConnectivityService {
 
     // If an expense is linked and pricing/dates changed, sync the expense
     if (existing.expenseId && (dto.monthlyPrice !== undefined || dto.startDate !== undefined || dto.endDate !== undefined || dto.currency !== undefined)) {
-      const expenseData: any = {};
+      const expenseData: Prisma.ExpenseUpdateInput = {};
       if (dto.monthlyPrice !== undefined && dto.monthlyPrice !== null) expenseData.totalAmount = dto.monthlyPrice;
       if (dto.currency !== undefined) expenseData.currency = dto.currency;
       if (dto.startDate !== undefined) expenseData.dateStart = dto.startDate ? new Date(dto.startDate) : null;
@@ -233,10 +250,10 @@ export class ConnectivityService {
       data: {
         tenantId,
         label: body.label || defaultLabel,
-        type: 'SERVICE' as any,
+        type: ExpenseType.SERVICE,
         totalAmount: Number(link.monthlyPrice),
         currency: link.currency,
-        frequency: 'MONTHLY' as any,
+        frequency: ExpenseFrequency.MONTHLY,
         dateIncurred: link.startDate || new Date(),
         dateStart: link.startDate,
         dateEnd: link.endDate,
@@ -244,7 +261,7 @@ export class ConnectivityService {
         delegationId: link.site.delegationId,
         siteId: link.site.id,
         createdBy,
-      } as any,
+      },
     });
 
     await this.prisma.connectivityLink.update({
