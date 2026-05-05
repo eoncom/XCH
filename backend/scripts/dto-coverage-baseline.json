@@ -10,7 +10,6 @@
     "backend/src/modules/backup/backup.controller.ts",
     "backend/src/modules/billing-entities/billing-entities.controller.ts",
     "backend/src/modules/budgets/budgets.controller.ts",
-    "backend/src/modules/connectivity/connectivity.controller.ts",
     "backend/src/modules/consumption/consumption.controller.ts",
     "backend/src/modules/contact-types/contact-types.controller.ts",
     "backend/src/modules/contacts/contacts.controller.ts",
