@@ -6,6 +6,7 @@ import {
   MonitorStatus,
   HealthStatus,
   SeverityLevel,
+  Prisma,
 } from '@prisma/client';
 import {
   HEALTH_RECOMPUTE_QUEUE,
@@ -275,12 +276,12 @@ export class HealthAggregationService {
         create: {
           siteId,
           overall,
-          componentsJson: components as any,
+          componentsJson: components as unknown as Prisma.InputJsonValue,
           computedAt,
         },
         update: {
           overall,
-          componentsJson: components as any,
+          componentsJson: components as unknown as Prisma.InputJsonValue,
           computedAt,
         },
       }),

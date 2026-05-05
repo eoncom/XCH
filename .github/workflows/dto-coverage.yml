@@ -1,0 +1,49 @@
+name: DTO Coverage (ADR-023)
+
+# S9 ADR-023 — bloquant pour merge sur main. Garantit que tout endpoint
+# HTTP backend dans un module non-exempté expose son ResponseDto via
+# @ApiResponse({ type })/ @ApiOkResponse({ type }) / @ApiCreatedResponse({ type }).
+# La baseline `backend/scripts/dto-coverage-baseline.json` liste les
+# modules pas encore migrés ; elle décroît PR-par-PR au fil de la cascade
+# S9 et tombe à 0 à v2.0.0.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  dto-coverage:
+    name: DTO coverage (S9 ADR-023)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dev deps (ts-node)
+        working-directory: backend
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Run DTO coverage check
+        working-directory: backend
+        run: npx ts-node --transpile-only scripts/check-dto-coverage.ts
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## DTO Coverage (S9 ADR-023)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Le check vérifie que chaque endpoint backend dans un module non-exempté expose son ResponseDto via \`@ApiResponse({ type })\` / \`@ApiOkResponse({ type })\` / \`@ApiCreatedResponse({ type })\`." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Baseline : \`backend/scripts/dto-coverage-baseline.json\` — décroît PR-par-PR au fil de la cascade S9." >> $GITHUB_STEP_SUMMARY
