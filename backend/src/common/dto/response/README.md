@@ -105,6 +105,22 @@ Puis `return toResponse(MonitorCheckResponseDto, prismaCheck)` côté service.
 - Helper Cas B : `to<Entity>ResponseDto(input): <Entity>ResponseDto`
 - Test : `backend/test/modules/<m>/dto-shape.spec.ts`
 
+## Pièges connus
+
+### `Record<string, T>` ne roundtrip pas sous `excludeExtraneousValues`
+
+`plainToInstance(...)` avec `excludeExtraneousValues: true` traite les
+sous-objets comme des classes à instancier. Sans `@Type(() => Concrete)`,
+les valeurs dynamic-key disparaissent (résultat = `{}`).
+
+**Règle** : tout `@Expose() field: Record<string, T>` MUST passer par un
+helper Cas B qui construit le shape manuellement (avec spread copy pour
+isolation mémoire). Reference : `toRestoreFullResultResponseDto` dans
+`modules/backup/dto/restore-result.response.dto.ts`.
+
+`@Transform(({value}) => ({...value}))` ne marche PAS — l'extraction de
+valeur survient AVANT le transform sous `excludeExtraneousValues`.
+
 ## Anti-patterns
 
 - ❌ `toMatchSnapshot()` dans dto-shape.spec — préférer `toHaveProperty`
@@ -113,3 +129,4 @@ Puis `return toResponse(MonitorCheckResponseDto, prismaCheck)` côté service.
 - ❌ Plusieurs classes DTO dans un même fichier — 1 entité = 1 fichier.
 - ❌ `@Expose()` oublié sur un champ → exclu silencieusement par
   `excludeExtraneousValues: true`. Test dto-shape attrape la régression.
+- ❌ `Record<string, T>` mappé via `plainToInstance` (cf piège ci-dessus).

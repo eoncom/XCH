@@ -8,11 +8,16 @@ import {
   Res,
   UploadedFile,
   UseInterceptors,
-  StreamableFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiCreatedResponse,
+} from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { AuthRequest } from '../../types/request.interface';
@@ -20,6 +25,17 @@ import { BackupService } from './backup.service';
 import { backupFileFilter } from '../../common/utils/upload-security';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { RequireManage, RequireRead, RequireWrite } from '../../common/decorators/require-right.decorator';
+import { toResponse } from '../../common/utils/to-response.util';
+import { BackupResultResponseDto } from './dto/backup-result.response.dto';
+import {
+  RestoreFullResultResponseDto,
+  RestoreSiteResultResponseDto,
+  toRestoreFullResultResponseDto,
+  toRestoreSiteResultResponseDto,
+} from './dto/restore-result.response.dto';
+import { CleanupStorageResultResponseDto } from './dto/cleanup-storage-result.response.dto';
+import { BackupListResponseDto } from './dto/backup-list.response.dto';
+import { DeleteBackupResultResponseDto } from './dto/delete-backup-result.response.dto';
 
 @ApiTags('backup')
 @ApiBearerAuth()
@@ -35,9 +51,10 @@ export class BackupController {
   @RequireWrite()
   @SkipThrottle()
   @ApiOperation({ summary: '[ADMIN] Create full database + files backup' })
-  async createFullBackup(@Request() req: AuthRequest) {
+  @ApiCreatedResponse({ type: BackupResultResponseDto })
+  async createFullBackup(@Request() req: AuthRequest): Promise<BackupResultResponseDto> {
     const result = await this.backupService.createFullBackup(req.user.tenantId, req.user.id);
-    return result;
+    return toResponse(BackupResultResponseDto, result);
   }
 
   // ===== Full Restore =====
@@ -53,15 +70,17 @@ export class BackupController {
     }),
   )
   @ApiOperation({ summary: '[ADMIN] Restore full backup from ZIP' })
+  @ApiOkResponse({ type: RestoreFullResultResponseDto })
   async restoreFullBackup(
     @UploadedFile() file: Express.Multer.File,
     @Request() req: AuthRequest,
-  ) {
-    return this.backupService.restoreFullBackup(
+  ): Promise<RestoreFullResultResponseDto> {
+    const result = await this.backupService.restoreFullBackup(
       req.user.tenantId,
       file.buffer,
       req.user.id,
     );
+    return toRestoreFullResultResponseDto(result);
   }
 
   // ===== Site Restore (MUST be before :siteId to avoid route conflict) =====
@@ -77,15 +96,17 @@ export class BackupController {
     }),
   )
   @ApiOperation({ summary: '[ADMIN] Restore site from backup ZIP' })
+  @ApiOkResponse({ type: RestoreSiteResultResponseDto })
   async restoreSiteBackup(
     @UploadedFile() file: Express.Multer.File,
     @Request() req: AuthRequest,
-  ) {
-    return this.backupService.restoreSiteBackup(
+  ): Promise<RestoreSiteResultResponseDto> {
+    const result = await this.backupService.restoreSiteBackup(
       req.user.tenantId,
       file.buffer,
       req.user.id,
     );
+    return toRestoreSiteResultResponseDto(result);
   }
 
   // ===== Site Backup =====
@@ -94,6 +115,7 @@ export class BackupController {
   @RequireWrite()
   @SkipThrottle()
   @ApiOperation({ summary: '[ADMIN] Create site-specific backup (ZIP)' })
+  @ApiOkResponse({ description: 'Binary ZIP file stream (application/zip)' })
   async createSiteBackup(
     @Param('siteId') siteId: string,
     @Request() req: AuthRequest,
@@ -119,12 +141,14 @@ export class BackupController {
   @RequireWrite()
   @SkipThrottle()
   @ApiOperation({ summary: '[ADMIN] Clean up orphaned files in storage' })
-  async cleanupStorage(@Request() req: AuthRequest) {
-    return this.backupService.cleanupOrphanedStorage(
+  @ApiOkResponse({ type: CleanupStorageResultResponseDto })
+  async cleanupStorage(@Request() req: AuthRequest): Promise<CleanupStorageResultResponseDto> {
+    const result = await this.backupService.cleanupOrphanedStorage(
       req.user.tenantId,
       req.user.id,
       0, // No grace period when triggered manually — user wants cleanup now
     );
+    return toResponse(CleanupStorageResultResponseDto, result);
   }
 
   // ===== Backup Management =====
@@ -132,15 +156,17 @@ export class BackupController {
   @Get('list')
   @RequireRead()
   @ApiOperation({ summary: '[ADMIN] List available backups' })
-  async listBackups(@Request() req: AuthRequest) {
+  @ApiOkResponse({ type: BackupListResponseDto })
+  async listBackups(@Request() req: AuthRequest): Promise<BackupListResponseDto> {
     const backups = await this.backupService.listBackups(req.user.tenantId);
-    return { backups, total: backups.length };
+    return toResponse(BackupListResponseDto, { backups, total: backups.length });
   }
 
   @Get(':id/download')
   @RequireRead()
   @SkipThrottle()
   @ApiOperation({ summary: '[ADMIN] Download a backup file' })
+  @ApiOkResponse({ description: 'Binary backup archive stream (application/zip)' })
   async downloadBackup(
     @Param('id') id: string,
     @Request() req: AuthRequest,
@@ -162,10 +188,11 @@ export class BackupController {
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: '[ADMIN] Delete a backup' })
+  @ApiOkResponse({ type: DeleteBackupResultResponseDto })
   async deleteBackup(
     @Param('id') id: string,
     @Request() req: AuthRequest,
-  ) {
+  ): Promise<DeleteBackupResultResponseDto> {
     return this.backupService.deleteBackup(req.user.tenantId, id);
   }
 }
