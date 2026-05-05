@@ -8,16 +8,30 @@ import {
   Request,
   Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiOkResponse,
+} from '@nestjs/swagger';
 import { IntegrationsService } from './integrations.service';
 import { SyncNetBoxSitesDto, SyncNetBoxDevicesDto, MapAssetToNetBoxDto } from './dto/sync-netbox.dto';
 import { AuthRequest } from '../../types/request.interface';
 import { RequireRead, RequireWrite, RequireManage } from '../../common/decorators/require-right.decorator';
+import {
+  IntegrationConfigResponseDto,
+  IntegrationsStatusResponseDto,
+  IntegrationSyncReportResponseDto,
+  IntegrationTestAllResultResponseDto,
+  IntegrationTestResultResponseDto,
+  NetboxListResponseDto,
+} from './dto/integration-passthrough.response.dto';
 
 /**
  * Integrations controller — NetBox today.
- * All `monitoring/*` and `uptime-kuma/*` routes were removed in ADR-016.
- * Native monitoring lives under `/api/monitors` (MonitorsController).
+ * Cf `dto/integration-passthrough.response.dto.ts` — Swagger marker DTOs
+ * (no runtime `toResponse()`) since NetBox responses mirror upstream API
+ * shapes that vary by version. Tokens are masked server-side.
  */
 @ApiTags('integrations')
 @ApiBearerAuth()
@@ -28,6 +42,7 @@ export class IntegrationsController {
   @Get('status')
   @RequireRead()
   @ApiOperation({ summary: 'Get all integrations status' })
+  @ApiOkResponse({ type: IntegrationsStatusResponseDto })
   getStatus() {
     return this.integrationsService.getStatus();
   }
@@ -35,6 +50,7 @@ export class IntegrationsController {
   @Get('config')
   @RequireRead()
   @ApiOperation({ summary: 'Get integration configuration (tokens masked)' })
+  @ApiOkResponse({ type: IntegrationConfigResponseDto })
   getConfig(@Request() req: AuthRequest) {
     return this.integrationsService.getIntegrationConfig(req.user.tenantId);
   }
@@ -42,13 +58,15 @@ export class IntegrationsController {
   @Patch('config')
   @RequireWrite()
   @ApiOperation({ summary: 'Update integration configuration' })
-  updateConfig(@Body() body: Record<string, any>, @Request() req: AuthRequest) {
+  @ApiOkResponse({ type: IntegrationConfigResponseDto })
+  updateConfig(@Body() body: Record<string, unknown>, @Request() req: AuthRequest) {
     return this.integrationsService.updateIntegrationConfig(req.user.tenantId, body);
   }
 
   @Post('test/:provider')
   @RequireRead()
   @ApiOperation({ summary: 'Test connection to a specific provider (netbox)' })
+  @ApiOkResponse({ type: IntegrationTestResultResponseDto })
   testConnection(@Param('provider') provider: 'netbox', @Request() req: AuthRequest) {
     return this.integrationsService.testConnection(provider, req.user.tenantId);
   }
@@ -56,6 +74,7 @@ export class IntegrationsController {
   @Post('test-all')
   @RequireRead()
   @ApiOperation({ summary: 'Test all integrations connections' })
+  @ApiOkResponse({ type: IntegrationTestAllResultResponseDto })
   testAllConnections() {
     return this.integrationsService.testAllConnections();
   }
@@ -65,6 +84,7 @@ export class IntegrationsController {
   @Post('netbox/sync/sites')
   @RequireManage()
   @ApiOperation({ summary: 'Sync sites from NetBox to XCH (READ-ONLY)' })
+  @ApiOkResponse({ type: IntegrationSyncReportResponseDto })
   syncNetBoxSites(@Request() req: AuthRequest, @Body() syncDto: SyncNetBoxSitesDto) {
     return this.integrationsService.syncNetBoxSites(req.user.tenantId, syncDto);
   }
@@ -72,6 +92,7 @@ export class IntegrationsController {
   @Post('netbox/sync/devices')
   @RequireManage()
   @ApiOperation({ summary: 'Sync devices from NetBox for a specific site (READ-ONLY)' })
+  @ApiOkResponse({ type: IntegrationSyncReportResponseDto })
   syncNetBoxDevices(@Request() req: AuthRequest, @Body() syncDto: SyncNetBoxDevicesDto) {
     return this.integrationsService.syncNetBoxDevices(req.user.tenantId, syncDto);
   }
@@ -79,6 +100,7 @@ export class IntegrationsController {
   @Post('netbox/map-asset')
   @RequireManage()
   @ApiOperation({ summary: 'Manually map XCH asset to NetBox device' })
+  @ApiOkResponse({ type: IntegrationSyncReportResponseDto })
   mapAssetToNetBox(@Request() req: AuthRequest, @Body() mapDto: MapAssetToNetBoxDto) {
     return this.integrationsService.mapAssetToNetBox(req.user.tenantId, mapDto);
   }
@@ -88,6 +110,7 @@ export class IntegrationsController {
   @Get('netbox/contacts')
   @RequireRead()
   @ApiOperation({ summary: 'List contacts from NetBox' })
+  @ApiOkResponse({ type: NetboxListResponseDto })
   getNetBoxContacts(
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
@@ -105,6 +128,7 @@ export class IntegrationsController {
   @Get('netbox/contact-groups')
   @RequireRead()
   @ApiOperation({ summary: 'List contact groups from NetBox' })
+  @ApiOkResponse({ type: NetboxListResponseDto })
   getNetBoxContactGroups(
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
@@ -115,6 +139,7 @@ export class IntegrationsController {
   @Post('netbox/sync/contacts')
   @RequireManage()
   @ApiOperation({ summary: 'Sync contacts from NetBox to XCH (READ-ONLY)' })
+  @ApiOkResponse({ type: IntegrationSyncReportResponseDto })
   syncNetBoxContacts(@Request() req: AuthRequest) {
     return this.integrationsService.syncNetBoxContacts(req.user.tenantId);
   }
