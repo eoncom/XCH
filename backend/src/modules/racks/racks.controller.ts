@@ -1,5 +1,13 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+  ApiOkResponse,
+  ApiCreatedResponse,
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { attachmentFileFilter } from '../../common/utils/upload-security';
@@ -17,6 +25,16 @@ import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
 import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
+import { toResponse, toResponseArray } from '../../common/utils/to-response.util';
+import { RackResponseDto } from './dto/rack.response.dto';
+import { RackListResponseDto } from './dto/rack-list.response.dto';
+import { RackMountResultResponseDto } from './dto/rack-mount-result.response.dto';
+import { RackAvailableSpacesResponseDto } from './dto/rack-available-spaces.response.dto';
+import { RackAttachmentResponseDto } from './dto/rack-attachment.response.dto';
+import {
+  RackAttachmentDeletedResultResponseDto,
+  RackDeletedResultResponseDto,
+} from './dto/rack-action-result.response.dto';
 
 @RequireModule('racks')
 @ApiTags('racks')
@@ -32,7 +50,11 @@ export class RacksController {
   @Post()
   @RequireWrite()
   @ApiOperation({ summary: 'Create new rack' })
-  async create(@Body() createRackDto: CreateRackDto, @Request() req: AuthRequest) {
+  @ApiCreatedResponse({ type: RackResponseDto })
+  async create(
+    @Body() createRackDto: CreateRackDto,
+    @Request() req: AuthRequest,
+  ): Promise<RackResponseDto> {
     if (createRackDto.siteId) {
       const perm = await this.permissionService.resolve(
         req.user.userId, createRackDto.siteId, 'racks', req.user.tenantId,
@@ -41,24 +63,35 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions for racks on this site');
       }
     }
-    return this.racksService.create(req.user.tenantId, createRackDto, req.user.userId);
+    const rack = await this.racksService.create(req.user.tenantId, createRackDto, req.user.userId);
+    return toResponse(RackResponseDto, rack);
   }
 
   @Get()
   @RequireRead()
   @ApiOperation({ summary: 'Get all racks (filtered by user site access + resource permissions)' })
-  async findAll(@Query() filters: FilterRackDto, @Request() req: AuthRequest) {
+  @ApiOkResponse({ type: RackListResponseDto })
+  async findAll(
+    @Query() filters: FilterRackDto,
+    @Request() req: AuthRequest,
+  ): Promise<RackListResponseDto> {
     const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
       req.user.userId,
     );
-    return this.racksService.findAll(req.user.tenantId, filters, accessibleSiteIds);
+    const page = await this.racksService.findAll(req.user.tenantId, filters, accessibleSiteIds);
+    return toResponse(RackListResponseDto, page);
   }
 
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get rack by id with occupation details' })
-  async findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+  @ApiOkResponse({ type: RackResponseDto })
+  async findOne(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
+  ): Promise<RackResponseDto> {
     const rack = await this.racksService.findOne(id, req.user.tenantId, ctx);
     if (rack.siteId) {
       const perm = await this.permissionService.resolve(
@@ -68,29 +101,32 @@ export class RacksController {
         throw new ForbiddenException('No access to racks on this site');
       }
     }
-    return rack;
+    return toResponse(RackResponseDto, rack);
   }
 
   @Get(':id/available-spaces')
   @RequireRead()
   @ApiOperation({ summary: 'Find available spaces in rack for equipment of given height' })
-  findAvailableSpaces(
+  @ApiOkResponse({ type: RackAvailableSpacesResponseDto })
+  async findAvailableSpaces(
     @Param('id') id: string,
     @Query('heightU') heightU: number,
     @Request() req: AuthRequest,
-  ) {
-    return this.racksService.findAvailableSpaces(id, req.user.tenantId, Number(heightU));
+  ): Promise<RackAvailableSpacesResponseDto> {
+    const result = await this.racksService.findAvailableSpaces(id, req.user.tenantId, Number(heightU));
+    return toResponse(RackAvailableSpacesResponseDto, result);
   }
 
   @Post(':id/mount')
   @RequireWrite()
   @ApiOperation({ summary: 'Mount equipment on rack' })
+  @ApiOkResponse({ type: RackMountResultResponseDto })
   async mountEquipment(
     @Param('id') id: string,
     @Body() mountDto: MountEquipmentDto,
     @Request() req: AuthRequest,
     @CallerCtxParam() ctx: CallerCtx,
-  ) {
+  ): Promise<RackMountResultResponseDto> {
     const rack = await this.racksService.findOne(id, req.user.tenantId, ctx);
     if (rack.siteId) {
       const perm = await this.permissionService.resolve(
@@ -100,18 +136,20 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions to modify racks on this site');
       }
     }
-    return this.racksService.mountEquipment(id, req.user.tenantId, mountDto, req.user.userId);
+    const result = await this.racksService.mountEquipment(id, req.user.tenantId, mountDto, req.user.userId);
+    return toResponse(RackMountResultResponseDto, result);
   }
 
   @Delete(':id/unmount/:assetId')
   @RequireWrite()
   @ApiOperation({ summary: 'Unmount equipment from rack' })
+  @ApiOkResponse({ type: RackMountResultResponseDto })
   async unmountEquipment(
     @Param('id') id: string,
     @Param('assetId') assetId: string,
     @Request() req: AuthRequest,
     @CallerCtxParam() ctx: CallerCtx,
-  ) {
+  ): Promise<RackMountResultResponseDto> {
     const rack = await this.racksService.findOne(id, req.user.tenantId, ctx);
     if (rack.siteId) {
       const perm = await this.permissionService.resolve(
@@ -121,13 +159,20 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions to modify racks on this site');
       }
     }
-    return this.racksService.unmountEquipment(id, assetId, req.user.tenantId, req.user.userId);
+    const result = await this.racksService.unmountEquipment(id, assetId, req.user.tenantId, req.user.userId);
+    return toResponse(RackMountResultResponseDto, result);
   }
 
   @Patch(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Update rack' })
-  async update(@Param('id') id: string, @Body() updateRackDto: UpdateRackDto, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+  @ApiOkResponse({ type: RackResponseDto })
+  async update(
+    @Param('id') id: string,
+    @Body() updateRackDto: UpdateRackDto,
+    @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
+  ): Promise<RackResponseDto> {
     const rack = await this.racksService.findOne(id, req.user.tenantId, ctx);
     if (rack.siteId) {
       const perm = await this.permissionService.resolve(
@@ -137,13 +182,19 @@ export class RacksController {
         throw new ForbiddenException('Insufficient permissions to modify racks on this site');
       }
     }
-    return this.racksService.update(id, req.user.tenantId, updateRackDto, req.user.userId, ctx);
+    const updated = await this.racksService.update(id, req.user.tenantId, updateRackDto, req.user.userId, ctx);
+    return toResponse(RackResponseDto, updated);
   }
 
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete rack' })
-  async remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
+  @ApiOkResponse({ type: RackDeletedResultResponseDto })
+  async remove(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
+  ): Promise<RackDeletedResultResponseDto> {
     const rack = await this.racksService.findOne(id, req.user.tenantId, ctx);
     if (rack.siteId) {
       const perm = await this.permissionService.resolve(
@@ -163,6 +214,7 @@ export class RacksController {
   @Post(':id/attachments')
   @RequireWrite()
   @ApiOperation({ summary: 'Upload attachment to rack' })
+  @ApiCreatedResponse({ type: RackAttachmentResponseDto })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -179,30 +231,37 @@ export class RacksController {
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: attachmentFileFilter,
   }))
-  uploadAttachment(
+  async uploadAttachment(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
     @Body() uploadAttachmentDto: UploadAttachmentDto,
     @Request() req: AuthRequest,
-  ) {
-    return this.racksService.uploadAttachment(id, req.user.tenantId, req.user.userId, file, uploadAttachmentDto);
+  ): Promise<RackAttachmentResponseDto> {
+    const attachment = await this.racksService.uploadAttachment(id, req.user.tenantId, req.user.userId, file, uploadAttachmentDto);
+    return toResponse(RackAttachmentResponseDto, attachment);
   }
 
   @Get(':id/attachments')
   @RequireRead()
   @ApiOperation({ summary: 'List attachments for rack' })
-  listAttachments(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.racksService.listAttachments(id, req.user.tenantId);
+  @ApiOkResponse({ type: RackAttachmentResponseDto, isArray: true })
+  async listAttachments(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+  ): Promise<RackAttachmentResponseDto[]> {
+    const attachments = await this.racksService.listAttachments(id, req.user.tenantId);
+    return toResponseArray(RackAttachmentResponseDto, attachments);
   }
 
   @Delete(':id/attachments/:attachmentId')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete attachment from rack' })
-  deleteAttachment(
+  @ApiOkResponse({ type: RackAttachmentDeletedResultResponseDto })
+  async deleteAttachment(
     @Param('id') id: string,
     @Param('attachmentId') attachmentId: string,
     @Request() req: AuthRequest,
-  ) {
+  ): Promise<RackAttachmentDeletedResultResponseDto> {
     return this.racksService.deleteAttachment(attachmentId, req.user.tenantId, id);
   }
 }

@@ -113,13 +113,22 @@ Puis `return toResponse(MonitorCheckResponseDto, prismaCheck)` côté service.
 sous-objets comme des classes à instancier. Sans `@Type(() => Concrete)`,
 les valeurs dynamic-key disparaissent (résultat = `{}`).
 
-**Règle** : tout `@Expose() field: Record<string, T>` MUST passer par un
-helper Cas B qui construit le shape manuellement (avec spread copy pour
-isolation mémoire). Reference : `toRestoreFullResultResponseDto` dans
-`modules/backup/dto/restore-result.response.dto.ts`.
+**Deux options selon le shape** :
 
-`@Transform(({value}) => ({...value}))` ne marche PAS — l'extraction de
-valeur survient AVANT le transform sous `excludeExtraneousValues`.
+1. **Helper Cas B** (recommandé pour les shapes calculés / composites) —
+   construit le DTO manuellement avec spread copy.
+   Reference : `toRestoreFullResultResponseDto` dans
+   `modules/backup/dto/restore-result.response.dto.ts`.
+
+2. **`@Transform(({obj}) => obj.field)`** (recommandé pour les JSON
+   Prisma fields embedded dans une entité) — `obj` accède au plain source
+   object, contournant le pipeline d'instantiation de classe.
+   Reference : `RackResponseDto.specs` dans
+   `modules/racks/dto/rack.response.dto.ts`.
+
+`@Transform(({value}) => ({...value}))` ne marche PAS — `value` est déjà
+filtrée par `excludeExtraneousValues` quand le transform s'exécute.
+`obj` lit la source plain telle quelle, donc fonctionne.
 
 ## Anti-patterns
 

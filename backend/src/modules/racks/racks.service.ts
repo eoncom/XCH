@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { CreateRackDto } from './dto/create-rack.dto';
 import { UpdateRackDto } from './dto/update-rack.dto';
 import { MountEquipmentDto } from './dto/mount-equipment.dto';
@@ -71,7 +71,7 @@ export class RacksService {
   }
 
   async findAll(tenantId: string, filters: FilterRackDto = {}, accessibleSiteIds?: string[] | null) {
-    const where: any = { tenantId };
+    const where: Prisma.RackWhereInput = { tenantId };
 
     // Site access filtering
     if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
