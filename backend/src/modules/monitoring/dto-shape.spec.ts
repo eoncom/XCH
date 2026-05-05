@@ -1,3 +1,4 @@
+import { instanceToPlain } from 'class-transformer';
 import { ConnectivityRole, HttpMethod, MonitorKind, MonitorStatus, SeverityLevel } from '@prisma/client';
 import { toResponse, toResponseArray } from '../../common/utils/to-response.util';
 import { MonitorCheckResponseDto } from './dto/monitor-check.response.dto';
@@ -119,6 +120,29 @@ describe('Monitoring response DTO shapes', () => {
       expect(dto).not.toHaveProperty('passwordHash');
       expect(dto).not.toHaveProperty('tenant'); // raw relation skipped
       expect(dto).not.toHaveProperty('results'); // raw relation skipped
+    });
+
+    /**
+     * Runtime smoke — simulate the full serialization pipeline that
+     * ClassSerializerInterceptor performs on the response (instanceToPlain
+     * + JSON.stringify + JSON.parse). If a Prisma raw column leaks via
+     * @Expose() omission OR @Type() oversight on a relation, this test
+     * fails — even when the static `toHaveProperty` assertions above pass
+     * because they test the in-memory instance, not the wire payload.
+     */
+    it('runtime serialization (instanceToPlain → JSON) does not leak any extraneous field', () => {
+      const wirePayload = JSON.parse(JSON.stringify(instanceToPlain(dto)));
+      const allKeys = JSON.stringify(wirePayload);
+      expect(allKeys).not.toMatch(/passwordHash/i);
+      expect(allKeys).not.toMatch(/_internalCounter/);
+      expect(allKeys).not.toMatch(/_hiddenFromClient/);
+      // Embedded relations must also be free of leaks.
+      expect(wirePayload.httpConfig).not.toHaveProperty('_hiddenFromClient');
+      // Sanity check — legitimate fields ARE present on the wire.
+      expect(wirePayload).toHaveProperty('id', 'chk-1');
+      expect(wirePayload).toHaveProperty('kind', MonitorKind.HTTP);
+      expect(wirePayload.httpConfig).toHaveProperty('method', HttpMethod.GET);
+      expect(wirePayload.asset.site).toHaveProperty('code', 'SAC');
     });
   });
 

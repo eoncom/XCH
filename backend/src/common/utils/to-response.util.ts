@@ -1,6 +1,26 @@
 import { ClassConstructor, plainToInstance } from 'class-transformer';
 
 /**
+ * Context passed (optionally) as the 2nd parameter of every `to<X>ResponseDto`
+ * Cas B helper. Intentionally empty for the S9 baseline — PRs of the cascade
+ * extend it as concrete needs surface (RBAC partial reveal, tenant-specific
+ * feature flags, locale-aware enum labels, etc.).
+ *
+ * Convention (cf `common/dto/response/README.md`) :
+ *
+ *   export function to<X>ResponseDto(
+ *     input: <ServiceReturnShape>,
+ *     ctx?: ResponseMappingCtx,
+ *   ): <X>ResponseDto { ... }
+ *
+ * Always 2nd position, always optional, never a 3rd parameter — extend the
+ * interface instead.
+ */
+export interface ResponseMappingCtx {
+  // intentionally empty placeholder — extended in cascade PRs.
+}
+
+/**
  * Wrapper around `class-transformer.plainToInstance` that enforces the
  * canonical S9 Hardening tail mapping discipline (ADR-023 §3) :
  *

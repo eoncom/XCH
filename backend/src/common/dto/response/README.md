@@ -24,15 +24,44 @@ via `excludeExtraneousValues: true`.
 OU (2) DTO avec champs computed (uptime % calculé), OU (3) shape minimaliste
 ack/delete/enqueue (`{ deleted: true }`, `{ count: N }`).
 
-Signature canonique :
+**Signature canonique (figée pour la cascade S9)** :
+```ts
+export function to<X>ResponseDto(
+  input: <ServiceReturnShape>,
+  ctx?: ResponseMappingCtx,
+): <X>ResponseDto { ... }
+```
+
+- `input` : la valeur brute renvoyée par le service (rows `$queryRaw`,
+  composite cross-query, agrégat scalaire).
+- `ctx?: ResponseMappingCtx` : **toujours en 2ᵉ position, optionnel**. À
+  ajouter dès qu'un helper a besoin du `CallerCtx` / `tenantId` /
+  permissions pour mask des champs ou enrichir une projection
+  (ex: RBAC partial reveal, tenant-specific feature flags). Ne pas
+  rajouter de 3ᵉ paramètre — étendre `ResponseMappingCtx` plutôt.
+- Le type `ResponseMappingCtx` est exporté depuis
+  `backend/src/common/utils/to-response.util.ts` ; aujourd'hui il est
+  vide (placeholder), on l'enrichit incrémentalement par PR cascade.
+
+Exemple actuel sans `ctx` :
 ```ts
 export function toMonitorSummaryResponseDto(
   rows: Array<{ window: string; total: bigint; up: bigint }>,
 ): MonitorSummaryResponseDto { ... }
 ```
 
+Exemple futur avec `ctx` (illustratif, à venir si un module en a besoin) :
+```ts
+export function toUserResponseDto(
+  prismaUser: User,
+  ctx?: ResponseMappingCtx,
+): UserResponseDto {
+  // ctx?.callerCtx peut décider d'omettre `email` pour un caller non-admin
+}
+```
+
 Le helper vit dans `modules/<m>/dto/<x>.response.dto.ts` à côté de la classe
-DTO, fonction nommée `to<DtoName>` (sans le suffixe `Dto` à la fin pour
+DTO, fonction nommée `to<DtoName>` (sans suffixe `Dto` final pour
 éviter `toMonitorSummaryResponseDtoDto`).
 
 ### Cas C — `plainToInstance` + `@Type()` (entité Prisma avec relations)
