@@ -13,7 +13,6 @@
     "backend/src/modules/contact-types/contact-types.controller.ts",
     "backend/src/modules/contacts/contacts.controller.ts",
     "backend/src/modules/expenses/expenses.controller.ts",
-    "backend/src/modules/floor-plans/floor-plans.controller.ts",
     "backend/src/modules/integrations/integrations.controller.ts",
     "backend/src/modules/integrations/mapping/integration-mapping.controller.ts",
     "backend/src/modules/integrations/netbox/netbox.controller.ts",
