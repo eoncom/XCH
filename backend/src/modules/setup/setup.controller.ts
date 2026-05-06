@@ -7,9 +7,15 @@ import {
   HttpStatus,
   ForbiddenException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
 import { SetupService } from './setup.service';
 import { SetupDto } from './dto/setup.dto';
+import {
+  SetupStatusResponseDto,
+  SetupInitializeResponseDto,
+  SetupSecretsResponseDto,
+} from './dto/setup.response.dto';
+import { toResponse } from '../../common/utils/to-response.util';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -26,34 +32,36 @@ export class SetupController {
 
   @Get('status')
   @ApiOperation({ summary: 'Check if initial setup is needed' })
-  @ApiResponse({ status: 200, description: 'Setup status with service health checks' })
-  async getStatus() {
-    return this.setupService.getStatus();
+  @ApiOkResponse({ type: SetupStatusResponseDto, description: 'Setup status with service health checks' })
+  async getStatus(): Promise<SetupStatusResponseDto> {
+    const result = await this.setupService.getStatus();
+    return toResponse(SetupStatusResponseDto, result);
   }
 
   @Post('initialize')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Initialize the application (first launch only)' })
-  @ApiResponse({ status: 201, description: 'Application initialized successfully' })
-  @ApiResponse({ status: 409, description: 'Application already configured' })
-  async initialize(@Body() dto: SetupDto) {
+  @ApiCreatedResponse({ type: SetupInitializeResponseDto, description: 'Application initialized successfully' })
+  async initialize(@Body() dto: SetupDto): Promise<SetupInitializeResponseDto> {
     // Double-check that setup is needed
     const status = await this.setupService.getStatus();
     if (!status.needsSetup) {
       throw new ForbiddenException('Application is already configured. Setup cannot be run again.');
     }
-    return this.setupService.initialize(dto);
+    const result = await this.setupService.initialize(dto);
+    return toResponse(SetupInitializeResponseDto, result);
   }
 
   @Get('generate-secrets')
   @ApiOperation({ summary: 'Generate random secrets for .env configuration' })
-  @ApiResponse({ status: 200, description: 'Generated secrets' })
-  async generateSecrets() {
+  @ApiOkResponse({ type: SetupSecretsResponseDto, description: 'Plaintext secrets — copy to .env then never call again' })
+  async generateSecrets(): Promise<SetupSecretsResponseDto> {
     // Only allow if setup is needed
     const status = await this.setupService.getStatus();
     if (!status.needsSetup) {
       throw new ForbiddenException('Application is already configured.');
     }
-    return this.setupService.generateSecrets();
+    const result = await this.setupService.generateSecrets();
+    return toResponse(SetupSecretsResponseDto, result);
   }
 }

@@ -13,13 +13,20 @@ import {
 import {
   ApiTags,
   ApiOperation,
-  ApiResponse,
+  ApiOkResponse,
+  ApiCreatedResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { ContactsService } from './contacts.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { QueryContactDto } from './dto/query-contact.dto';
+import {
+  ContactResponseDto,
+  ContactDeletedResultResponseDto,
+} from './dto/contact.response.dto';
+import { ContactListResponseDto } from './dto/contact-list.response.dto';
+import { toResponse } from '../../common/utils/to-response.util';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
@@ -39,83 +46,66 @@ export class ContactsController {
   @Post()
   @RequireWrite()
   @ApiOperation({ summary: 'Create a new contact' })
-  @ApiResponse({
-    status: 201,
-    description: 'The contact has been successfully created.',
-  })
-  @ApiResponse({ status: 400, description: 'Bad request.' })
-  @ApiResponse({ status: 404, description: 'Contact type not found.' })
-  create(
+  @ApiCreatedResponse({ type: ContactResponseDto })
+  async create(
     @Body() createContactDto: CreateContactDto,
     @Request() req: AuthRequest,
     @CallerCtxParam() ctx: CallerCtx,
-  ) {
-    return this.contactsService.create(req.user.tenantId, createContactDto, ctx);
+  ): Promise<ContactResponseDto> {
+    const created = await this.contactsService.create(req.user.tenantId, createContactDto, ctx);
+    return toResponse(ContactResponseDto, created);
   }
 
   @Get()
   @RequireRead()
   @ApiOperation({ summary: 'Get all contacts' })
-  @ApiResponse({
-    status: 200,
-    description: 'Return all contacts matching the query parameters.',
-  })
-  findAll(
+  @ApiOkResponse({ type: ContactListResponseDto, description: 'Paginated contacts (data + meta)' })
+  async findAll(
     @Query() query: QueryContactDto,
     @Request() req: AuthRequest,
     @CallerCtxParam() ctx: CallerCtx,
-  ) {
-    return this.contactsService.findAll(req.user.tenantId, query, ctx);
+  ): Promise<ContactListResponseDto> {
+    const result = await this.contactsService.findAll(req.user.tenantId, query, ctx);
+    return toResponse(ContactListResponseDto, result);
   }
 
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get a contact by ID' })
-  @ApiResponse({ status: 200, description: 'Return the contact.' })
-  @ApiResponse({ status: 404, description: 'Contact not found.' })
-  findOne(
+  @ApiOkResponse({ type: ContactResponseDto })
+  async findOne(
     @Param('id') id: string,
     @Request() req: AuthRequest,
     @CallerCtxParam() ctx: CallerCtx,
-  ) {
-    return this.contactsService.findOne(req.user.tenantId, id, ctx);
+  ): Promise<ContactResponseDto> {
+    const row = await this.contactsService.findOne(req.user.tenantId, id, ctx);
+    return toResponse(ContactResponseDto, row);
   }
 
   @Patch(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Update a contact' })
-  @ApiResponse({
-    status: 200,
-    description: 'The contact has been successfully updated.',
-  })
-  @ApiResponse({ status: 404, description: 'Contact not found.' })
-  update(
+  @ApiOkResponse({ type: ContactResponseDto })
+  async update(
     @Param('id') id: string,
     @Body() updateContactDto: UpdateContactDto,
     @Request() req: AuthRequest,
     @CallerCtxParam() ctx: CallerCtx,
-  ) {
-    return this.contactsService.update(
-      req.user.tenantId,
-      id,
-      updateContactDto,
-      ctx,
-    );
+  ): Promise<ContactResponseDto> {
+    const updated = await this.contactsService.update(req.user.tenantId, id, updateContactDto, ctx);
+    return toResponse(ContactResponseDto, updated);
   }
 
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete a contact' })
-  @ApiResponse({
-    status: 200,
-    description: 'The contact has been successfully deleted.',
-  })
-  @ApiResponse({ status: 404, description: 'Contact not found.' })
-  remove(
+  @ApiOkResponse({ type: ContactDeletedResultResponseDto })
+  async remove(
     @Param('id') id: string,
     @Request() req: AuthRequest,
     @CallerCtxParam() ctx: CallerCtx,
-  ) {
-    return this.contactsService.remove(req.user.tenantId, id, ctx);
+  ): Promise<ContactDeletedResultResponseDto> {
+    const result = await this.contactsService.remove(req.user.tenantId, id, ctx);
+    return toResponse(ContactDeletedResultResponseDto, result);
   }
 }

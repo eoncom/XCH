@@ -9,10 +9,19 @@ import {
   Query,
   Request,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { UpdateEnumLabelDto } from './dto/update-enum-label.dto';
 import { CreateEnumValueDto } from './dto/create-enum-value.dto';
+import {
+  EnumLabelMapResponseDto,
+  EnumLabelRowResponseDto,
+  EnumLabelDeletedResultResponseDto,
+  EnumLabelResetResultResponseDto,
+  toEnumLabelMapResponseDto,
+  toEnumLabelDefaultsMapResponseDto,
+} from './dto/enum-label.response.dto';
+import { toResponse } from '../../common/utils/to-response.util';
 import { AuthRequest } from '../../types/request.interface';
 import { RequireRead, RequireWrite, RequireManage } from '../../common/decorators/require-right.decorator';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
@@ -29,59 +38,71 @@ export class AdminController {
   @RequireRead()
   @ApiOperation({ summary: 'Get enum labels (custom + defaults)' })
   @ApiQuery({ name: 'type', required: false, description: 'Filter by enum type (AssetType, AssetStatus, PinType)' })
+  @ApiOkResponse({ type: EnumLabelMapResponseDto, description: 'Per-type arrays of label items (Record manually mapped — Cas B)' })
   async getEnumLabels(
     @Request() req: AuthRequest,
     @Query('type') enumType?: string,
-  ) {
-    return this.adminService.getEnumLabels(req.user.tenantId, enumType);
+  ): Promise<EnumLabelMapResponseDto> {
+    const result = await this.adminService.getEnumLabels(req.user.tenantId, enumType);
+    return toEnumLabelMapResponseDto(result as Record<string, unknown[]>);
   }
 
   @Put('enum-labels')
   @RequireWrite()
   @ApiOperation({ summary: 'Update or create a custom enum label' })
+  @ApiOkResponse({ type: EnumLabelRowResponseDto, description: 'Updated/created EnumLabel row' })
   async updateEnumLabel(
     @Request() req: AuthRequest,
     @Body() dto: UpdateEnumLabelDto,
-  ) {
-    return this.adminService.updateEnumLabel(req.user.tenantId, dto);
+  ): Promise<EnumLabelRowResponseDto> {
+    const row = await this.adminService.updateEnumLabel(req.user.tenantId, dto);
+    return toResponse(EnumLabelRowResponseDto, row);
   }
 
   @Post('enum-labels')
   @RequireWrite()
   @ApiOperation({ summary: 'Create a new custom enum value (e.g., new asset type)' })
+  @ApiCreatedResponse({ type: EnumLabelRowResponseDto, description: 'Created EnumLabel row' })
   async createEnumValue(
     @Request() req: AuthRequest,
     @Body() dto: CreateEnumValueDto,
-  ) {
-    return this.adminService.createEnumValue(req.user.tenantId, dto);
+  ): Promise<EnumLabelRowResponseDto> {
+    const row = await this.adminService.createEnumValue(req.user.tenantId, dto);
+    return toResponse(EnumLabelRowResponseDto, row);
   }
 
   @Delete('enum-labels/:id')
   @RequireManage()
   @ApiOperation({ summary: 'Delete a custom enum value (refuses if built-in or in use)' })
+  @ApiOkResponse({ type: EnumLabelDeletedResultResponseDto })
   async deleteEnumValue(
     @Request() req: AuthRequest,
     @Param('id') id: string,
-  ) {
-    return this.adminService.deleteEnumValue(req.user.tenantId, id);
+  ): Promise<EnumLabelDeletedResultResponseDto> {
+    const result = await this.adminService.deleteEnumValue(req.user.tenantId, id);
+    return toResponse(EnumLabelDeletedResultResponseDto, result);
   }
 
   @Post('enum-labels/reset')
   @RequireWrite()
   @ApiOperation({ summary: 'Reset enum labels to defaults' })
   @ApiQuery({ name: 'type', required: false, description: 'Reset only this enum type' })
+  @ApiOkResponse({ type: EnumLabelResetResultResponseDto })
   async resetEnumLabels(
     @Request() req: AuthRequest,
     @Query('type') enumType?: string,
-  ) {
-    return this.adminService.resetEnumLabels(req.user.tenantId, enumType);
+  ): Promise<EnumLabelResetResultResponseDto> {
+    const result = await this.adminService.resetEnumLabels(req.user.tenantId, enumType);
+    return toResponse(EnumLabelResetResultResponseDto, result);
   }
 
   @Get('enum-labels/defaults')
   @RequireRead()
   @ApiOperation({ summary: 'Get default enum labels (no customization)' })
   @ApiQuery({ name: 'type', required: false })
-  async getDefaults(@Query('type') enumType?: string) {
-    return this.adminService.getDefaults(enumType);
+  @ApiOkResponse({ type: EnumLabelMapResponseDto })
+  async getDefaults(@Query('type') enumType?: string): Promise<EnumLabelMapResponseDto> {
+    const result = this.adminService.getDefaults(enumType);
+    return toEnumLabelDefaultsMapResponseDto(result as Record<string, Record<string, unknown>>);
   }
 }
