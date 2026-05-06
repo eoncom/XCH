@@ -6,7 +6,6 @@
     "backend/src/modules/asset-models/asset-models.controller.ts",
     "backend/src/modules/assets/assets.controller.ts",
     "backend/src/modules/audit/audit.controller.ts",
-    "backend/src/modules/auth/auth.controller.ts",
     "backend/src/modules/budgets/budgets.controller.ts",
     "backend/src/modules/consumption/consumption.controller.ts",
     "backend/src/modules/contact-types/contact-types.controller.ts",
