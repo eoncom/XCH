@@ -7,6 +7,77 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.11.0] - 2026-05-06 — DTO discipline cascade S9 vague A+B (12 modules)
+
+Tag intermédiaire S9 — Hardening tail (plan v2 finalization). Pure refonte
+interne anti-leak Prisma : aucune surface utilisateur visible. Cascade
+post-baseline ADR-023 sur 12 modules en quelques heures (critère Q4 v1.11.0
+< 4 jours ouvrés très largement validé).
+
+### Changed
+
+- Aucune surface utilisateur visible (refonte interne anti-leak Prisma).
+
+### Internal
+
+- **DTO discipline cascade S9 vague A+B** — 12 modules migrés au pattern
+  ADR-023 (Response DTO co-localisé + `@ApiResponse({ type })` Swagger +
+  `class-transformer` whitelist `excludeExtraneousValues: true`) :
+  monitoring (baseline) · connectivity · notifications · backup · racks ·
+  sites · tenants · users · floor-plans · integrations · tasks.
+- **126/274 endpoints HTTP couverts (46%)** par Response DTO + garde-fou
+  CI `dto-coverage` actif (`backend/scripts/check-dto-coverage.ts`).
+  Baseline `backend/scripts/dto-coverage-baseline.json` : 28 → 16
+  controllers exemptés.
+- **Backend Jest 193 → 300** (+107 tests dto-shape par module : assertions
+  d'inclusion explicites `toHaveProperty` + `not.toHaveProperty` sur
+  champs sensibles + runtime smoke `instanceToPlain` → JSON).
+- **ADR-023 dto-discipline.md** — pattern figé : (Cas A) `plainToInstance`
+  pur ; (Cas B) helper manuel `to<X>ResponseDto(input, ctx?)` pour shapes
+  composites / `Record<string, T>` ; (Cas C) `plainToInstance` + `@Type()`
+  pour relations imbriquées. README opérationnel
+  (`backend/src/common/dto/response/README.md`) + signature canonique
+  `ResponseMappingCtx` exportée.
+- **Patterns transversaux gravés** :
+  - `@Transform(({obj}) => obj.field)` pour Prisma JSON / `Record<string,T>`
+    embedded — bypass class-transformer instantiation pipeline.
+  - `@Res()` binary streams (backup ZIP downloads, etc.) exemptés du
+    `type:` requirement par le script CI (détection automatique via
+    look-ahead méthode).
+  - `ADJACENCY_WINDOW=20` dans le script CI pour couvrir
+    `@Post + @UseInterceptors(FileInterceptor(...))` multi-line avant
+    `@ApiOkResponse` (pattern file upload).
+  - **Sensitive fields hardening** sur `User` (DTO whitelist exclut
+    `passwordHash`/`totpSecret`/`totpBackupCodes`/`inviteToken`/
+    `resetToken`/`failedLoginAttempts`/`lockedUntil` ; runtime smoke
+    test regex matchers contre bcrypt prefix, TOTP base32, tokens).
+- **`ClassSerializerInterceptor` global activé** dans `backend/src/main.ts`
+  (`useGlobalInterceptors`).
+- **`as any` cleanup** sur les modules touchés (where/data/expense
+  payloads typés `Prisma.<Model>WhereInput` / `Prisma.<Model>UpdateInput`).
+
+### PRs
+
+- #37 — Baseline DTO discipline + monitoring pivot (ADR-023)
+- #38 — connectivity Response DTOs
+- #39 — notifications Response DTOs
+- #40 — backup Response DTOs (binary streams + Record helpers)
+- #41 — racks Response DTOs (Prisma JSON `@Transform({obj})` pattern)
+- #42 — sites Response DTOs (vague B start)
+- #43 — tenants Response DTOs (SSO secret-mask runtime smoke)
+- #44 — users Response DTOs (sensitive fields hardening)
+- #45 — floor-plans Response DTOs
+- #46 — integrations Response DTOs (Swagger marker-only — NetBox upstream)
+- #47 — tasks Response DTOs (Swagger marker-only — relations massives)
+
+### Reste post-tag (vague C+D, avant v2.0.0)
+
+- #12 assets (type A Prisma raw leak — le plus risqué, séquentiel seul)
+- #13 asset-models · #14 expenses+billing-entities · #15 auth (sécurité)
+- #16 reliquats groupés · #17 CSP nonce dynamique (frontend)
+
+---
+
 ## [1.10.0] - 2026-05-04
 
 ### Added
