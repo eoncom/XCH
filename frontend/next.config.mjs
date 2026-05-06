@@ -1,7 +1,11 @@
 /**
- * Security headers applied to every response from the frontend.
- * CSP allows 'unsafe-inline' and 'unsafe-eval' for Next.js dev tools + inline scripts;
- * consider moving to a strict CSP with nonces in a later hardening pass.
+ * Static security headers applied to every response from the frontend.
+ *
+ * The Content-Security-Policy is NOT in this list — it is generated
+ * per-request with a fresh nonce by `frontend/src/middleware.ts` (see
+ * `frontend/src/lib/csp.ts`). Keeping the CSP out of next.config.mjs
+ * guarantees a single source of truth and avoids the nonce header
+ * being clobbered by the static value.
  */
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -25,31 +29,6 @@ const securityHeaders = [
   // credentialless: allow loading cross-origin resources without credentials
   // (keeps leaflet tile CDN usable without strict CORP on their side)
   { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      // Next.js runtime requires inline + eval in dev/prod. Acceptable baseline.
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' data: https://fonts.gstatic.com",
-      // Tile providers we serve directly to <img> (Leaflet TileLayer):
-      //   - tile.openstreetmap.org (default light theme)
-      //   - basemaps.cartocdn.com  (Dark Matter, used in dark theme — S6 PR2)
-      // unpkg.com + raw.githubusercontent.com host the Leaflet marker icons.
-      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://raw.githubusercontent.com",
-      // APIs called from the browser; same-origin + NetBox/Uptime Kuma typically proxied.
-      // nominatim.openstreetmap.org is whitelisted explicitly because the "Actualiser
-      // GPS" button (sites/new + sites/[id]/edit) calls its /search endpoint directly
-      // to geocode an address into lat/lng — no server-side proxy for it.
-      "connect-src 'self' blob: https://nominatim.openstreetmap.org",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      "object-src 'none'",
-      'upgrade-insecure-requests',
-    ].join('; '),
-  },
 ];
 
 /** @type {import('next').NextConfig} */
