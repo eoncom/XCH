@@ -1,5 +1,13 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, UseInterceptors, UploadedFile, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+  ApiOkResponse,
+  ApiCreatedResponse,
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { attachmentFileFilter } from '../../common/utils/upload-security';
@@ -19,6 +27,18 @@ import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
 import { ExpensesService } from '../expenses/expenses.service';
+import {
+  TaskAttachmentDeletedResultResponseDto,
+  TaskAttachmentResponseDto,
+  TaskCommentDeletedResultResponseDto,
+  TaskCommentResponseDto,
+  TaskDeletedResultResponseDto,
+  TaskExpenseResultResponseDto,
+  TaskListResponseDto,
+  TaskResponseDto,
+  TaskStatsByPriorityResponseDto,
+  TaskStatsByStatusResponseDto,
+} from './dto/task-passthrough.response.dto';
 
 @RequireModule('tasks')
 @ApiTags('tasks')
@@ -35,6 +55,7 @@ export class TasksController {
   @Post()
   @RequireWrite()
   @ApiOperation({ summary: 'Create new task' })
+  @ApiCreatedResponse({ type: TaskResponseDto })
   async create(@Body() createTaskDto: CreateTaskDto, @Request() req: AuthRequest) {
     if (createTaskDto.siteId) {
       const perm = await this.permissionService.resolve(
@@ -50,6 +71,7 @@ export class TasksController {
   @Get()
   @RequireRead()
   @ApiOperation({ summary: 'Get all tasks (filtered by user site access + resource permissions)' })
+  @ApiOkResponse({ type: TaskListResponseDto })
   async findAll(@Query() filter: FilterTaskDto, @Request() req: AuthRequest) {
     const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
@@ -61,6 +83,7 @@ export class TasksController {
   @Get('my-tasks')
   @RequireRead()
   @ApiOperation({ summary: 'Get tasks assigned to me' })
+  @ApiOkResponse({ type: TaskResponseDto, isArray: true })
   async getMyTasks(@Request() req: AuthRequest) {
     const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
@@ -72,6 +95,7 @@ export class TasksController {
   @Get('overdue')
   @RequireRead()
   @ApiOperation({ summary: 'Get overdue tasks' })
+  @ApiOkResponse({ type: TaskResponseDto, isArray: true })
   async getOverdueTasks(@Request() req: AuthRequest) {
     const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
@@ -83,6 +107,7 @@ export class TasksController {
   @Get('stats/by-status')
   @RequireRead()
   @ApiOperation({ summary: 'Get tasks statistics by status' })
+  @ApiOkResponse({ type: TaskStatsByStatusResponseDto })
   async getStatsByStatus(@Request() req: AuthRequest) {
     const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
@@ -94,6 +119,7 @@ export class TasksController {
   @Get('stats/by-priority')
   @RequireRead()
   @ApiOperation({ summary: 'Get tasks statistics by priority' })
+  @ApiOkResponse({ type: TaskStatsByPriorityResponseDto })
   async getStatsByPriority(@Request() req: AuthRequest) {
     const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(
       req.user.tenantId,
@@ -105,6 +131,7 @@ export class TasksController {
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get task by id' })
+  @ApiOkResponse({ type: TaskResponseDto })
   async findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     const task = await this.tasksService.findOne(id, req.user.tenantId, ctx);
     if (task.siteId) {
@@ -121,6 +148,7 @@ export class TasksController {
   @Patch(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Update task' })
+  @ApiOkResponse({ type: TaskResponseDto })
   async update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     const task = await this.tasksService.findOne(id, req.user.tenantId, ctx);
     if (task.siteId) {
@@ -137,6 +165,7 @@ export class TasksController {
   @Patch(':id/checklist')
   @RequireWrite()
   @ApiOperation({ summary: 'Update task checklist' })
+  @ApiOkResponse({ type: TaskResponseDto })
   async updateChecklist(
     @Param('id') id: string,
     @Body() updateChecklistDto: UpdateChecklistDto,
@@ -158,6 +187,7 @@ export class TasksController {
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete task' })
+  @ApiOkResponse({ type: TaskDeletedResultResponseDto })
   async remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     const task = await this.tasksService.findOne(id, req.user.tenantId, ctx);
     if (task.siteId) {
@@ -178,31 +208,22 @@ export class TasksController {
   @Post(':id/attachments')
   @RequireWrite()
   @ApiOperation({ summary: 'Upload attachment to task' })
+  @ApiCreatedResponse({ type: TaskAttachmentResponseDto })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-        },
-        description: {
-          type: 'string',
-        },
-        category: {
-          type: 'string',
-          enum: ['spec', 'invoice', 'photo', 'report', 'manual', 'other'],
-        },
+        file: { type: 'string', format: 'binary' },
+        description: { type: 'string' },
+        category: { type: 'string', enum: ['spec', 'invoice', 'photo', 'report', 'manual', 'other'] },
       },
     },
   })
-  // S1-closing (ADR-016 lot M) — limits + fileFilter were missing on this
-  // endpoint, leaving it as a DoS / arbitrary upload vector.
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB, same as assets/sites/racks
+      limits: { fileSize: 10 * 1024 * 1024 },
       fileFilter: attachmentFileFilter,
     }),
   )
@@ -224,6 +245,7 @@ export class TasksController {
   @Get(':id/attachments')
   @RequireRead()
   @ApiOperation({ summary: 'List attachments for task' })
+  @ApiOkResponse({ type: TaskAttachmentResponseDto, isArray: true })
   listAttachments(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.tasksService.listAttachments(id, req.user.tenantId);
   }
@@ -231,6 +253,7 @@ export class TasksController {
   @Delete(':id/attachments/:attachmentId')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete attachment from task' })
+  @ApiOkResponse({ type: TaskAttachmentDeletedResultResponseDto })
   deleteAttachment(
     @Param('id') id: string,
     @Param('attachmentId') attachmentId: string,
@@ -246,6 +269,7 @@ export class TasksController {
   @Post(':id/comments')
   @RequireWrite()
   @ApiOperation({ summary: 'Add comment to task' })
+  @ApiCreatedResponse({ type: TaskCommentResponseDto })
   createComment(
     @Param('id') id: string,
     @Body() createCommentDto: CreateCommentDto,
@@ -257,6 +281,7 @@ export class TasksController {
   @Get(':id/comments')
   @RequireRead()
   @ApiOperation({ summary: 'Get comments for task' })
+  @ApiOkResponse({ type: TaskCommentResponseDto, isArray: true })
   getComments(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.tasksService.getComments(id, req.user.tenantId);
   }
@@ -264,41 +289,39 @@ export class TasksController {
   @Patch(':id/comments/:commentId')
   @RequireWrite()
   @ApiOperation({ summary: 'Update comment' })
+  @ApiOkResponse({ type: TaskCommentResponseDto })
   updateComment(
     @Param('id') id: string,
     @Param('commentId') commentId: string,
     @Body() body: { text: string },
     @Request() req: AuthRequest,
   ) {
-    const localRole = (req as any).localRole || (req.user.isSuperAdmin ? 'ADMIN' : 'VIEWER');
+    const localRole = (req as { localRole?: string }).localRole || (req.user.isSuperAdmin ? 'ADMIN' : 'VIEWER');
     return this.tasksService.updateComment(commentId, req.user.tenantId, req.user.id, body.text, localRole);
   }
 
   @Delete(':id/comments/:commentId')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete comment' })
+  @ApiOkResponse({ type: TaskCommentDeletedResultResponseDto })
   deleteComment(
     @Param('id') id: string,
     @Param('commentId') commentId: string,
     @Request() req: AuthRequest,
   ) {
-    const localRole = (req as any).localRole || (req.user.isSuperAdmin ? 'ADMIN' : 'VIEWER');
+    const localRole = (req as { localRole?: string }).localRole || (req.user.isSuperAdmin ? 'ADMIN' : 'VIEWER');
     return this.tasksService.deleteComment(commentId, req.user.tenantId, req.user.id, localRole);
   }
 
   // ========== ADR-011 Inline Expense generation ==========
 
-  /**
-   * Generate an Expense (SERVICE / ONE_TIME) from this task's actualCost
-   * (or estimatedCost when useEstimated=true). 1:1 relationship — refuses
-   * if the task already has an expense linked.
-   */
   @Post(':id/generate-expense')
   @RequireWrite()
   @ApiOperation({
     summary:
       'Generate an Expense linked to this task (ADR-011). Validates that the caller has WRITE on the task site.',
   })
+  @ApiCreatedResponse({ type: TaskExpenseResultResponseDto })
   async generateExpense(
     @Param('id') id: string,
     @Body() body: { bearerId: string; label?: string; useEstimated?: boolean },
@@ -322,20 +345,18 @@ export class TasksController {
     );
   }
 
-  /**
-   * Resync the linked Expense's totalAmount from the current task cost
-   * (frozen-by-default, ADR-011 §2).
-   */
   @Patch(':id/resync-expense')
   @RequireWrite()
   @ApiOperation({ summary: 'Resync linked expense from task cost (ADR-011)' })
+  @ApiOkResponse({ type: TaskExpenseResultResponseDto })
   async resyncExpense(
     @Param('id') id: string,
     @Request() req: AuthRequest,
     @CallerCtxParam() ctx: CallerCtx,
   ) {
     const task = await this.tasksService.findOne(id, req.user.tenantId, ctx);
-    if (!(task as any).expenseId) {
+    const taskExpenseId = (task as { expenseId?: string | null }).expenseId;
+    if (!taskExpenseId) {
       throw new BadRequestException('No expense linked to this task');
     }
     if (task.siteId) {
@@ -346,7 +367,7 @@ export class TasksController {
         throw new ForbiddenException('Insufficient permissions to edit expenses on this site');
       }
     }
-    return this.expensesService.resyncExpense(req.user.tenantId, (task as any).expenseId, {
+    return this.expensesService.resyncExpense(req.user.tenantId, taskExpenseId, {
       kind: 'task',
       sourceId: id,
     });
