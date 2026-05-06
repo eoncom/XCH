@@ -157,26 +157,61 @@ function main() {
   let coveredCount = 0;
   let exemptedCount = 0;
   const violations: Endpoint[] = [];
+  // S9 PR17 follow-up — track files that are listed in the baseline AND
+  // already have full coverage. After PR #49 / #50 we shipped fully
+  // typed assets / asset-models controllers but forgot to drop their
+  // baseline entries; the script silently kept exempting them. Detecting
+  // and failing on this state prevents the same trap from re-appearing
+  // post-v2.0 once a future PR reintroduces a baseline entry.
+  const fullyCoveredControllers = new Set<string>();
+  const knownExempted = new Set<string>();
+  const exemptedKnownEmpty = new Set<string>();
+  // Build a per-controller view of `endpoints covered vs exempted` so we
+  // can flag stale exemptions (covered=N, exempted=0) once the loop
+  // finishes.
+  const perController: Record<string, { covered: number; exempted: number; total: number }> = {};
 
   for (const file of controllers) {
     const rel = relativeFromRepo(file);
     const endpoints = findEndpoints(file);
     const isExempt = exemptedSet.has(rel);
+    if (isExempt) knownExempted.add(rel);
+    perController[rel] = { covered: 0, exempted: 0, total: 0 };
     for (const ep of endpoints) {
       totalEndpoints++;
+      perController[rel].total++;
       const covered = hasResponseDtoCoverage(file, ep.line);
       if (covered) {
         coveredCount++;
+        perController[rel].covered++;
       } else if (isExempt) {
         exemptedCount++;
+        perController[rel].exempted++;
       } else {
         violations.push(ep);
       }
     }
+    if (perController[rel].total > 0 && perController[rel].covered === perController[rel].total) {
+      fullyCoveredControllers.add(rel);
+    }
+    if (isExempt && perController[rel].total === 0) {
+      // Empty controller listed as exempted — also stale.
+      exemptedKnownEmpty.add(rel);
+    }
+  }
+
+  // Stale exemptions = listed in baseline.exempted_files AND every
+  // endpoint already has full DTO coverage. The exemption is a no-op
+  // and silently weakens the strictness guarantee — fail.
+  const staleExemptions: string[] = [];
+  for (const rel of knownExempted) {
+    if (fullyCoveredControllers.has(rel) || exemptedKnownEmpty.has(rel)) {
+      staleExemptions.push(rel);
+    }
   }
 
   const totalControllers = controllers.length;
-  const exemptControllers = controllers.filter((f) => exemptedSet.has(relativeFromRepo(f))).length;
+  const exemptControllers = knownExempted.size;
 
   console.log(`\n=== DTO Coverage Check (S9 ADR-023) ===\n`);
   console.log(`Controllers scanned        : ${totalControllers}`);
@@ -185,6 +220,7 @@ function main() {
   console.log(`Endpoints DTO-covered      : ${coveredCount}`);
   console.log(`Endpoints exempted         : ${exemptedCount}`);
   console.log(`Endpoints uncovered (FAIL) : ${violations.length}`);
+  console.log(`Stale exemptions (FAIL)    : ${staleExemptions.length}`);
 
   if (violations.length > 0) {
     console.log(`\n=== VIOLATIONS ===`);
@@ -198,6 +234,28 @@ function main() {
     );
     console.log(
       `Either add the decorator (preferred — finishes the S9 module migration) or, if temporarily, exempt the file in scripts/dto-coverage-baseline.json with a tracking issue.\n`,
+    );
+    process.exit(1);
+  }
+
+  if (staleExemptions.length > 0) {
+    console.log(`\n=== STALE EXEMPTIONS ===`);
+    for (const rel of staleExemptions) {
+      const p = perController[rel];
+      const reason = p && p.total > 0
+        ? `every endpoint is already DTO-covered (${p.covered}/${p.total})`
+        : 'controller has no HTTP endpoints to cover';
+      console.log(`${rel}  → ${reason}`);
+    }
+    console.log(
+      `\n::error::${staleExemptions.length} controller(s) listed in scripts/dto-coverage-baseline.json` +
+        ` while their endpoints are already fully covered (or have no endpoints at all).`,
+    );
+    console.log(
+      `These exemptions are no-ops that silently weaken the strict guarantee. Drop them from \`exempted_files\`.`,
+    );
+    console.log(
+      `Origin of the rule : v2.0.0 follow-up — assets/asset-models trapped this exact state through PRs #49/#50 → cleaned in PR #16.\n`,
     );
     process.exit(1);
   }
