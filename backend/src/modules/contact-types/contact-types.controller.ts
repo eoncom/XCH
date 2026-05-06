@@ -14,13 +14,19 @@ import {
   ApiTags,
   ApiBearerAuth,
   ApiOperation,
-  ApiResponse,
+  ApiOkResponse,
+  ApiCreatedResponse,
   ApiQuery,
 } from '@nestjs/swagger';
 import { ContactCategory } from '@prisma/client';
 import { ContactTypesService } from './contact-types.service';
 import { CreateContactTypeDto } from './dto/create-contact-type.dto';
 import { UpdateContactTypeDto } from './dto/update-contact-type.dto';
+import {
+  ContactTypeResponseDto,
+  ContactTypeDeletedResultResponseDto,
+} from './dto/contact-type.response.dto';
+import { toResponse, toResponseArray } from '../../common/utils/to-response.util';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead } from '../../common/decorators/require-right.decorator';
 import { AuthRequest } from '../../types/request.interface';
@@ -35,22 +41,13 @@ export class ContactTypesController {
   @Post()
   @RequireWrite()
   @ApiOperation({ summary: 'Create a new contact type' })
-  @ApiResponse({
-    status: 201,
-    description: 'Contact type created successfully',
-  })
-  @ApiResponse({
-    status: 409,
-    description: 'Contact type with this name already exists',
-  })
-  create(
+  @ApiCreatedResponse({ type: ContactTypeResponseDto, description: 'Contact type created successfully' })
+  async create(
     @Request() req: AuthRequest,
     @Body() createContactTypeDto: CreateContactTypeDto,
-  ) {
-    return this.contactTypesService.create(
-      req.user.tenantId,
-      createContactTypeDto,
-    );
+  ): Promise<ContactTypeResponseDto> {
+    const created = await this.contactTypesService.create(req.user.tenantId, createContactTypeDto);
+    return toResponse(ContactTypeResponseDto, created);
   }
 
   @Get()
@@ -68,15 +65,12 @@ export class ContactTypesController {
     type: Boolean,
     description: 'Filter by active status',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'List of contact types (system types listed first)',
-  })
-  findAll(
+  @ApiOkResponse({ type: [ContactTypeResponseDto], description: 'List of contact types (system types listed first)' })
+  async findAll(
     @Request() req: AuthRequest,
     @Query('category') category?: ContactCategory,
     @Query('isActive') isActive?: string,
-  ) {
+  ): Promise<ContactTypeResponseDto[]> {
     const filters: any = {};
 
     if (category) {
@@ -87,54 +81,38 @@ export class ContactTypesController {
       filters.isActive = isActive === 'true';
     }
 
-    return this.contactTypesService.findAll(req.user.tenantId, filters);
+    const rows = await this.contactTypesService.findAll(req.user.tenantId, filters);
+    return toResponseArray(ContactTypeResponseDto, rows);
   }
 
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get a contact type by ID' })
-  @ApiResponse({ status: 200, description: 'Contact type found' })
-  @ApiResponse({ status: 404, description: 'Contact type not found' })
-  findOne(@Request() req: AuthRequest, @Param('id') id: string) {
-    return this.contactTypesService.findOne(req.user.tenantId, id);
+  @ApiOkResponse({ type: ContactTypeResponseDto })
+  async findOne(@Request() req: AuthRequest, @Param('id') id: string): Promise<ContactTypeResponseDto> {
+    const row = await this.contactTypesService.findOne(req.user.tenantId, id);
+    return toResponse(ContactTypeResponseDto, row);
   }
 
   @Patch(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Update a contact type' })
-  @ApiResponse({ status: 200, description: 'Contact type updated' })
-  @ApiResponse({
-    status: 403,
-    description: 'Cannot modify name/category of system types',
-  })
-  @ApiResponse({ status: 404, description: 'Contact type not found' })
-  @ApiResponse({
-    status: 409,
-    description: 'Contact type with this name already exists',
-  })
-  update(
+  @ApiOkResponse({ type: ContactTypeResponseDto })
+  async update(
     @Request() req: AuthRequest,
     @Param('id') id: string,
     @Body() updateContactTypeDto: UpdateContactTypeDto,
-  ) {
-    return this.contactTypesService.update(
-      req.user.tenantId,
-      id,
-      updateContactTypeDto,
-    );
+  ): Promise<ContactTypeResponseDto> {
+    const updated = await this.contactTypesService.update(req.user.tenantId, id, updateContactTypeDto);
+    return toResponse(ContactTypeResponseDto, updated);
   }
 
   @Delete(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete a contact type' })
-  @ApiResponse({ status: 200, description: 'Contact type deleted' })
-  @ApiResponse({ status: 403, description: 'Cannot delete system types' })
-  @ApiResponse({ status: 404, description: 'Contact type not found' })
-  @ApiResponse({
-    status: 409,
-    description: 'Contact type is in use and cannot be deleted',
-  })
-  remove(@Request() req: AuthRequest, @Param('id') id: string) {
-    return this.contactTypesService.remove(req.user.tenantId, id);
+  @ApiOkResponse({ type: ContactTypeDeletedResultResponseDto })
+  async remove(@Request() req: AuthRequest, @Param('id') id: string): Promise<ContactTypeDeletedResultResponseDto> {
+    const result = await this.contactTypesService.remove(req.user.tenantId, id);
+    return toResponse(ContactTypeDeletedResultResponseDto, result);
   }
 }

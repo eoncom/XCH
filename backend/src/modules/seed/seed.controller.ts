@@ -1,6 +1,12 @@
 import { Controller, Param, Post, Request, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags, ApiOkResponse } from '@nestjs/swagger';
 import { SeedService } from './seed.service';
+import {
+  SeedDemoResponseDto,
+  SeedResetResponseDto,
+  SeedResetDomainResponseDto,
+} from './dto/seed.response.dto';
+import { toResponse } from '../../common/utils/to-response.util';
 import { AuthRequest } from '../../types/request.interface';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { RequireManage } from '../../common/decorators/require-right.decorator';
@@ -30,8 +36,10 @@ export class SeedController {
     summary: '[ADMIN ONLY] Load demo data',
     description: 'Loads comprehensive demo data (sites, assets, racks, tasks). Idempotent - can be run multiple times safely.',
   })
-  async loadDemo(@Request() req: AuthRequest) {
-    return this.seedService.loadDemo(req.user.tenantId);
+  @ApiOkResponse({ type: SeedDemoResponseDto, description: 'Per-entity counts of seeded rows' })
+  async loadDemo(@Request() req: AuthRequest): Promise<SeedDemoResponseDto> {
+    const result = await this.seedService.loadDemo(req.user.tenantId);
+    return toResponse(SeedDemoResponseDto, result);
   }
 
   @Post('reset')
@@ -39,8 +47,10 @@ export class SeedController {
     summary: '[ADMIN ONLY] Reset all data',
     description: 'Deletes all data EXCEPT admin user and tenant. Use with caution!',
   })
-  async reset(@Request() req: AuthRequest) {
-    return this.seedService.resetData(req.user.tenantId, req.user.id);
+  @ApiOkResponse({ type: SeedResetResponseDto })
+  async reset(@Request() req: AuthRequest): Promise<SeedResetResponseDto> {
+    const result = await this.seedService.resetData(req.user.tenantId, req.user.id);
+    return toResponse(SeedResetResponseDto, result);
   }
 
   /**
@@ -56,12 +66,14 @@ export class SeedController {
     description:
       'Domains: assets, racks, expenses, monitors, notifications. Domain "sites" non supporté — utiliser /api/seed/reset (global) puis /api/seed/demo. Refusé si NODE_ENV=production.',
   })
-  async resetDomain(@Request() req: AuthRequest, @Param('domain') domain: string) {
+  @ApiOkResponse({ type: SeedResetDomainResponseDto })
+  async resetDomain(@Request() req: AuthRequest, @Param('domain') domain: string): Promise<SeedResetDomainResponseDto> {
     if (!RESET_DOMAINS.includes(domain as ResetDomain)) {
       throw new Error(
         `Unknown reset domain "${domain}". Supported: ${RESET_DOMAINS.join(', ')}.`,
       );
     }
-    return this.seedService.resetDomain(req.user.tenantId, domain as ResetDomain);
+    const result = await this.seedService.resetDomain(req.user.tenantId, domain as ResetDomain);
+    return toResponse(SeedResetDomainResponseDto, result);
   }
 }

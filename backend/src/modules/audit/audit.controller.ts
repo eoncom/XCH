@@ -1,7 +1,9 @@
 import { Controller, ForbiddenException, Get, Param, Query, Request, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiOkResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuditService } from './audit.service';
+import { AuditLogListResponseDto } from './dto/audit-log-list.response.dto';
+import { toResponse } from '../../common/utils/to-response.util';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireManage, RequireRead } from '../../common/decorators/require-right.decorator';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
@@ -26,6 +28,7 @@ export class AuditController {
   // suffit pour navigation interactive, bloque le scrape automatisé.
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @ApiOperation({ summary: 'Query tenant-wide audit log (super admin only)' })
+  @ApiOkResponse({ type: AuditLogListResponseDto, description: 'Paginated audit log + enrichWithEntityLabels' })
   async query(
     @Query('entity') entity: string | undefined,
     @Query('entityId') entityId: string | undefined,
@@ -36,11 +39,11 @@ export class AuditController {
     @Query('page') page: string | undefined,
     @Query('pageSize') pageSize: string | undefined,
     @Request() req: AuthRequest,
-  ) {
+  ): Promise<AuditLogListResponseDto> {
     if (!req.user.isSuperAdmin) {
       throw new ForbiddenException('Réservé aux super administrateurs');
     }
-    return this.service.query(req.user.tenantId, {
+    const result = await this.service.query(req.user.tenantId, {
       entity,
       entityId,
       userId,
@@ -50,21 +53,24 @@ export class AuditController {
       page: page ? parseInt(page, 10) : undefined,
       pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
     });
+    return toResponse(AuditLogListResponseDto, result);
   }
 
   @Get('entity/:type/:id')
   @RequireRead()
   @ApiOperation({ summary: 'Get audit log entries for a specific entity' })
+  @ApiOkResponse({ type: AuditLogListResponseDto })
   async forEntity(
     @Param('type') type: string,
     @Param('id') id: string,
     @Query('limit') limit: string | undefined,
     @Request() req: AuthRequest,
-  ) {
-    return this.service.query(req.user.tenantId, {
+  ): Promise<AuditLogListResponseDto> {
+    const result = await this.service.query(req.user.tenantId, {
       entity: type,
       entityId: id,
       pageSize: limit ? parseInt(limit, 10) : 50,
     });
+    return toResponse(AuditLogListResponseDto, result);
   }
 }
