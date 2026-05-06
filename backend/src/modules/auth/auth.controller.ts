@@ -1,5 +1,5 @@
-import { Controller, Post, Body, UseGuards, Request, Get, Res, UnauthorizedException, Req, Delete, Param, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { Controller, Post, Body, UseGuards, Request, Get, Res, UnauthorizedException, Req, Delete, Param, BadRequestException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -24,15 +24,29 @@ import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { LoginResponseDto } from './dto/login.response.dto';
+import { SessionResponseDto } from './dto/session.response.dto';
+import { AuthProfileResponseDto } from './dto/auth-profile.response.dto';
+import { AuthUserResponseDto } from './dto/auth-user.response.dto';
+import { MyPermissionsResponseDto } from './dto/auth-permissions.response.dto';
+import { TotpSetupResponseDto } from './dto/totp-setup.response.dto';
+import { TotpVerifySetupResponseDto } from './dto/totp-verify-setup.response.dto';
+import { SsoConfigResponseDto } from './dto/sso-config.response.dto';
+import { InviteResponseDto } from './dto/invite.response.dto';
+import {
+  AuthSuccessResultResponseDto,
+  TotpDisabledResultResponseDto,
+  AuthMessageResultResponseDto,
+} from './dto/auth-action-result.response.dto';
+import { toResponse } from '../../common/utils/to-response.util';
 import { AuthRequest } from '../../types/request.interface';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { RequireWrite, RequireManage } from '../../common/decorators/require-right.decorator';
+import { RequireManage } from '../../common/decorators/require-right.decorator';
 import { PermissionService } from '../../common/services/permission.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 
@@ -92,12 +106,15 @@ export class AuthController {
   @Throttle({ default: { ttl: 60000, limit: authLimit } })
   @UseGuards(LocalAuthGuard)
   @ApiOperation({ summary: 'Login with email/password' })
-  @ApiResponse({ status: 200, description: 'Returns user data and sets HTTP-only cookies, or requires 2FA' })
+  @ApiOkResponse({
+    type: LoginResponseDto,
+    description: 'Returns one of three shapes: { user } success, { requires2FA, tempToken } 2FA gate, or { user, requires2FASetup } when tenant requires enrollment. Sets HTTP-only cookies on success paths.',
+  })
   async login(
     @Request() req: AuthRequest,
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) res: Response,
-  ) {
+  ): Promise<LoginResponseDto> {
     const user = req.user;
 
     // ADR-018 — TenantSecurityConfig (typed) replaces tenant.config.security.
@@ -113,7 +130,7 @@ export class AuthController {
         { sub: user.id, type: '2fa_pending' },
         { expiresIn: '5m' },
       );
-      return { requires2FA: true, tempToken };
+      return toResponse(LoginResponseDto, { requires2FA: true, tempToken });
     }
 
     // If tenant requires 2FA but user hasn't set it up, flag it
@@ -121,7 +138,7 @@ export class AuthController {
       const result = await this.authService.login(user);
       res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', result.sessionMs));
       res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', result.refreshMs));
-      return { user: result.user, requires2FASetup: true };
+      return toResponse(LoginResponseDto, { user: result.user, requires2FASetup: true });
     }
 
     const result = await this.authService.login(user);
@@ -131,16 +148,15 @@ export class AuthController {
     res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', result.refreshMs));
 
     // Return only user data (tokens already in cookies)
-    return { user: result.user };
+    return toResponse(LoginResponseDto, { user: result.user });
   }
 
   @Get('session')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current session status (checks accessToken cookie)' })
-  @ApiResponse({ status: 200, description: 'Returns current user if authenticated' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - no valid session' })
-  async getSession(@Request() req: AuthRequest) {
+  @ApiOkResponse({ type: SessionResponseDto, description: 'Returns the authenticated user enriched with tenant ref' })
+  async getSession(@Request() req: AuthRequest): Promise<SessionResponseDto> {
     // Enrich JWT data with full user info from DB (includes totpEnabled, name, tenant, etc.)
     const dbUser = await this.prisma.user.findUnique({
       where: { id: req.user.userId || req.user.id },
@@ -149,7 +165,7 @@ export class AuthController {
     if (!dbUser) {
       throw new UnauthorizedException('User not found');
     }
-    return {
+    return toResponse(SessionResponseDto, {
       user: {
         id: dbUser.id,
         email: dbUser.email,
@@ -160,18 +176,17 @@ export class AuthController {
         isSuperAdmin: dbUser.isSuperAdmin || false,
       },
       isAuthenticated: true,
-    };
+    });
   }
 
   @Post('refresh')
   @Public()
   @ApiOperation({ summary: 'Refresh access token using refreshToken cookie' })
-  @ApiResponse({ status: 200, description: 'Sets new accessToken cookie' })
-  @ApiResponse({ status: 401, description: 'Invalid or missing refresh token' })
+  @ApiOkResponse({ type: AuthSuccessResultResponseDto, description: 'Sets new accessToken cookie' })
   async refresh(
     @Req() req: ExpressRequest,
     @Res({ passthrough: true }) res: Response,
-  ) {
+  ): Promise<AuthSuccessResultResponseDto> {
     const refreshToken = req.cookies['refreshToken'];
 
     if (!refreshToken) {
@@ -183,15 +198,15 @@ export class AuthController {
     // Set new accessToken cookie with tenant-configured timeout
     res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', result.sessionMs));
 
-    return { success: true };
+    return toResponse(AuthSuccessResultResponseDto, { success: true });
   }
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout (clears authentication cookies)' })
-  @ApiResponse({ status: 200, description: 'Cookies cleared successfully' })
-  async logout(@Res({ passthrough: true }) res: Response) {
+  @ApiOkResponse({ type: AuthSuccessResultResponseDto, description: 'Cookies cleared successfully' })
+  async logout(@Res({ passthrough: true }) res: Response): Promise<AuthSuccessResultResponseDto> {
     // Clear authentication cookies (environment-aware)
     const accessCookieOpts = this.getCookieOptions('/', 0);
     const refreshCookieOpts = this.getCookieOptions('/api/auth/refresh', 0);
@@ -199,7 +214,7 @@ export class AuthController {
     res.clearCookie('accessToken', accessCookieOpts);
     res.clearCookie('refreshToken', refreshCookieOpts);
 
-    return { success: true };
+    return toResponse(AuthSuccessResultResponseDto, { success: true });
   }
 
   @Post('register')
@@ -207,23 +222,27 @@ export class AuthController {
   @ApiBearerAuth()
   @Throttle({ default: { ttl: 60000, limit: authLimit } })
   @ApiOperation({ summary: 'Register new user (ADMIN only)' })
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+  @ApiCreatedResponse({ type: AuthUserResponseDto, description: 'Created user (sensitive fields stripped)' })
+  async register(@Body() registerDto: RegisterDto): Promise<AuthUserResponseDto> {
+    const created = await this.authService.register(registerDto);
+    return toResponse(AuthUserResponseDto, created);
   }
 
   @Get('profile')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
-  getProfile(@Request() req: AuthRequest) {
-    return req.user;
+  @ApiOkResponse({ type: AuthProfileResponseDto, description: 'JWT-payload-derived caller identity' })
+  getProfile(@Request() req: AuthRequest): AuthProfileResponseDto {
+    return toResponse(AuthProfileResponseDto, req.user);
   }
 
   @Get('my-permissions')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user permissions summary' })
-  async getMyPermissions(@Request() req: AuthRequest) {
+  @ApiOkResponse({ type: MyPermissionsResponseDto, description: 'Composite of super-admin flag, delegations, and accessible site IDs' })
+  async getMyPermissions(@Request() req: AuthRequest): Promise<MyPermissionsResponseDto> {
     const userId = req.user.userId || req.user.id;
     const tenantId = req.user.tenantId;
 
@@ -244,13 +263,13 @@ export class AuthController {
 
     const accessibleSiteIds = await this.permissionService.getAccessibleSiteIds(tenantId, userId);
 
-    return {
+    return toResponse(MyPermissionsResponseDto, {
       isSuperAdmin,
       hasDelegation,
       allSitesAccess: isSuperAdmin || accessibleSiteIds === null,
       accessibleSiteIds,
       delegations,
-    };
+    });
   }
 
   // ===== TOTP 2FA Endpoints =====
@@ -259,7 +278,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate TOTP secret and QR code for 2FA setup' })
-  async setup2FA(@Request() req: AuthRequest) {
+  @ApiOkResponse({ type: TotpSetupResponseDto, description: 'Plaintext TOTP secret + QR data URL — user enrolls in their authenticator app' })
+  async setup2FA(@Request() req: AuthRequest): Promise<TotpSetupResponseDto> {
     const user = await this.prisma.user.findUnique({ where: { id: req.user.id } });
     if (!user || user.authProvider !== 'local') {
       throw new BadRequestException('2FA is only available for local accounts');
@@ -279,17 +299,18 @@ export class AuthController {
       data: { totpSecret: this.crypto.encryptIfPlain(secret) },
     });
 
-    return { secret, qrCodeDataUrl };
+    return toResponse(TotpSetupResponseDto, { secret, qrCodeDataUrl });
   }
 
   @Post('2fa/verify-setup')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Verify first TOTP code to complete 2FA setup' })
+  @ApiOkResponse({ type: TotpVerifySetupResponseDto, description: 'Plaintext backup codes returned ONCE — user must save them out-of-band' })
   async verifySetup2FA(
     @Request() req: AuthRequest,
     @Body() body: { token: string },
-  ) {
+  ): Promise<TotpVerifySetupResponseDto> {
     const user = await this.prisma.user.findUnique({ where: { id: req.user.id } });
     if (!user || !user.totpSecret) {
       throw new BadRequestException('2FA setup not initiated');
@@ -320,17 +341,18 @@ export class AuthController {
       },
     });
 
-    return { enabled: true, backupCodes: codes };
+    return toResponse(TotpVerifySetupResponseDto, { enabled: true, backupCodes: codes });
   }
 
   @Post('2fa/verify')
   @Public()
   @Throttle({ default: { ttl: 60000, limit: authLimit } })
   @ApiOperation({ summary: 'Verify TOTP code during login (uses temp token)' })
+  @ApiOkResponse({ type: LoginResponseDto, description: 'Returns { user } on success and sets HTTP-only cookies' })
   async verify2FA(
     @Body() body: { code: string; tempToken: string },
     @Res({ passthrough: true }) res: Response,
-  ) {
+  ): Promise<LoginResponseDto> {
     let payload: any;
     try {
       payload = this.jwtService.verify(body.tempToken);
@@ -365,17 +387,18 @@ export class AuthController {
     res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', result.sessionMs));
     res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', result.refreshMs));
 
-    return { user: result.user };
+    return toResponse(LoginResponseDto, { user: result.user });
   }
 
   @Post('2fa/backup-verify')
   @Public()
   @Throttle({ default: { ttl: 60000, limit: authLimit } })
   @ApiOperation({ summary: 'Verify backup code during login (uses temp token)' })
+  @ApiOkResponse({ type: LoginResponseDto, description: 'Returns { user } on success and sets HTTP-only cookies' })
   async verifyBackupCode(
     @Body() body: { code: string; tempToken: string },
     @Res({ passthrough: true }) res: Response,
-  ) {
+  ): Promise<LoginResponseDto> {
     let payload: any;
     try {
       payload = this.jwtService.verify(body.tempToken);
@@ -415,17 +438,18 @@ export class AuthController {
     res.cookie('accessToken', result.accessToken, this.getCookieOptions('/', result.sessionMs));
     res.cookie('refreshToken', result.refreshToken, this.getCookieOptions('/api/auth/refresh', result.refreshMs));
 
-    return { user: result.user };
+    return toResponse(LoginResponseDto, { user: result.user });
   }
 
   @Post('2fa/disable')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Disable 2FA (requires current password)' })
+  @ApiOkResponse({ type: TotpDisabledResultResponseDto, description: 'TOTP disabled and backup codes wiped' })
   async disable2FA(
     @Request() req: AuthRequest,
     @Body() body: { password: string },
-  ) {
+  ): Promise<TotpDisabledResultResponseDto> {
     const user = await this.prisma.user.findUnique({ where: { id: req.user.id } });
     if (!user || !user.totpEnabled) {
       throw new BadRequestException('2FA is not enabled');
@@ -449,17 +473,18 @@ export class AuthController {
       },
     });
 
-    return { disabled: true };
+    return toResponse(TotpDisabledResultResponseDto, { disabled: true });
   }
 
   @Delete('2fa/user/:userId')
   @RequireManage()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Admin: disable 2FA for a specific user (super admin only via class-level @SkipDelegation + @RequireManage)' })
+  @ApiOkResponse({ type: TotpDisabledResultResponseDto, description: 'TOTP disabled for the target user' })
   async adminDisable2FA(
     @Request() req: AuthRequest,
     @Param('userId') userId: string,
-  ) {
+  ): Promise<TotpDisabledResultResponseDto> {
     // Authorization already enforced by PermissionGuard:
     //   class-level @SkipDelegation + method @RequireManage → isSuperAdmin only.
     await this.prisma.user.update({
@@ -471,7 +496,7 @@ export class AuthController {
       },
     });
 
-    return { disabled: true };
+    return toResponse(TotpDisabledResultResponseDto, { disabled: true });
   }
 
   // ===== Invite & Password Reset Endpoints =====
@@ -483,36 +508,43 @@ export class AuthController {
     summary:
       'Invite a new user by email. Class-level @SkipDelegation() + @RequireManage() resolves to super-admin only (see AUTH_MODEL §4 table). Delegation-scoped MANAGE users create members via POST /users instead.',
   })
-  @ApiResponse({ status: 201, description: 'Invitation sent' })
-  async invite(@Body() body: InviteUserDto, @Request() req: AuthRequest) {
-    return this.authService.invite(req.user.tenantId, body.email, body.name);
+  @ApiCreatedResponse({
+    type: InviteResponseDto,
+    description: 'Created user + emailSent flag. Plaintext inviteToken returned only when SMTP failed (admin shares the link manually).',
+  })
+  async invite(@Body() body: InviteUserDto, @Request() req: AuthRequest): Promise<InviteResponseDto> {
+    const created = await this.authService.invite(req.user.tenantId, body.email, body.name);
+    return toResponse(InviteResponseDto, created);
   }
 
   @Post('accept-invite')
   @Public()
   @Throttle({ default: { ttl: 60000, limit: authLogoutLimit } })
   @ApiOperation({ summary: 'Accept invitation and set password (public)' })
-  @ApiResponse({ status: 200, description: 'Account activated' })
-  async acceptInvite(@Body() body: AcceptInviteDto) {
-    return this.authService.acceptInvite(body.token, body.password);
+  @ApiOkResponse({ type: AuthMessageResultResponseDto, description: 'Account activated' })
+  async acceptInvite(@Body() body: AcceptInviteDto): Promise<AuthMessageResultResponseDto> {
+    const result = await this.authService.acceptInvite(body.token, body.password);
+    return toResponse(AuthMessageResultResponseDto, result);
   }
 
   @Post('forgot-password')
   @Public()
   @Throttle({ default: { ttl: 60000, limit: authForgotLimit } })
   @ApiOperation({ summary: 'Request password reset email (public)' })
-  @ApiResponse({ status: 200, description: 'Reset email sent if account exists' })
-  async forgotPassword(@Body() body: ForgotPasswordDto) {
-    return this.authService.forgotPassword(body.email);
+  @ApiOkResponse({ type: AuthMessageResultResponseDto, description: 'Reset email sent if account exists (response is identical regardless to avoid user-existence oracle)' })
+  async forgotPassword(@Body() body: ForgotPasswordDto): Promise<AuthMessageResultResponseDto> {
+    const result = await this.authService.forgotPassword(body.email);
+    return toResponse(AuthMessageResultResponseDto, result);
   }
 
   @Post('reset-password')
   @Public()
   @Throttle({ default: { ttl: 60000, limit: authLimit } })
   @ApiOperation({ summary: 'Reset password using token (public)' })
-  @ApiResponse({ status: 200, description: 'Password reset successfully' })
-  async resetPassword(@Body() body: ResetPasswordDto) {
-    return this.authService.resetPassword(body.token, body.password);
+  @ApiOkResponse({ type: AuthMessageResultResponseDto, description: 'Password reset successfully' })
+  async resetPassword(@Body() body: ResetPasswordDto): Promise<AuthMessageResultResponseDto> {
+    const result = await this.authService.resetPassword(body.token, body.password);
+    return toResponse(AuthMessageResultResponseDto, result);
   }
 
   // ===== SSO / OIDC Endpoints =====
@@ -520,8 +552,8 @@ export class AuthController {
   @Get('sso-config')
   @Public()
   @ApiOperation({ summary: 'Get SSO configuration status (public — for login page)' })
-  @ApiResponse({ status: 200, description: 'SSO enabled status' })
-  async getSsoConfig() {
+  @ApiOkResponse({ type: SsoConfigResponseDto, description: 'SSO enabled status and provider identifier' })
+  async getSsoConfig(): Promise<SsoConfigResponseDto> {
     const oidcEnabled = this.configService.get('OIDC_ENABLED') === 'true';
 
     // ADR-018 — TenantSsoConfig (typed table) replaces tenant.config.sso.
@@ -536,24 +568,26 @@ export class AuthController {
       // Ignore — no tenant configured yet
     }
 
-    return {
+    return toResponse(SsoConfigResponseDto, {
       ssoEnabled: oidcEnabled || tenantSsoEnabled,
       provider: oidcEnabled ? 'oidc' : tenantSsoEnabled ? 'oidc' : null,
-    };
+    });
   }
 
   @Get('oidc')
   @Public()
   @UseGuards(AuthGuard('oidc'))
   @ApiOperation({ summary: 'Initiate OIDC login flow (redirects to IdP)' })
-  async oidcLogin() {
-    // Passport handles the redirect automatically
+  @ApiOkResponse({ description: 'Redirects to the configured IdP — no JSON body returned' })
+  async oidcLogin(@Res() _res: Response) {
+    // Passport handles the redirect automatically via the AuthGuard('oidc') strategy.
   }
 
   @Get('oidc/callback')
   @Public()
   @UseGuards(AuthGuard('oidc'))
   @ApiOperation({ summary: 'OIDC callback handler (receives code from IdP)' })
+  @ApiOkResponse({ description: 'Sets HTTP-only cookies and redirects to the frontend dashboard — no JSON body returned' })
   async oidcCallback(
     @Request() req: any,
     @Res() res: Response,
