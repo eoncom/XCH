@@ -247,6 +247,58 @@ describe('Auth response DTO shapes — sensitive credentials must NEVER leak', (
       expect(dto.user).not.toHaveProperty('externalId');
       expectNoSecretsInWire(dto);
     });
+
+    /**
+     * Defensive test for cross-shape contamination — a future bug (or
+     * service refactor) could accidentally pass `{ requires2FA, tempToken,
+     * user: somePrismaUser }`. The DTO can't enforce the discriminated-
+     * union semantics, but the embedded `AuthUserRefResponseDto` strict
+     * whitelist must still drop every credential. Result: the wire shape
+     * is semantically wrong (mixes 2FA-gate fields with user payload) but
+     * is NOT a security incident — no passwordHash/totpSecret/token leaks
+     * to the network.
+     */
+    it('contamination defense — shape 1 + accidental user does not leak credentials', () => {
+      const dto = toResponse(LoginResponseDto, {
+        requires2FA: true,
+        tempToken: 'temp-jwt-5min',
+        user: PRISMA_USER_WITH_SECRETS, // accidental contamination
+      });
+      const wire = wireShape(dto);
+      expect(wire.requires2FA).toBe(true);
+      expect(wire.tempToken).toBe('temp-jwt-5min');
+      // The contaminated user IS present in the wire (shape mixed) but
+      // every credential field is whitelisted away by AuthUserRefResponseDto.
+      expect(wire.user).toBeDefined();
+      const user = wire.user as Record<string, unknown>;
+      expect(user).not.toHaveProperty('passwordHash');
+      expect(user).not.toHaveProperty('totpSecret');
+      expect(user).not.toHaveProperty('totpBackupCodes');
+      expect(user).not.toHaveProperty('inviteToken');
+      expect(user).not.toHaveProperty('resetToken');
+      expect(user).not.toHaveProperty('failedLoginAttempts');
+      expect(user).not.toHaveProperty('lockedUntil');
+      expect(user).not.toHaveProperty('externalId');
+      expectNoSecretsInWire(dto);
+    });
+
+    /**
+     * Symmetric defense — if a future bug also adds `requires2FA: true` on
+     * top of a successful `{ user }` shape, the user payload still cannot
+     * leak credentials.
+     */
+    it('contamination defense — shape 3 + accidental requires2FA still safe', () => {
+      const dto = toResponse(LoginResponseDto, {
+        user: PRISMA_USER_WITH_SECRETS,
+        requires2FA: true, // contamination
+        tempToken: 'should-not-be-here',
+      });
+      const wire = wireShape(dto);
+      // Both fields appear on the wire (DTO can't reject the mix), but no
+      // credential reaches the wire.
+      expect(wire.user).toBeDefined();
+      expectNoSecretsInWire(dto);
+    });
   });
 
   describe('SessionResponseDto', () => {
