@@ -1,5 +1,12 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, Res, ForbiddenException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiOkResponse,
+  ApiCreatedResponse,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { ExpensesService } from './expenses.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
@@ -11,6 +18,16 @@ import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { Response } from 'express';
 import { PermissionService } from '../../common/services/permission.service';
+import { ExpenseResponseDto } from './dto/expense.response.dto';
+import { ExpenseListResponseDto } from './dto/expense-list.response.dto';
+import {
+  ExpenseProjectionResponseDto,
+  ExpenseReportByBearerResponseDto,
+  ExpenseReportByMonthResponseDto,
+  ExpenseReportByTargetResponseDto,
+  ExpenseReportChargebackResponseDto,
+} from './dto/expense-report.response.dto';
+import { ExpenseDeletedResultResponseDto } from './dto/expense-action-result.response.dto';
 
 @ApiTags('expenses')
 @Controller('expenses')
@@ -22,12 +39,6 @@ export class ExpensesController {
     private readonly permissionService: PermissionService,
   ) {}
 
-  /**
-   * Resolve the delegation IDs the current user is allowed to see cost data
-   * for. null = super-admin (no restriction). Empty array = blocked — means
-   * the user lost MANAGE between the guard check and the query. Callers
-   * should also reject filters pointing outside this list.
-   */
   private async scopeOrFail(req: AuthRequest, filterDelegationId?: string): Promise<string[] | null> {
     const scope = await this.permissionService.getManagedDelegationIds(
       req.user.tenantId,
@@ -46,10 +57,8 @@ export class ExpensesController {
   @Post()
   @RequireManage()
   @ApiOperation({ summary: 'Create an expense with optional allocations' })
+  @ApiCreatedResponse({ type: ExpenseResponseDto })
   async create(@Body() dto: CreateExpenseDto, @Request() req: AuthRequest) {
-    // Guard against cross-delegation writes: ensure the expense's delegationId
-    // is in the user's managed scope (super-admin bypasses). Threads the
-    // scope to the service so allocation targets are also scope-checked (D2).
     const scope = await this.scopeOrFail(req, dto.delegationId);
     return this.expensesService.create(req.user.tenantId, dto, req.user.userId, scope);
   }
@@ -57,6 +66,7 @@ export class ExpensesController {
   @Get()
   @RequireManage()
   @ApiOperation({ summary: 'List all expenses (scoped to managed delegations for non super-admins)' })
+  @ApiOkResponse({ type: ExpenseListResponseDto })
   async findAll(
     @Query() filters: FilterExpenseDto,
     @Request() req: AuthRequest,
@@ -68,6 +78,7 @@ export class ExpensesController {
   @Get('reports/by-bearer')
   @RequireManage()
   @ApiOperation({ summary: 'Report: total by bearer' })
+  @ApiOkResponse({ type: ExpenseReportByBearerResponseDto })
   @ApiQuery({ name: 'dateFrom', required: false })
   @ApiQuery({ name: 'dateTo', required: false })
   async reportByBearer(
@@ -82,6 +93,7 @@ export class ExpensesController {
   @Get('reports/by-month')
   @RequireManage()
   @ApiOperation({ summary: 'Report: monthly spending evolution (feeds dashboard chart)' })
+  @ApiOkResponse({ type: ExpenseReportByMonthResponseDto })
   @ApiQuery({ name: 'dateFrom', required: false })
   @ApiQuery({ name: 'dateTo', required: false })
   @ApiQuery({ name: 'delegationId', required: false })
@@ -104,6 +116,7 @@ export class ExpensesController {
   @Get('reports/by-target')
   @RequireManage()
   @ApiOperation({ summary: 'Report: total by target' })
+  @ApiOkResponse({ type: ExpenseReportByTargetResponseDto })
   @ApiQuery({ name: 'dateFrom', required: false })
   @ApiQuery({ name: 'dateTo', required: false })
   async reportByTarget(
@@ -118,6 +131,7 @@ export class ExpensesController {
   @Get('reports/chargeback')
   @RequireManage()
   @ApiOperation({ summary: 'Report: chargeback detail' })
+  @ApiOkResponse({ type: ExpenseReportChargebackResponseDto })
   @ApiQuery({ name: 'dateFrom', required: false })
   @ApiQuery({ name: 'dateTo', required: false })
   async reportChargeback(
@@ -131,10 +145,9 @@ export class ExpensesController {
 
   @Get('projection')
   @RequireManage()
-  // Lourde : findMany + cap 10000 + expansion des récurrentes en mois.
-  // 10/min/user largement suffisant pour un dashboard interactif.
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({ summary: 'Project expenses over a date range (monthly breakdown)' })
+  @ApiOkResponse({ type: ExpenseProjectionResponseDto })
   @ApiQuery({ name: 'from', required: true, description: 'Start month YYYY-MM' })
   @ApiQuery({ name: 'to', required: true, description: 'End month YYYY-MM' })
   @ApiQuery({ name: 'groupBy', required: false, enum: ['type', 'delegation', 'site'] })
@@ -150,6 +163,7 @@ export class ExpensesController {
   @Get('export')
   @RequireManage()
   @ApiOperation({ summary: 'Export expenses to Excel' })
+  @ApiOkResponse({ description: 'Binary CSV stream (text/csv with BOM)' })
   @ApiQuery({ name: 'type', required: false })
   @ApiQuery({ name: 'dateFrom', required: false })
   @ApiQuery({ name: 'dateTo', required: false })
@@ -163,10 +177,12 @@ export class ExpensesController {
     const result = await this.expensesService.findAll(req.user.tenantId, { type, dateFrom, dateTo, page: 1, pageSize: 100 } as FilterExpenseDto);
     const expenses = result.data;
 
-    // Build CSV export (simple, no external dependency needed)
     const headers = ['Label', 'Type', 'Montant', 'Devise', 'Fréquence', 'Date', 'Porteur', 'Vendor', 'Facture', 'PO', 'Cibles (%)'];
-    const rows = expenses.map((e: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = (expenses as any[]).map((e: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const targets = (e.allocations || [])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((a: any) => `${a.target?.name || a.targetId} (${a.percentage}%)`)
         .join('; ');
       return [
@@ -188,24 +204,26 @@ export class ExpensesController {
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=expenses-export.csv');
-    res.send('\uFEFF' + csv); // BOM for Excel UTF-8
+    res.send('﻿' + csv);
   }
 
   @Get(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Get an expense with allocations' })
+  @ApiOkResponse({ type: ExpenseResponseDto })
   async findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     const expense = await this.expensesService.findOne(req.user.tenantId, id, ctx);
-    await this.scopeOrFail(req, (expense as any).delegationId);
+    await this.scopeOrFail(req, (expense as { delegationId?: string }).delegationId);
     return expense;
   }
 
   @Patch(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Update an expense' })
+  @ApiOkResponse({ type: ExpenseResponseDto })
   async update(@Param('id') id: string, @Body() dto: UpdateExpenseDto, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     const existing = await this.expensesService.findOne(req.user.tenantId, id, ctx);
-    const scope = await this.scopeOrFail(req, (existing as any).delegationId);
+    const scope = await this.scopeOrFail(req, (existing as { delegationId?: string }).delegationId);
     if (dto.delegationId) await this.scopeOrFail(req, dto.delegationId);
     return this.expensesService.update(req.user.tenantId, id, dto, scope, ctx);
   }
@@ -213,9 +231,10 @@ export class ExpensesController {
   @Delete(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Delete an expense' })
+  @ApiOkResponse({ type: ExpenseDeletedResultResponseDto })
   async remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     const existing = await this.expensesService.findOne(req.user.tenantId, id, ctx);
-    await this.scopeOrFail(req, (existing as any).delegationId);
+    await this.scopeOrFail(req, (existing as { delegationId?: string }).delegationId);
     return this.expensesService.remove(req.user.tenantId, id, ctx);
   }
 }

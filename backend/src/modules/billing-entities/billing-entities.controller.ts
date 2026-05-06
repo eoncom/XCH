@@ -1,5 +1,12 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, ForbiddenException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiOkResponse,
+  ApiCreatedResponse,
+} from '@nestjs/swagger';
 import { BillingEntitiesService } from './billing-entities.service';
 import { CreateBillingEntityDto, UpdateBillingEntityDto } from './dto/create-billing-entity.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -8,6 +15,9 @@ import { CallerCtxParam } from '../../common/decorators/caller-ctx.decorator';
 import { CallerCtx } from '../../common/types/caller-ctx.interface';
 import { AuthRequest } from '../../types/request.interface';
 import { PermissionService } from '../../common/services/permission.service';
+import { BillingEntityResponseDto } from './dto/billing-entity.response.dto';
+import { BillingEntitySummaryResponseDto } from './dto/billing-entity-summary.response.dto';
+import { BillingEntityDeletedResultResponseDto } from './dto/billing-entity-action-result.response.dto';
 
 @ApiTags('billing-entities')
 @Controller('billing-entities')
@@ -37,8 +47,8 @@ export class BillingEntitiesController {
   @Post()
   @RequireManage()
   @ApiOperation({ summary: 'Create a billing entity' })
+  @ApiCreatedResponse({ type: BillingEntityResponseDto })
   async create(@Body() dto: CreateBillingEntityDto, @Request() req: AuthRequest) {
-    // Allow global entities (delegationId=null) only for super-admins.
     const scope = await this.scopeOrFail(req, dto.delegationId ?? undefined);
     if (scope !== null && !dto.delegationId) {
       throw new ForbiddenException(
@@ -51,6 +61,7 @@ export class BillingEntitiesController {
   @Get()
   @RequireManage()
   @ApiOperation({ summary: 'List all billing entities (managed delegations + globals)' })
+  @ApiOkResponse({ type: BillingEntityResponseDto, isArray: true })
   @ApiQuery({ name: 'type', required: false })
   @ApiQuery({ name: 'isActive', required: false })
   @ApiQuery({ name: 'search', required: false })
@@ -77,12 +88,11 @@ export class BillingEntitiesController {
   @Get(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Get a billing entity' })
+  @ApiOkResponse({ type: BillingEntityResponseDto })
   async findOne(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     const entity = await this.billingEntitiesService.findOne(req.user.tenantId, id, ctx);
-    // Globals (delegationId=null) visible to everyone with MANAGE; scoped
-    // entities enforced.
-    if ((entity as any).delegationId) {
-      await this.scopeOrFail(req, (entity as any).delegationId);
+    if ((entity as { delegationId?: string }).delegationId) {
+      await this.scopeOrFail(req, (entity as { delegationId?: string }).delegationId);
     }
     return entity;
   }
@@ -90,10 +100,11 @@ export class BillingEntitiesController {
   @Get(':id/summary')
   @RequireManage()
   @ApiOperation({ summary: 'Get billing entity summary (totals)' })
+  @ApiOkResponse({ type: BillingEntitySummaryResponseDto })
   async getSummary(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     const entity = await this.billingEntitiesService.findOne(req.user.tenantId, id, ctx);
-    if ((entity as any).delegationId) {
-      await this.scopeOrFail(req, (entity as any).delegationId);
+    if ((entity as { delegationId?: string }).delegationId) {
+      await this.scopeOrFail(req, (entity as { delegationId?: string }).delegationId);
     }
     return this.billingEntitiesService.getSummary(req.user.tenantId, id);
   }
@@ -101,12 +112,12 @@ export class BillingEntitiesController {
   @Patch(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Update a billing entity' })
+  @ApiOkResponse({ type: BillingEntityResponseDto })
   async update(@Param('id') id: string, @Body() dto: UpdateBillingEntityDto, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     const existing = await this.billingEntitiesService.findOne(req.user.tenantId, id, ctx);
-    if ((existing as any).delegationId) {
-      await this.scopeOrFail(req, (existing as any).delegationId);
+    if ((existing as { delegationId?: string }).delegationId) {
+      await this.scopeOrFail(req, (existing as { delegationId?: string }).delegationId);
     } else {
-      // Global entity — super-admin only.
       const scope = await this.scopeOrFail(req);
       if (scope !== null) {
         throw new ForbiddenException('Seul un super administrateur peut modifier un centre de coût global.');
@@ -119,10 +130,11 @@ export class BillingEntitiesController {
   @Delete(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Delete a billing entity' })
+  @ApiOkResponse({ type: BillingEntityDeletedResultResponseDto })
   async remove(@Param('id') id: string, @Request() req: AuthRequest, @CallerCtxParam() ctx: CallerCtx) {
     const existing = await this.billingEntitiesService.findOne(req.user.tenantId, id, ctx);
-    if ((existing as any).delegationId) {
-      await this.scopeOrFail(req, (existing as any).delegationId);
+    if ((existing as { delegationId?: string }).delegationId) {
+      await this.scopeOrFail(req, (existing as { delegationId?: string }).delegationId);
     } else {
       const scope = await this.scopeOrFail(req);
       if (scope !== null) {
