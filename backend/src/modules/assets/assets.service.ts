@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import * as Papa from 'papaparse';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
@@ -185,7 +185,7 @@ export class AssetsService {
     const pageSize = filter?.pageSize ?? 25;
     const skip = (page - 1) * pageSize;
 
-    const where: any = { tenantId };
+    const where: Prisma.AssetWhereInput = { tenantId };
 
     // Site access filtering: restrict to accessible sites for TECHNICIEN/VIEWER
     if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
@@ -1195,7 +1195,7 @@ export class AssetsService {
   }
 
   async getStatsByType(tenantId: string, accessibleSiteIds?: string[] | null) {
-    const where: any = { tenantId };
+    const where: Prisma.AssetWhereInput = { tenantId };
     if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
       if (accessibleSiteIds.length === 0) return [];
       where.siteId = { in: accessibleSiteIds };
@@ -1213,7 +1213,7 @@ export class AssetsService {
   }
 
   async getStatsBySite(tenantId: string, accessibleSiteIds?: string[] | null) {
-    const where: any = { tenantId };
+    const where: Prisma.AssetWhereInput = { tenantId };
     if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
       if (accessibleSiteIds.length === 0) return [];
       where.siteId = { in: accessibleSiteIds };
