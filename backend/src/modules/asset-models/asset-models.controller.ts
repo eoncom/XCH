@@ -1,6 +1,12 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, Res, ParseBoolPipe, DefaultValuePipe } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiCreatedResponse,
+} from '@nestjs/swagger';
 import { AssetModelsService } from './asset-models.service';
 import { VendorTemplatesService } from './vendor-templates.service';
 import { CreateAssetModelDto, UpdateAssetModelDto, FilterAssetModelDto } from './dto/create-asset-model.dto';
@@ -9,13 +15,19 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireWrite, RequireRead, RequireManage } from '../../common/decorators/require-right.decorator';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { AuthRequest } from '../../types/request.interface';
+import { toResponse, toResponseArray } from '../../common/utils/to-response.util';
+import { AssetModelResponseDto } from './dto/asset-model.response.dto';
+import { AssetModelListResponseDto } from './dto/asset-model-list.response.dto';
+import {
+  AssetModelImportResultResponseDto,
+  AssetModelVendorResponseDto,
+} from './dto/asset-model-vendor.response.dto';
+import { AssetModelCatalogResponseDto } from './dto/asset-model-catalog.response.dto';
+import {
+  AssetModelCatalogDeletedResultResponseDto,
+  AssetModelDeletedResultResponseDto,
+} from './dto/asset-model-action-result.response.dto';
 
-/**
- * Asset models are a tenant-wide catalog.
- * Reads are open to any authenticated user (needed to pre-fill asset forms).
- * Writes (create/update/delete) are super-admin only (@SkipDelegation + @RequireWrite/Manage
- * resolves to isSuperAdmin — see PermissionGuard).
- */
 @ApiTags('asset-models')
 @Controller('asset-models')
 @UseGuards(JwtAuthGuard)
@@ -27,61 +39,52 @@ export class AssetModelsController {
     private readonly vendorTemplates: VendorTemplatesService,
   ) {}
 
-  /**
-   * v1.4.x — Vendor-agnostic catalog imports. The UI lists the registered
-   * vendors via `GET import/vendors` and triggers a specific one via
-   * `POST import/:vendor`. Idempotent (upsert by (tenantId, name)).
-   */
   @Get('import/vendors')
   @RequireRead()
   @ApiOperation({ summary: 'List available vendor catalogs' })
-  listVendors() {
-    return this.vendorTemplates.listVendors();
+  @ApiOkResponse({ type: AssetModelVendorResponseDto, isArray: true })
+  async listVendors(): Promise<AssetModelVendorResponseDto[]> {
+    const vendors = await this.vendorTemplates.listVendors();
+    return toResponseArray(AssetModelVendorResponseDto, vendors);
   }
 
-  // NOTE: `import/upload` and `import/fortinet` MUST be declared before
-  // `import/:vendor` — Nest resolves routes in declaration order and a
-  // param route would otherwise swallow them (matched `:vendor='upload'`).
-
-  /**
-   * Upload an operator-provided vendor catalog JSON (Fortinet-native OR generic shape).
-   * Super-admin only. The service validates the payload shape and upserts by (tenantId, name).
-   * Use this when a fabricant isn't yet registered in the built-in registry.
-   */
   @Post('import/upload')
   @RequireManage()
   @ApiOperation({ summary: 'Upload and import a vendor catalog JSON (super admin only)' })
-  importUploaded(@Body() dto: UploadCatalogDto, @Request() req: AuthRequest) {
-    return this.vendorTemplates.importCustomCatalog(req.user.tenantId, dto);
+  @ApiCreatedResponse({ type: AssetModelImportResultResponseDto })
+  async importUploaded(
+    @Body() dto: UploadCatalogDto,
+    @Request() req: AuthRequest,
+  ): Promise<AssetModelImportResultResponseDto> {
+    const result = await this.vendorTemplates.importCustomCatalog(req.user.tenantId, dto);
+    return toResponse(AssetModelImportResultResponseDto, result);
   }
-
-  // The vendor-specific POST import/fortinet was removed in v1.4.x — the
-  // generic POST import/:vendor route covers every bundled pack and the
-  // POST import/upload route covers operator-uploaded ones.
 
   @Post('import/:vendor')
   @RequireManage()
   @ApiOperation({ summary: 'Import a vendor catalog by key (e.g. "fortinet"). Super admin only.' })
-  importVendor(@Param('vendor') vendor: string, @Request() req: AuthRequest) {
-    return this.vendorTemplates.importVendor(vendor, req.user.tenantId);
+  @ApiCreatedResponse({ type: AssetModelImportResultResponseDto })
+  async importVendor(
+    @Param('vendor') vendor: string,
+    @Request() req: AuthRequest,
+  ): Promise<AssetModelImportResultResponseDto> {
+    const result = await this.vendorTemplates.importVendor(vendor, req.user.tenantId);
+    return toResponse(AssetModelImportResultResponseDto, result);
   }
-
-  // ============================================================================
-  // Vendor catalog packs (v1.4.x) — each imported JSON is stored as a
-  // VendorCatalog row so operators can list, download, re-upload and delete
-  // catalogs from the UI without touching the source code.
-  // ============================================================================
 
   @Get('catalogs')
   @RequireRead()
   @ApiOperation({ summary: 'List vendor catalog packs for the current tenant' })
-  listCatalogs(@Request() req: AuthRequest) {
-    return this.vendorTemplates.listCatalogs(req.user.tenantId);
+  @ApiOkResponse({ type: AssetModelCatalogResponseDto, isArray: true })
+  async listCatalogs(@Request() req: AuthRequest): Promise<AssetModelCatalogResponseDto[]> {
+    const catalogs = await this.vendorTemplates.listCatalogs(req.user.tenantId);
+    return toResponseArray(AssetModelCatalogResponseDto, catalogs);
   }
 
   @Get('catalogs/:id/download')
   @RequireRead()
   @ApiOperation({ summary: 'Download the raw JSON payload of a stored catalog pack' })
+  @ApiOkResponse({ description: 'Binary JSON catalog stream (application/json attachment)' })
   async downloadCatalog(
     @Param('id') id: string,
     @Request() req: AuthRequest,
@@ -97,17 +100,19 @@ export class AssetModelsController {
   @Delete('catalogs/:id')
   @RequireManage()
   @ApiOperation({ summary: 'Delete a catalog pack. Pass ?withModels=true to also drop the linked AssetModels (only those with no assets attached)' })
-  deleteCatalog(
+  @ApiOkResponse({ type: AssetModelCatalogDeletedResultResponseDto })
+  async deleteCatalog(
     @Param('id') id: string,
     @Query('withModels', new DefaultValuePipe(false), ParseBoolPipe) withModels: boolean,
     @Request() req: AuthRequest,
-  ) {
+  ): Promise<AssetModelCatalogDeletedResultResponseDto> {
     return this.vendorTemplates.deleteCatalog(req.user.tenantId, id, withModels);
   }
 
   @Get('export')
   @RequireRead()
   @ApiOperation({ summary: 'Export matching AssetModels as a downloadable JSON pack (optional manufacturer/type/catalogId filter)' })
+  @ApiOkResponse({ description: 'Binary JSON pack stream (application/json attachment)' })
   async exportPack(
     @Query('manufacturer') manufacturer: string | undefined,
     @Query('type') type: string | undefined,
@@ -130,35 +135,60 @@ export class AssetModelsController {
   @Post()
   @RequireWrite()
   @ApiOperation({ summary: 'Create an asset model' })
-  create(@Body() dto: CreateAssetModelDto, @Request() req: AuthRequest) {
-    return this.service.create(req.user.tenantId, dto);
+  @ApiCreatedResponse({ type: AssetModelResponseDto })
+  async create(
+    @Body() dto: CreateAssetModelDto,
+    @Request() req: AuthRequest,
+  ): Promise<AssetModelResponseDto> {
+    const model = await this.service.create(req.user.tenantId, dto);
+    return toResponse(AssetModelResponseDto, model);
   }
 
   @Get()
   @RequireRead()
   @ApiOperation({ summary: 'List asset models' })
-  findAll(@Query() filters: FilterAssetModelDto, @Request() req: AuthRequest) {
-    return this.service.findAll(req.user.tenantId, filters);
+  @ApiOkResponse({ type: AssetModelListResponseDto })
+  async findAll(
+    @Query() filters: FilterAssetModelDto,
+    @Request() req: AuthRequest,
+  ): Promise<AssetModelListResponseDto> {
+    const page = await this.service.findAll(req.user.tenantId, filters);
+    return toResponse(AssetModelListResponseDto, page);
   }
 
   @Get(':id')
   @RequireRead()
   @ApiOperation({ summary: 'Get an asset model' })
-  findOne(@Param('id') id: string, @Request() req: AuthRequest) {
-    return this.service.findOne(req.user.tenantId, id);
+  @ApiOkResponse({ type: AssetModelResponseDto })
+  async findOne(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+  ): Promise<AssetModelResponseDto> {
+    const model = await this.service.findOne(req.user.tenantId, id);
+    return toResponse(AssetModelResponseDto, model);
   }
 
   @Patch(':id')
   @RequireWrite()
   @ApiOperation({ summary: 'Update an asset model' })
-  update(@Param('id') id: string, @Body() dto: UpdateAssetModelDto, @Request() req: AuthRequest) {
-    return this.service.update(req.user.tenantId, id, dto);
+  @ApiOkResponse({ type: AssetModelResponseDto })
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateAssetModelDto,
+    @Request() req: AuthRequest,
+  ): Promise<AssetModelResponseDto> {
+    const model = await this.service.update(req.user.tenantId, id, dto);
+    return toResponse(AssetModelResponseDto, model);
   }
 
   @Delete(':id')
   @RequireManage()
   @ApiOperation({ summary: 'Delete an asset model (fails if assets linked)' })
-  remove(@Param('id') id: string, @Request() req: AuthRequest) {
+  @ApiOkResponse({ type: AssetModelDeletedResultResponseDto })
+  async remove(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+  ): Promise<AssetModelDeletedResultResponseDto> {
     return this.service.remove(req.user.tenantId, id);
   }
 }
