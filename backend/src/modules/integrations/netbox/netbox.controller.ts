@@ -8,12 +8,25 @@ import {
   HttpStatus,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiOkResponse,
+} from '@nestjs/swagger';
 import { ModuleGuard } from '../../../common/guards/module.guard';
 import { RequireModule } from '../../../common/decorators/require-module.decorator';
 import { NetboxService } from './netbox.service';
 import { NetboxSyncService } from './netbox-sync.service';
 import { RequireRead, RequireManage } from '../../../common/decorators/require-right.decorator';
+import { AuthRequest } from '../../../types/request.interface';
+import {
+  IntegrationSyncReportResponseDto,
+  NetboxHealthResponseDto,
+  NetboxListResponseDto,
+  NetboxStatusResponseDto,
+} from '../dto/integration-passthrough.response.dto';
 
 @RequireModule('integrations_netbox')
 @ApiTags('Integrations - NetBox')
@@ -33,7 +46,7 @@ export class NetboxController {
   @Get('health')
   @RequireRead()
   @ApiOperation({ summary: 'Check NetBox integration health' })
-  @ApiResponse({ status: 200, description: 'Health check result' })
+  @ApiOkResponse({ type: NetboxHealthResponseDto })
   async healthCheck() {
     return this.netboxService.healthCheck();
   }
@@ -41,7 +54,7 @@ export class NetboxController {
   @Get('status')
   @RequireRead()
   @ApiOperation({ summary: 'Get NetBox integration status' })
-  @ApiResponse({ status: 200, description: 'Integration status' })
+  @ApiOkResponse({ type: NetboxStatusResponseDto })
   async getStatus() {
     return {
       enabled: this.netboxService.isEnabled(),
@@ -56,10 +69,10 @@ export class NetboxController {
   @Get('sites')
   @RequireRead()
   @ApiOperation({ summary: 'List NetBox sites' })
+  @ApiOkResponse({ type: NetboxListResponseDto })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'offset', required: false, type: Number })
   @ApiQuery({ name: 'name', required: false, type: String })
-  @ApiResponse({ status: 200, description: 'List of NetBox sites' })
   async getSites(
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
@@ -71,11 +84,11 @@ export class NetboxController {
   @Get('devices')
   @RequireRead()
   @ApiOperation({ summary: 'List NetBox devices' })
+  @ApiOkResponse({ type: NetboxListResponseDto })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'offset', required: false, type: Number })
   @ApiQuery({ name: 'name', required: false, type: String })
   @ApiQuery({ name: 'site_id', required: false, type: Number })
-  @ApiResponse({ status: 200, description: 'List of NetBox devices' })
   async getDevices(
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
@@ -88,11 +101,11 @@ export class NetboxController {
   @Get('racks')
   @RequireRead()
   @ApiOperation({ summary: 'List NetBox racks' })
+  @ApiOkResponse({ type: NetboxListResponseDto })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'offset', required: false, type: Number })
   @ApiQuery({ name: 'name', required: false, type: String })
   @ApiQuery({ name: 'site_id', required: false, type: Number })
-  @ApiResponse({ status: 200, description: 'List of NetBox racks' })
   async getRacks(
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
@@ -110,8 +123,8 @@ export class NetboxController {
   @RequireManage()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sync sites from NetBox to XCH' })
-  @ApiResponse({ status: 200, description: 'Sync result' })
-  async syncSites(@Req() req: any) {
+  @ApiOkResponse({ type: IntegrationSyncReportResponseDto })
+  async syncSites(@Req() req: AuthRequest) {
     const tenantId = req.user?.tenantId || 'default';
     return this.netboxSyncService.syncSitesFromNetbox(tenantId);
   }
@@ -120,8 +133,8 @@ export class NetboxController {
   @RequireManage()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sync devices from NetBox to XCH assets' })
-  @ApiResponse({ status: 200, description: 'Sync result' })
-  async syncDevices(@Req() req: any) {
+  @ApiOkResponse({ type: IntegrationSyncReportResponseDto })
+  async syncDevices(@Req() req: AuthRequest) {
     const tenantId = req.user?.tenantId || 'default';
     return this.netboxSyncService.syncDevicesFromNetbox(tenantId);
   }
@@ -130,8 +143,8 @@ export class NetboxController {
   @RequireManage()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sync racks from NetBox to XCH' })
-  @ApiResponse({ status: 200, description: 'Sync result' })
-  async syncRacks(@Req() req: any) {
+  @ApiOkResponse({ type: IntegrationSyncReportResponseDto })
+  async syncRacks(@Req() req: AuthRequest) {
     const tenantId = req.user?.tenantId || 'default';
     return this.netboxSyncService.syncRacksFromNetbox(tenantId);
   }
@@ -140,8 +153,8 @@ export class NetboxController {
   @RequireManage()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Full sync from NetBox (sites, devices, racks)' })
-  @ApiResponse({ status: 200, description: 'Full sync report' })
-  async fullSync(@Req() req: any) {
+  @ApiOkResponse({ type: IntegrationSyncReportResponseDto })
+  async fullSync(@Req() req: AuthRequest) {
     const tenantId = req.user?.tenantId || 'default';
     return this.netboxSyncService.fullSync(tenantId);
   }

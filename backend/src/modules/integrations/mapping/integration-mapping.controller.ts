@@ -7,10 +7,20 @@ import {
   Param,
   Request,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiOkResponse,
+} from '@nestjs/swagger';
 import { IntegrationMappingService } from './integration-mapping.service';
 import { AuthRequest } from '../../../types/request.interface';
 import { RequireRead, RequireWrite } from '../../../common/decorators/require-right.decorator';
+import {
+  IntegrationMappingDeleteResultResponseDto,
+  IntegrationMappingItemResponseDto,
+  IntegrationMappingSaveResultResponseDto,
+} from '../dto/integration-passthrough.response.dto';
 
 @ApiTags('integration-mapping')
 @ApiBearerAuth()
@@ -21,6 +31,7 @@ export class IntegrationMappingController {
   @Get(':provider/:entityType')
   @RequireRead()
   @ApiOperation({ summary: 'Get mappings for a provider and entity type' })
+  @ApiOkResponse({ type: IntegrationMappingItemResponseDto, isArray: true })
   getMappings(
     @Request() req: AuthRequest,
     @Param('provider') provider: string,
@@ -32,6 +43,7 @@ export class IntegrationMappingController {
   @Post(':provider/:entityType')
   @RequireWrite()
   @ApiOperation({ summary: 'Save mappings for a provider and entity type' })
+  @ApiOkResponse({ type: IntegrationMappingSaveResultResponseDto })
   saveMappings(
     @Request() req: AuthRequest,
     @Param('provider') provider: string,
@@ -57,6 +69,7 @@ export class IntegrationMappingController {
   @Delete(':provider/:entityType')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete all mappings for a provider and entity type' })
+  @ApiOkResponse({ type: IntegrationMappingDeleteResultResponseDto })
   deleteMappings(
     @Request() req: AuthRequest,
     @Param('provider') provider: string,
@@ -68,6 +81,7 @@ export class IntegrationMappingController {
   @Delete('single/:id')
   @RequireWrite()
   @ApiOperation({ summary: 'Delete a single mapping' })
+  @ApiOkResponse({ type: IntegrationMappingDeleteResultResponseDto })
   deleteMapping(
     @Request() req: AuthRequest,
     @Param('id') id: string,

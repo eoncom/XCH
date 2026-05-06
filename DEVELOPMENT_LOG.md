@@ -7533,16 +7533,16 @@ feat(s9-pr5): racks Response DTOs + Prisma JSON @Transform pattern (#41)
 
 ## Session Auto-Update - 2026-05-06
 
-**Date:** 2026-05-06 07:10:34
+**Date:** 2026-05-06 01:59:17
 **Type:** Automatic documentation update
 
 **Changes:**
-- Backend files modified: 3
+- Backend files modified: 5
 - Frontend files modified: 0
 
 **Commit message:**
 ```
-feat(s9-pr8): users Response DTOs (vague B parallel) — sensitive fields hardening (#44)
+feat(s9-pr9): floor-plans Response DTOs (vague B parallel élargi) (#45)
 ```
 
 **Auto-updated files:**
