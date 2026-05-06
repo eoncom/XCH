@@ -130,6 +130,45 @@ les valeurs dynamic-key disparaissent (résultat = `{}`).
 filtrée par `excludeExtraneousValues` quand le transform s'exécute.
 `obj` lit la source plain telle quelle, donc fonctionne.
 
+### `Prisma.Decimal` corrompu sur champ typé `string | number` (union)
+
+Découvert pendant la cascade S9 PR #16 (budgets). Toujours typer un
+champ `Decimal` Prisma comme **`number`** (pas `string | number`).
+
+**Cause** : `toResponse()` active `enableImplicitConversion: true`, qui
+lit la métadonnée TypeScript `design:type` exposée par `reflect-metadata`.
+- `amount!: number` → métadonnée = `Number` → la conversion route par
+  `Number(value)`, qui appelle `Decimal.valueOf()` (= primitif numérique).
+  Le wire payload est un nombre JSON propre `40000`.
+- `amount!: string | number` → métadonnée = `Object` (les unions sont
+  effacées) → class-transformer shallow-copie les internes Decimal
+  (`{s, e, d}`) sans appeler `toJSON`, et le wire payload sort en
+  `{}` (vide) ou (selon timing du `@Transform`) `"[object Object]"`.
+
+**Pattern figé pour post-v2.0** :
+
+```ts
+// ✅ correct — wire = number
+@ApiProperty({ description: 'Decimal(12,2) — coerced via Decimal.valueOf()' })
+@Expose()
+amount!: number;
+
+// ❌ corrompu — wire = {} ou "[object Object]"
+@Expose()
+amount!: string | number;
+```
+
+Référence consommateurs OK : `expense.response.dto.ts` (`amount!: number`,
+`totalAmount!: number`), `budget.response.dto.ts` (`amount!: number`,
+`BudgetParentRefResponseDto.amount!: number`). Test runtime smoke en
+place dans `__tests__/reliquats-dto-shape.spec.ts` (`Prisma.Decimal`
+sample → wire `number === 40000`, jamais d'objet `{s,e,d}`).
+
+Si la précision décimale au-delà du JS safe number est critique pour
+un champ donné (montants > 9 × 10¹⁵), exposer le Decimal en `string`
+explicite via Cas B helper qui fait `value.toString()` AVANT que
+class-transformer ne touche la valeur — pas via `string | number`.
+
 ## Anti-patterns
 
 - ❌ `toMatchSnapshot()` dans dto-shape.spec — préférer `toHaveProperty`
@@ -139,3 +178,6 @@ filtrée par `excludeExtraneousValues` quand le transform s'exécute.
 - ❌ `@Expose()` oublié sur un champ → exclu silencieusement par
   `excludeExtraneousValues: true`. Test dto-shape attrape la régression.
 - ❌ `Record<string, T>` mappé via `plainToInstance` (cf piège ci-dessus).
+- ❌ `Decimal` Prisma exposé en `string | number` (union) — la
+  métadonnée perdue corrompt la sérialisation. Toujours `number` pur
+  (cf piège « Prisma.Decimal corrompu » ci-dessus).

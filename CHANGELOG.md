@@ -7,6 +7,112 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.0.0] - 2026-05-06 — S9 Hardening tail FINAL : 100% DTO coverage + CSP strict
+
+Tag majeur clôturant le plan v2 finalization (chantier S9 — Hardening tail).
+Les 5 PRs vague C (#49 → #54 GitHub, s9-pr12 → s9-pr17) ont été livrées en
+~36 h, tag aligné sur le merge de PR #54 (s9-pr17 CSP nonce). À partir
+d'ici la baseline `dto-coverage-baseline.json` est **vide** (`exempted_files: []`)
+et le garde-fou CI affiche `Baseline is empty → guard is fully strict.
+ADR-023 cascade complete.`
+
+### Changed (BREAKING)
+
+- **100% DTO coverage backend** — toutes les responses HTTP sont désormais
+  des Response DTOs structurés, plus aucune entité Prisma brute. Le wire
+  shape de tous les endpoints est garanti par class-transformer
+  `excludeExtraneousValues: true` + tests dto-shape avec runtime smoke
+  `instanceToPlain → JSON.stringify` anti-leak. Affecte 274 endpoints
+  répartis sur 32 controllers. Côté wire, les changements observables
+  par d'éventuels consumers externes sont limités à :
+  - Disparition systématique de tout champ Prisma non explicitement
+    `@Expose()'d` (`passwordHash`, `totpSecret`, `totpBackupCodes`,
+    `inviteToken`/`resetToken` hashés, `failedLoginAttempts`,
+    `lockedUntil`, `externalId` OIDC sub).
+  - `Budget.amount` (et `Budget.parent.amount`) désormais sérialisé en
+    `number` (vs `string|number` legacy) — `Decimal.valueOf()` route
+    par défaut. Frontend XCH déjà compatible (`String(amount)` marche
+    pour les deux). À vérifier sur tout consumer externe scriptant
+    `/api/budgets/*` qui dépendrait du type string explicite.
+  - Audit log enrichi d'un champ `entityLabel: string | null` synthétisé
+    par `enrichWithEntityLabels` (passthrough — pas un nouveau champ
+    DB).
+- **CSP strict côté frontend** — élimination définitive de
+  `'unsafe-inline'` du Content-Security-Policy. Nonce dynamique généré
+  par `frontend/src/middleware.ts` (Web Crypto Edge runtime,
+  `crypto.randomUUID()`), propagé via header `x-nonce` vers le root
+  layout, et appliqué aux directives `script-src` et `style-src`.
+  `next.config.mjs` ne sert plus de CSP statique — single source of
+  truth = middleware. `'unsafe-eval'` reste actif uniquement en dev
+  (HMR Next.js). Les tile providers (OSM / CartoDB Dark Matter) +
+  Nominatim restent whitelistés dans `img-src` / `connect-src`.
+
+### Added
+
+- **Pattern S9 ADR-023 finalisé** (cf
+  `backend/src/common/dto/response/README.md`) : 3 cas mapping
+  (A `plainToInstance` direct, B helper manuel
+  `to<X>ResponseDto(input, ctx?)`, C `plainToInstance + @Type()`),
+  arbre de décision en 3 questions, conventions de nommage, pièges
+  connus (`Record<string,T>`, `@Transform({obj})` pour Prisma JSON,
+  Decimal `string|number` → `number`).
+- `frontend/src/lib/csp.ts` — helper `buildCsp(nonce)` réutilisable.
+- 33 nouveaux tests dto-shape `auth/dto-shape.spec.ts` (anti-leak
+  credentials + 3 wire shapes du LoginResponseDto + 2 tests défensifs
+  cross-shape contamination).
+- 20 nouveaux tests dto-shape `__tests__/reliquats-dto-shape.spec.ts`
+  (8 modules markers + 5 modules non-triviaux avec runtime smoke
+  Decimal/Record/agrégat/tree).
+
+### Internal
+
+- **DTO discipline cascade S9 vague C** — 6 PRs livrées sur main
+  post-v1.11.0 :
+  - **#49 (s9-pr12)** assets — Prisma raw leak type A (~20 endpoints).
+  - **#50 (s9-pr13)** asset-models — vendor catalog (~12 endpoints,
+    2 binary streams).
+  - **#51 (s9-pr14)** expenses + billing-entities groupés (~17
+    endpoints, 1 binary stream CSV export).
+  - **#52 (s9-pr15)** auth — module sensible MFA/2FA/refresh (20
+    endpoints, 11 Response DTOs avec hardening anti-leak credentials).
+  - **#53 (s9-pr16)** reliquats groupés — 13 modules (~58 endpoints) :
+    access-overrides, admin, audit, budgets, consumption, contact-types,
+    contacts, organization, sdwan, search, seed, setup, user-delegations.
+    Découverte runtime critique gravée : `Prisma.Decimal` sur champ
+    typé `string | number` est dropé en `{}` par
+    `enableImplicitConversion`; fix → typage `number` direct.
+  - **#54 (s9-pr17)** CSP nonce dynamique frontend.
+- **Garde-fou CI `dto-coverage` à 0 module exempté** —
+  `backend/scripts/dto-coverage-baseline.json` `exempted_files: []`.
+  Toute future régression (endpoint ajouté sans `@ApiResponse({ type })`)
+  fait échouer le check.
+- **Tests dto-shape sur 100% des modules** — assertions inclusion
+  explicites + runtime smoke anti-leak via helper `wireShape()` qui
+  parse `JSON.parse(JSON.stringify(instanceToPlain(dto)))` (drop des
+  `undefined` props comme le vrai HTTP wire).
+- **Backend Jest 300 → 386** (+86 tests vague C : 23 assets + 8
+  asset-models + 9 expenses + billing + 33 auth + 20 reliquats).
+- **Cleanup baseline cascade** — entrées `assets` et `asset-models`
+  retirées en PR #16 (n'avaient pas été nettoyées en PR #49 / #50
+  malgré la couverture effective).
+- **Layout root passé en async** (Next 15 — `headers()` retourne
+  `Promise<ReadonlyHeaders>`) pour permettre la lecture du nonce.
+
+### PRs incluses depuis v1.11.0
+
+- #49 assets · #50 asset-models · #51 expenses+billing-entities
+- #52 auth · #53 reliquats · #54 CSP nonce
+
+### Plan v2 finalization — état après tag
+
+Plan v2 (validé 2026-04-29) clos officiellement. Reste hors scope plan
+v2 mais identifié dette résiduelle :
+- S8 Sentry / error tracking — prérequis pilotes externes non bloquant
+  pour v2.0.0, à programmer selon contraintes pilotes.
+- S5b Heavy SQL refactors — performance, optionnel.
+
+---
+
 ## [1.11.0] - 2026-05-06 — DTO discipline cascade S9 vague A+B (12 modules)
 
 Tag intermédiaire S9 — Hardening tail (plan v2 finalization). Pure refonte

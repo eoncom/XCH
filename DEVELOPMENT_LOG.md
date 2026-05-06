@@ -7696,3 +7696,24 @@ feat(s9-pr16): reliquats Response DTOs (vague C #5 — 13 modules + baseline cle
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-06
+
+**Date:** 2026-05-06 22:23:33
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 2
+
+**Commit message:**
+```
+feat(s9-pr17): CSP nonce dynamique frontend (vague C #6 — 'unsafe-inline' éliminé) (#54)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
