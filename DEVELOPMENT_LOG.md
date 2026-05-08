@@ -7717,3 +7717,24 @@ feat(s9-pr17): CSP nonce dynamique frontend (vague C #6 — 'unsafe-inline' éli
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-09
+
+**Date:** 2026-05-09 00:36:49
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 6
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat(s8): glitchtip bootstrap ops + 3 compose fixes (item 1)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

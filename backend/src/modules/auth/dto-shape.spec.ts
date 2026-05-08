@@ -1,4 +1,5 @@
 import { instanceToPlain } from 'class-transformer';
+import { SECRET_REGEX_BUNDLE } from '../../common/observability/glitchtip/scrubber';
 import { toResponse } from '../../common/utils/to-response.util';
 import { AuthUserRefResponseDto } from './dto/auth-user-ref.response.dto';
 import { AuthUserResponseDto } from './dto/auth-user.response.dto';
@@ -56,21 +57,10 @@ const PRISMA_USER_WITH_SECRETS = {
   tenant: { id: 'tnt-1', name: 'Demo', subdomain: 'demo', _hidden: 'leak' },
 };
 
-const SECRET_REGEX_BUNDLE = [
-  /passwordHash/,
-  /\$2[aby]\$/,                     // bcrypt prefix
-  /totpSecret/,
-  /JBSWY3DPEHPK3PXP/,               // example TOTP base32 value
-  /totpBackupCodes/,
-  /inviteToken/,                    // matches both field name AND legacy values
-  /resetToken/,
-  /a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6/, // sample invite token value
-  /f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5/, // sample reset token value
-  /failedLoginAttempts/,
-  /lockedUntil/,
-  /externalId/,
-  /oidc-sub-abc123/,
-];
+// SECRET_REGEX_BUNDLE déplacé en S8 vers
+// `backend/src/common/observability/glitchtip/scrubber.ts` pour partager la
+// single source of truth avec le hook Sentry `beforeSend` (filet anti-leak
+// runtime). Importé en haut du fichier.
 
 function expectNoSecretsInWire(dto: unknown) {
   const wireJson = JSON.stringify(instanceToPlain(dto));
