@@ -72,8 +72,11 @@ services:
       EMAIL_URL: ${GLITCHTIP_EMAIL_URL:-consolemail://}
       DEFAULT_FROM_EMAIL: ${GLITCHTIP_FROM_EMAIL:-glitchtip@xch.local}
       # Désactive l'inscription publique : seul l'admin auto-seedé peut créer
-      # d'autres comptes via l'UI.
-      ENABLE_OPEN_USER_REGISTRATION: "false"
+      # d'autres comptes via l'UI. NB : variable officielle GlitchTip est
+      # `ENABLE_USER_REGISTRATION` (et non OPEN_USER_REGISTRATION qui n'existe
+      # pas, ignoré silencieusement). Env-driven pour permettre override en
+      # dev si besoin.
+      ENABLE_USER_REGISTRATION: ${GLITCHTIP_ENABLE_USER_REGISTRATION:-false}
       # Air-gap : refuse tout outbound DSN explicite. GlitchTip ne s'auto-monitore
       # PAS via un Sentry public (ironique mais cohérent avec air-gap).
       GLITCHTIP_DSN: ""
@@ -87,8 +90,13 @@ services:
       # que l'admin UI signale sa version (pas de PII).
       ANONYMIZE_DATA: "true"
     networks:
-      - glitchtip-internal
-      - xch-network
+      glitchtip-internal:
+      xch-network:
+        # Alias DNS pour que NPM (sur xch-network) puisse pointer
+        # `proxy_pass http://glitchtip:8000` au lieu de `glitchtip-web`.
+        # Hostname `glitchtip-web` reste valide (nom du container).
+        aliases:
+          - glitchtip
     restart: unless-stopped
 
   glitchtip-worker:
@@ -105,9 +113,20 @@ services:
       - glitchtip-internal
     restart: unless-stopped
 
-  # Init job : crée le compte super-admin GlitchTip à la première mise en route.
-  # Idempotent (Django createsuperuser --noinput exit 0 si l'user existe déjà).
-  # Crédentials lus depuis glitchtip/.env. Auto-seed = pas de manip post-deploy.
+  # Init job : applique les migrations Django + crée le super-admin GlitchTip
+  # à la première mise en route. Idempotent par design : check explicite
+  # `User.objects.filter(email=...).exists()` avant create_superuser pour
+  # exit 0 sur ré-exécution (sinon `createsuperuser --noinput` exit 1 si user
+  # déjà présent → docker compose redémarre en boucle au 2e `up -d`).
+  #
+  # Pourquoi YAML literal block scalar `|` (et non folded `>`) :
+  # `>` collapse les newlines en espaces, ce qui casse les blocks Python
+  # `if/else`. Le bloc literal préserve les newlines, le heredoc `<<'PYEOF'`
+  # capture le Python proprement, et `PYEOF` au début de ligne ferme bien
+  # le heredoc après dedent du literal block.
+  #
+  # `migrate --noinput` est nécessaire car l'image start.sh ne migre pas
+  # auto au boot (vérifié empiriquement S8).
   glitchtip-admin-seed:
     image: glitchtip/glitchtip:v4.1
     container_name: glitchtip-admin-seed
@@ -118,22 +137,26 @@ services:
       <<: *glitchtip-env
       GLITCHTIP_ADMIN_EMAIL: ${GLITCHTIP_ADMIN_EMAIL:?GLITCHTIP_ADMIN_EMAIL requis dans glitchtip/.env}
       GLITCHTIP_ADMIN_PASSWORD: ${GLITCHTIP_ADMIN_PASSWORD:?GLITCHTIP_ADMIN_PASSWORD requis dans glitchtip/.env}
-    entrypoint: >
-      /bin/sh -c "
-      sleep 10 &&
-      python manage.py shell -c \"
-      from django.contrib.auth import get_user_model;
-      U = get_user_model();
-      email = '$$GLITCHTIP_ADMIN_EMAIL';
-      pwd = '$$GLITCHTIP_ADMIN_PASSWORD';
-      u = U.objects.filter(email=email).first();
-      if u is None:
-        U.objects.create_superuser(email=email, password=pwd);
-        print(f'Created superuser {email}')
-      else:
-        print(f'Superuser {email} already exists, skipping')
-      \"
-      "
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        sleep 10
+        echo "==> Applying Django migrations"
+        python manage.py migrate --noinput
+        echo "==> Seeding super-admin (idempotent)"
+        python manage.py shell <<'PYEOF'
+        import os
+        from django.contrib.auth import get_user_model
+        U = get_user_model()
+        email = os.environ['GLITCHTIP_ADMIN_EMAIL']
+        pwd = os.environ['GLITCHTIP_ADMIN_PASSWORD']
+        if U.objects.filter(email=email).exists():
+            print(f'Superuser {email} already exists, skipping')
+        else:
+            U.objects.create_superuser(email=email, password=pwd)
+            print(f'Created superuser {email}')
+        PYEOF
     networks:
       - glitchtip-internal
     restart: "no"
