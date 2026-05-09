@@ -40,6 +40,7 @@ import { ConsumptionModule } from './modules/consumption/consumption.module';
 import { SearchModule } from './modules/search/search.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { MonitorsApiModule } from './modules/monitoring/monitors-api.module';
+import { TestErrorModule } from './modules/test-error/test-error.module';
 
 @Module({
   imports: [
@@ -113,6 +114,9 @@ import { MonitorsApiModule } from './modules/monitoring/monitors-api.module';
     SearchModule,
     AuditModule,
     MonitorsApiModule,
+    // S8 / item 6 — endpoints synthèses GlitchTip (gated env flag + super-admin).
+    // Voir TestErrorModule pour la doc gating.
+    TestErrorModule,
   ],
   providers: [
     {

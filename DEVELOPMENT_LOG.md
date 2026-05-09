@@ -7759,3 +7759,24 @@ feat(s8): worker GlitchTip capture in WorkerEventLogger.jobFailed (item 3)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-09
+
+**Date:** 2026-05-09 11:30:59
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 6
+- Frontend files modified: 3
+
+**Commit message:**
+```
+feat(s8): CSP connect-src — autorise l'ingest GlitchTip parsé du DSN (item 5)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
