@@ -342,112 +342,154 @@ export class ExpensesService {
 
   // ========== REPORTS ==========
 
+  /**
+   * S5b PR2 — replaces a `findMany + reduce JS` group-by with a single
+   * `$queryRaw` group-by SQL natif. `totalRefactured` is computed via
+   * `LEFT JOIN LATERAL` on `cost_allocations` so each expense contributes
+   * exactly its own allocation sum (avoiding the row-multiplication
+   * problem of a direct JOIN on a 1-N relation). `netBorne` is computed
+   * post-fetch (one subtraction per row, ~10 rows max). Wire shape
+   * preserved : `{bearer:{id,name,code,type}, totalBorne, totalRefactured,
+   * netBorne, expenseCount}[]` sorted desc by totalBorne.
+   */
   async reportByBearer(
     tenantId: string,
     filters?: { dateFrom?: string; dateTo?: string; delegationId?: string },
     scopeDelegationIds: string[] | null = null,
-  ) {
-    const where: any = { tenantId };
-    if (filters?.dateFrom || filters?.dateTo) {
-      where.dateIncurred = {};
-      if (filters.dateFrom) where.dateIncurred.gte = new Date(filters.dateFrom);
-      if (filters.dateTo) where.dateIncurred.lte = new Date(filters.dateTo);
-    }
-    if (filters?.delegationId) where.delegationId = filters.delegationId;
-    if (scopeDelegationIds !== null) {
-      if (scopeDelegationIds.length === 0) return [];
-      where.delegationId = where.delegationId
-        ? where.delegationId
-        : { in: scopeDelegationIds };
-    }
+  ): Promise<Array<{
+    bearer: { id: string; name: string; code: string; type: string };
+    totalBorne: number;
+    totalRefactured: number;
+    netBorne: number;
+    expenseCount: number;
+  }>> {
+    if (scopeDelegationIds !== null && scopeDelegationIds.length === 0) return [];
 
-    const expenses = await this.prisma.expense.findMany({
-      where,
-      include: {
-        bearer: { select: { id: true, name: true, code: true, type: true } },
-        allocations: { select: { amount: true, targetId: true } },
+    const conditions: Prisma.Sql[] = [Prisma.sql`e."tenantId" = ${tenantId}`];
+    if (filters?.dateFrom) {
+      conditions.push(Prisma.sql`e."dateIncurred" >= ${new Date(filters.dateFrom)}`);
+    }
+    if (filters?.dateTo) {
+      conditions.push(Prisma.sql`e."dateIncurred" <= ${new Date(filters.dateTo)}`);
+    }
+    if (filters?.delegationId) {
+      conditions.push(Prisma.sql`e."delegationId" = ${filters.delegationId}`);
+    } else if (scopeDelegationIds !== null) {
+      conditions.push(Prisma.sql`e."delegationId" IN (${Prisma.join(scopeDelegationIds)})`);
+    }
+    const whereClause = Prisma.join(conditions, ` AND `);
+
+    type Row = {
+      bearer_id: string;
+      bearer_name: string;
+      bearer_code: string;
+      bearer_type: string;
+      total_borne: number;
+      total_refactured: number;
+      expense_count: number;
+    };
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      SELECT
+        be.id           AS bearer_id,
+        be.name         AS bearer_name,
+        be.code         AS bearer_code,
+        be."type"       AS bearer_type,
+        COALESCE(SUM(e."totalAmount"), 0)::float8 AS total_borne,
+        COALESCE(SUM(alloc.allocated), 0)::float8 AS total_refactured,
+        COUNT(e.id)::int                          AS expense_count
+      FROM expenses e
+      JOIN billing_entities be ON be.id = e."bearerId"
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(SUM(amount), 0) AS allocated
+        FROM cost_allocations ca
+        WHERE ca."expenseId" = e.id
+      ) alloc ON TRUE
+      WHERE ${whereClause}
+      GROUP BY be.id, be.name, be.code, be."type"
+      ORDER BY total_borne DESC
+    `);
+
+    return rows.map((r) => ({
+      bearer: {
+        id: r.bearer_id,
+        name: r.bearer_name,
+        code: r.bearer_code,
+        type: r.bearer_type,
       },
-    });
-
-    const bearerMap = new Map<string, {
-      bearer: { id: string; name: string; code: string; type: string };
-      totalBorne: number;
-      totalRefactured: number;
-      netBorne: number;
-      expenseCount: number;
-    }>();
-
-    for (const exp of expenses) {
-      const key = exp.bearerId;
-      if (!bearerMap.has(key)) {
-        bearerMap.set(key, {
-          bearer: exp.bearer,
-          totalBorne: 0,
-          totalRefactured: 0,
-          netBorne: 0,
-          expenseCount: 0,
-        });
-      }
-      const entry = bearerMap.get(key)!;
-      entry.totalBorne += exp.totalAmount;
-      entry.totalRefactured += exp.allocations.reduce((sum, a) => sum + a.amount, 0);
-      entry.expenseCount++;
-    }
-
-    for (const entry of bearerMap.values()) {
-      entry.netBorne = entry.totalBorne - entry.totalRefactured;
-    }
-
-    return Array.from(bearerMap.values()).sort((a, b) => b.totalBorne - a.totalBorne);
+      totalBorne: Number(r.total_borne),
+      totalRefactured: Number(r.total_refactured),
+      netBorne: Number(r.total_borne) - Number(r.total_refactured),
+      expenseCount: Number(r.expense_count),
+    }));
   }
 
+  /**
+   * S5b PR2 — replaces a `findMany + reduce JS` group-by with a single
+   * `$queryRaw` group-by SQL natif. Joins `cost_allocations → expenses`
+   * for the tenant/date/scope filters (which apply to the parent
+   * expense), groups by target, and returns the aggregated impute totals.
+   * Wire shape preserved : `{target:{id,name,code,type}, totalImputed,
+   * allocationCount}[]` sorted desc by totalImputed.
+   */
   async reportByTarget(
     tenantId: string,
     filters?: { dateFrom?: string; dateTo?: string; delegationId?: string },
     scopeDelegationIds: string[] | null = null,
-  ) {
-    const expenseWhere: any = { tenantId };
-    if (filters?.dateFrom || filters?.dateTo) {
-      expenseWhere.dateIncurred = {};
-      if (filters.dateFrom) expenseWhere.dateIncurred.gte = new Date(filters.dateFrom);
-      if (filters.dateTo) expenseWhere.dateIncurred.lte = new Date(filters.dateTo);
-    }
-    if (filters?.delegationId) expenseWhere.delegationId = filters.delegationId;
-    if (scopeDelegationIds !== null) {
-      if (scopeDelegationIds.length === 0) return [];
-      expenseWhere.delegationId = expenseWhere.delegationId
-        ? expenseWhere.delegationId
-        : { in: scopeDelegationIds };
-    }
+  ): Promise<Array<{
+    target: { id: string; name: string; code: string; type: string };
+    totalImputed: number;
+    allocationCount: number;
+  }>> {
+    if (scopeDelegationIds !== null && scopeDelegationIds.length === 0) return [];
 
-    const allocations = await this.prisma.costAllocation.findMany({
-      where: { expense: expenseWhere },
-      include: {
-        target: { select: { id: true, name: true, code: true, type: true } },
+    const conditions: Prisma.Sql[] = [Prisma.sql`e."tenantId" = ${tenantId}`];
+    if (filters?.dateFrom) {
+      conditions.push(Prisma.sql`e."dateIncurred" >= ${new Date(filters.dateFrom)}`);
+    }
+    if (filters?.dateTo) {
+      conditions.push(Prisma.sql`e."dateIncurred" <= ${new Date(filters.dateTo)}`);
+    }
+    if (filters?.delegationId) {
+      conditions.push(Prisma.sql`e."delegationId" = ${filters.delegationId}`);
+    } else if (scopeDelegationIds !== null) {
+      conditions.push(Prisma.sql`e."delegationId" IN (${Prisma.join(scopeDelegationIds)})`);
+    }
+    const whereClause = Prisma.join(conditions, ` AND `);
+
+    type Row = {
+      target_id: string;
+      target_name: string;
+      target_code: string;
+      target_type: string;
+      total_imputed: number;
+      allocation_count: number;
+    };
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      SELECT
+        bt.id             AS target_id,
+        bt.name           AS target_name,
+        bt.code           AS target_code,
+        bt."type"         AS target_type,
+        COALESCE(SUM(ca.amount), 0)::float8 AS total_imputed,
+        COUNT(ca.id)::int                   AS allocation_count
+      FROM cost_allocations ca
+      JOIN expenses e        ON e.id = ca."expenseId"
+      JOIN billing_entities bt ON bt.id = ca."targetId"
+      WHERE ${whereClause}
+      GROUP BY bt.id, bt.name, bt.code, bt."type"
+      ORDER BY total_imputed DESC
+    `);
+
+    return rows.map((r) => ({
+      target: {
+        id: r.target_id,
+        name: r.target_name,
+        code: r.target_code,
+        type: r.target_type,
       },
-    });
-
-    const targetMap = new Map<string, {
-      target: { id: string; name: true; code: string; type: string };
-      totalImputed: number;
-      allocationCount: number;
-    }>();
-
-    for (const alloc of allocations) {
-      const key = alloc.targetId;
-      if (!targetMap.has(key)) {
-        targetMap.set(key, {
-          target: alloc.target as any,
-          totalImputed: 0,
-          allocationCount: 0,
-        });
-      }
-      const entry = targetMap.get(key)!;
-      entry.totalImputed += alloc.amount;
-      entry.allocationCount++;
-    }
-
-    return Array.from(targetMap.values()).sort((a, b) => b.totalImputed - a.totalImputed);
+      totalImputed: Number(r.total_imputed),
+      allocationCount: Number(r.allocation_count),
+    }));
   }
 
   /**

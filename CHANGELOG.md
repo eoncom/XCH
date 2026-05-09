@@ -7,6 +7,84 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.1] - 2026-05-09 — S5b Heavy SQL refactors
+
+Patch de performance interne post-v2.1.0. Refactor des 4 endpoints
+agrégat lourds du module `expenses` extraits volontairement de S5 PR4
+pour ne pas étendre un PR approuvé. **Wire shape API strictement
+inchangée** (bump patch). Plans `EXPLAIN (FORMAT TEXT)` consolidés sur
+`xch-deploy` dans [`docs/perf/SESSION-05B-explain-analyze.md`](docs/perf/SESSION-05B-explain-analyze.md).
+
+Clôture la séquence S5b du plan v2 finalization avant la mini-session
+typecheck cleanup pré-tag final.
+
+### Internal — pas de changement de contrat API
+
+- **`projection()` + `reportByMonth()` SQL natif** ([backend/src/modules/
+  expenses/expenses.service.ts](backend/src/modules/expenses/expenses.service.ts)) :
+  l'éclatement MONTHLY/QUARTERLY/YEARLY sur buckets mensuels passe d'une
+  boucle JS (`Map<monthKey, …>` après `findMany`) à une CTE SQL unique
+  `GENERATE_SERIES(start, end, '1 month'::interval) JOIN expenses` avec
+  contribution check par mois. 1 query au lieu de N (12-60 selon plage).
+  Sémantique d'amortissement préservée à l'identique : `QUARTERLY =
+  totalAmount/3` chaque mois actif, `YEARLY = totalAmount/12` chaque
+  mois actif (pas modulo). `reportByMonth` filtre `HAVING SUM > 0` pour
+  préserver la wire-shape compacte (mois sans contribution absent).
+  `projection` matérialise tous les mois de la fenêtre côté JS reshape
+  (1 passe linéaire post-fetch). Le cap 10k expenses (guard JS-side
+  memory du `findMany`) est retiré : avec l'aggregation SQL natif, la
+  mémoire Node n'est plus exposée.
+
+- **`reportByBearer()` + `reportByTarget()` group-by SQL natif** : passage
+  de `findMany + reduce JS` à `$queryRaw` avec `LEFT JOIN LATERAL` pour
+  `reportByBearer` (somme des `cost_allocations.amount` par expense, sans
+  row-multiplication). 1 query au lieu de 1 findMany + N JS-side
+  iterations. `netBorne = totalBorne - totalRefactured` calculé
+  post-fetch (~10 rows max).
+
+- **24+ tests query-count** ajoutés (pattern S5 PR4 R2 — `expect(prisma.
+  $queryRaw).toHaveBeenCalledTimes(1)`, `expect(prisma.expense.findMany)
+  .not.toHaveBeenCalled()`). Garantit qu'un futur refactor qui
+  régresserait à un pattern findMany + boucle JS échouerait au build CI.
+- **24 tests d'intégration** sur vraie Postgres (`backend/test/integration/
+  expenses/projection.spec.ts` + `reports.spec.ts`) — 12 cas projection
+  (8 scenarios originaux + 4 cas bordure neufs : MONTHLY dateEnd
+  antérieur, YEARLY mid-window, ONE_TIME bordure haute, fenêtre vide) +
+  12 cas reports (LATERAL aggregation, multi-bearer/target, tenant
+  isolation cross-leak, type-smoke `typeof === 'number'`).
+
+- Type fix dans le legacy `reportByTarget`: `name: true` → `name: string`
+  dans le type littéral interne (était une regression silencieuse, jamais
+  exercée par le compilateur).
+
+### Documentation
+
+- **`docs/perf/SESSION-05B-explain-analyze.md`** — 8 plans EXPLAIN
+  AVANT/APRÈS pour les 4 cibles (1 par endpoint avant + 1 après =
+  8 plans), capturés sur xch-deploy avec `EXPLAIN (FORMAT TEXT)`. Pas
+  de timings/buffers : volume pilote (1 expense présente) → Seq Scan
+  partout, mesures sans valeur prédictive. À ré-exécuter avec
+  `(ANALYZE, BUFFERS)` quand un pilote dépasse ~1k expenses (caveat
+  reproduit du pattern S5 PR3 doc).
+
+### Plan v2 finalization — état après tag
+
+- ✅ S5b livrée. Cible 3 audit `enrichWithEntityLabels` retirée du scope
+  S5b et **reportée S6 perf vague 2** : l'audit n'est pas un vrai N+1
+  par log mais déjà 6 queries fixes batchées par type (cf. analyse plan
+  + scan code 2026-05-09). ROI faible (-5 roundtrips, ~5-15ms par GET
+  /audit), à reconsidérer quand un autre type d'optim entrera en scope.
+- 🔮 Reste pour clôture officielle plan v2 : mini-session typecheck
+  cleanup pré-tag final (résidu post-S9 : TS7006 implicit any +
+  TS2769 + TS2322).
+
+### PRs incluses dans ce tag
+
+- #59 `feat(s5b-pr1): refactor projection() + reportByMonth() in single SQL query`
+- #YY `feat(s5b-pr2): reportByBearer + reportByTarget — single SQL group-by + bundle release v2.1.1`
+
+---
+
 ## [2.1.0] - 2026-05-09 — S8 GlitchTip self-hosted observability (air-gap)
 
 Tag de feature observabilité, **post-v2.0.0**. Aucune surface utilisateur
