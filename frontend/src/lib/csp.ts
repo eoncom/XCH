@@ -14,8 +14,32 @@
  *   grep at S9 PR17 audit), so we don't need a dev-only `'unsafe-inline'`
  *   on style-src — the strict nonce policy holds in dev too.
  */
+/**
+ * Extrait l'origin (`scheme://host[:port]`) du DSN GlitchTip frontend pour
+ * l'autoriser dans `connect-src`. Source unique : on parse depuis
+ * `NEXT_PUBLIC_GLITCHTIP_DSN_FRONTEND` plutôt que d'avoir une env var
+ * dédiée à maintenir en parallèle (décision S8 / item 5).
+ *
+ * Si la var n'est pas set ou est malformée, retourne `null` → la CSP est
+ * inchangée et le browser SDK (qui sera no-op faute de DSN de toute façon)
+ * n'a rien à atteindre. Pas de bruit en dev local.
+ */
+function glitchtipIngestOrigin(): string | null {
+  const dsn = process.env.NEXT_PUBLIC_GLITCHTIP_DSN_FRONTEND;
+  if (!dsn) return null;
+  try {
+    const url = new URL(dsn);
+    // Format Sentry/GlitchTip : `<scheme>://<key>@<host>[:<port>]/<id>`.
+    // `URL.origin` ignore le user-info → exactement ce qu'on veut autoriser.
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 export function buildCsp(nonce: string): string {
   const isDev = process.env.NODE_ENV === 'development';
+  const ingestOrigin = glitchtipIngestOrigin();
   const directives: string[] = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''}`,
@@ -26,8 +50,12 @@ export function buildCsp(nonce: string): string {
     //   - basemaps.cartocdn.com  (Dark Matter, used in dark theme — S6 PR2)
     // unpkg.com + raw.githubusercontent.com host the Leaflet marker icons.
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://raw.githubusercontent.com",
-    // APIs called from the browser; same-origin + Nominatim direct call.
-    "connect-src 'self' blob: https://nominatim.openstreetmap.org",
+    // APIs called from the browser :
+    //   - 'self'                                    (same-origin, via NPM)
+    //   - blob:                                     (uploads/exports)
+    //   - https://nominatim.openstreetmap.org       (geocoding direct)
+    //   - <ingestOrigin> (S8)                       (GlitchTip events POST)
+    `connect-src 'self' blob: https://nominatim.openstreetmap.org${ingestOrigin ? ` ${ingestOrigin}` : ''}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
