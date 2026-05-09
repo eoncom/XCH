@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/node';
 import { WorkerEventLogger } from './worker-event-logger.service';
 
 /**
@@ -11,12 +12,14 @@ describe('WorkerEventLogger', () => {
   let logSpy: jest.SpyInstance;
   let warnSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
+  let captureSpy: jest.SpyInstance;
 
   beforeEach(() => {
     svc = new WorkerEventLogger();
     logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
     warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
     errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+    captureSpy = jest.spyOn(Sentry, 'captureException').mockImplementation(() => 'event-id');
   });
 
   afterEach(() => {
@@ -109,6 +112,51 @@ describe('WorkerEventLogger', () => {
       svc.jobFailed('notifications', '12', 'notification-dispatch', err, 1);
       const obj = lastJson(errorSpy);
       expect(obj.stack.length).toBeLessThanOrEqual(2048);
+    });
+
+    // ── S8 / ADR-024 — Sentry/GlitchTip capture ──
+    describe('Sentry capture', () => {
+      it('routes the original Error to Sentry.captureException', () => {
+        const err = new Error('boom');
+        svc.jobFailed('monitor-check', '42', 'probe', err, 2);
+        expect(captureSpy).toHaveBeenCalledTimes(1);
+        expect(captureSpy.mock.calls[0][0]).toBe(err);
+      });
+
+      it('tags low-cardinality fields (queue + jobName), extras hold ids/attempts', () => {
+        const err = new Error('boom');
+        svc.jobFailed('notifications', '777', 'notification-dispatch', err, 3);
+        const ctx = captureSpy.mock.calls[0][1];
+        expect(ctx.tags).toEqual({
+          queue: 'notifications',
+          jobName: 'notification-dispatch',
+        });
+        expect(ctx.extra).toEqual({ jobId: '777', attempts: 3 });
+      });
+
+      it('adds errorCode tag when message has SCREAMING_SNAKE prefix', () => {
+        const err = new Error('ETIMEDOUT: connect timed out');
+        svc.jobFailed('monitor-check', '1', 'probe', err, 1);
+        const ctx = captureSpy.mock.calls[0][1];
+        expect(ctx.tags.errorCode).toBe('ETIMEDOUT');
+      });
+
+      it('omits errorCode tag when no SCREAMING_SNAKE prefix', () => {
+        const err = new Error('something blew up');
+        svc.jobFailed('monitor-check', '1', 'probe', err, 1);
+        const ctx = captureSpy.mock.calls[0][1];
+        expect(ctx.tags).not.toHaveProperty('errorCode');
+      });
+
+      it('does NOT capture on jobCompleted (success path stays out of Sentry)', () => {
+        svc.jobCompleted('monitor-check', '1', 'probe', 100, 1);
+        expect(captureSpy).not.toHaveBeenCalled();
+      });
+
+      it('does NOT capture on emit() raw error (only jobFailed wraps capture)', () => {
+        svc.emit('error', { queue: 'q', event: 'job-failed', error: 'manual' });
+        expect(captureSpy).not.toHaveBeenCalled();
+      });
     });
   });
 });

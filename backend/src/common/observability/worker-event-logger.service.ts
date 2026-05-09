@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/node';
 
 /**
  * Structured event types emitted by worker queue handlers.
@@ -122,6 +123,24 @@ export class WorkerEventLogger {
       error_code,
       stack,
       ...extra,
+    });
+
+    // S8 / ADR-024 — route les job-failed vers GlitchTip pour alerting
+    // centralisé. Tags = bas-cardinalité (queue + jobName), extras = haute-
+    // cardinalité (jobId, attempts) pour ne pas exploser la facette tags
+    // côté UI. error_code est aussi un tag car peu de valeurs distinctes
+    // (ENOTFOUND, ETIMEDOUT, ECONNREFUSED, …) — utile pour grouper.
+    // Si DSN absent (dev local), captureException est no-op silencieux.
+    Sentry.captureException(err, {
+      tags: {
+        queue,
+        jobName: job_name,
+        ...(error_code ? { errorCode: error_code } : {}),
+      },
+      extra: {
+        jobId: job_id,
+        attempts,
+      },
     });
   }
 }
