@@ -135,7 +135,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: xch-backend:v1.1.1
+    image: xch-backend:v2.1.1
     container_name: xch-backend
     env_file:
       - ./backend/.env
@@ -167,7 +167,7 @@ services:
   # no port exposed.  Scale horizontally with `--scale backend-worker=N`
   # if check volume grows past ~10k.
   backend-worker:
-    image: xch-backend:v1.1.1
+    image: xch-backend:v2.1.1
     container_name: xch-backend-worker
     env_file:
       - ./backend/.env
@@ -212,7 +212,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: xch-frontend:v1.1.1
+    image: xch-frontend:v2.1.1
     container_name: xch-frontend
     environment:
       NODE_ENV: production
