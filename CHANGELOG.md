@@ -7,6 +7,184 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.0] - 2026-05-09 — S8 GlitchTip self-hosted observability (air-gap)
+
+Tag de feature observabilité, **post-v2.0.0**. Aucune surface utilisateur
+visible : pur ajout d'une stack GlitchTip self-hosted (compose dédié,
+cycle de vie indépendant) plus l'instrumentation `@sentry/node` + `@sentry/nextjs`
+côté backend (api+worker) et frontend (browser+ssr+edge). Architecturé
+explicitement air-gap : zéro forwarding externe vers Sentry SaaS, DSN
+internes Docker pour les processus serveur, DSN public via NPM Let's
+Encrypt seulement pour le browser (qui ne peut pas joindre le réseau
+Docker). Décision design + procédure deploy détaillées dans
+[ADR-024 GlitchTip air-gap observability](docs/decisions/adr-024-glitchtip-air-gap-observability.md).
+
+### Internal
+
+- **Compose stack `docker-compose.glitchtip.yml`** — postgres + redis +
+  glitchtip-web + glitchtip-worker + glitchtip-admin-seed (idempotent).
+  Réseaux : `glitchtip-internal` privé + `xch-network` external avec
+  alias DNS `glitchtip` pour que NPM puisse pointer
+  `proxy_pass http://glitchtip:8000`. Image pinnée
+  `glitchtip/glitchtip:v4.1`. Rétention events 90j (`GLITCHTIP_MAX_EVENT_LIFE_DAYS`),
+  signup public désactivé (`ENABLE_USER_REGISTRATION=false`), admin
+  auto-seedé via `createsuperuser` Django.
+
+- **Outils ops `glitchtip/scripts/`** :
+  - `gen-secrets.sh` : génère `glitchtip/.env` avec SECRET_KEY (64 hex) +
+    POSTGRES_PASSWORD (64 hex) + ADMIN_PASSWORD (48 hex) via openssl.
+    Atomic write mode 600. `--force`, `--stdout`.
+  - `gen-dsn.sh` + `_gen_dsn.py` : bootstrap idempotent via Django ORM
+    (`docker exec ... manage.py shell`) — création org `xch` + team +
+    3 projets (`xch-backend`, `xch-worker`, `xch-frontend`) + association
+    super-admin comme Owner + member. Génère 3 DSN différenciés par
+    audience : interne pour backend/worker (`http://...@glitchtip-web:8000/<id>`),
+    public pour frontend (`https://...@glitch.eoncom.io/<id>`). Modes
+    `--dry-run` (rollback transaction côté Python), `--json`. Audit
+    log GET/CREATE/ENSURE par ressource. python3 stdlib (pas de jq).
+
+- **Backend `@sentry/node`** init via `backend/src/main.ts` (side-effect
+  import en TOUT premier, avant `@nestjs/core`, pour que les async
+  hooks Sentry s'attachent avant les libs instrumentées). Module
+  `backend/src/common/observability/glitchtip/`  :
+  - `init.ts` : `Sentry.init` no-op si `GLITCHTIP_DSN_BACKEND` vide,
+    `tracesSampleRate=0`, `sendDefaultPii=false`, scope tag
+    `mode=api|worker` set via probe argv `--worker` ou `XCH_MODE=worker`.
+  - `scrubber.ts` : exporte `SECRET_REGEX_BUNDLE` (single source of
+    truth, déplacé depuis `dto-shape.spec.ts` S9 PR #15) +
+    `scrubEvent` `beforeSend` qui drop l'event entier si match (filet
+    fail-closed) + drop `user.email` (garde uniquement `user.id` UUID)
+    + drop `request.cookies` / `Authorization` / `Cookie` /
+    `X-CSRF-Token` / body.
+
+- **`AllExceptionsFilter`** (`backend/src/common/filters/`) : sur la
+  branche `else` (unhandled exceptions seulement, PAS HttpException ni
+  Prisma known errors qui sont du business expected),
+  `Sentry.captureException(err, { tags: {method, route}, extra:
+  {status_code, path}, user: {id} })`. Signal/bruit propre côté UI
+  GlitchTip.
+
+- **Worker** `WorkerEventLogger.jobFailed()` (`backend/src/common/
+  observability/`) : après l'`emit('error')` JSON pour Loki, appelle
+  `Sentry.captureException` avec tags bas-cardinalité `queue + jobName +
+  errorCode` (extrait du SCREAMING_SNAKE prefix) et extras
+  haute-cardinalité `jobId + attempts`. Couvre tous les processors BullMQ
+  actuels et futurs (un seul chemin de capture).
+
+- **Frontend `@sentry/nextjs`** ^8.55.2 via `instrumentation.ts` racine
+  (Next 15.1.3) + `sentry.{server,edge}.config.ts` + `sentry.client.config.ts`.
+  **Pas de `withSentryConfig`** : le webpack plugin Sentry entre en
+  conflit avec `config.externals['canvas'] = 'canvas'` requis par Konva
+  SSR ; bypass total du wrapper. Conséquence : source maps pas auto-
+  uploadées en prod (backlog `@sentry/cli` standalone si besoin).
+  Scrubber partagé `frontend/src/lib/observability/glitchtip-scrubber.ts`
+  filtre les erreurs LÉGITIMES (`AbortError`, `ChunkLoadError`,
+  `Loading chunk N failed`, HTTP 401/403/404 RBAC fail-closed +
+  deep-link).
+
+- **CSP** (`frontend/src/lib/csp.ts`) : helper `glitchtipIngestOrigin()`
+  parse `URL(NEXT_PUBLIC_GLITCHTIP_DSN_FRONTEND).origin` pour autoriser
+  dynamiquement l'origin GlitchTip dans `connect-src` — single source,
+  pas d'env var dédiée à maintenir. Try/catch fallback si DSN absent
+  ou malformé.
+
+- **Endpoints synthèses `_test-error`** (item 6 du handoff) : double
+  gating `ENABLE_TEST_ERROR_ENDPOINTS=true` env (désactivé par défaut)
+  ET super-admin RBAC. Si flag OFF → 404 (pas d'info-leak sur
+  l'existence de la route).
+  - `GET /api/_test-error/backend` → unhandled exception (route via
+    AllExceptionsFilter else)
+  - `POST /api/_test-error/worker` → enqueue job qui throw côté processor
+  - `/dashboard/test-error` (page) → bouton qui throw, capturé par
+    `dashboard/error.tsx` (modifiée pour appeler `Sentry.captureException`,
+    couvre désormais TOUTES les erreurs unhandled de `/dashboard/*`).
+
+- **`scripts/audit-egress.sh`** (item 7) : 4 assertions runtime
+  validant l'air-gap.
+  - 1 : `node` HTTP probe vers https://sentry.io depuis xch-backend doit
+    échouer (mode `--strict`) ou warner sinon. Pas de curl (absent du
+    container Node).
+  - 2 : `getent hosts sentry.io` NXDOMAIN si DNS bloqué OS-level.
+  - 3 : `node` probe vers `http://glitchtip-web:8000/api/0/` doit
+    répondre (preuve réseau interne fonctionne).
+  - 4 : `grep sentry.io backend/src + frontend/src` = 0 match (preuve
+    code source clean).
+  - Modes `--strict` (prod air-gap, 1+2 bloquantes) / défaut (dev/test,
+    1+2 informationnelles, 3+4 toujours bloquantes).
+
+- **Bug pré-existant fix** : `frontend/Dockerfile` n'avait pas d'`ARG
+  NEXT_PUBLIC_*` et `.dockerignore` exclut volontairement `.env*` →
+  toutes les vars `NEXT_PUBLIC_*` étaient bundlées vides en build. Fix :
+  `ARG` + `ENV` dans Dockerfile + `build.args:` dans
+  `docker-compose.yml`. Procédure deploy ajustée (`set -a; source
+  frontend/.env; set +a; docker compose build frontend`). Le bug
+  marchait par accident sur v2.0.0 parce que toutes les valeurs
+  fallback à vide étaient acceptables (`NEXT_PUBLIC_API_URL=''` →
+  relatif via nginx).
+
+### Décisions design verrouillées (cf ADR-024)
+
+- **Drop `user.email` entièrement** côté events Sentry — garde
+  uniquement `user.id` (UUID Prisma). Pas de hash email, pas de PII
+  même hashée.
+- **3 projets GlitchTip pour 4 runtimes** — backend api/worker partage
+  le projet `xch-backend` distingué par tag `mode` ; frontend a son
+  propre `xch-frontend` distingué par tag `runtime=browser/ssr/edge`.
+  Le projet `xch-worker` est créé par `gen-dsn.sh` mais inutilisé
+  (architecture historique conservée pour rollback futur si on veut
+  séparer). À nettoyer si pas réutilisé d'ici v2.2.
+- **Rétention 90j** events GlitchTip via `GLITCHTIP_MAX_EVENT_LIFE_DAYS=90`,
+  purge auto via Celery beat `cleanup_old_events`.
+- **Manual SDK init** côté frontend (no `withSentryConfig`) : compromis
+  source maps auto-upload contre robustesse Konva externals.
+
+### Limitations connues / backlog
+
+- Pas de tracing (`tracesSampleRate=0`) ni de session replay. Volume
+  GlitchTip réduit, pas de visibilité fine sur les requêtes/transactions.
+  À reconsidérer si besoin diagnostic perf pointu.
+- Pas de profiling (`profilesSampleRate=0`).
+- Source maps pas uploadées auto en prod côté frontend → stack traces
+  browser minifiées dans la UI GlitchTip. Acceptable pour identifier
+  l'erreur ; pour debug fin, utiliser `glitchtip-cli` standalone au
+  build step (backlog).
+- **Coupling `apps.organizations_ext` / `apps.teams` / `apps.projects`**
+  dans `glitchtip/scripts/_gen_dsn.py` : valable pour image v4.1 pinnée.
+  Si bump GlitchTip un jour, vérifier les imports avant deploy
+  (le helper lèvera `error` field explicite côté audit JSON si un
+  import échoue).
+
+### Commits inclus depuis v2.0.0 (ordre chronologique sur S8)
+
+- `6095a88` chore(s8): docker-compose.glitchtip.yml stack dédiée (PR0 handoff)
+- `5dc7d7c` feat(s8): glitchtip bootstrap ops + 3 compose fixes (item 1)
+- `d3f7253` feat(s8): backend GlitchTip wiring — init + scrubber + AllExceptionsFilter (item 2)
+- `2802dfa` feat(s8): worker GlitchTip capture in WorkerEventLogger.jobFailed (item 3)
+- `ea2d301` feat(s8): frontend GlitchTip via @sentry/nextjs (item 4 — manual init)
+- `b5dca9a` feat(s8): CSP connect-src — autorise l'ingest GlitchTip parsé du DSN (item 5)
+- `d0fc1e7` feat(s8): test-error endpoints + validation handoff (item 6)
+- `ac74f70` feat(s8): scripts/audit-egress.sh — air-gap GlitchTip 4 assertions (item 7)
+- `6faabdc` fix(s8): NEXT_PUBLIC_* via build.args — bug pré-existant + bloquant item 6
+- `c0d9823` fix(s8): wire sentry.client.config via Providers — bug bloquant item 6
+- `e70bee2` fix(s8): audit-egress.sh — node-based probe + relaxed/strict modes
+- `13e0e53` fix(s8): gen-dsn.sh — associer admin comme OrganizationOwner + Team member
+
+### Validation runtime (xch-deploy pilote)
+
+- 3 events visuellement validés dans GlitchTip UI (1 par projet `xch-backend` mode=api,
+  `xch-backend` mode=worker, `xch-frontend` runtime=browser).
+- `bash scripts/audit-egress.sh` (relaxed) : 2/4 PASS bloquantes + 2/4 WARN
+  réseau (xch-deploy = dev/test internet-ouvert, attendu).
+- Critère acceptance v2.1.0 atteint.
+
+### Reste pour bascule vraie prod air-gap (post-v2.1.0)
+
+- Mettre en place le firewall outbound bloquant sur l'host prod final
+  (ou DNS-block sentry.io) → puis re-run `bash scripts/audit-egress.sh
+  --strict` doit retourner 4/4 PASS.
+
+---
+
 ## [2.0.0] - 2026-05-06 — S9 Hardening tail FINAL : 100% DTO coverage + CSP strict
 
 Tag majeur clôturant le plan v2 finalization (chantier S9 — Hardening tail).
