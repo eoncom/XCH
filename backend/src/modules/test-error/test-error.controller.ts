@@ -10,13 +10,16 @@ import {
   Request,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiOkResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequireManage } from '../../common/decorators/require-right.decorator';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
+import { ErrorResponseDto } from '../../common/dto/response/error-response.dto';
+import { toResponse } from '../../common/utils/to-response.util';
 import { AuthRequest } from '../../types/request.interface';
+import { TestErrorEnqueuedResponseDto } from './dto/test-error-enqueued.response.dto';
 import { JOB_THROW, TEST_ERROR_QUEUE } from './test-error.processor';
 
 /**
@@ -58,7 +61,13 @@ export class TestErrorController {
   @SkipDelegation()
   @RequireManage()
   @ApiOperation({ summary: 'Synthèse erreur unhandled backend (super-admin + flag)' })
-  @ApiOkResponse({ description: 'Ne retourne JAMAIS 200 — toujours 500 ou 403/404 selon gating' })
+  @ApiResponse({
+    status: 500,
+    type: ErrorResponseDto,
+    description:
+      'Endpoint qui throw TOUJOURS — réponse réelle = 500 via AllExceptionsFilter. ' +
+      'Si flag OFF → 404, si pas super-admin → 403, mais jamais 2xx.',
+  })
   triggerBackend(@Request() req: AuthRequest): never {
     this.assertEnabled();
     this.assertSuperAdmin(req);
@@ -85,7 +94,12 @@ export class TestErrorController {
   @RequireManage()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Enqueue un test-error job (super-admin + flag)' })
-  async triggerWorker(@Request() req: AuthRequest): Promise<{ status: string; jobId: string }> {
+  @ApiResponse({
+    status: 202,
+    type: TestErrorEnqueuedResponseDto,
+    description: 'Job enqueueé sur la queue `test-error` ; le processor traitera async + throw.',
+  })
+  async triggerWorker(@Request() req: AuthRequest): Promise<TestErrorEnqueuedResponseDto> {
     this.assertEnabled();
     this.assertSuperAdmin(req);
 
@@ -99,7 +113,10 @@ export class TestErrorController {
     );
 
     this.logger.warn(`Enqueued synthetic worker error (jobId=${job.id}, user=${req.user.id})`);
-    return { status: 'enqueued', jobId: String(job.id) };
+    return toResponse(TestErrorEnqueuedResponseDto, {
+      status: 'enqueued',
+      jobId: String(job.id),
+    });
   }
 
   // ── Gating helpers ───────────────────────────────────────────────────
