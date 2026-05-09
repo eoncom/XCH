@@ -1,6 +1,6 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-05-09 20:42:54 (Auto-update)
+**Dernière mise à jour :** 2026-05-09 21:24:09 (Auto-update)
 **Version actuelle :** 1.9.0 (taguée 2026-05-02)
 **Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + **Sessions 1-7 finalization v2 livrées** + 10/10 critical paths E2E couverts + smoke @full-user-journey régression bloquante automatisée
 
@@ -30,10 +30,10 @@
 | 6 | UX dark canvas + erreurs réseau + tap targets (cible laptop/iPad/tablette, pas mobile) | — | v1.8.2 | ✅ Livrée 2026-05-01 |
 | **7** | **Refonte E2E Playwright scaffolding ~210 tests + mini-dette traversale (FK Expense onDelete + baseline non-régression frontend + codemod 163 lint + lockfile + DB e2e isolée + reset scoped)** | **ADR-007 amend** | (intermédiaire) | **✅ Livrée 2026-05-02** |
 | **7.5** | **Validation E2E réelle (alignement specs RBAC sur AUTH_MODEL_V2 + drift fixes wizard schema + α testids login/sidebar/delegation + docker-compose CI single-origin nginx + smoke @full-user-journey 10/10 RÉELLEMENT vert sur CI)** | — | **v1.9.0** | **✅ Livrée 2026-05-03** |
-| 8 | Sentry / error tracking (prérequis pilotes externes confirmé) | — | — | 🔮 |
-| 9 | Hardening tail (CSP nonce dynamique + DTOs structurés sur 30+ endpoints, 60-80 fichiers backend, 25-30 nouveaux Response DTOs) | — | — | 🔮 |
-| 5b | Heavy SQL refactors (3 refactors GENERATE_SERIES + DataLoader + group-by) | — | — | 🔮 |
-| Mini | Mini-session typecheck cleanup pré-v2.0.0 (résidu post-S9 : TS7006 implicit any + TS2769 + TS2322) | — | — | 🔮 |
+| 8 | Sentry / error tracking (prérequis pilotes externes confirmé) → GlitchTip self-hosted air-gap | ADR-024 | v2.1.0 | ✅ Livrée 2026-05-08 |
+| 9 | Hardening tail (CSP nonce dynamique + DTOs structurés sur 30+ endpoints, 60-80 fichiers backend, 25-30 nouveaux Response DTOs) | — | v2.0.0 | ✅ Livrée 2026-05-08 |
+| **5b** | **Heavy SQL refactors (2 cibles livrées : GENERATE_SERIES projection/reportByMonth + group-by reportByBearer/Target. Cible 3 audit reportée S6 perf vague 2 — pas de vrai N+1, déjà batché par type)** | — | **v2.1.1** | **✅ Livrée 2026-05-09** |
+| Mini | Mini-session typecheck cleanup pré-tag final (résidu post-S9 : TS7006 implicit any + TS2769 + TS2322) | — | — | 🔮 |
 
 **Tag :** **v1.9.0** posé 2026-05-03 après S7 + S7.5 (smoke `@full-user-journey` 10/10 RÉELLEMENT vert sur CI run [25263200317](https://github.com/eoncom/XCH/actions/runs/25263200317), 21s tests). Session 7 a livré scaffolding + mini-dette traversale (5 PRs autonomes mergées sans incident). Session 7.5 a livré validation E2E réelle en 5 PRs (PR5d-PR5h) après 12 itérations diagnostiques sur l'activation smoke (cf retex CHANGELOG entry [1.9.0] + entités MCP `XCH_E2E_AUTH_STORAGE_STATE_PATTERN` + `XCH_ITERATION_THRESHOLD_PRINCIPLE` gravées).
 

@@ -227,11 +227,157 @@ GroupAggregate  (cost=51.13..51.37 rows=5 width=144)
 
 ---
 
-## Cibles 3 & 4 — `reportByBearer` + `reportByTarget`
+## Cible 3 — `reportByBearer()`
 
-🔮 **À documenter en S5b PR2.** Le format et le protocole de capture sont
-identiques à PR1 (4 plans : avant `findMany + reduce JS` × après
-`$queryRaw + LEFT JOIN LATERAL`).
+### AVANT (S5 — `findMany` + reduce JS)
+
+Query générée par Prisma :
+```sql
+SELECT *
+FROM expenses
+WHERE "tenantId" = $1
+  AND "dateIncurred" >= $2
+  AND "dateIncurred" <= $3;
+```
+(avec `include: { bearer, allocations }` traduit en JOINs séparés).
+
+Plan capturé :
+```
+Seq Scan on expenses  (cost=0.00..1.02 rows=1 width=1564)
+  Filter: (("dateIncurred" >= …) AND ("dateIncurred" <= …) AND
+           ("tenantId" = 'cmojd5f1w0000p1e1qi7trjmv'))
+```
+
+Puis : itération JS qui group-by `bearerId`, `reduce` allocations pour
+sommer `totalRefactured`, et calcule `netBorne = totalBorne -
+totalRefactured` à la fin.
+
+### APRÈS (S5b PR2 — single `$queryRaw` + `LEFT JOIN LATERAL`)
+
+```sql
+SELECT
+  be.id, be.name, be.code, be."type",
+  COALESCE(SUM(e."totalAmount"), 0)::float8 AS total_borne,
+  COALESCE(SUM(alloc.allocated), 0)::float8 AS total_refactured,
+  COUNT(e.id)::int                          AS expense_count
+FROM expenses e
+JOIN billing_entities be ON be.id = e."bearerId"
+LEFT JOIN LATERAL (
+  SELECT COALESCE(SUM(amount), 0) AS allocated
+  FROM cost_allocations ca
+  WHERE ca."expenseId" = e.id
+) alloc ON TRUE
+WHERE e."tenantId" = $1 AND e."dateIncurred" >= $2 AND e."dateIncurred" <= $3
+GROUP BY be.id, be.name, be.code, be."type"
+ORDER BY total_borne DESC;
+```
+
+Plan capturé :
+```
+Sort  (cost=18.89..18.89 rows=1 width=446)
+  Sort Key: (COALESCE(sum(e."totalAmount"), '0'::double precision)) DESC
+  ->  GroupAggregate  (cost=18.85..18.88 rows=1 width=446)
+        Group Key: be.id
+        ->  Sort
+              Sort Key: be.id
+              ->  Nested Loop Left Join
+                    ->  Nested Loop
+                          ->  Seq Scan on expenses e
+                                Filter: ("dateIncurred" >= … AND
+                                         "dateIncurred" <= … AND
+                                         "tenantId" = …)
+                          ->  Index Scan using billing_entities_pkey on billing_entities be
+                                Index Cond: (id = e."bearerId")
+                    ->  Aggregate
+                          ->  Bitmap Heap Scan on cost_allocations ca
+                                Recheck Cond: ("expenseId" = e.id)
+                                ->  Bitmap Index Scan on "cost_allocations_expenseId_idx"
+                                      Index Cond: ("expenseId" = e.id)
+```
+
+**Observations** :
+- Le seq scan filter sur `expenses` est strictement identique à AVANT (`tenantId + dateIncurred BETWEEN`). Index Scan attendu à scale via `expenses_tenantId_delegationId_dateIncurred_idx`.
+- Le JOIN sur `billing_entities` utilise déjà l'**Index Scan** sur la PK `billing_entities_pkey`. Pas d'amélioration d'index nécessaire.
+- Le `LEFT JOIN LATERAL` exécute pour chaque expense un `SUM(amount) FROM cost_allocations WHERE expenseId = e.id`. Postgres choisit ici un **Bitmap Index Scan** sur `cost_allocations_expenseId_idx` (l'index FK existant) — exactement ce qu'on veut. À scale, chaque expense récupère ses allocations en O(log N) plutôt que de matérialiser le produit cartésien.
+- Le `GROUP BY` + `ORDER BY` côté Postgres remplace le `Map<bearerId, …>.reduce()` JS. Mémoire Node = O(bearers) au lieu de O(expenses + allocations).
+
+### À volume réel attendu
+
+À ~50k expenses × 100 bearers × ~3 allocations/expense :
+- AVANT : 50k expenses fetchées (1 row par expense, ~1.5kB chaque) + 150k allocations (via `include`) → ~250 MB transférés DB→Node, reduce JS construit `Map<100, …>` mais consomme la mémoire intermédiaire pour parser/itérer toutes les rows.
+- APRÈS : ~100 rows agrégées par Postgres (1 par bearer), transfert wire = ~50 kB. Pas de matérialisation côté Node.
+
+---
+
+## Cible 4 — `reportByTarget()`
+
+### AVANT (S5 — `findMany` sur `costAllocation` + reduce JS)
+
+```sql
+SELECT *
+FROM cost_allocations ca
+JOIN expenses e ON e.id = ca."expenseId"
+WHERE e."tenantId" = $1 AND e."dateIncurred" >= $2 AND e."dateIncurred" <= $3;
+```
+
+Plan :
+```
+Nested Loop  (cost=4.16..10.54 rows=470 width=1708)
+  ->  Seq Scan on expenses e
+        Filter: (… same as bearer …)
+  ->  Bitmap Heap Scan on cost_allocations ca
+        Recheck Cond: ("expenseId" = e.id)
+        ->  Bitmap Index Scan on "cost_allocations_expenseId_idx"
+              Index Cond: ("expenseId" = e.id)
+```
+
+Puis : reduce JS qui group-by `targetId` et somme `amount`.
+
+### APRÈS (S5b PR2 — single `$queryRaw` GROUP BY natif)
+
+```sql
+SELECT
+  bt.id, bt.name, bt.code, bt."type",
+  COALESCE(SUM(ca.amount), 0)::float8 AS total_imputed,
+  COUNT(ca.id)::int                   AS allocation_count
+FROM cost_allocations ca
+JOIN expenses e        ON e.id = ca."expenseId"
+JOIN billing_entities bt ON bt.id = ca."targetId"
+WHERE e."tenantId" = $1 AND e."dateIncurred" >= $2 AND e."dateIncurred" <= $3
+GROUP BY bt.id, bt.name, bt.code, bt."type"
+ORDER BY total_imputed DESC;
+```
+
+Plan :
+```
+Sort  (cost=34.44..34.76 rows=130 width=438)
+  Sort Key: (COALESCE(sum(ca.amount), '0'::double precision)) DESC
+  ->  HashAggregate
+        Group Key: bt.id
+        ->  Hash Join
+              Hash Cond: (ca."targetId" = bt.id)
+              ->  Nested Loop
+                    ->  Seq Scan on expenses e
+                          Filter: (… same as bearer …)
+                    ->  Bitmap Heap Scan on cost_allocations ca
+                          Recheck Cond: ("expenseId" = e.id)
+                          ->  Bitmap Index Scan on "cost_allocations_expenseId_idx"
+                                Index Cond: ("expenseId" = e.id)
+              ->  Hash
+                    ->  Seq Scan on billing_entities bt
+```
+
+**Observations** :
+- Même filter strict sur `expenses` qu'AVANT. Itinéraire vers `cost_allocations` identique (Bitmap Index Scan via FK).
+- `JOIN billing_entities bt` utilise un **Hash Join** (Postgres choisit cette stratégie quand l'autre côté est petit — typiquement <1k targets sur un tenant). À scale ça resterait Hash Join (table targets en RAM + probe expenses). Pas de soucis perf.
+- `HashAggregate` group-by Postgres remplace le `Map<targetId, …>.reduce()` JS.
+- Note : la query filtre sur `e."tenantId"` (l'expense parent), pas sur `bt."tenantId"`. C'est intentionnel — le `bt.id` est référencé par `ca."targetId"` qui pointe sur une `billing_entity` qui peut avoir un autre tenant en théorie. En pratique tous les targets sont du même tenant que l'expense (validateAllocationTargets le vérifie au CRUD), donc le résultat est correct. Si un cross-tenant slip emergait, le test d'isolation tenant le détecterait.
+
+### À volume réel attendu
+
+À ~50k expenses × 150k allocations × 100 targets :
+- AVANT : 150k allocations fetchées (~1.7 kB chaque) + 50k expenses jointes → ~280 MB transférés. Reduce JS sur ces 150k rows.
+- APRÈS : ~100 rows agrégées par Postgres, transfert wire = ~50 kB.
 
 ---
 
