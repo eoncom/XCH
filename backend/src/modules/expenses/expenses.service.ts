@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { CreateExpenseDto, UpdateExpenseDto, AllocationDto } from './dto/create-expense.dto';
 import { FilterExpenseDto } from './dto/filter-expense.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
@@ -460,105 +460,90 @@ export class ExpensesService {
     tenantId: string,
     filters?: { dateFrom?: string; dateTo?: string; delegationId?: string; expenseType?: string },
     scopeDelegationIds: string[] | null = null,
-  ) {
-    const where: any = { tenantId };
-    if (filters?.dateFrom || filters?.dateTo) {
-      where.dateIncurred = {};
-      if (filters.dateFrom) where.dateIncurred.gte = new Date(filters.dateFrom);
-      if (filters.dateTo) where.dateIncurred.lte = new Date(filters.dateTo);
+  ): Promise<Array<{ month: string; total: number; count: number }>> {
+    // S5b — single SQL query (CTE GENERATE_SERIES + INNER JOIN). Replaces a
+    // findMany + JS expansion loop. Buckets with total=0 are filtered via
+    // HAVING to preserve the original wire-shape (compact array, only months
+    // with at least one contribution). Recurring expenses (MONTHLY / QUARTERLY
+    // / YEARLY) are amortized across each active month: total/1, total/3 and
+    // total/12 respectively.
+    if (!filters?.dateFrom || !filters?.dateTo) {
+      throw new BadRequestException('dateFrom and dateTo are required (YYYY-MM-DD)');
     }
-    if (filters?.delegationId) where.delegationId = filters.delegationId;
-    if (filters?.expenseType) where.type = filters.expenseType;
+    if (scopeDelegationIds !== null && scopeDelegationIds.length === 0) return [];
+
+    const dateFrom = new Date(filters.dateFrom);
+    const dateTo = new Date(filters.dateTo);
+    if (Number.isNaN(dateFrom.getTime()) || Number.isNaN(dateTo.getTime())) {
+      throw new BadRequestException('Invalid dateFrom / dateTo (YYYY-MM-DD expected)');
+    }
+
+    // Compose WHERE fragments as Prisma.Sql (parameterized — no string interp).
+    // Preserves the legacy filter `dateIncurred BETWEEN gte AND lte` for ALL
+    // expenses (recurring included). The contribution clause inside the JOIN
+    // separately constrains which (month, expense) pairs are emitted.
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`e."tenantId" = ${tenantId}`,
+      Prisma.sql`e."dateIncurred" >= ${dateFrom}`,
+      Prisma.sql`e."dateIncurred" <= ${dateTo}`,
+    ];
+    if (filters.delegationId) {
+      conditions.push(Prisma.sql`e."delegationId" = ${filters.delegationId}`);
+    }
+    if (filters.expenseType) {
+      conditions.push(Prisma.sql`e."type" = ${filters.expenseType}::"ExpenseType"`);
+    }
     if (scopeDelegationIds !== null) {
-      if (scopeDelegationIds.length === 0) return [];
-      where.delegationId = where.delegationId
-        ? where.delegationId
-        : { in: scopeDelegationIds };
+      conditions.push(Prisma.sql`e."delegationId" IN (${Prisma.join(scopeDelegationIds)})`);
     }
+    const whereClause = Prisma.join(conditions, ` AND `);
 
-    // Cap dur : la projection éclate les récurrentes en tranches mensuelles.
-    // Au-delà de 10k expenses chargées, le calcul + la sérialisation deviennent
-    // un risque CPU/mémoire. Aucun cas pilote n'approche ce volume mais le cap
-    // protège contre un tenant pathologique ou un bug d'absence de filtre date.
-    const PROJECTION_EXPENSE_CAP = 10_000;
-    const expenseCount = await this.prisma.expense.count({ where });
-    if (expenseCount > PROJECTION_EXPENSE_CAP) {
-      throw new BadRequestException(
-        `Trop de dépenses dans la fenêtre de projection (${expenseCount} > ${PROJECTION_EXPENSE_CAP}). Affinez les filtres dateFrom/dateTo/delegationId.`,
-      );
-    }
+    const rows = await this.prisma.$queryRaw<
+      Array<{ month: string; total: number; count: number }>
+    >(Prisma.sql`
+      WITH months AS (
+        SELECT generate_series(
+          date_trunc('month', ${dateFrom}::timestamp),
+          date_trunc('month', ${dateTo}::timestamp),
+          '1 month'::interval
+        ) AS month_start
+      ),
+      contributions AS (
+        SELECT
+          m.month_start,
+          CASE e."frequency"
+            WHEN 'ONE_TIME'  THEN e."totalAmount"
+            WHEN 'MONTHLY'   THEN e."totalAmount"
+            WHEN 'QUARTERLY' THEN e."totalAmount" / 3.0
+            WHEN 'YEARLY'    THEN e."totalAmount" / 12.0
+            ELSE 0
+          END AS amount,
+          e.id AS expense_id
+        FROM months m
+        JOIN expenses e ON
+          (e."frequency" = 'ONE_TIME'
+            AND date_trunc('month', e."dateIncurred") = m.month_start)
+          OR
+          (e."frequency" <> 'ONE_TIME'
+            AND m.month_start >= GREATEST(
+                  date_trunc('month', COALESCE(e."dateStart", e."dateIncurred")),
+                  date_trunc('month', ${dateFrom}::timestamp))
+            AND m.month_start <= LEAST(
+                  date_trunc('month', COALESCE(e."dateEnd", '9999-12-31'::timestamp)),
+                  date_trunc('month', ${dateTo}::timestamp)))
+        WHERE ${whereClause}
+      )
+      SELECT
+        to_char(month_start, 'YYYY-MM') AS month,
+        ROUND(SUM(amount)::numeric, 2)::float8 AS total,
+        COUNT(expense_id)::int AS count
+      FROM contributions
+      GROUP BY month_start
+      HAVING SUM(amount) > 0
+      ORDER BY month_start
+    `);
 
-    const expenses = await this.prisma.expense.findMany({
-      where,
-      select: {
-        totalAmount: true,
-        frequency: true,
-        dateIncurred: true,
-        dateStart: true,
-        dateEnd: true,
-        type: true,
-        currency: true,
-      },
-      take: PROJECTION_EXPENSE_CAP,
-    });
-
-    const monthKey = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const bucket = new Map<string, { month: string; total: number; count: number }>();
-
-    // Helper to add an amount to a month bucket
-    const add = (key: string, amount: number) => {
-      if (!bucket.has(key)) bucket.set(key, { month: key, total: 0, count: 0 });
-      const b = bucket.get(key)!;
-      b.total += amount;
-      b.count += 1;
-    };
-
-    const windowStart = filters?.dateFrom ? new Date(filters.dateFrom) : null;
-    const windowEnd = filters?.dateTo ? new Date(filters.dateTo) : null;
-
-    for (const exp of expenses) {
-      if (exp.frequency === 'ONE_TIME') {
-        add(monthKey(exp.dateIncurred), Number(exp.totalAmount));
-        continue;
-      }
-
-      // Expand recurring expenses across their effective window, clipped to
-      // the report window.
-      const effStart =
-        exp.dateStart && (!windowStart || exp.dateStart > windowStart) ? exp.dateStart : windowStart ?? exp.dateIncurred;
-      const effEnd =
-        exp.dateEnd && (!windowEnd || exp.dateEnd < windowEnd) ? exp.dateEnd : windowEnd ?? new Date();
-      if (effStart > effEnd) continue;
-
-      const monthsInPeriod = this.monthsBetweenInclusive(effStart, effEnd);
-      const perMonth =
-        exp.frequency === 'MONTHLY'
-          ? Number(exp.totalAmount)
-          : exp.frequency === 'QUARTERLY'
-            ? Number(exp.totalAmount) / 3
-            : exp.frequency === 'YEARLY'
-              ? Number(exp.totalAmount) / 12
-              : 0;
-
-      const cursor = new Date(effStart.getFullYear(), effStart.getMonth(), 1);
-      for (let i = 0; i < monthsInPeriod; i++) {
-        add(monthKey(cursor), perMonth);
-        cursor.setMonth(cursor.getMonth() + 1);
-      }
-    }
-
-    return Array.from(bucket.values())
-      .map((b) => ({ ...b, total: Math.round(b.total * 100) / 100 }))
-      .sort((a, b) => a.month.localeCompare(b.month));
-  }
-
-  private monthsBetweenInclusive(start: Date, end: Date): number {
-    const months =
-      (end.getFullYear() - start.getFullYear()) * 12 +
-      (end.getMonth() - start.getMonth()) +
-      1;
-    return Math.max(0, months);
+    return rows;
   }
 
   async reportChargeback(
@@ -604,13 +589,22 @@ export class ExpensesService {
 
   /**
    * Project expenses over a date range, expanding recurring expenses into monthly tranches.
-   * Returns totals and per-month breakdown, optionally grouped by type/delegation/site.
+   * Returns totals and per-month breakdown, grouped by type/delegation/site.
+   *
+   * S5b — single SQL query (CTE GENERATE_SERIES + INNER JOIN + GROUP BY
+   * (month, type, delegationId, siteId)). The post-fetch reshape (1 linear
+   * pass) builds the multi-axis structure expected by the API. The full
+   * window of months is always represented in `byMonth` (empty months have
+   * total=0). Wire shape strictly preserved.
    */
   async projection(
     tenantId: string,
     dateFrom: string,
     dateTo: string,
-    groupBy?: 'type' | 'delegation' | 'site',
+    // groupBy is accepted for forward-compat with the controller signature
+    // but the response always carries every axis (byType / byDelegation /
+    // bySite). The frontend selects the relevant axis.
+    _groupBy?: 'type' | 'delegation' | 'site',
   ) {
     // Accept both "YYYY-MM" and "YYYY-MM-DD" (normalize to first-of-month)
     const toMonthStart = (s: string) => {
@@ -624,38 +618,94 @@ export class ExpensesService {
     to.setUTCMonth(to.getUTCMonth() + 1); // end of last month
     to.setUTCDate(0);
 
-    // Get all expenses that could overlap the projection window
-    const expenses = await this.prisma.expense.findMany({
-      where: {
-        tenantId,
-        OR: [
-          // ONE_TIME within range
-          { frequency: 'ONE_TIME', dateIncurred: { gte: from, lte: to } },
-          // Recurring: active during range
-          {
-            frequency: { not: 'ONE_TIME' },
-            dateStart: { lte: to },
-            OR: [
-              { dateEnd: null },
-              { dateEnd: { gte: from } },
-            ],
-          },
-        ],
-      },
-      include: {
-        bearer: { select: { id: true, name: true } },
-      },
-    });
+    type Row = {
+      month: string;
+      type: string | null;
+      delegation_id: string | null;
+      site_id: string | null;
+      total: number;
+    };
 
-    // Build monthly buckets
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      WITH months AS (
+        SELECT generate_series(
+          date_trunc('month', ${from}::timestamp),
+          date_trunc('month', ${to}::timestamp),
+          '1 month'::interval
+        ) AS month_start
+      ),
+      contributions AS (
+        SELECT
+          m.month_start,
+          COALESCE(e."type"::text, 'OTHER') AS type,
+          COALESCE(e."delegationId", 'none') AS delegation_id,
+          COALESCE(e."siteId", 'none') AS site_id,
+          CASE e."frequency"
+            WHEN 'ONE_TIME'  THEN e."totalAmount"
+            WHEN 'MONTHLY'   THEN e."totalAmount"
+            WHEN 'QUARTERLY' THEN e."totalAmount" / 3.0
+            WHEN 'YEARLY'    THEN e."totalAmount" / 12.0
+            ELSE 0
+          END AS amount
+        FROM months m
+        JOIN expenses e ON
+          (e."frequency" = 'ONE_TIME'
+            AND date_trunc('month', e."dateIncurred") = m.month_start)
+          OR
+          (e."frequency" <> 'ONE_TIME'
+            AND m.month_start >= GREATEST(
+                  date_trunc('month', COALESCE(e."dateStart", e."dateIncurred")),
+                  date_trunc('month', ${from}::timestamp))
+            AND m.month_start <= LEAST(
+                  date_trunc('month', COALESCE(e."dateEnd", '9999-12-31'::timestamp)),
+                  date_trunc('month', ${to}::timestamp)))
+        WHERE e."tenantId" = ${tenantId}
+          -- Pre-filter on the expenses scan (mirrors the legacy findMany OR).
+          -- Without this, Postgres reads every recurring expense regardless
+          -- of its active window and filters them in the Nested Loop, which
+          -- defeats indexes (tenantId, delegationId, dateIncurred) at scale.
+          -- The condition is iso-functional with the legacy Prisma where:
+          -- recurring expenses with NULL dateStart are excluded (NULL <= to
+          -- is FALSE), matching pre-S5b behaviour exactly.
+          AND (
+            (e."frequency" = 'ONE_TIME'
+              AND e."dateIncurred" >= ${from}::timestamp
+              AND e."dateIncurred" <= ${to}::timestamp)
+            OR
+            (e."frequency" <> 'ONE_TIME'
+              AND e."dateStart" <= ${to}::timestamp
+              AND (e."dateEnd" IS NULL OR e."dateEnd" >= ${from}::timestamp))
+          )
+      )
+      SELECT
+        to_char(month_start, 'YYYY-MM') AS month,
+        type,
+        delegation_id,
+        site_id,
+        SUM(amount)::float8 AS total
+      FROM contributions
+      GROUP BY month_start, type, delegation_id, site_id
+      ORDER BY month_start
+    `);
+
+    // Build the full set of months in the window (some may have no
+    // contribution; they must still be present in the response).
     const months: string[] = [];
     const cursor = new Date(from);
     while (cursor <= to) {
-      months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
-      cursor.setMonth(cursor.getMonth() + 1);
+      months.push(
+        `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`,
+      );
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
     }
 
-    const byMonth: Record<string, { total: number; byType: Record<string, number>; byDelegation: Record<string, number>; bySite: Record<string, number> }> = {};
+    type MonthBucket = {
+      total: number;
+      byType: Record<string, number>;
+      byDelegation: Record<string, number>;
+      bySite: Record<string, number>;
+    };
+    const byMonth: Record<string, MonthBucket> = {};
     for (const m of months) {
       byMonth[m] = { total: 0, byType: {}, byDelegation: {}, bySite: {} };
     }
@@ -665,76 +715,39 @@ export class ExpensesService {
     const totalByDelegation: Record<string, number> = {};
     const totalBySite: Record<string, number> = {};
 
-    for (const exp of expenses) {
-      const type = exp.type || 'OTHER';
-      const delegationId = (exp as any).delegationId || 'none';
-      const siteId = (exp as any).siteId || 'none';
+    for (const row of rows) {
+      const amt = Number(row.total);
+      const type = row.type ?? 'OTHER';
+      const delegationId = row.delegation_id ?? 'none';
+      const siteId = row.site_id ?? 'none';
+      const bucket = byMonth[row.month];
+      if (!bucket) continue; // safety: SQL guarantees row.month ∈ months
 
-      if (exp.frequency === 'ONE_TIME') {
-        const d = new Date(exp.dateIncurred);
-        const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        if (byMonth[monthKey]) {
-          const amt = Number(exp.totalAmount);
-          byMonth[monthKey].total += amt;
-          byMonth[monthKey].byType[type] = (byMonth[monthKey].byType[type] || 0) + amt;
-          byMonth[monthKey].byDelegation[delegationId] = (byMonth[monthKey].byDelegation[delegationId] || 0) + amt;
-          byMonth[monthKey].bySite[siteId] = (byMonth[monthKey].bySite[siteId] || 0) + amt;
-          grandTotal += amt;
-          totalByType[type] = (totalByType[type] || 0) + amt;
-          totalByDelegation[delegationId] = (totalByDelegation[delegationId] || 0) + amt;
-          totalBySite[siteId] = (totalBySite[siteId] || 0) + amt;
-        }
-      } else {
-        // Recurring: expand into monthly tranches
-        const effectiveStart = exp.dateStart && exp.dateStart > from ? exp.dateStart : from;
-        const effectiveEnd = exp.dateEnd && exp.dateEnd < to ? exp.dateEnd : to;
+      bucket.total += amt;
+      bucket.byType[type] = (bucket.byType[type] || 0) + amt;
+      bucket.byDelegation[delegationId] = (bucket.byDelegation[delegationId] || 0) + amt;
+      bucket.bySite[siteId] = (bucket.bySite[siteId] || 0) + amt;
 
-        for (const monthKey of months) {
-          const [y, m] = monthKey.split('-').map(Number);
-          const monthStart = new Date(y, m - 1, 1);
-          const monthEnd = new Date(y, m, 0);
-
-          if (monthStart > effectiveEnd || monthEnd < effectiveStart) continue;
-
-          let monthlyAmount = 0;
-          switch (exp.frequency) {
-            case 'MONTHLY':
-              monthlyAmount = Number(exp.totalAmount);
-              break;
-            case 'QUARTERLY':
-              monthlyAmount = Number(exp.totalAmount) / 3;
-              break;
-            case 'YEARLY':
-              monthlyAmount = Number(exp.totalAmount) / 12;
-              break;
-          }
-
-          byMonth[monthKey].total += monthlyAmount;
-          byMonth[monthKey].byType[type] = (byMonth[monthKey].byType[type] || 0) + monthlyAmount;
-          byMonth[monthKey].byDelegation[delegationId] = (byMonth[monthKey].byDelegation[delegationId] || 0) + monthlyAmount;
-          byMonth[monthKey].bySite[siteId] = (byMonth[monthKey].bySite[siteId] || 0) + monthlyAmount;
-          grandTotal += monthlyAmount;
-          totalByType[type] = (totalByType[type] || 0) + monthlyAmount;
-          totalByDelegation[delegationId] = (totalByDelegation[delegationId] || 0) + monthlyAmount;
-          totalBySite[siteId] = (totalBySite[siteId] || 0) + monthlyAmount;
-        }
-      }
+      grandTotal += amt;
+      totalByType[type] = (totalByType[type] || 0) + amt;
+      totalByDelegation[delegationId] = (totalByDelegation[delegationId] || 0) + amt;
+      totalBySite[siteId] = (totalBySite[siteId] || 0) + amt;
     }
 
-    // Round all amounts
+    const round2 = (v: number) => Math.round(v * 100) / 100;
     const roundObj = (obj: Record<string, number>) =>
-      Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, Math.round(v * 100) / 100]));
+      Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, round2(v)]));
 
     return {
       totals: {
-        total: Math.round(grandTotal * 100) / 100,
+        total: round2(grandTotal),
         byType: roundObj(totalByType),
         byDelegation: roundObj(totalByDelegation),
         bySite: roundObj(totalBySite),
       },
       byMonth: months.map((m) => ({
         month: m,
-        total: Math.round(byMonth[m].total * 100) / 100,
+        total: round2(byMonth[m].total),
         byType: roundObj(byMonth[m].byType),
         byDelegation: roundObj(byMonth[m].byDelegation),
         bySite: roundObj(byMonth[m].bySite),
