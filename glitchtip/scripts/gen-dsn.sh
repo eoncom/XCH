@@ -49,6 +49,7 @@ INTERNAL_HOST="http://glitchtip-web:8000"
 PUBLIC_HOST="https://glitch.eoncom.io"
 DRY_RUN=0
 JSON_ONLY=0
+ENV_FILE_PATH=""
 
 # Spec des projets : slug, platform tag, audience (internal=Docker network /
 # public=browser-reachable). Choix audience par projet :
@@ -70,7 +71,7 @@ while [[ $# -gt 0 ]]; do
     --public-host)   PUBLIC_HOST="$2"; shift 2 ;;
     --dry-run)       DRY_RUN=1; shift ;;
     --json)          JSON_ONLY=1; shift ;;
-    --env-file)      shift 2 ;;  # réservé pour usage futur (lecture defaults)
+    --env-file)      ENV_FILE_PATH="$2"; shift 2 ;;
     -h|--help)       sed -n '3,42p' "$0"; exit 0 ;;
     *)               echo "ERROR: argument inconnu: $1" >&2; exit 2 ;;
   esac
@@ -89,12 +90,28 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PY_HELPER="${REPO_ROOT}/glitchtip/scripts/_gen_dsn.py"
 [[ -f "$PY_HELPER" ]] || { echo "ERROR: helper Python introuvable: $PY_HELPER" >&2; exit 1; }
 
+# Récupère l'email admin depuis glitchtip/.env pour pouvoir associer ce user
+# comme Owner de l'org dans le helper Python (sinon le super-admin ne voit
+# rien dans la UI GlitchTip — bug item 6).
+ADMIN_EMAIL=""
+DEFAULT_ENV_FILE="${REPO_ROOT}/glitchtip/.env"
+ENV_FILE_LOOKUP="${ENV_FILE_PATH:-$DEFAULT_ENV_FILE}"
+if [[ -f "$ENV_FILE_LOOKUP" ]]; then
+  ADMIN_EMAIL="$(grep -E '^GLITCHTIP_ADMIN_EMAIL=' "$ENV_FILE_LOOKUP" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+fi
+if [[ -z "$ADMIN_EMAIL" ]]; then
+  echo "WARN: GLITCHTIP_ADMIN_EMAIL introuvable (cherché dans ${ENV_FILE_LOOKUP})" >&2
+  echo "      L'org sera créée mais l'admin ne sera pas associé comme Owner." >&2
+  echo "      → la UI GlitchTip affichera 'create an organization' au login admin." >&2
+fi
+
 # --- Run ORM via docker exec ----------------------------------------------
 
 OUTPUT="$(
   docker exec -i \
     -e GEN_DSN_ORG_SLUG="$ORG_SLUG" \
     -e GEN_DSN_ORG_NAME="$ORG_NAME" \
+    -e GEN_DSN_ADMIN_EMAIL="$ADMIN_EMAIL" \
     -e GEN_DSN_DRY_RUN="$DRY_RUN" \
     -e GEN_DSN_INTERNAL_HOST="$INTERNAL_HOST" \
     -e GEN_DSN_PUBLIC_HOST="$PUBLIC_HOST" \
