@@ -1,0 +1,178 @@
+# GlitchTip self-hosted observability stack — S8 ADR-024.
+#
+# Cycle de vie INDÉPENDANT du compose XCH principal (option B retenue) :
+# - démarrage opt-in : `docker compose -f docker-compose.glitchtip.yml --env-file glitchtip/.env up -d`
+# - arrêt sans toucher XCH : `docker compose -f docker-compose.glitchtip.yml down`
+# - duplication prod : ce fichier + glitchtip/.env + un volume de migration suffisent.
+#
+# Réseau :
+# - `glitchtip-internal` (bridge interne, NON exposé) : DB + Redis + worker + web
+# - `xch-network` (external, géré par docker-compose.yml XCH) : glitchtip-web seulement,
+#   pour que xch-backend / xch-backend-worker puissent POST `http://glitchtip-web:8000/api/...`
+#   sans sortir de l'hôte.
+#
+# Air-gap : aucun port public exposé par défaut. L'admin UI est accessible :
+# - en dev / xch-deploy : via reverse-proxy NPM sub-host `glitchtip.eoncom.io` qui
+#   route vers `glitchtip-web:8000` (admin only — credentials manuels).
+# - en prod air-gap finale : aucun reverse-proxy public, accès admin via SSH tunnel.
+#
+# Rétention : ENV `GLITCHTIP_MAX_EVENT_LIFE_DAYS=90` (purge auto via Celery beat,
+# voir `cleanup_old_events` task GlitchTip core).
+
+services:
+  glitchtip-postgres:
+    image: postgres:16-alpine
+    container_name: glitchtip-postgres
+    environment:
+      POSTGRES_DB: ${GLITCHTIP_POSTGRES_DB:-glitchtip}
+      POSTGRES_USER: ${GLITCHTIP_POSTGRES_USER:-glitchtip}
+      POSTGRES_PASSWORD: ${GLITCHTIP_POSTGRES_PASSWORD:?GLITCHTIP_POSTGRES_PASSWORD requis dans glitchtip/.env}
+    volumes:
+      - glitchtip_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-glitchtip}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - glitchtip-internal
+    restart: unless-stopped
+
+  glitchtip-redis:
+    image: redis:7-alpine
+    container_name: glitchtip-redis
+    # Pas de password : Redis interne au réseau glitchtip-internal, pas de port
+    # exposé. Le couplage GlitchTip ⇄ Redis est local-only.
+    command: ["redis-server", "--save", "60", "1"]
+    volumes:
+      - glitchtip_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - glitchtip-internal
+    restart: unless-stopped
+
+  glitchtip-web:
+    image: glitchtip/glitchtip:v4.1
+    container_name: glitchtip-web
+    depends_on:
+      glitchtip-postgres:
+        condition: service_healthy
+      glitchtip-redis:
+        condition: service_healthy
+    environment: &glitchtip-env
+      DATABASE_URL: postgres://${GLITCHTIP_POSTGRES_USER:-glitchtip}:${GLITCHTIP_POSTGRES_PASSWORD}@glitchtip-postgres:5432/${GLITCHTIP_POSTGRES_DB:-glitchtip}
+      REDIS_URL: redis://glitchtip-redis:6379/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?GLITCHTIP_SECRET_KEY requis dans glitchtip/.env (output `openssl rand -hex 32`)}
+      # PORT du conteneur web — différent du port hôte (pas d'exposition externe).
+      PORT: "8000"
+      EMAIL_URL: ${GLITCHTIP_EMAIL_URL:-consolemail://}
+      DEFAULT_FROM_EMAIL: ${GLITCHTIP_FROM_EMAIL:-glitchtip@xch.local}
+      # Désactive l'inscription publique : seul l'admin auto-seedé peut créer
+      # d'autres comptes via l'UI. NB : variable officielle GlitchTip est
+      # `ENABLE_USER_REGISTRATION` (et non OPEN_USER_REGISTRATION qui n'existe
+      # pas, ignoré silencieusement). Env-driven pour permettre override en
+      # dev si besoin.
+      ENABLE_USER_REGISTRATION: ${GLITCHTIP_ENABLE_USER_REGISTRATION:-false}
+      # Air-gap : refuse tout outbound DSN explicite. GlitchTip ne s'auto-monitore
+      # PAS via un Sentry public (ironique mais cohérent avec air-gap).
+      GLITCHTIP_DSN: ""
+      # Rétention 90 jours (cf user spec). Purge auto via Celery beat task
+      # `cleanup_old_events` qui tourne quotidiennement.
+      GLITCHTIP_MAX_EVENT_LIFE_DAYS: ${GLITCHTIP_MAX_EVENT_LIFE_DAYS:-90}
+      # Domaine accepté par Django ALLOWED_HOSTS. xch-deploy = subdomain interne ;
+      # production air-gap = nom local court.
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://glitchtip-web:8000}
+      # En air-gap pur, désactive toute télémétrie ; pour xch-deploy on accepte
+      # que l'admin UI signale sa version (pas de PII).
+      ANONYMIZE_DATA: "true"
+    networks:
+      glitchtip-internal:
+      xch-network:
+        # Alias DNS pour que NPM (sur xch-network) puisse pointer
+        # `proxy_pass http://glitchtip:8000` au lieu de `glitchtip-web`.
+        # Hostname `glitchtip-web` reste valide (nom du container).
+        aliases:
+          - glitchtip
+    restart: unless-stopped
+
+  glitchtip-worker:
+    image: glitchtip/glitchtip:v4.1
+    container_name: glitchtip-worker
+    depends_on:
+      glitchtip-postgres:
+        condition: service_healthy
+      glitchtip-redis:
+        condition: service_healthy
+    command: ./bin/run-celery-with-beat.sh
+    environment: *glitchtip-env
+    networks:
+      - glitchtip-internal
+    restart: unless-stopped
+
+  # Init job : applique les migrations Django + crée le super-admin GlitchTip
+  # à la première mise en route. Idempotent par design : check explicite
+  # `User.objects.filter(email=...).exists()` avant create_superuser pour
+  # exit 0 sur ré-exécution (sinon `createsuperuser --noinput` exit 1 si user
+  # déjà présent → docker compose redémarre en boucle au 2e `up -d`).
+  #
+  # Pourquoi YAML literal block scalar `|` (et non folded `>`) :
+  # `>` collapse les newlines en espaces, ce qui casse les blocks Python
+  # `if/else`. Le bloc literal préserve les newlines, le heredoc `<<'PYEOF'`
+  # capture le Python proprement, et `PYEOF` au début de ligne ferme bien
+  # le heredoc après dedent du literal block.
+  #
+  # `migrate --noinput` est nécessaire car l'image start.sh ne migre pas
+  # auto au boot (vérifié empiriquement S8).
+  glitchtip-admin-seed:
+    image: glitchtip/glitchtip:v4.1
+    container_name: glitchtip-admin-seed
+    depends_on:
+      glitchtip-web:
+        condition: service_started
+    environment:
+      <<: *glitchtip-env
+      GLITCHTIP_ADMIN_EMAIL: ${GLITCHTIP_ADMIN_EMAIL:?GLITCHTIP_ADMIN_EMAIL requis dans glitchtip/.env}
+      GLITCHTIP_ADMIN_PASSWORD: ${GLITCHTIP_ADMIN_PASSWORD:?GLITCHTIP_ADMIN_PASSWORD requis dans glitchtip/.env}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        sleep 10
+        echo "==> Applying Django migrations"
+        python manage.py migrate --noinput
+        echo "==> Seeding super-admin (idempotent)"
+        python manage.py shell <<'PYEOF'
+        import os
+        from django.contrib.auth import get_user_model
+        U = get_user_model()
+        email = os.environ['GLITCHTIP_ADMIN_EMAIL']
+        pwd = os.environ['GLITCHTIP_ADMIN_PASSWORD']
+        if U.objects.filter(email=email).exists():
+            print(f'Superuser {email} already exists, skipping')
+        else:
+            U.objects.create_superuser(email=email, password=pwd)
+            print(f'Created superuser {email}')
+        PYEOF
+    networks:
+      - glitchtip-internal
+    restart: "no"
+
+volumes:
+  glitchtip_postgres_data:
+    driver: local
+  glitchtip_redis_data:
+    driver: local
+
+networks:
+  # Réseau interne glitchtip — pas de pont vers xch-network ni vers l'extérieur.
+  glitchtip-internal:
+    driver: bridge
+  # Réseau XCH déjà créé par docker-compose.yml ; on le rejoint en external pour
+  # permettre à glitchtip-web d'être joignable depuis xch-backend / xch-worker.
+  xch-network:
+    external: true
+    name: ${XCH_NETWORK_NAME:-relaxed-morse-e92d0e_xch-network}

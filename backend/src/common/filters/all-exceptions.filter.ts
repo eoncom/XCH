@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/node';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -82,13 +83,35 @@ export class AllExceptionsFilter implements ExceptionFilter {
       error = 'Bad Request';
       this.logger.warn(`Prisma validation error on ${request.method} ${request.url}`);
     }
-    // Unknown errors
+    // Unknown errors — la branche "actionable" pour l'observabilité.
+    // HttpException et Prisma known errors ci-dessus sont des sorties business
+    // attendues (validation, conflit, not-found) → spam Sentry si capturés.
+    // On envoie UNIQUEMENT les unhandled à GlitchTip pour signal/bruit propre.
     else {
       const err = exception as Error;
       this.logger.error(
         `Unhandled exception on ${request.method} ${request.url}: ${err?.message || exception}`,
         err?.stack,
       );
+
+      // S8 : route vers GlitchTip self-hosted (DSN backend = interne Docker).
+      // Si DSN absent (dev local), Sentry.captureException reste no-op silencieux.
+      // user.id only (pas d'email — décision XCH 2026-05-08), tags request,
+      // scrubber `beforeSend` filet anti-leak final côté init.ts.
+      const userId = (request as Request & { user?: { id?: string } }).user?.id;
+      Sentry.captureException(err, {
+        tags: {
+          method: request.method,
+          // route?.path = pattern Express (`/api/users/:id`) → pas d'IDs
+          // dans les tags qui généreraient une explosion de cardinalité.
+          route: (request as Request & { route?: { path?: string } }).route?.path || 'unknown',
+        },
+        extra: {
+          status_code: status,
+          path: request.url,
+        },
+        user: userId ? { id: userId } : undefined,
+      });
     }
 
     response.status(status).json({

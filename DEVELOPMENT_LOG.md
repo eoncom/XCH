@@ -7717,3 +7717,87 @@ feat(s9-pr17): CSP nonce dynamique frontend (vague C #6 — 'unsafe-inline' éli
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-09
+
+**Date:** 2026-05-09 00:36:49
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 6
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat(s8): glitchtip bootstrap ops + 3 compose fixes (item 1)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-09
+
+**Date:** 2026-05-09 10:40:15
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 8
+
+**Commit message:**
+```
+feat(s8): worker GlitchTip capture in WorkerEventLogger.jobFailed (item 3)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-09
+
+**Date:** 2026-05-09 11:30:59
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 6
+- Frontend files modified: 3
+
+**Commit message:**
+```
+feat(s8): CSP connect-src — autorise l'ingest GlitchTip parsé du DSN (item 5)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-09
+
+**Date:** 2026-05-09 15:09:02
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix(s8): gen-dsn.sh — associer admin comme OrganizationOwner + Team member
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

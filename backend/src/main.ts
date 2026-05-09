@@ -1,3 +1,8 @@
+// MUST stay first : Sentry/GlitchTip init s'attache aux async hooks Node
+// AVANT le chargement des libs instrumentées (http, pg, etc.). Tout import
+// déplacé au-dessus de cette ligne casserait l'instrumentation silencieusement.
+import './common/observability/glitchtip/init';
+
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ClassSerializerInterceptor, ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';

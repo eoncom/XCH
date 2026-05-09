@@ -6,6 +6,7 @@ import { DatabaseModule } from './config/database.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { ObservabilityModule } from './common/observability/observability.module';
+import { TestErrorModule } from './modules/test-error/test-error.module';
 
 /**
  * Worker bootstrap module (ADR-014).
@@ -33,6 +34,9 @@ import { ObservabilityModule } from './common/observability/observability.module
     ObservabilityModule,
     NotificationsModule,
     MonitoringModule,
+    // S8 / item 6 — processor consume `test-error` queue (job `throw`).
+    // Endpoint controller côté API enqueue ; ce processor consomme côté worker.
+    TestErrorModule,
   ],
 })
 export class WorkerModule {}
