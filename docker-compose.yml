@@ -158,10 +158,28 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # NEXT_PUBLIC_* doivent être passés au BUILD (Next.js bake les valeurs
+      # dans les bundles JS) — voir frontend/Dockerfile pour l'explication.
+      # Compose substitue depuis (1) env shell, (2) --env-file, (3) repo-root .env.
+      # Pratique sur xch-deploy : export les vars de frontend/.env avant build :
+      #   set -a; source frontend/.env; set +a; docker compose build frontend
+      # OU les avoir aussi dans .env du repo root (pas idéal, duplication).
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
+        NEXT_PUBLIC_GLITCHTIP_DSN_FRONTEND: ${NEXT_PUBLIC_GLITCHTIP_DSN_FRONTEND:-}
+        NEXT_PUBLIC_GLITCHTIP_ENVIRONMENT: ${NEXT_PUBLIC_GLITCHTIP_ENVIRONMENT:-}
+        NEXT_PUBLIC_GLITCHTIP_RELEASE: ${NEXT_PUBLIC_GLITCHTIP_RELEASE:-}
+        NEXT_PUBLIC_ENABLE_TEST_ERROR_ENDPOINTS: ${NEXT_PUBLIC_ENABLE_TEST_ERROR_ENDPOINTS:-false}
     container_name: xch-frontend
     environment:
+      # NB : ces `environment:` runtime ne sont utiles QUE pour les vars lues
+      # côté Node SSR (sentry.server.config.ts par ex). Les NEXT_PUBLIC_*
+      # côté browser sont déjà figées dans les bundles via build.args ci-dessus.
       NEXT_PUBLIC_API_URL: ${FRONTEND_API_URL:-}
       NEXT_PUBLIC_APP_URL: ${FRONTEND_APP_URL:-}
+      NEXT_PUBLIC_GLITCHTIP_DSN_FRONTEND: ${NEXT_PUBLIC_GLITCHTIP_DSN_FRONTEND:-}
+      NEXT_PUBLIC_GLITCHTIP_ENVIRONMENT: ${NEXT_PUBLIC_GLITCHTIP_ENVIRONMENT:-}
     depends_on:
       - backend
     networks:
