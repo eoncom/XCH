@@ -9,6 +9,7 @@ import { NotificationsConfigPanel } from './notifications/NotificationsConfigPan
 import { useAppearance } from '@/components/AppearanceProvider';
 import {
   appearanceApi,
+  type AppearanceTheme,
   type UpdateTenantAppearanceInput,
   type UpdateUserAppearanceInput,
 } from '@/lib/api/appearance';
@@ -1938,6 +1939,29 @@ export default function SettingsPage() {
   // Tab visible if user has MANAGE on ANY delegation (not just the active one)
   const hasAnyManage = userDelegations.some((d) => d.right === 'MANAGE');
   const { theme, setTheme } = useTheme();
+  // User-level theme preference (persisted via PATCH /api/users/me/appearance).
+  // We keep next-themes' `theme` as a fallback for the very first render before
+  // `userAppearance` resolves, and call `reloadAppearance()` after each update
+  // so AppearanceProvider re-applies the new theme via setTheme on its end.
+  const { appearance: userAppearance, reload: reloadAppearance } = useAppearance();
+  const [savingUserTheme, setSavingUserTheme] = useState(false);
+  const userThemeLocked = userAppearance ? userAppearance.allowUserOverride === false : false;
+  const activeUserTheme: AppearanceTheme = (userAppearance?.theme ?? (theme as AppearanceTheme | undefined) ?? 'system');
+  const setUserTheme = async (next: AppearanceTheme) => {
+    if (savingUserTheme || userThemeLocked) return;
+    setSavingUserTheme(true);
+    try {
+      // Optimistic UX: flip next-themes immediately so the page reacts without
+      // waiting for the round-trip; reloadAppearance() will reconcile after.
+      setTheme(next);
+      await appearanceApi.updateMine({ source: 'custom', theme: next });
+      await reloadAppearance();
+    } catch (e: any) {
+      toast.error(e?.message || 'Erreur lors de la mise à jour du thème');
+    } finally {
+      setSavingUserTheme(false);
+    }
+  };
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
   const [tenantData, setTenantData] = useState<TenantConfig | null>(null);
@@ -2491,11 +2515,17 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">
                   Choisissez le thème de l&apos;interface utilisateur
                 </p>
+                {userThemeLocked && (
+                  <p className="text-xs text-muted-foreground">
+                    Thème verrouillé par l&apos;administrateur — vous ne pouvez pas le modifier.
+                  </p>
+                )}
                 <div className="grid grid-cols-3 gap-4">
                   <button
-                    onClick={() => setTheme('light')}
-                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
-                      theme === 'light'
+                    onClick={() => setUserTheme('light')}
+                    disabled={savingUserTheme || userThemeLocked}
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      activeUserTheme === 'light'
                         ? 'border-primary bg-primary/5'
                         : 'border-muted hover:border-muted-foreground/50'
                     }`}
@@ -2510,9 +2540,10 @@ export default function SettingsPage() {
                   </button>
 
                   <button
-                    onClick={() => setTheme('dark')}
-                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
-                      theme === 'dark'
+                    onClick={() => setUserTheme('dark')}
+                    disabled={savingUserTheme || userThemeLocked}
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      activeUserTheme === 'dark'
                         ? 'border-primary bg-primary/5'
                         : 'border-muted hover:border-muted-foreground/50'
                     }`}
@@ -2526,9 +2557,10 @@ export default function SettingsPage() {
                   </button>
 
                   <button
-                    onClick={() => setTheme('system')}
-                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
-                      theme === 'system'
+                    onClick={() => setUserTheme('system')}
+                    disabled={savingUserTheme || userThemeLocked}
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      activeUserTheme === 'system'
                         ? 'border-primary bg-primary/5'
                         : 'border-muted hover:border-muted-foreground/50'
                     }`}
