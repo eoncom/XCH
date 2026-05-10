@@ -7,6 +7,52 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.2] - 2026-05-10 — Bug fixes prod-bloquants + UI/UX professionnalisation
+
+Release post-test global production 2026-05-09 (cf MCP `XCH_PROD_TEST_REPORT_2026_05_09`).
+Deux sessions parallèles coordonnées via MCP `XCH_TRACK_AB_COORDINATION` :
+
+- **Track A** — 6 bugs prod-bloquants en 3 PRs cascade (B1+B2+B4+B6+B7+B9)
+- **Track B** — 7 findings UI/UX en 1 PR + 1 fixup CI (U1+U2+U3+U4+U5+U7+B8)
+
+**0 collision** entre les 2 tracks malgré zones partagées (`budgets/page.tsx`
+lignes 379-380 + banner). Le protocole de locks MCP a fait son travail.
+
+### Fixed (Track A)
+
+- **B1** : dashboard counters now read `meta.total` instead of `array.length` ([#64](https://github.com/eoncom/XCH/pull/64))
+- **B2** : tasks Kanban shows all statuses with native pagination per column via `useInfiniteQuery` ([#64](https://github.com/eoncom/XCH/pull/64))
+- **B4** : costs page total + count + search now coherent via new `/api/expenses/summary` endpoint ([#64](https://github.com/eoncom/XCH/pull/64))
+- **B6** : user theme persists via `/api/users/me/appearance` (PUT) ([#62](https://github.com/eoncom/XCH/pull/62))
+- **B7** : `AppearanceProvider` 29-fetch loop killed (`setTheme` stabilized via `useRef`, retiré du dep array `useCallback`) ([#62](https://github.com/eoncom/XCH/pull/62))
+- **B9** : budgets over-threshold counter excludes sub-budgets (`rootBudgets.filter`), banner reformulé en 2 lignes autonomes ("Sous-budgets cumulés" + "Dépenses propres au budget") ([#63](https://github.com/eoncom/XCH/pull/63))
+
+### Improved — UI/UX (Track B)
+
+- **U1** : Import CSV — 17 strings sans accents corrigés + 2 refinements UX (em dash sélecteur site, parenthèse preview limit) ([#65](https://github.com/eoncom/XCH/pull/65))
+- **U2** : Contacts — tagline reformulée *"Annuaire : fournisseurs, internes, partenaires, équipes techniques et d'urgence"* + 4 accents + scope label *"Délégation X"* (forme pleine, fin du *"Del. X"* cryptique) ([#65](https://github.com/eoncom/XCH/pull/65))
+- **U3** : Monitoring — tagline sans jargon *"worker XCH"* → *"Surveillance temps réel : disponibilité des liens, équipements et services."* + sweep cross-pages confirmé propre (sonde gardé = terme métier réseau valide) ([#65](https://github.com/eoncom/XCH/pull/65))
+- **U4** : Avatars — nouveau composant partagé `<UserAvatar size=sm/md/lg name email image />` + utilitaire `getInitials` (strip annotations `[…]`/`(…)` + 2-letter init) + refactor 3 call sites ([#65](https://github.com/eoncom/XCH/pull/65))
+- **U5 + B8** : Budgets — hiérarchie spatiale forte (parent full-width + sub-grid responsive 1/2/3 cols imbriquée + bordure rouge propagée tint sur bloc parent over-budget) + tag *"Sous-budget de [parent]"* supprimé (contexte spatial fait le job) + skeleton loading ([#65](https://github.com/eoncom/XCH/pull/65))
+- **U7** : Settings — 10 skeleton loading states cohérents (Apparence + Tenant + SSO + Électricité + Modules + Types + Modèles + 2 sub-cards Apparence) remplaçant les `<p>Chargement...</p>` plain text ([#65](https://github.com/eoncom/XCH/pull/65))
+
+### Added — Backend
+
+- `GET /api/expenses/summary` endpoint (totalAmount, totalAllocated, count, byType) pour le fix B4 ([#64](https://github.com/eoncom/XCH/pull/64))
+
+### Resolved indirectly
+
+- **B5** : freeze "Par cible" tab — résolu par fix B7. La boucle 29-fetch était le blocker du JS thread (pas le SQL backend). `reportByTarget` mesuré à 35ms post-fix.
+
+### MCP audit trail
+
+- `XCH_PROD_TEST_REPORT_2026_05_09` — rapport initial source des findings (preserved as historic snapshot)
+- `XCH_BUGS_PROD_BLOCKERS` — Track A statuts par bug
+- `XCH_UIUX_FINDINGS` — Track B statuts par finding
+- `XCH_TRACK_AB_COORDINATION` — timeline complète locks/signals/seed handoffs entre les 2 tracks
+
+---
+
 ## [2.1.1] - 2026-05-09 — S5b Heavy SQL refactors
 
 Patch de performance interne post-v2.1.0. Refactor des 4 endpoints
