@@ -7,6 +7,37 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.3] - 2026-05-10 — Bugs secondaires Track C : floor plans + backup completeness + dette TS
+
+Patch release post-v2.1.2 fermant la liste Track C des bugs secondaires
+identifiés au test global production 2026-05-09 (cf MCP `XCH_BUGS_SECONDARY`).
+Une session, un PR squash, validé prod via rebuild `--no-cache` complet et
+backup test à 161 KB / 19 data files.
+
+### Fixed
+
+- **B3** : floor plans page affichait *« 0 plan(s) »* + grille vide + footer pagination *« 1-6 sur 6 »*. Cause racine = **DTO broken** : `FloorPlanResponseDto` exposait `name`/`floor`/`building`/`tenantId`/`createdAt`/`updatedAt` qui n'existent pas dans le schéma Prisma, et n'exposait PAS `title`/`site`/`planGroupId` qui existent. `class-transformer` (avec `excludeExtraneousValues: true`) droppait les vrais champs et émettait `undefined` pour les noms légacy → le filtre frontend `plan.title?.toLowerCase().includes('')` retournait `undefined` pour tous les plans → rejet total. `meta.total` restait correct côté pagination, d'où la contradiction visible. ([#67](https://github.com/eoncom/XCH/pull/67))
+- **B3 (suite)** : dedup poussé serveur via raw SQL CTE (`COALESCE("planGroupId", id)` + `MAX(version)` + `COUNT(*) AS total_versions`) — `meta.total` désormais cohérent avec la grille, badge *« X versions »* lit `plan.totalVersions` (un champ par row dans la réponse). Le frontend a perdu `getLatestVersions` / `getVersionCounts` (helpers client supprimés). ([#67](https://github.com/eoncom/XCH/pull/67))
+- **B10** : `POST /api/backup/full` produisait un ZIP de 101 KB avec **9 tables silencieusement exclues** — Expense (240 records dans le seed test), Budget (18), BillingEntity, CostAllocation, Photo, AssetMovement, ConnectivityLink, SiteHealthSnapshot, TaskComment. Restaurer un backup d'un tenant peuplé en dépenses/budgets aurait perdu tout l'écosystème coûts sans erreur visible. `exportAllTenantData()` étendu avec les 9 tables ; `restoreFullBackup()` symétrique avec FK ordering strict + Budget hierarchy 2-pass + `contactIdMap` ajouté pour remap `Expense.vendorId`. Validation prod : ZIP passe à 161 KB, 19 data files, metadata.counts liste les 9 nouvelles tables. ([#67](https://github.com/eoncom/XCH/pull/67))
+- **B10 (UI)** : libellé du backup remplacé. *« Base de données + fichiers MinIO »* → *« Toutes les données métier (sites, équipements, baies, plans, tâches, dépenses, budgets) + fichiers référencés (plans, pièces jointes, photos) »* avec caveat italique sur les fichiers orphelins du stockage objet (renvoyés à Track D). ([#67](https://github.com/eoncom/XCH/pull/67))
+
+### Removed
+
+- **`// @ts-nocheck`** retiré de [`frontend/src/app/dashboard/costs/reports/page.tsx`](frontend/src/app/dashboard/costs/reports/page.tsx) (résidu de la PR4 abandonnée du Track A). Dry-run grep préalable confirmait des types `BearerReport` / `TargetReport` propres, pas de `any`/cast légacy. ([#67](https://github.com/eoncom/XCH/pull/67))
+
+### Out of scope — figé pour Track D Backup v2
+
+Le backup contient toujours uniquement les **fichiers MinIO référencés en base** (`fileUrl` / `path` FK). Pas de snapshot complet du bucket, pas de fichiers orphelins, pas de checksums SHA-256, pas de dry-run preview restore. Une session dédiée *Track D Backup v2* couvrira ce périmètre (scope figé dans MCP `XCH_TRACK_D_BACKUP_V2_SCOPE`).
+
+### MCP audit trail
+
+- `XCH_TRACK_C_BUGS_SECONDARY_2026_05_10` — session tracking complète (root cause B3 découvert pendant l'investigation, audit pattern restore B10 avant édition, validation prod step-by-step)
+- `XCH_BUGS_SECONDARY` — B3 + B10 + ts-nocheck marqués ✅
+- `XCH_TRACK_D_BACKUP_V2_SCOPE` — scope figé pour future session
+- `XCH_PROD_PORTS` — caveat ports xch-deploy (backend host:3002 → 3000, grafana monopolise host:3000) + caveat rebuild backend-worker en même temps que backend (image SHA partagé mais tag séparé)
+
+---
+
 ## [2.1.2] - 2026-05-10 — Bug fixes prod-bloquants + UI/UX professionnalisation
 
 Release post-test global production 2026-05-09 (cf MCP `XCH_PROD_TEST_REPORT_2026_05_09`).
