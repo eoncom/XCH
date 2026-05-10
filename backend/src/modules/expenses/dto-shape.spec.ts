@@ -3,6 +3,7 @@ import { ExpenseFrequency, ExpenseType } from '@prisma/client';
 import { toResponse } from '../../common/utils/to-response.util';
 import { ExpenseResponseDto, ExpenseAllocationResponseDto, ExpenseBearerRefResponseDto } from './dto/expense.response.dto';
 import { ExpenseListResponseDto } from './dto/expense-list.response.dto';
+import { ExpensesSummaryResponseDto } from './dto/expenses-summary.response.dto';
 
 describe('Expenses response DTO shapes', () => {
   describe('ExpenseResponseDto', () => {
@@ -67,6 +68,59 @@ describe('Expenses response DTO shapes', () => {
         meta: { total: 0, page: 1, pageSize: 25, totalPages: 0 },
       });
       expect(dto.meta).toEqual({ total: 0, page: 1, pageSize: 25, totalPages: 0 });
+    });
+  });
+
+  describe('ExpensesSummaryResponseDto', () => {
+    it('exposes totalAmount + totalAllocated + count + byType passthrough', () => {
+      const dto = toResponse(ExpensesSummaryResponseDto, {
+        totalAmount: 1052578.57,
+        totalAllocated: 696711.0,
+        count: 240,
+        byType: {
+          [ExpenseType.SERVICE]: { count: 120, total: 800000 },
+          [ExpenseType.LICENSE]: { count: 30, total: 120578.57 },
+          [ExpenseType.EQUIPMENT]: { count: 90, total: 132000 },
+        },
+        // Extraneous keys must be stripped at the top level.
+        _internal: 'leak',
+        passwordHash: 'never',
+      });
+      expect(dto.totalAmount).toBe(1052578.57);
+      expect(dto.totalAllocated).toBe(696711.0);
+      expect(dto.count).toBe(240);
+      expect(dto.byType).toEqual({
+        [ExpenseType.SERVICE]: { count: 120, total: 800000 },
+        [ExpenseType.LICENSE]: { count: 30, total: 120578.57 },
+        [ExpenseType.EQUIPMENT]: { count: 90, total: 132000 },
+      });
+    });
+
+    it('runtime serialization is leak-free at the top level', () => {
+      const dto = toResponse(ExpensesSummaryResponseDto, {
+        totalAmount: 0,
+        totalAllocated: 0,
+        count: 0,
+        byType: {},
+        _internal: 'leak',
+        passwordHash: 'never',
+      });
+      const wireJson = JSON.stringify(instanceToPlain(dto));
+      expect(wireJson).not.toMatch(/passwordHash/);
+      expect(wireJson).not.toMatch(/_internal/);
+    });
+
+    it('handles empty filtered set (zeros + empty byType)', () => {
+      const dto = toResponse(ExpensesSummaryResponseDto, {
+        totalAmount: 0,
+        totalAllocated: 0,
+        count: 0,
+        byType: {},
+      });
+      expect(dto.totalAmount).toBe(0);
+      expect(dto.totalAllocated).toBe(0);
+      expect(dto.count).toBe(0);
+      expect(dto.byType).toEqual({});
     });
   });
 

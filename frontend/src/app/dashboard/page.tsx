@@ -41,26 +41,41 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
-  // Fetch real data from APIs
-  const { data: sites = [], isLoading: sitesLoading, isError: sitesIsError, error: sitesError, refetch: sitesRefetch } = useQuery<Site[]>({
-    queryKey: ['sites'],
-    queryFn: () => sitesApi.getAll(),
+  // Fetch real data from APIs.
+  // B1 fix (test 2026-05-09): the cards used to display `array.length` over
+  // the first paginated page (default 25), which capped at 25 even when the
+  // tenant had hundreds of items. We now read the headline count from
+  // `response.meta.total` (server-side count) and pass `data` (up to
+  // pageSize=500) to the per-site alert aggregation. 500 covers pilot scale
+  // comfortably; for very large tenants the per-site sub-aggregation would
+  // need dedicated backend stats endpoints (out of scope for this PR).
+  const { data: sitesResponse, isLoading: sitesLoading, isError: sitesIsError, error: sitesError, refetch: sitesRefetch } = useQuery({
+    queryKey: ['sites', 'dashboard'],
+    queryFn: () => sitesApi.getAllPaginated({ pageSize: 500 }),
   });
+  const sites: Site[] = sitesResponse?.data ?? [];
+  const sitesTotal = sitesResponse?.meta.total ?? sites.length;
 
-  const { data: assets = [], isLoading: assetsLoading, isError: assetsIsError, error: assetsError, refetch: assetsRefetch } = useQuery<Asset[]>({
-    queryKey: ['assets'],
-    queryFn: () => assetsApi.getAll(),
+  const { data: assetsResponse, isLoading: assetsLoading, isError: assetsIsError, error: assetsError, refetch: assetsRefetch } = useQuery({
+    queryKey: ['assets', 'dashboard'],
+    queryFn: () => assetsApi.getAllPaginated({ pageSize: 500 }),
   });
+  const assets: Asset[] = assetsResponse?.data ?? [];
+  const assetsTotal = assetsResponse?.meta.total ?? assets.length;
 
-  const { data: racks = [], isLoading: racksLoading, isError: racksIsError, error: racksError, refetch: racksRefetch } = useQuery<Rack[]>({
-    queryKey: ['racks'],
-    queryFn: () => racksApi.getAll(),
+  const { data: racksResponse, isLoading: racksLoading, isError: racksIsError, error: racksError, refetch: racksRefetch } = useQuery({
+    queryKey: ['racks', 'dashboard'],
+    queryFn: () => racksApi.getAllPaginated({ pageSize: 500 }),
   });
+  const racks: Rack[] = racksResponse?.data ?? [];
+  const racksTotal = racksResponse?.meta.total ?? racks.length;
 
-  const { data: tasks = [], isLoading: tasksLoading, isError: tasksIsError, error: tasksError, refetch: tasksRefetch } = useQuery<Task[]>({
-    queryKey: ['tasks'],
-    queryFn: () => tasksApi.getAll(),
+  const { data: tasksResponse, isLoading: tasksLoading, isError: tasksIsError, error: tasksError, refetch: tasksRefetch } = useQuery({
+    queryKey: ['tasks', 'dashboard'],
+    queryFn: () => tasksApi.getAllPaginated({ pageSize: 500 }),
   });
+  const tasks: Task[] = tasksResponse?.data ?? [];
+  const tasksTotal = tasksResponse?.meta.total ?? tasks.length;
 
   const { data: nativeMonitors = [] } = useQuery<MonitorCheck[]>({
     queryKey: ['monitors', 'all'],
@@ -103,7 +118,7 @@ export default function DashboardPage() {
 
     return {
       sites: {
-        total: sites.length,
+        total: sitesTotal,
         active: activeSites,
         critical: criticalSites,
         healthy: healthySites,
@@ -112,23 +127,23 @@ export default function DashboardPage() {
         unknown: unknownSites,
       },
       assets: {
-        total: assets.length,
+        total: assetsTotal,
         inService: inServiceAssets,
         inStock: inStockAssets,
       },
       racks: {
-        total: racks.length,
+        total: racksTotal,
         activeU: totalUsedU,
         totalU: totalAvailableU,
       },
       tasks: {
-        total: tasks.length,
+        total: tasksTotal,
         todo: todoTasks,
         inProgress: inProgressTasks,
         done: doneTasks,
       },
     };
-  }, [sites, assets, racks, tasks]);
+  }, [sites, assets, racks, tasks, sitesTotal, assetsTotal, racksTotal, tasksTotal]);
 
   // Warranty thresholds from tenant config
   const warrantyThresholds = useWarrantyThresholds();
