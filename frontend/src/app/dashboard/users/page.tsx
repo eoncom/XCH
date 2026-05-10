@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Users, UserPlus, Mail, Phone, Shield, Send, Loader2, Search, X, Trash2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { AccessGate } from '@/components/AccessGate';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
@@ -353,9 +354,7 @@ function UsersPageInner() {
                 className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-lg">
-                    {user.name?.charAt(0).toUpperCase() || user.email.charAt(0).toUpperCase()}
-                  </div>
+                  <UserAvatar size="lg" name={user.name} email={user.email} />
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold">{user.name || 'Nom non défini'}</p>

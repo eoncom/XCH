@@ -546,11 +546,7 @@ export default function TaskDetailPage({
                             <Bot className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                           </div>
                         ) : (
-                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                            <span className="text-sm font-medium text-primary">
-                              {comment.author?.name?.charAt(0)?.toUpperCase() || '?'}
-                            </span>
-                          </div>
+                          <UserAvatar size="sm" name={comment.author?.name} />
                         )}
                       </div>
 

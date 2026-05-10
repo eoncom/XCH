@@ -14,6 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Database, Download, Loader2, Upload, FileJson, Trash2, Package } from 'lucide-react';
 import { toast } from 'sonner';
+import { getInitials } from '@/lib/get-initials';
 import {
   assetModelsApi,
   type StoredCatalog,
@@ -283,7 +284,7 @@ export function VendorCatalogImportMenu({ onImported }: Props) {
                   className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/30 transition-colors"
                 >
                   <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center text-sm font-semibold">
-                    {v.label.charAt(0)}
+                    {getInitials(v.label, '?')}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
