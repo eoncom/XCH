@@ -119,6 +119,13 @@ export interface CreateExpenseData {
   allocations?: { targetId: string; percentage: number; notes?: string }[];
 }
 
+export interface ExpensesSummary {
+  totalAmount: number;
+  totalAllocated: number;
+  count: number;
+  byType: Record<string, { count: number; total: number }>;
+}
+
 export interface BearerReport {
   bearer: { id: string; name: string; code: string; type: string };
   totalBorne: number;
@@ -162,6 +169,26 @@ export const expensesApi = {
     const qs = buildExpenseParams(params);
     const query = qs.toString();
     return apiClient.get<PaginatedResponse<Expense>>(`/api/expenses${query ? `?${query}` : ''}`);
+  },
+
+  /**
+   * Aggregate over the full filtered set (no pagination slice). Mirrors the
+   * filter shape of `getAllPaginated` so the UI can drive both the list and
+   * the summary cards from the same query state. Returns sum/count/byType.
+   */
+  getSummary: (params?: { type?: string; bearerId?: string; vendorId?: string; targetId?: string; dateFrom?: string; dateTo?: string; search?: string; delegationId?: string; siteId?: string }): Promise<ExpensesSummary> => {
+    const qs = new URLSearchParams();
+    if (params?.type) qs.set('type', params.type);
+    if (params?.bearerId) qs.set('bearerId', params.bearerId);
+    if (params?.vendorId) qs.set('vendorId', params.vendorId);
+    if (params?.targetId) qs.set('targetId', params.targetId);
+    if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params?.dateTo) qs.set('dateTo', params.dateTo);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.delegationId) qs.set('delegationId', params.delegationId);
+    if (params?.siteId) qs.set('siteId', params.siteId);
+    const query = qs.toString();
+    return apiClient.get<ExpensesSummary>(`/api/expenses/summary${query ? `?${query}` : ''}`);
   },
   getById: (id: string) => apiClient.get<Expense>(`/api/expenses/${id}`),
   create: (data: CreateExpenseData) => apiClient.post<Expense>('/api/expenses', data),

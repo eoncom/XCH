@@ -28,6 +28,7 @@ import {
   ExpenseReportChargebackResponseDto,
 } from './dto/expense-report.response.dto';
 import { ExpenseDeletedResultResponseDto } from './dto/expense-action-result.response.dto';
+import { ExpensesSummaryResponseDto } from './dto/expenses-summary.response.dto';
 
 @ApiTags('expenses')
 @Controller('expenses')
@@ -73,6 +74,21 @@ export class ExpensesController {
   ) {
     const scope = await this.scopeOrFail(req, filters.delegationId);
     return this.expensesService.findAll(req.user.tenantId, filters, scope);
+  }
+
+  @Get('summary')
+  @RequireManage()
+  @ApiOperation({
+    summary:
+      'Aggregate counterpart to GET /expenses (sum + count + byType over the full filtered set, no pagination slice). Feeds the costs page summary cards.',
+  })
+  @ApiOkResponse({ type: ExpensesSummaryResponseDto })
+  async summary(
+    @Query() filters: FilterExpenseDto,
+    @Request() req: AuthRequest,
+  ) {
+    const scope = await this.scopeOrFail(req, filters.delegationId);
+    return this.expensesService.summary(req.user.tenantId, filters, scope);
   }
 
   @Get('reports/by-bearer')
