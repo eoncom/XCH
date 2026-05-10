@@ -376,14 +376,16 @@ function BudgetsPage() {
     saveAs(blob, `xch-budgets-${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
-  const overBudgetCount = Object.values(statuses).filter((s) => s.overBudget).length;
-  const thresholdCount = Object.values(statuses).filter((s) => s.thresholdReached && !s.overBudget).length;
-  // Totaux agrégés : ne sommer QUE les budgets racines. Un sous-budget est par
-  // construction un découpage de l'enveloppe parent (Σ children ≤ parent),
-  // donc l'inclure dans la somme produirait un double comptage. Idem pour le
-  // dépensé : le scope d'un enfant est inclus dans celui du parent, donc
-  // `parent.spent` couvre déjà les dépenses des enfants.
+  // Totaux agrégés et compteurs over/threshold : ne compter QUE les budgets
+  // racines. Un sous-budget est par construction un découpage de l'enveloppe
+  // parent, donc l'inclure produirait un double comptage à la fois sur les
+  // sommes (Σ children ≤ parent) et sur le compteur "En dépassement" (un
+  // parent over-budget verrait aussi ses sous-budgets contribuer au total).
   const rootBudgets = budgets.filter((b) => !b.parentId);
+  const overBudgetCount = rootBudgets.filter((b) => statuses[b.id]?.overBudget).length;
+  const thresholdCount = rootBudgets.filter(
+    (b) => statuses[b.id]?.thresholdReached && !statuses[b.id]?.overBudget,
+  ).length;
   const totalBudgeted = rootBudgets.reduce((sum, b) => sum + (statuses[b.id]?.budgeted ?? 0), 0);
   const totalSpent = rootBudgets.reduce((sum, b) => sum + (statuses[b.id]?.spent ?? 0), 0);
 
@@ -619,21 +621,28 @@ function BudgetsPage() {
                             : ''
                       }
                     />
-                    {/* D5 — when a budget has children, break down the spent
-                        into "own direct expenses" vs "from sub-budgets". */}
+                    {/* B9 — show two autonomous figures rather than computing
+                        ownDirect = parent.spent - fromKids. The subtraction
+                        assumed Σ children.spent ⊆ parent.spent, but that breaks
+                        when scopes diverge (e.g., delegation-scoped parent +
+                        CdC-scoped children with multi-target allocations
+                        receiving from outside the parent's scope). The two
+                        numbers below are independent: the admin reads them as
+                        complementary signals, not as a partition. */}
                     {(budget._count?.children ?? 0) > 0 && status && (() => {
                       const fromKids = childrenSpentById.get(budget.id) ?? 0;
                       if (fromKids <= 0) return null;
-                      const ownDirect = Math.max(0, status.spent - fromKids);
                       return (
-                        <p className="text-xs text-muted-foreground">
-                          dont {formatCurrency(fromKids, budget.currency)} depuis les sous-budgets
-                          {ownDirect > 0 && (
-                            <>
-                              {' '}· {formatCurrency(ownDirect, budget.currency)} en direct
-                            </>
-                          )}
-                        </p>
+                        <div className="space-y-0.5 text-xs text-muted-foreground">
+                          <p>
+                            Sous-budgets cumulés :{' '}
+                            {formatCurrency(fromKids, budget.currency)}
+                          </p>
+                          <p>
+                            Dépenses propres au budget :{' '}
+                            {formatCurrency(status.spent, budget.currency)}
+                          </p>
+                        </div>
                       );
                     })()}
                     <div className="flex justify-between text-xs text-muted-foreground">
