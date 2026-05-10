@@ -110,7 +110,7 @@ export default function ImportAssetsPage() {
         }
 
         if (results.data.length === 0) {
-          setParseErrors(['Le fichier ne contient aucune ligne de donnees.']);
+          setParseErrors(['Le fichier ne contient aucune ligne de données.']);
           return;
         }
 
@@ -269,7 +269,7 @@ export default function ImportAssetsPage() {
             </h1>
           </div>
           <p className="text-muted-foreground ml-10">
-            Importez des equipements depuis un fichier CSV
+            Importez des équipements depuis un fichier CSV
           </p>
         </div>
       </div>
@@ -281,11 +281,11 @@ export default function ImportAssetsPage() {
         </Badge>
         <span className="text-muted-foreground">&rarr;</span>
         <Badge variant={step === 'preview' ? 'default' : 'secondary'}>
-          2. Apercu
+          2. Aperçu
         </Badge>
         <span className="text-muted-foreground">&rarr;</span>
         <Badge variant={step === 'result' ? 'default' : 'secondary'}>
-          3. Resultat
+          3. Résultat
         </Badge>
       </div>
 
@@ -315,7 +315,7 @@ export default function ImportAssetsPage() {
               <Upload className="h-10 w-10 text-muted-foreground" />
               <div className="text-center">
                 <p className="font-medium text-foreground">
-                  Glissez-deposez votre fichier ici
+                  Glissez-déposez votre fichier ici
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
                   ou cliquez pour parcourir (CSV, TXT)
@@ -358,11 +358,11 @@ export default function ImportAssetsPage() {
                 onValueChange={setSiteId}
                 placeholder="Tous les sites"
                 allowNone
-                noneLabel="Aucun (utiliser les donnees du CSV)"
+                noneLabel="Aucun — utiliser les données du CSV"
                 noneValue="none"
               />
               <p className="text-xs text-muted-foreground">
-                Si selectionne, tous les equipements importes seront affectes a
+                Si sélectionné, tous les équipements importés seront affectés à
                 ce site.
               </p>
             </div>
@@ -400,7 +400,7 @@ export default function ImportAssetsPage() {
                   URL.revokeObjectURL(url);
                 }}
               >
-                Telecharger le modele CSV
+                Télécharger le modèle CSV
               </button>
             </div>
           </CardContent>
@@ -415,7 +415,7 @@ export default function ImportAssetsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Apercu de l&apos;import
+              Aperçu de l&apos;import
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -423,7 +423,7 @@ export default function ImportAssetsPage() {
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <Badge variant="secondary">
                 {parsedRows.length} ligne{parsedRows.length > 1 ? 's' : ''}{' '}
-                detectee{parsedRows.length > 1 ? 's' : ''}
+                détectée{parsedRows.length > 1 ? 's' : ''}
               </Badge>
               <Badge variant="secondary">
                 {columns.length} colonne{columns.length > 1 ? 's' : ''}
@@ -435,7 +435,7 @@ export default function ImportAssetsPage() {
 
             {/* Column mapping */}
             <div className="space-y-1">
-              <p className="text-sm font-medium">Colonnes detectees :</p>
+              <p className="text-sm font-medium">Colonnes détectées :</p>
               <div className="flex flex-wrap gap-1">
                 {columns.map((col) => {
                   const isKnown = EXPECTED_COLUMNS.includes(
@@ -448,7 +448,7 @@ export default function ImportAssetsPage() {
                       className={!isKnown ? 'opacity-60' : ''}
                     >
                       {col}
-                      {!isKnown && ' (ignoree)'}
+                      {!isKnown && ' (ignorée)'}
                     </Badge>
                   );
                 })}
@@ -505,8 +505,8 @@ export default function ImportAssetsPage() {
 
             {parsedRows.length > 100 && (
               <p className="text-xs text-muted-foreground">
-                Apercu limite aux 100 premieres lignes sur{' '}
-                {parsedRows.length} au total.
+                Aperçu limité aux 100 premières lignes ({parsedRows.length} au
+                total).
               </p>
             )}
 
@@ -626,7 +626,7 @@ export default function ImportAssetsPage() {
                   <div>
                     <p className="text-2xl font-bold">{result.total}</p>
                     <p className="text-sm text-muted-foreground">
-                      Lignes traitees
+                      Lignes traitées
                     </p>
                   </div>
                 </div>
@@ -641,7 +641,7 @@ export default function ImportAssetsPage() {
                       {result.imported}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Importes avec succes
+                      Importés avec succès
                     </p>
                   </div>
                 </div>
@@ -672,7 +672,7 @@ export default function ImportAssetsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-destructive">
                   <AlertCircle className="h-5 w-5" />
-                  Details des erreurs
+                  Détails des erreurs
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -715,7 +715,7 @@ export default function ImportAssetsPage() {
             <Button asChild>
               <Link href="/dashboard/assets">
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Retour aux equipements
+                Retour aux équipements
               </Link>
             </Button>
           </div>
