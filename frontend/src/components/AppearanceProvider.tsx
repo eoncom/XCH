@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useTheme } from 'next-themes';
@@ -60,6 +61,16 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
   const [appearance, setAppearance] = useState<EffectiveAppearance | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // next-themes returns a fresh `setTheme` reference on every render. Putting
+  // it in `reload`'s deps caused an infinite refetch loop (B7) — each call to
+  // setTheme(res.theme) re-rendered the consumer, redefined setTheme,
+  // redefined reload, fired the effect, called setTheme again, etc.
+  // We pin it via a ref so reload stays stable across renders.
+  const setThemeRef = useRef(setTheme);
+  useEffect(() => {
+    setThemeRef.current = setTheme;
+  }, [setTheme]);
+
   const reload = useCallback(async () => {
     if (!user) {
       setAppearance(null);
@@ -70,13 +81,13 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       const res = await appearanceApi.getEffective();
       setAppearance(res);
       applyAppearance(res);
-      setTheme(res.theme); // bridge into next-themes
+      setThemeRef.current(res.theme); // bridge into next-themes
     } catch {
       // Fail silent — keep whatever defaults are already applied.
     } finally {
       setLoading(false);
     }
-  }, [user, setTheme]);
+  }, [user]);
 
   useEffect(() => {
     reload();
