@@ -124,7 +124,7 @@ export default function ContactsPage() {
     mutationFn: contactsApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      toast.success('Contact supprime avec succes');
+      toast.success('Contact supprimé avec succès');
       setDeleteId(null);
     },
     onError: (error: Error) => {
@@ -236,7 +236,7 @@ export default function ContactsPage() {
         <div>
           <h1 className="text-3xl font-bold">Contacts</h1>
           <p className="text-muted-foreground">
-            Gerez vos contacts : fournisseurs, internes, partenaires, technique et urgence
+            Annuaire : fournisseurs, internes, partenaires, équipes techniques et d&apos;urgence
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -324,7 +324,7 @@ export default function ContactsPage() {
             <SelectItem value="GLOBAL">Global (tenant)</SelectItem>
             {orgTree.map((del) => (
               <SelectItem key={del.id} value={`DELEGATION:${del.id}`}>
-                Del. {del.name}
+                Délégation {del.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -377,7 +377,7 @@ export default function ContactsPage() {
                         }
                         variant={contact.type?.color ? 'outline' : 'secondary'}
                       >
-                        {contact.type?.name || 'Non defini'}
+                        {contact.type?.name || 'Non défini'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
@@ -469,8 +469,8 @@ export default function ContactsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
             <AlertDialogDescription>
-              Etes-vous sur de vouloir supprimer ce contact ? Cette action est
-              irreversible.
+              Êtes-vous sûr de vouloir supprimer ce contact ? Cette action est
+              irréversible.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

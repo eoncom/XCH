@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { CardSkeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -50,7 +51,6 @@ import {
   Wallet,
   Bell,
   BellOff,
-  ChevronRight,
   Eye,
   Wallet2,
   Download,
@@ -71,10 +71,6 @@ export default function BudgetsPageWrapper() {
       <BudgetsPage />
     </AccessGate>
   );
-}
-
-interface BudgetWithChildren extends Budget {
-  _children?: BudgetWithChildren[];
 }
 
 const EXPENSE_TYPE_LABELS: Record<string, string> = {
@@ -117,29 +113,6 @@ function BudgetsPage() {
 
   const budgets = budgetsRes?.data || [];
 
-  // Build a flat list with parent→children tree order (depth-first) so the
-  // UI can render sub-budgets indented right under their parent.
-  const orderedBudgets = useMemo(() => {
-    const byId = new Map(budgets.map((b) => [b.id, { ...b, _children: [] as BudgetWithChildren[] } as BudgetWithChildren]));
-    const roots: BudgetWithChildren[] = [];
-    for (const b of byId.values()) {
-      if (b.parentId && byId.has(b.parentId)) {
-        byId.get(b.parentId)!._children!.push(b);
-      } else {
-        roots.push(b);
-      }
-    }
-    const flat: Array<{ budget: BudgetWithChildren; depth: number }> = [];
-    const walk = (nodes: BudgetWithChildren[], depth: number) => {
-      for (const n of nodes.sort((a, b) => a.label.localeCompare(b.label))) {
-        flat.push({ budget: n, depth });
-        if (n._children?.length) walk(n._children, depth + 1);
-      }
-    };
-    walk(roots, 0);
-    return flat;
-  }, [budgets]);
-
   // D5 — for each budget, the sum of its children's `spent`. Recursive so a
   // 3-level hierarchy totals correctly. The parent card uses this to show
   // "dont Xk€ issu des sous-budgets" next to its own total spent.
@@ -165,6 +138,22 @@ function BudgetsPage() {
     for (const b of budgets) sumForNode(b.id);
     return map;
   }, [budgets, statuses]);
+
+  // P5 — group budgets by parent for hierarchical render. Roots = budgets
+  // without a parent OR with a parentId pointing to a missing budget (orphans
+  // are treated as roots so they remain visible). Children sorted by label.
+  const groupedBudgets = useMemo(() => {
+    const idSet = new Set(budgets.map((b) => b.id));
+    const roots = budgets
+      .filter((b) => !b.parentId || !idSet.has(b.parentId))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return roots.map((parent) => ({
+      parent,
+      children: budgets
+        .filter((b) => b.parentId === parent.id)
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    }));
+  }, [budgets]);
 
   // Recompute statuses whenever the budgets query resolves (initial load,
   // a mutation invalidation, a delegation switch, or any external change
@@ -389,6 +378,162 @@ function BudgetsPage() {
   const totalBudgeted = rootBudgets.reduce((sum, b) => sum + (statuses[b.id]?.budgeted ?? 0), 0);
   const totalSpent = rootBudgets.reduce((sum, b) => sum + (statuses[b.id]?.spent ?? 0), 0);
 
+  // P5 — single source for budget card rendering, used both for parent
+  // (full-width container above sub-grid) and children (cells in sub-grid).
+  // The parent/child relationship is conveyed by the spatial layout, so the
+  // "Sous-budget de X" tag (U5) is intentionally absent here — it would be
+  // redundant noise inside the visual hierarchy.
+  const renderBudgetCard = (budget: Budget) => {
+    const status = statuses[budget.id];
+    const progressPct = status?.progressPct ?? 0;
+    const isOver = status?.overBudget ?? false;
+    const atThreshold = status?.thresholdReached && !isOver;
+
+    return (
+      <Card
+        key={budget.id}
+        className={
+          isOver
+            ? 'border-red-300 dark:border-red-800'
+            : atThreshold
+              ? 'border-orange-300 dark:border-orange-800'
+              : ''
+        }
+      >
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <CardTitle className="text-lg truncate">{budget.label}</CardTitle>
+            </div>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewExpensesOf(budget)}
+                aria-label="Voir les dépenses de ce budget"
+                title="Voir les dépenses"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              {canWrite && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleEdit(budget)}
+                    aria-label="Modifier le budget"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
+                    onClick={() => setDeleteId(budget.id)}
+                    aria-label="Supprimer le budget"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Badge variant="outline">
+              {budget.period === 'YEAR' ? 'Annuel' : 'Mensuel'}
+            </Badge>
+            {budget.delegation && (
+              <Badge variant="secondary">{budget.delegation.name}</Badge>
+            )}
+            {budget.site && <Badge variant="secondary">{budget.site.name}</Badge>}
+            {budget.expenseType && (
+              <Badge variant="secondary">
+                {EXPENSE_TYPE_LABELS[budget.expenseType] ?? budget.expenseType}
+              </Badge>
+            )}
+            {budget.billingEntity && (
+              <Badge variant="secondary" className="gap-1">
+                <Wallet2 className="h-3 w-3" />
+                {budget.billingEntity.code}
+              </Badge>
+            )}
+            {(budget._count?.children ?? 0) > 0 && (
+              <Badge variant="outline" className="text-xs">
+                {budget._count?.children} sous-budget(s)
+              </Badge>
+            )}
+            {!budget.alertsEnabled ? (
+              <Badge variant="outline" className="text-xs">
+                <BellOff className="h-3 w-3 mr-1" /> Alertes off
+              </Badge>
+            ) : atThreshold ? (
+              <Badge variant="warning">
+                <Bell className="h-3 w-3 mr-1" /> Seuil {budget.alertThresholdPct}% atteint
+              </Badge>
+            ) : null}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">
+                {status
+                  ? `${formatCurrency(status.spent, budget.currency)} / ${formatCurrency(
+                      status.budgeted,
+                      budget.currency,
+                    )}`
+                  : 'Calcul...'}
+              </span>
+              <span className={`font-medium ${isOver ? 'text-red-600' : ''}`}>
+                {progressPct}%
+              </span>
+            </div>
+            <Progress
+              value={Math.min(progressPct, 100)}
+              className={
+                isOver
+                  ? '[&>div]:bg-red-500'
+                  : atThreshold
+                    ? '[&>div]:bg-orange-500'
+                    : ''
+              }
+            />
+            {/* B9 (Track A PR2) — two autonomous figures, not a partition.
+                Sub-budgets cumulés ⊥ Dépenses propres : the parent might count
+                expenses outside the children's scope (delegation-vs-CdC mix). */}
+            {(budget._count?.children ?? 0) > 0 && status && (() => {
+              const fromKids = childrenSpentById.get(budget.id) ?? 0;
+              if (fromKids <= 0) return null;
+              return (
+                <div className="space-y-0.5 text-xs text-muted-foreground">
+                  <p>
+                    Sous-budgets cumulés :{' '}
+                    {formatCurrency(fromKids, budget.currency)}
+                  </p>
+                  <p>
+                    Dépenses propres au budget :{' '}
+                    {formatCurrency(status.spent, budget.currency)}
+                  </p>
+                </div>
+              );
+            })()}
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{budget.startDate.split('T')[0]}</span>
+              <span>{budget.endDate.split('T')[0]}</span>
+            </div>
+            {status && status.remaining < 0 && (
+              <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Dépassement de{' '}
+                {formatCurrency(Math.abs(status.remaining), budget.currency)}
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -480,14 +625,10 @@ function BudgetsPage() {
         </Card>
       </div>
 
-      {/* Budget list (tree) */}
+      {/* Budget list (hierarchical: parent full-width + children sub-grid) */}
       {isLoading ? (
-        <Card>
-          <CardContent className="py-8">
-            <p className="text-center text-muted-foreground">Chargement...</p>
-          </CardContent>
-        </Card>
-      ) : orderedBudgets.length === 0 ? (
+        <CardSkeleton />
+      ) : groupedBudgets.length === 0 ? (
         <Card>
           <CardContent className="py-12">
             <p className="text-center text-muted-foreground">
@@ -496,169 +637,34 @@ function BudgetsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {orderedBudgets.map(({ budget, depth }) => {
-            const status = statuses[budget.id];
-            const progressPct = status?.progressPct ?? 0;
-            const isOver = status?.overBudget ?? false;
-            const atThreshold = status?.thresholdReached && !isOver;
+        <div className="space-y-6">
+          {groupedBudgets.map(({ parent, children }) => {
+            const parentStatus = statuses[parent.id];
+            const isParentOver = parentStatus?.overBudget ?? false;
+            const parentAtThreshold =
+              parentStatus?.thresholdReached && !isParentOver;
+            // P5 — wrap parent + sub-grid in a tinted container when the parent
+            // is over/threshold AND has children. The propagated red/orange tint
+            // signals "this section is in danger" at a glance — stronger cue
+            // than an isolated border on a single card lost in a flat grid.
+            const wrapperCls =
+              children.length === 0
+                ? 'space-y-4'
+                : isParentOver
+                  ? 'rounded-xl border border-red-200 bg-red-50/40 dark:border-red-900/40 dark:bg-red-950/10 p-4 space-y-4'
+                  : parentAtThreshold
+                    ? 'rounded-xl border border-orange-200 bg-orange-50/40 dark:border-orange-900/40 dark:bg-orange-950/10 p-4 space-y-4'
+                    : 'space-y-4';
 
             return (
-              <Card
-                key={budget.id}
-                className={
-                  (isOver
-                    ? 'border-red-300 dark:border-red-800 '
-                    : atThreshold
-                      ? 'border-orange-300 dark:border-orange-800 '
-                      : '') +
-                  (depth > 0 ? 'ml-8 border-l-4 border-l-muted-foreground/30 ' : '')
-                }
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {depth > 0 && (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-                      )}
-                      <CardTitle className="text-lg truncate">{budget.label}</CardTitle>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setViewExpensesOf(budget)}
-                        aria-label="Voir les dépenses de ce budget"
-                        title="Voir les dépenses"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {canWrite && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(budget)}
-                            aria-label="Modifier le budget"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive"
-                            onClick={() => setDeleteId(budget.id)}
-                            aria-label="Supprimer le budget"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
+              <div key={parent.id} className={wrapperCls}>
+                {renderBudgetCard(parent)}
+                {children.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {children.map((child) => renderBudgetCard(child))}
                   </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Badge variant="outline">
-                      {budget.period === 'YEAR' ? 'Annuel' : 'Mensuel'}
-                    </Badge>
-                    {budget.delegation && (
-                      <Badge variant="secondary">{budget.delegation.name}</Badge>
-                    )}
-                    {budget.site && <Badge variant="secondary">{budget.site.name}</Badge>}
-                    {budget.expenseType && (
-                      <Badge variant="secondary">
-                        {EXPENSE_TYPE_LABELS[budget.expenseType] ?? budget.expenseType}
-                      </Badge>
-                    )}
-                    {budget.billingEntity && (
-                      <Badge variant="secondary" className="gap-1">
-                        <Wallet2 className="h-3 w-3" />
-                        {budget.billingEntity.code}
-                      </Badge>
-                    )}
-                    {budget.parent && (
-                      <Badge variant="outline" className="text-xs">
-                        Sous-budget de {budget.parent.label}
-                      </Badge>
-                    )}
-                    {(budget._count?.children ?? 0) > 0 && (
-                      <Badge variant="outline" className="text-xs">
-                        {budget._count?.children} sous-budget(s)
-                      </Badge>
-                    )}
-                    {!budget.alertsEnabled ? (
-                      <Badge variant="outline" className="text-xs">
-                        <BellOff className="h-3 w-3 mr-1" /> Alertes off
-                      </Badge>
-                    ) : atThreshold ? (
-                      <Badge variant="warning">
-                        <Bell className="h-3 w-3 mr-1" /> Seuil {budget.alertThresholdPct}% atteint
-                      </Badge>
-                    ) : null}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        {status
-                          ? `${formatCurrency(status.spent, budget.currency)} / ${formatCurrency(
-                              status.budgeted,
-                              budget.currency,
-                            )}`
-                          : 'Calcul...'}
-                      </span>
-                      <span className={`font-medium ${isOver ? 'text-red-600' : ''}`}>
-                        {progressPct}%
-                      </span>
-                    </div>
-                    <Progress
-                      value={Math.min(progressPct, 100)}
-                      className={
-                        isOver
-                          ? '[&>div]:bg-red-500'
-                          : atThreshold
-                            ? '[&>div]:bg-orange-500'
-                            : ''
-                      }
-                    />
-                    {/* B9 — show two autonomous figures rather than computing
-                        ownDirect = parent.spent - fromKids. The subtraction
-                        assumed Σ children.spent ⊆ parent.spent, but that breaks
-                        when scopes diverge (e.g., delegation-scoped parent +
-                        CdC-scoped children with multi-target allocations
-                        receiving from outside the parent's scope). The two
-                        numbers below are independent: the admin reads them as
-                        complementary signals, not as a partition. */}
-                    {(budget._count?.children ?? 0) > 0 && status && (() => {
-                      const fromKids = childrenSpentById.get(budget.id) ?? 0;
-                      if (fromKids <= 0) return null;
-                      return (
-                        <div className="space-y-0.5 text-xs text-muted-foreground">
-                          <p>
-                            Sous-budgets cumulés :{' '}
-                            {formatCurrency(fromKids, budget.currency)}
-                          </p>
-                          <p>
-                            Dépenses propres au budget :{' '}
-                            {formatCurrency(status.spent, budget.currency)}
-                          </p>
-                        </div>
-                      );
-                    })()}
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{budget.startDate.split('T')[0]}</span>
-                      <span>{budget.endDate.split('T')[0]}</span>
-                    </div>
-                    {status && status.remaining < 0 && (
-                      <p className="text-xs text-red-600 font-medium flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        Dépassement de{' '}
-                        {formatCurrency(Math.abs(status.remaining), budget.currency)}
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                )}
+              </div>
             );
           })}
         </div>

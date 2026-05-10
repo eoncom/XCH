@@ -24,7 +24,7 @@ export default function MonitoringOverviewPage() {
             <h1 className="text-2xl font-bold">Surveillance</h1>
           </div>
           <p className="text-muted-foreground text-sm ml-10">
-            État en direct des sondes ICMP, HTTP et TCP exécutées par le worker XCH.
+            Surveillance temps réel : disponibilité des liens, équipements et services.
           </p>
         </div>
       </div>
