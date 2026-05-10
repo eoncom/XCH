@@ -3113,11 +3113,17 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Full backup */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center justify-between p-4 border rounded-lg gap-4">
                   <div>
                     <h4 className="font-medium">Backup complet</h4>
                     <p className="text-sm text-muted-foreground">
-                      Base de données + fichiers MinIO (plans, photos, QR codes)
+                      Toutes les données métier (sites, équipements, baies, plans,
+                      tâches, dépenses, budgets) + fichiers référencés (plans, pièces
+                      jointes, photos).
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1 italic">
+                      Les fichiers orphelins du stockage objet (sans référence en base)
+                      ne sont pas inclus.
                     </p>
                   </div>
                   <Button

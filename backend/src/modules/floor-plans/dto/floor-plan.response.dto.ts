@@ -2,10 +2,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
 import { PinResponseDto } from './pin.response.dto';
 
-/**
- * FloorPlan entity exposed by all CRUD endpoints.
- * Cas C — Prisma scalars + nested pins[] + scaleRefLine JSON passthrough.
- */
+// Track C 2026-05-10 — B3 fix: aligned with Prisma FloorPlan schema. Previous
+// shape exposed `name`, `floor`, `building`, `parentId`, `width`, `height`,
+// `tenantId`, `createdAt`, `updatedAt` — none of which exist on the schema.
+// At runtime class-transformer dropped the actual `title`/`site`/`planGroupId`
+// values and emitted undefined for the wrong field names, breaking the floor
+// plans list page (filter rejected every plan because plan.title was missing).
 export class FloorPlanResponseDto {
   @ApiProperty()
   @Expose()
@@ -13,47 +15,43 @@ export class FloorPlanResponseDto {
 
   @ApiProperty()
   @Expose()
-  tenantId!: string;
-
-  @ApiProperty()
-  @Expose()
   siteId!: string;
 
   @ApiProperty()
   @Expose()
-  name!: string;
+  title!: string;
 
-  @ApiPropertyOptional({ type: String, nullable: true })
+  @ApiProperty({ description: 'Floor plan version (incremented on new-version)' })
   @Expose()
-  floor?: string | null;
+  version!: number;
 
-  @ApiPropertyOptional({ type: String, nullable: true })
+  @ApiPropertyOptional({ type: String, nullable: true, description: 'Plan group identifier — same value across versions of the same logical plan' })
   @Expose()
-  building?: string | null;
+  planGroupId?: string | null;
 
-  @ApiPropertyOptional({ type: String, nullable: true })
+  @ApiProperty()
   @Expose()
-  notes?: string | null;
-
-  @ApiPropertyOptional({ type: String, nullable: true })
-  @Expose()
-  fileUrl?: string | null;
-
-  @ApiPropertyOptional({ type: String, nullable: true })
-  @Expose()
-  fileType?: string | null;
+  fileUrl!: string;
 
   @ApiPropertyOptional({ type: Number, nullable: true })
   @Expose()
   fileSize?: number | null;
 
-  @ApiPropertyOptional({ type: Number, nullable: true })
+  @ApiPropertyOptional({ type: String, nullable: true })
   @Expose()
-  width?: number | null;
+  mimeType?: string | null;
 
-  @ApiPropertyOptional({ type: Number, nullable: true })
+  @ApiPropertyOptional({ type: String, nullable: true })
   @Expose()
-  height?: number | null;
+  notes?: string | null;
+
+  @ApiProperty()
+  @Expose()
+  uploadedBy!: string;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  @Expose()
+  uploadedAt!: Date;
 
   @ApiPropertyOptional({ type: Number, nullable: true })
   @Expose()
@@ -67,24 +65,20 @@ export class FloorPlanResponseDto {
   @Transform(({ obj }) => obj?.scaleRefLine ?? null, { toClassOnly: true })
   scaleRefLine?: unknown;
 
-  @ApiProperty({ description: 'Floor plan version (incremented on new-version)' })
+  @ApiPropertyOptional({ description: 'Site reference (passthrough — id, code, name, etc.)', nullable: true })
   @Expose()
-  version!: number;
-
-  @ApiPropertyOptional({ type: String, nullable: true })
-  @Expose()
-  parentId?: string | null;
-
-  @ApiProperty({ type: String, format: 'date-time' })
-  @Expose()
-  createdAt!: Date;
-
-  @ApiProperty({ type: String, format: 'date-time' })
-  @Expose()
-  updatedAt!: Date;
+  @Transform(({ obj }) => obj?.site ?? null, { toClassOnly: true })
+  site?: unknown;
 
   @ApiPropertyOptional({ type: () => [PinResponseDto] })
   @Expose()
   @Type(() => PinResponseDto)
   pins?: PinResponseDto[];
+
+  // Track C 2026-05-10 — B3 fix: server-side computed count of versions in
+  // the same planGroupId, exposed so the list view can display "X versions"
+  // badge without having to dedup client-side.
+  @ApiPropertyOptional({ type: Number, description: 'Number of versions in this planGroupId (>=1)' })
+  @Expose()
+  totalVersions?: number;
 }

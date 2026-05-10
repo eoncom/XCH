@@ -13,26 +13,23 @@ import {
 
 describe('Floor-plans response DTO shapes', () => {
   describe('FloorPlanResponseDto', () => {
-    it('exposes scalars + scaleRefLine passthrough + pins[]', () => {
+    it('exposes Prisma schema scalars + site/scaleRefLine passthrough + pins[] + totalVersions', () => {
+      const uploadedAt = new Date();
       const dto = toResponse(FloorPlanResponseDto, {
         id: 'fp-1',
-        tenantId: 'tnt-1',
         siteId: 'site-1',
-        name: 'RDC',
-        floor: '0',
-        building: 'A',
-        notes: null,
+        title: 'RDC',
+        version: 2,
+        planGroupId: 'grp-rdc',
         fileUrl: '/storage/fp-1.png',
-        fileType: 'image/png',
         fileSize: 12345,
-        width: 1920,
-        height: 1080,
+        mimeType: 'image/png',
+        notes: null,
+        uploadedBy: 'user-1',
+        uploadedAt,
         scaleMetersPerPixel: 0.05,
         scaleRefLine: { x1: 0, y1: 0, x2: 100, y2: 0, lengthMeters: 5 },
-        version: 2,
-        parentId: 'fp-0',
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        site: { id: 'site-1', code: 'SITE-A', name: 'Site A' },
         pins: [
           {
             id: 'p-1',
@@ -46,15 +43,35 @@ describe('Floor-plans response DTO shapes', () => {
             updatedAt: new Date(),
           },
         ],
-        // Extraneous.
+        totalVersions: 3,
+        // Extraneous (must be dropped by class-transformer).
         _internalCounter: 99,
+        // Fields that don't exist on the schema (must NOT leak through).
+        name: 'RDC-LEGACY',
+        floor: '0',
+        building: 'A',
+        parentId: 'fp-0',
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
       expect(dto).toHaveProperty('id', 'fp-1');
+      expect(dto).toHaveProperty('title', 'RDC');
       expect(dto).toHaveProperty('version', 2);
+      expect(dto).toHaveProperty('planGroupId', 'grp-rdc');
+      expect(dto).toHaveProperty('mimeType', 'image/png');
+      expect(dto).toHaveProperty('uploadedBy', 'user-1');
+      expect(dto.uploadedAt).toEqual(uploadedAt);
       expect(dto.scaleRefLine).toMatchObject({ lengthMeters: 5 });
+      expect(dto.site).toMatchObject({ code: 'SITE-A', name: 'Site A' });
       expect(dto.pins).toHaveLength(1);
       expect(dto.pins?.[0]).toHaveProperty('pinType', 'WIFI_AP');
+      expect(dto).toHaveProperty('totalVersions', 3);
+      // Drop extraneous + non-schema fields
       expect(dto).not.toHaveProperty('_internalCounter');
+      expect(dto).not.toHaveProperty('name');
+      expect(dto).not.toHaveProperty('floor');
+      expect(dto).not.toHaveProperty('building');
+      expect(dto).not.toHaveProperty('parentId');
     });
   });
 

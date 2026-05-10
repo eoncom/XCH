@@ -578,6 +578,12 @@ export class BackupService {
       const floorPlanIdMap = new Map<string, string>();
       const siteIdMap = new Map<string, string>();
       const attachmentPathMap = new Map<string, string>();
+      // Track C 2026-05-10 — id maps for the cost ecosystem + photos +
+      // task comments + asset movements + connectivity + budgets.
+      const contactIdMap = new Map<string, string>();
+      const billingEntityIdMap = new Map<string, string>();
+      const expenseIdMap = new Map<string, string>();
+      const budgetIdMap = new Map<string, string>();
 
       // 1. Create contacts + contact types (tenant-level)
       const contactTypeIdMap = new Map<string, string>();
@@ -604,10 +610,13 @@ export class BackupService {
       if (dataFiles['contacts']?.length) {
         for (const contact of dataFiles['contacts']) {
           const existing = await tx.contact.findFirst({ where: { tenantId, name: contact.name } });
-          if (!existing) {
+          if (existing) {
+            // Track C: track id even when skipping (vendor remap on Expense)
+            contactIdMap.set(contact.id, existing.id);
+          } else {
             const newTypeId = contact.typeId ? contactTypeIdMap.get(contact.typeId) : undefined;
             if (newTypeId) {
-              await tx.contact.create({
+              const newContact = await tx.contact.create({
                 data: {
                   tenantId, name: contact.name,
                   typeId: newTypeId,
@@ -617,6 +626,7 @@ export class BackupService {
                   notes: contact.notes,
                 },
               });
+              contactIdMap.set(contact.id, newContact.id);
             }
           }
         }
@@ -807,6 +817,302 @@ export class BackupService {
       totalCounts.floorPlans = floorPlanIdMap.size;
       totalCounts.tasks = taskIdMap.size;
 
+      // ====================================================================
+      // Track C 2026-05-10 — B10 fix: restore the previously missing tables
+      // (cost ecosystem + asset movements + photos + task comments + site
+      // health snapshots + connectivity links + budgets). FK ordering:
+      //   1. SiteHealthSnapshot       (siteId)
+      //   2. AssetMovement            (assetId, optional site/rack)
+      //   3. TaskComment              (taskId, authorId)
+      //   4. Photo                    (polymorphic entityType + entityId)
+      //   5. BillingEntity            (tenant-scoped, idempotent on code)
+      //   6. Expense                  (bearer + delegation + site + asset + vendor)
+      //   7. CostAllocation           (expense + target BillingEntity)
+      //   8. ConnectivityLink         (site + asset + expense)
+      //   9. Budget                   (delegation + site + billingEntity, 2-pass for parent/child)
+      // ====================================================================
+
+      // 1. SiteHealthSnapshot — 1:1 with site, idempotent via upsert.
+      if (dataFiles['site-health-snapshots']?.length) {
+        let count = 0;
+        for (const snap of dataFiles['site-health-snapshots']) {
+          const newSiteId = siteIdMap.get(snap.siteId);
+          if (!newSiteId) continue;
+          await tx.siteHealthSnapshot.upsert({
+            where: { siteId: newSiteId },
+            update: {
+              overall: snap.overall,
+              componentsJson: snap.componentsJson,
+              computedAt: new Date(snap.computedAt),
+            },
+            create: {
+              siteId: newSiteId,
+              overall: snap.overall,
+              componentsJson: snap.componentsJson,
+              computedAt: new Date(snap.computedAt),
+            },
+          });
+          count++;
+        }
+        totalCounts.siteHealthSnapshots = count;
+      }
+
+      // 2. AssetMovement — append-only audit trail, no idempotence needed.
+      if (dataFiles['asset-movements']?.length) {
+        let count = 0;
+        for (const mov of dataFiles['asset-movements']) {
+          const newAssetId = assetIdMap.get(mov.assetId);
+          if (!newAssetId) continue;
+          await tx.assetMovement.create({
+            data: {
+              tenantId,
+              assetId: newAssetId,
+              userId: null, // user remap not in scope; FK is SetNull on user delete
+              type: mov.type,
+              fromSiteId: mov.fromSiteId ? siteIdMap.get(mov.fromSiteId) ?? null : null,
+              toSiteId:   mov.toSiteId   ? siteIdMap.get(mov.toSiteId)   ?? null : null,
+              fromRackId: mov.fromRackId ? rackIdMap.get(mov.fromRackId) ?? null : null,
+              toRackId:   mov.toRackId   ? rackIdMap.get(mov.toRackId)   ?? null : null,
+              fromRackPositionU: mov.fromRackPositionU ?? null,
+              toRackPositionU:   mov.toRackPositionU   ?? null,
+              fromStatus: mov.fromStatus ?? null,
+              toStatus:   mov.toStatus   ?? null,
+              notes: mov.notes ?? null,
+              timestamp: mov.timestamp ? new Date(mov.timestamp) : new Date(),
+            },
+          });
+          count++;
+        }
+        totalCounts.assetMovements = count;
+      }
+
+      // 3. TaskComment — append-only, no idempotence needed.
+      if (dataFiles['task-comments']?.length) {
+        let count = 0;
+        for (const com of dataFiles['task-comments']) {
+          const newTaskId = taskIdMap.get(com.taskId);
+          if (!newTaskId) continue;
+          await tx.taskComment.create({
+            data: {
+              taskId: newTaskId,
+              authorId: userId || com.authorId, // best-effort: reattribute to restore actor
+              text: com.text,
+              isSystem: com.isSystem ?? false,
+            },
+          });
+          count++;
+        }
+        totalCounts.taskComments = count;
+      }
+
+      // 4. Photo (polymorphic entityType: site / asset / task)
+      if (dataFiles['photos']?.length) {
+        let count = 0;
+        for (const photo of dataFiles['photos']) {
+          let newEntityId: string | undefined;
+          switch (photo.entityType) {
+            case 'site':  newEntityId = siteIdMap.get(photo.entityId); break;
+            case 'asset': newEntityId = assetIdMap.get(photo.entityId); break;
+            case 'task':  newEntityId = taskIdMap.get(photo.entityId); break;
+          }
+          if (!newEntityId) continue;
+          await tx.photo.create({
+            data: {
+              entityType: photo.entityType,
+              entityId: newEntityId,
+              fileUrl: photo.fileUrl,
+              fileName: photo.fileName,
+              fileSize: photo.fileSize ?? null,
+              mimeType: photo.mimeType,
+              caption: photo.caption ?? null,
+              uploadedBy: userId || photo.uploadedBy,
+            },
+          });
+          count++;
+        }
+        totalCounts.photos = count;
+      }
+
+      // 5. BillingEntity — tenant-scoped, idempotent on code (matches the
+      // Site/Contact pattern). delegationId/siteId reused as-is for
+      // same-tenant restore; for cross-tenant restore, FK violations
+      // would surface here (out of scope for Track C — see Track D).
+      if (dataFiles['billing-entities']?.length) {
+        for (const be of dataFiles['billing-entities']) {
+          const existing = await tx.billingEntity.findFirst({ where: { tenantId, code: be.code } });
+          if (existing) {
+            billingEntityIdMap.set(be.id, existing.id);
+            continue;
+          }
+          const newSiteId = be.siteId ? siteIdMap.get(be.siteId) ?? null : null;
+          const newBe = await tx.billingEntity.create({
+            data: {
+              tenantId,
+              name: be.name,
+              code: be.code,
+              type: be.type,
+              description: be.description ?? null,
+              isActive: be.isActive ?? true,
+              delegationId: be.delegationId ?? null, // same-tenant assumption
+              siteId: newSiteId,
+            },
+          });
+          billingEntityIdMap.set(be.id, newBe.id);
+        }
+        totalCounts.billingEntities = billingEntityIdMap.size;
+      }
+
+      // 6. Expense — depends on BillingEntity (bearer) + Contact (vendor) +
+      // delegation + site + asset.
+      if (dataFiles['expenses']?.length) {
+        for (const exp of dataFiles['expenses']) {
+          const newBearerId = billingEntityIdMap.get(exp.bearerId);
+          if (!newBearerId) {
+            this.logger.warn(`Skipping expense ${exp.id}: bearer ${exp.bearerId} not in billingEntityIdMap`);
+            continue;
+          }
+          const newSiteId   = exp.siteId   ? siteIdMap.get(exp.siteId)     ?? null : null;
+          const newAssetId  = exp.assetId  ? assetIdMap.get(exp.assetId)   ?? null : null;
+          const newVendorId = exp.vendorId ? contactIdMap.get(exp.vendorId) ?? null : null;
+          const newExp = await tx.expense.create({
+            data: {
+              tenantId,
+              label: exp.label,
+              description: exp.description ?? null,
+              type: exp.type || 'OTHER',
+              totalAmount: exp.totalAmount,
+              currency: exp.currency || 'EUR',
+              frequency: exp.frequency || 'ONE_TIME',
+              dateIncurred: new Date(exp.dateIncurred),
+              dateStart: exp.dateStart ? new Date(exp.dateStart) : null,
+              dateEnd:   exp.dateEnd   ? new Date(exp.dateEnd)   : null,
+              bearerId: newBearerId,
+              delegationId: exp.delegationId, // required FK, same-tenant assumption
+              siteId: newSiteId,
+              assetId: newAssetId,
+              externalRef: exp.externalRef ?? null,
+              vendorId: newVendorId,
+              invoiceRef: exp.invoiceRef ?? null,
+              poNumber: exp.poNumber ?? null,
+              notes: exp.notes ?? null,
+              createdBy: userId || exp.createdBy,
+            },
+          });
+          expenseIdMap.set(exp.id, newExp.id);
+        }
+        totalCounts.expenses = expenseIdMap.size;
+      }
+
+      // 7. CostAllocation — depends on Expense + target BillingEntity.
+      if (dataFiles['cost-allocations']?.length) {
+        let count = 0;
+        for (const alloc of dataFiles['cost-allocations']) {
+          const newExpenseId = expenseIdMap.get(alloc.expenseId);
+          const newTargetId  = billingEntityIdMap.get(alloc.targetId);
+          if (!newExpenseId || !newTargetId) continue;
+          await tx.costAllocation.create({
+            data: {
+              expenseId: newExpenseId,
+              targetId:  newTargetId,
+              percentage: alloc.percentage,
+              amount: alloc.amount,
+              notes: alloc.notes ?? null,
+            },
+          });
+          count++;
+        }
+        totalCounts.costAllocations = count;
+      }
+
+      // 8. ConnectivityLink — depends on site + asset + expense.
+      if (dataFiles['connectivity-links']?.length) {
+        let count = 0;
+        for (const link of dataFiles['connectivity-links']) {
+          const newSiteId = siteIdMap.get(link.siteId);
+          if (!newSiteId) continue;
+          const newAssetId   = link.assetId   ? assetIdMap.get(link.assetId)     ?? null : null;
+          const newExpenseId = link.expenseId ? expenseIdMap.get(link.expenseId) ?? null : null;
+          await tx.connectivityLink.create({
+            data: {
+              tenantId,
+              siteId: newSiteId,
+              role: link.role || 'PRIMARY',
+              provider: link.provider,
+              type: link.type,
+              bandwidthDown: link.bandwidthDown ?? null,
+              bandwidthUp: link.bandwidthUp ?? null,
+              publicIp: link.publicIp ?? null,
+              monthlyPrice: link.monthlyPrice ?? null,
+              currency: link.currency || 'EUR',
+              startDate: link.startDate ? new Date(link.startDate) : null,
+              endDate:   link.endDate   ? new Date(link.endDate)   : null,
+              contractRef: link.contractRef ?? null,
+              notes: link.notes ?? null,
+              assetId: newAssetId,
+              expenseId: newExpenseId,
+            },
+          });
+          count++;
+        }
+        totalCounts.connectivityLinks = count;
+      }
+
+      // 9. Budget — 2-pass to handle parent/child hierarchy. Pass 1 inserts
+      // roots (parentId null). Pass 2+ iterates until every child whose
+      // parent is in the map has been created (handles arbitrary depth).
+      if (dataFiles['budgets']?.length) {
+        const restoreBudget = async (b: any) => {
+          const newSiteId = b.siteId ? siteIdMap.get(b.siteId) ?? null : null;
+          const newBeId   = b.billingEntityId ? billingEntityIdMap.get(b.billingEntityId) ?? null : null;
+          const newParent = b.parentId ? budgetIdMap.get(b.parentId) ?? null : null;
+          const created = await tx.budget.create({
+            data: {
+              tenantId,
+              label: b.label,
+              delegationId: b.delegationId ?? null,
+              siteId: newSiteId,
+              billingEntityId: newBeId,
+              expenseType: b.expenseType ?? null,
+              period: b.period || 'YEAR',
+              startDate: new Date(b.startDate),
+              endDate: new Date(b.endDate),
+              amount: b.amount,
+              currency: b.currency || 'EUR',
+              notes: b.notes ?? null,
+              alertsEnabled: b.alertsEnabled ?? true,
+              alertThresholdPct: b.alertThresholdPct ?? 80,
+              parentId: newParent,
+            },
+          });
+          budgetIdMap.set(b.id, created.id);
+        };
+
+        // Pass 1: roots
+        for (const b of dataFiles['budgets'].filter((x: any) => !x.parentId)) {
+          await restoreBudget(b);
+        }
+        // Pass 2+: children (iterate while progress is made — covers nested depth)
+        let pending: any[] = dataFiles['budgets'].filter((x: any) => x.parentId);
+        let progressed = true;
+        while (pending.length > 0 && progressed) {
+          progressed = false;
+          const stillPending: any[] = [];
+          for (const b of pending) {
+            if (budgetIdMap.has(b.parentId)) {
+              await restoreBudget(b);
+              progressed = true;
+            } else {
+              stillPending.push(b);
+            }
+          }
+          pending = stillPending;
+        }
+        if (pending.length > 0) {
+          this.logger.warn(`${pending.length} budgets could not be linked to parent — orphaned references skipped`);
+        }
+        totalCounts.budgets = budgetIdMap.size;
+      }
+
       // Attachments (all, re-mapped)
       if (dataFiles['attachments']?.length) {
         for (const att of dataFiles['attachments']) {
@@ -990,25 +1296,56 @@ export class BackupService {
   // ==========================================================================
 
   private async exportAllTenantData(tenantId: string): Promise<Record<string, any[]>> {
-    const [sites, assets, racks, floorPlans, pins, tasks, contacts, contactTypes, users, attachments] =
-      await Promise.all([
-        this.prisma.site.findMany({ where: { tenantId } }),
-        this.prisma.asset.findMany({ where: { tenantId } }),
-        this.prisma.rack.findMany({ where: { tenantId } }),
-        this.prisma.floorPlan.findMany({ where: { site: { tenantId } } }),
-        this.prisma.pin.findMany({ where: { floorPlan: { site: { tenantId } } } }),
-        this.prisma.task.findMany({ where: { tenantId } }),
-        this.prisma.contact.findMany({ where: { tenantId } }),
-        this.prisma.contactType.findMany({ where: { tenantId } }),
-        this.prisma.user.findMany({
-          where: { tenantId },
-          select: {
-            id: true, email: true, name: true,
-            active: true, phone: true, authProvider: true,
-          },
-        }),
-        this.prisma.attachment.findMany({ where: { tenantId } }),
-      ]);
+    // Track C 2026-05-10 — B10 fix: extended with the 9 tables that were
+    // silently excluded from the full backup (cost ecosystem + asset
+    // movements + connectivity + photos + task comments + site health
+    // snapshots). Without these, restoring a 240-expense / 18-budget
+    // tenant would yield 0 expenses / 0 budgets and break the financial
+    // module entirely. See round-trip test in Track C verification notes.
+    const [
+      sites, assets, racks, floorPlans, pins, tasks,
+      contacts, contactTypes, users, attachments,
+      // ----- Track C additions: previously missing tables -----
+      photos, assetMovements, taskComments,
+      connectivityLinks, siteHealthSnapshots,
+      billingEntities, expenses, costAllocations, budgets,
+    ] = await Promise.all([
+      this.prisma.site.findMany({ where: { tenantId } }),
+      this.prisma.asset.findMany({ where: { tenantId } }),
+      this.prisma.rack.findMany({ where: { tenantId } }),
+      this.prisma.floorPlan.findMany({ where: { site: { tenantId } } }),
+      this.prisma.pin.findMany({ where: { floorPlan: { site: { tenantId } } } }),
+      this.prisma.task.findMany({ where: { tenantId } }),
+      this.prisma.contact.findMany({ where: { tenantId } }),
+      this.prisma.contactType.findMany({ where: { tenantId } }),
+      this.prisma.user.findMany({
+        where: { tenantId },
+        select: {
+          id: true, email: true, name: true,
+          active: true, phone: true, authProvider: true,
+        },
+      }),
+      this.prisma.attachment.findMany({ where: { tenantId } }),
+      // Photo is polymorphic (entityType + entityId, no tenantId column);
+      // scope via the related entity owner.
+      this.prisma.photo.findMany({
+        where: {
+          OR: [
+            { site: { tenantId } },
+            { asset: { tenantId } },
+            { task: { tenantId } },
+          ],
+        },
+      }),
+      this.prisma.assetMovement.findMany({ where: { tenantId } }),
+      this.prisma.taskComment.findMany({ where: { task: { tenantId } } }),
+      this.prisma.connectivityLink.findMany({ where: { tenantId } }),
+      this.prisma.siteHealthSnapshot.findMany({ where: { site: { tenantId } } }),
+      this.prisma.billingEntity.findMany({ where: { tenantId } }),
+      this.prisma.expense.findMany({ where: { tenantId } }),
+      this.prisma.costAllocation.findMany({ where: { expense: { tenantId } } }),
+      this.prisma.budget.findMany({ where: { tenantId } }),
+    ]);
 
     // Enrich sites with GPS coordinates (PostGIS → lat/lng)
     const enrichedSites = await this.enrichSitesWithCoordinates(sites);
@@ -1018,6 +1355,16 @@ export class BackupService {
       'floor-plans': floorPlans, pins, tasks,
       contacts, 'contact-types': contactTypes, users,
       attachments,
+      // Track C additions
+      photos,
+      'asset-movements': assetMovements,
+      'task-comments': taskComments,
+      'connectivity-links': connectivityLinks,
+      'site-health-snapshots': siteHealthSnapshots,
+      'billing-entities': billingEntities,
+      expenses,
+      'cost-allocations': costAllocations,
+      budgets,
     };
   }
 

@@ -366,9 +366,10 @@ export interface Pin {
 
 export interface FloorPlan {
   id: string;
-  tenantId: string;
   siteId: string;
-  title: string;              // Changed from 'name' to match backend
+  title: string;
+  // Vestigial fields kept for backwards compat with older list-view code paths
+  // (table view building/floor labels). Not present on the Prisma schema.
   floor?: string;
   building?: string;
   version: number;
@@ -383,10 +384,11 @@ export interface FloorPlan {
   // Scale calibration (for heatmap / measurements)
   scaleMetersPerPixel?: number;
   scaleRefLine?: { x1: number; y1: number; x2: number; y2: number; meters: number };
-  createdAt?: string;
-  updatedAt?: string;
   site?: Site;
   pins?: Pin[];
+  // Track C 2026-05-10 — populated by GET /api/floor-plans (server-side dedup
+  // by planGroupId). Equals 1 unless multiple versions exist in the group.
+  totalVersions?: number;
   _count?: { pins: number };
 }
 

@@ -276,53 +276,102 @@ export class FloorPlansService {
   }
 
   /**
-   * Find all floor plans for tenant (with optional filters)
+   * Find all floor plans for tenant (with optional filters).
+   *
+   * Track C 2026-05-10 — B3 fix: dedup happens server-side. Each planGroupId
+   * (or own id when null) collapses to its latest version. `meta.total` is
+   * the count of distinct groups, so header counters and pagination footer
+   * stay consistent. Each row carries `totalVersions` so the list view can
+   * show the "X versions" badge without re-deduping client-side.
+   *
+   * Built via raw SQL because Prisma's `distinct` does not handle null
+   * planGroupId correctly (treats them as a single group → wrong dedup).
    */
   async findAll(tenantId: string, filters: FilterFloorPlanDto = {}, accessibleSiteIds?: string[] | null) {
-    const where: any = {
-      site: { tenantId }  // Filter via site relation
-    };
-
-    // Site access filtering
-    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
-      if (accessibleSiteIds.length === 0) return buildPaginatedResponse([], 0, filters.page ?? 1, filters.pageSize ?? 25);
-      where.siteId = { in: accessibleSiteIds };
-    }
-
-    if (filters.siteId) {
-      if (accessibleSiteIds && !accessibleSiteIds.includes(filters.siteId)) return buildPaginatedResponse([], 0, filters.page ?? 1, filters.pageSize ?? 25);
-      where.siteId = filters.siteId;
-    }
-
     const page = filters.page ?? 1;
     const pageSize = filters.pageSize ?? 25;
-    const sortOrder = filters.sortOrder || 'desc';
 
-    // Default multi-column sort or single-column if sortBy specified
+    // Early-out on empty access scope
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      if (accessibleSiteIds.length === 0) return buildPaginatedResponse([], 0, page, pageSize);
+      if (filters.siteId && !accessibleSiteIds.includes(filters.siteId)) {
+        return buildPaginatedResponse([], 0, page, pageSize);
+      }
+    }
+
+    // Build dynamic SQL filters with positional params
+    const params: any[] = [tenantId];
+    let accessFilter = '';
+    let siteFilter = '';
+
+    if (accessibleSiteIds !== undefined && accessibleSiteIds !== null) {
+      params.push(accessibleSiteIds);
+      accessFilter = `AND fp."siteId" = ANY($${params.length}::text[])`;
+    }
+    if (filters.siteId) {
+      params.push(filters.siteId);
+      siteFilter = `AND fp."siteId" = $${params.length}`;
+    }
+
+    // Step 1 — find latest version id + total versions per group
+    const groupRows = await this.prisma.$queryRawUnsafe<{ id: string; total_versions: number }[]>(
+      `WITH grouped AS (
+         SELECT
+           COALESCE(fp."planGroupId", fp.id) AS group_key,
+           MAX(fp.version) AS max_version,
+           COUNT(*)::int AS total_versions
+         FROM floor_plans fp
+         INNER JOIN sites s ON fp."siteId" = s.id
+         WHERE s."tenantId" = $1 ${accessFilter} ${siteFilter}
+         GROUP BY COALESCE(fp."planGroupId", fp.id)
+       )
+       SELECT fp.id, g.total_versions
+       FROM floor_plans fp
+       INNER JOIN sites s ON fp."siteId" = s.id
+       INNER JOIN grouped g
+         ON COALESCE(fp."planGroupId", fp.id) = g.group_key
+        AND fp.version = g.max_version
+       WHERE s."tenantId" = $1 ${accessFilter} ${siteFilter}`,
+      ...params,
+    );
+
+    const total = groupRows.length;
+
+    // Step 2 — paginate the latest-version ids
+    const skip = (page - 1) * pageSize;
+    const pagedRows = groupRows.slice(skip, skip + pageSize);
+    const pagedIds = pagedRows.map((r) => r.id);
+    const versionCountById = new Map(pagedRows.map((r) => [r.id, Number(r.total_versions)]));
+
+    if (pagedIds.length === 0) return buildPaginatedResponse([], total, page, pageSize);
+
+    // Step 3 — fetch full data with includes
+    const sortOrder = filters.sortOrder || 'desc';
     const orderBy = filters.sortBy
       ? { [filters.sortBy]: sortOrder }
       : [{ siteId: 'asc' as const }, { version: 'desc' as const }];
 
-    const [data, total] = await Promise.all([
-      this.prisma.floorPlan.findMany({
-        where,
-        include: {
-          site: true,
-          pins: {
-            include: {
-              asset: true,
-              rack: { include: { assets: true } },
-            },
+    const data = await this.prisma.floorPlan.findMany({
+      where: { id: { in: pagedIds } },
+      include: {
+        site: true,
+        pins: {
+          include: {
+            asset: true,
+            rack: { include: { assets: true } },
           },
         },
-        orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.floorPlan.count({ where }),
-    ]);
+      },
+      orderBy,
+    });
 
-    return buildPaginatedResponse(data, total, page, pageSize);
+    // Step 4 — enrich with totalVersions for the list view badge
+    const enriched = data.map((d) => ({
+      ...d,
+      totalVersions: versionCountById.get(d.id) ?? 1,
+    }));
+
+    return buildPaginatedResponse(enriched, total, page, pageSize);
   }
 
   /**
