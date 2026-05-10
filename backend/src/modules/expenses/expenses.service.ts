@@ -134,24 +134,20 @@ export class ExpensesService {
   }
 
   /**
-   * When `scopeDelegationIds` is null, the caller is super-admin — no
-   * delegation restriction. When it's an array, every expense must match one
-   * of those delegationIds (including merging with an explicit `delegationId`
-   * filter, which the controller guarantees is already in-scope).
+   * Common Prisma where-clause builder shared by `findAll` and `summary` so
+   * the list and its aggregate stay perfectly aligned. Caller is responsible
+   * for the empty-scope short-circuit (returning 0/empty before touching DB).
    */
-  async findAll(
+  private buildListWhere(
     tenantId: string,
-    filters: FilterExpenseDto = {},
-    scopeDelegationIds: string[] | null = null,
-  ) {
+    filters: FilterExpenseDto,
+    scopeDelegationIds: string[] | null,
+  ): any {
     const where: any = { tenantId };
     if (filters.type) where.type = filters.type;
     if (filters.bearerId) where.bearerId = filters.bearerId;
     if (filters.vendorId) where.vendorId = filters.vendorId;
     if (scopeDelegationIds !== null) {
-      if (scopeDelegationIds.length === 0) {
-        return buildPaginatedResponse([], 0, Number(filters.page) || 1, Number(filters.pageSize) || 25);
-      }
       where.delegationId = { in: scopeDelegationIds };
     }
 
@@ -172,7 +168,8 @@ export class ExpensesService {
       where.allocations = { some: { targetId: filters.targetId } };
     }
 
-    // Delegation filter
+    // Delegation filter (overrides the scope-based `in` clause when set —
+    // the controller guarantees it's already in scope).
     if (filters.delegationId) where.delegationId = filters.delegationId;
 
     // Site filter
@@ -180,6 +177,30 @@ export class ExpensesService {
 
     // Asset filter (ADR-011 — list expenses linked to a specific asset)
     if ((filters as any).assetId) where.assetId = (filters as any).assetId;
+
+    return where;
+  }
+
+  /**
+   * When `scopeDelegationIds` is null, the caller is super-admin — no
+   * delegation restriction. When it's an array, every expense must match one
+   * of those delegationIds (including merging with an explicit `delegationId`
+   * filter, which the controller guarantees is already in-scope).
+   */
+  async findAll(
+    tenantId: string,
+    filters: FilterExpenseDto = {},
+    scopeDelegationIds: string[] | null = null,
+  ) {
+    if (scopeDelegationIds !== null && scopeDelegationIds.length === 0) {
+      return buildPaginatedResponse(
+        [],
+        0,
+        Number(filters.page) || 1,
+        Number(filters.pageSize) || 25,
+      );
+    }
+    const where = this.buildListWhere(tenantId, filters, scopeDelegationIds);
 
     const page = filters.page ?? 1;
     const pageSize = filters.pageSize ?? 25;
@@ -198,6 +219,65 @@ export class ExpensesService {
     ]);
 
     return buildPaginatedResponse(data, total, page, pageSize);
+  }
+
+  /**
+   * Aggregate counterpart to `findAll`. Returns `{ totalAmount, count, byType }`
+   * over the **full filtered set** (no pagination slice). Used by the costs
+   * page summary cards so they stay coherent with the chart and the top-N
+   * reports — bug fix B4 (test 2026-05-09): the cards previously summed only
+   * the first page of `/expenses` and contradicted the by-month / by-bearer
+   * aggregates on the same view.
+   */
+  async summary(
+    tenantId: string,
+    filters: FilterExpenseDto = {},
+    scopeDelegationIds: string[] | null = null,
+  ): Promise<{
+    totalAmount: number;
+    totalAllocated: number;
+    count: number;
+    byType: Record<string, { count: number; total: number }>;
+  }> {
+    if (scopeDelegationIds !== null && scopeDelegationIds.length === 0) {
+      return { totalAmount: 0, totalAllocated: 0, count: 0, byType: {} };
+    }
+    const where = this.buildListWhere(tenantId, filters, scopeDelegationIds);
+
+    const [agg, allocAgg, byTypeRows] = await Promise.all([
+      this.prisma.expense.aggregate({
+        where,
+        _sum: { totalAmount: true },
+        _count: { _all: true },
+      }),
+      // Σ allocations.amount across the filtered expense set — drives the
+      // "Total réparti" card so it stays coherent with the totalAmount card.
+      this.prisma.costAllocation.aggregate({
+        where: { expense: where },
+        _sum: { amount: true },
+      }),
+      this.prisma.expense.groupBy({
+        by: ['type'],
+        where,
+        _sum: { totalAmount: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const byType: Record<string, { count: number; total: number }> = {};
+    for (const row of byTypeRows) {
+      byType[row.type] = {
+        count: row._count._all,
+        total: Number(row._sum.totalAmount ?? 0),
+      };
+    }
+
+    return {
+      totalAmount: Number(agg._sum.totalAmount ?? 0),
+      totalAllocated: Number(allocAgg._sum.amount ?? 0),
+      count: agg._count._all,
+      byType,
+    };
   }
 
   async findOne(tenantId: string, id: string, callerCtx?: CallerCtx) {

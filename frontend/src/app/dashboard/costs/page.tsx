@@ -81,20 +81,35 @@ function CostsPage() {
   const queryClient = useQueryClient();
   const { canCreate, canDelete } = usePermissions();
 
-  // Reset page when filters change
-  useEffect(() => { setPage(1); }, [filterType, filterBearerId]);
+  // Reset page when filters change. `search` is now server-side (cf B4 fix
+  // 2026-05-10) so it's part of the queryKey alongside type/bearerId.
+  useEffect(() => { setPage(1); }, [filterType, filterBearerId, search]);
 
   const { data: response, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['expenses', filterType, filterBearerId, page, pageSize],
+    queryKey: ['expenses', filterType, filterBearerId, search, page, pageSize],
     queryFn: () => expensesApi.getAllPaginated({
       type: filterType || undefined,
       bearerId: filterBearerId || undefined,
+      search: search || undefined,
       page,
       pageSize,
     }),
   });
   const expenses = response?.data ?? [];
   const paginationMeta = response?.meta;
+
+  // B4 fix — summary cards must reflect the FULL filtered set, not the first
+  // paginated page. Backend route `/api/expenses/summary` aggregates with the
+  // same filter shape as the list, so the card totals match the by-month /
+  // by-bearer reports on the same view.
+  const { data: summary } = useQuery({
+    queryKey: ['expenses-summary', filterType, filterBearerId, search],
+    queryFn: () => expensesApi.getSummary({
+      type: filterType || undefined,
+      bearerId: filterBearerId || undefined,
+      search: search || undefined,
+    }),
+  });
 
   const { data: entitiesResponse } = useQuery<BillingEntity[]>({
     queryKey: ['billing-entities'],
@@ -119,25 +134,13 @@ function CostsPage() {
     },
   });
 
-  const filtered = useMemo(() => {
-    if (!search) return expenses;
-    const q = search.toLowerCase();
-    return expenses.filter(e =>
-      e.label.toLowerCase().includes(q) ||
-      e.vendor?.toLowerCase().includes(q) ||
-      e.bearer?.name?.toLowerCase().includes(q)
-    );
-  }, [expenses, search]);
-
-  // Summary cards
-  const totalAmount = filtered.reduce((sum, e) => sum + e.totalAmount, 0);
-  const totalAllocated = filtered.reduce((sum, e) =>
-    sum + e.allocations.reduce((s, a) => s + a.amount, 0), 0
-  );
-  const typeCounts = filtered.reduce((acc, e) => {
-    acc[e.type] = (acc[e.type] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // Search is now server-side (in the queryKey above), so `expenses` IS the
+  // filtered set for the current page. The list renders directly from it; the
+  // summary cards below come from `summary` (full-set aggregate, not paged).
+  const totalAmount = summary?.totalAmount ?? 0;
+  const totalAllocated = summary?.totalAllocated ?? 0;
+  const totalCount = summary?.count ?? paginationMeta?.total ?? expenses.length;
+  const byType = summary?.byType ?? {};
 
   const handleExportCsv = async () => {
     try {
@@ -240,7 +243,7 @@ function CostsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(totalAmount)}</div>
-            <p className="text-xs text-muted-foreground">{filtered.length} dépense(s)</p>
+            <p className="text-xs text-muted-foreground">{totalCount} dépense(s)</p>
           </CardContent>
         </Card>
         <Card>
@@ -262,9 +265,9 @@ function CostsPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-1">
-              {Object.entries(typeCounts).map(([type, count]) => (
+              {Object.entries(byType).map(([type, stats]) => (
                 <Badge key={type} variant="outline" className="text-xs">
-                  {EXPENSE_TYPE_LABELS[type] || type}: {count}
+                  {EXPENSE_TYPE_LABELS[type] || type}: {stats.count}
                 </Badge>
               ))}
             </div>
@@ -328,7 +331,7 @@ function CostsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((expense) => (
+              {expenses.map((expense) => (
                 <TableRow key={expense.id}>
                   <TableCell className="font-medium">
                     <Link href={`/dashboard/costs/${expense.id}`} className="hover:underline">
@@ -391,7 +394,7 @@ function CostsPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && (
+              {expenses.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     Aucune dépense trouvée

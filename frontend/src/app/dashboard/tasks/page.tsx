@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,11 +55,25 @@ const kanbanColumns: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE'];
 interface KanbanColumnProps {
   status: TaskStatus;
   tasks: Task[];
+  /** Server-side total for this status (drives the column header count). */
+  total: number;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
   onTaskClick: (task: Task) => void;
   onDrop: (taskId: string, newStatus: TaskStatus) => void;
 }
 
-function KanbanColumn({ status, tasks, onTaskClick, onDrop }: KanbanColumnProps) {
+function KanbanColumn({
+  status,
+  tasks,
+  total,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+  onTaskClick,
+  onDrop,
+}: KanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -81,12 +95,18 @@ function KanbanColumn({ status, tasks, onTaskClick, onDrop }: KanbanColumnProps)
     }
   };
 
+  // Header count uses the server-side `total` (B2 fix). Previously the
+  // column header showed `tasks.length` over the first page of a single
+  // paginated /api/tasks fetch, hiding TODO/IN_PROGRESS items behind 25
+  // recent DONE entries.
+  const remaining = Math.max(0, total - tasks.length);
+
   return (
     <div className="flex-1 min-w-[300px]">
       <div className="mb-4">
         <h3 className="font-semibold text-lg flex items-center justify-between">
           {taskStatusLabels[status]}
-          <span className="text-sm text-muted-foreground">({tasks.length})</span>
+          <span className="text-sm text-muted-foreground">({total})</span>
         </h3>
       </div>
 
@@ -102,6 +122,19 @@ function KanbanColumn({ status, tasks, onTaskClick, onDrop }: KanbanColumnProps)
         {tasks.map((task) => (
           <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
         ))}
+        {hasNextPage && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full"
+            onClick={onLoadMore}
+            disabled={isFetchingNextPage}
+          >
+            {isFetchingNextPage
+              ? 'Chargement...'
+              : `Charger plus (${remaining} restant${remaining > 1 ? 'es' : ''})`}
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -217,6 +250,12 @@ export default function TasksPage() {
   const [pageSize, setPageSize] = useState(25);
   const { canCreate } = usePermissions();
 
+  // The list/grid views drive off this paginated query. The Kanban view is
+  // additionally driven by 4 independent useInfiniteQuery below (one per
+  // status) so each column has its own server-side total + load-more (B2 fix,
+  // test 2026-05-09). We keep this query enabled even in Kanban mode because
+  // the alert banners at the top (overdueTasks, dueSoonTasks, blockedTasks)
+  // still derive from `filteredTasks` and would show 0 otherwise.
   const { data: response, isLoading, isError, error, refetch } = useQuery<{ data: Task[]; meta: PaginationMeta }>({
     queryKey: ['tasks', { page, pageSize, status: statusFilter, priority: priorityFilter, siteId: siteFilter, assignedTo: assignedFilter, search }],
     queryFn: () => tasksApi.getAllPaginated({
@@ -232,6 +271,63 @@ export default function TasksPage() {
   });
   const tasks = response?.data ?? [];
   const meta = response?.meta;
+
+  // ── B2 fix: per-status Kanban queries ────────────────────────────────────
+  // Each Kanban column owns its own paginated fetch so the column header
+  // shows the **server-side total** (not array.length-on-page-1) and the body
+  // can load more pages on demand. Filters (priority/site/assignedTo/search)
+  // are applied server-side so each column only fetches relevant rows.
+  // The kanban view ignores the page-level statusFilter dropdown — it always
+  // shows all four status columns; column-level filtering is the whole point.
+  const kanbanFilters = {
+    priority: priorityFilter !== 'all' ? priorityFilter : undefined,
+    siteId: siteFilter !== 'all' ? siteFilter : undefined,
+    assignedTo: assignedFilter !== 'all' ? assignedFilter : undefined,
+    search: search || undefined,
+  };
+  const kanbanEnabled = viewMode === 'kanban';
+  const kanbanPageSize = 25;
+
+  const todoQuery = useInfiniteQuery({
+    queryKey: ['tasks', 'kanban', 'TODO', kanbanFilters],
+    queryFn: ({ pageParam }) =>
+      tasksApi.getAllPaginated({ ...kanbanFilters, status: 'TODO', page: pageParam, pageSize: kanbanPageSize }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.meta.page < last.meta.totalPages ? last.meta.page + 1 : undefined),
+    enabled: kanbanEnabled,
+  });
+  const inProgressQuery = useInfiniteQuery({
+    queryKey: ['tasks', 'kanban', 'IN_PROGRESS', kanbanFilters],
+    queryFn: ({ pageParam }) =>
+      tasksApi.getAllPaginated({ ...kanbanFilters, status: 'IN_PROGRESS', page: pageParam, pageSize: kanbanPageSize }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.meta.page < last.meta.totalPages ? last.meta.page + 1 : undefined),
+    enabled: kanbanEnabled,
+  });
+  const blockedQuery = useInfiniteQuery({
+    queryKey: ['tasks', 'kanban', 'BLOCKED', kanbanFilters],
+    queryFn: ({ pageParam }) =>
+      tasksApi.getAllPaginated({ ...kanbanFilters, status: 'BLOCKED', page: pageParam, pageSize: kanbanPageSize }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.meta.page < last.meta.totalPages ? last.meta.page + 1 : undefined),
+    enabled: kanbanEnabled,
+  });
+  const doneQuery = useInfiniteQuery({
+    queryKey: ['tasks', 'kanban', 'DONE', kanbanFilters],
+    queryFn: ({ pageParam }) =>
+      tasksApi.getAllPaginated({ ...kanbanFilters, status: 'DONE', page: pageParam, pageSize: kanbanPageSize }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.meta.page < last.meta.totalPages ? last.meta.page + 1 : undefined),
+    enabled: kanbanEnabled,
+  });
+  const kanbanQueries: Record<TaskStatus, typeof todoQuery> = {
+    TODO: todoQuery,
+    IN_PROGRESS: inProgressQuery,
+    BLOCKED: blockedQuery,
+    DONE: doneQuery,
+    // CANCELLED isn't surfaced in the Kanban board (cf kanbanColumns).
+    CANCELLED: doneQuery,
+  };
 
   // Reset page when filters change
   useEffect(() => { setPage(1); }, [search, statusFilter, priorityFilter, siteFilter, assignedFilter]);
@@ -328,15 +424,36 @@ export default function TasksPage() {
     // changes filters during the inflight request.
     onMutate: async ({ id, status }) => {
       await queryClient.cancelQueries({ queryKey: ['tasks'] });
-      const snapshots = queryClient.getQueriesData<{ data: Task[]; meta: PaginationMeta }>({
-        queryKey: ['tasks'],
-      });
+      // Multiple cached query variants share the ['tasks', ...] prefix:
+      //   - useQuery list/grid → { data: Task[], meta }
+      //   - useInfiniteQuery kanban (per status) → { pages: [{data,meta}], pageParams }
+      // Patch both shapes so the dragged card moves immediately under the new
+      // column without snapping back to its old position before invalidation.
+      const snapshots = queryClient.getQueriesData<unknown>({ queryKey: ['tasks'] });
       snapshots.forEach(([key, old]) => {
-        if (!old?.data) return;
-        queryClient.setQueryData(key, {
-          ...old,
-          data: old.data.map((t) => (t.id === id ? { ...t, status } : t)),
-        });
+        if (!old || typeof old !== 'object') return;
+        const o = old as {
+          data?: Task[];
+          meta?: PaginationMeta;
+          pages?: Array<{ data: Task[]; meta: PaginationMeta }>;
+          pageParams?: unknown[];
+        };
+        if (Array.isArray(o.data)) {
+          queryClient.setQueryData(key, {
+            ...o,
+            data: o.data.map((t) => (t.id === id ? { ...t, status } : t)),
+          });
+          return;
+        }
+        if (Array.isArray(o.pages)) {
+          queryClient.setQueryData(key, {
+            ...o,
+            pages: o.pages.map((page) => ({
+              ...page,
+              data: page.data.map((t) => (t.id === id ? { ...t, status } : t)),
+            })),
+          });
+        }
       });
       return { snapshots };
     },
@@ -355,10 +472,6 @@ export default function TasksPage() {
 
   const handleDrop = (taskId: string, newStatus: TaskStatus) => {
     updateStatusMutation.mutate({ id: taskId, status: newStatus });
-  };
-
-  const getTasksByStatus = (status: TaskStatus): Task[] => {
-    return filteredTasks.filter((task) => task.status === status);
   };
 
   const handleExport = (format: 'excel' | 'pdf' | 'csv' | 'json') => {
@@ -550,15 +663,24 @@ export default function TasksPage() {
       {/* Kanban / List / Grid */}
       {viewMode === 'kanban' && (
         <div data-testid="kanban-board" className="flex gap-6 overflow-x-auto pb-4">
-          {kanbanColumns.map((status) => (
-            <KanbanColumn
-              key={status}
-              status={status}
-              tasks={getTasksByStatus(status)}
-              onTaskClick={handleTaskClick}
-              onDrop={handleDrop}
-            />
-          ))}
+          {kanbanColumns.map((status) => {
+            const query = kanbanQueries[status];
+            const items: Task[] = query.data?.pages.flatMap((p) => p.data) ?? [];
+            const total = query.data?.pages[0]?.meta.total ?? 0;
+            return (
+              <KanbanColumn
+                key={status}
+                status={status}
+                tasks={items}
+                total={total}
+                hasNextPage={query.hasNextPage ?? false}
+                isFetchingNextPage={query.isFetchingNextPage ?? false}
+                onLoadMore={() => query.fetchNextPage()}
+                onTaskClick={handleTaskClick}
+                onDrop={handleDrop}
+              />
+            );
+          })}
         </div>
       )}
 

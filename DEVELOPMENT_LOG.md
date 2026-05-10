@@ -7843,3 +7843,24 @@ feat(s5b-pr1): refactor projection() + reportByMonth() in single SQL query (#59)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-10
+
+**Date:** 2026-05-10 12:54:03
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 4
+
+**Commit message:**
+```
+fix(B9): exclude sub-budgets from over-threshold counter + decouple parent/children spent banner (#63)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
