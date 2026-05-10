@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Skeleton, CardSkeleton } from '@/components/ui/skeleton';
 import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network, X, Bell, Zap } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
@@ -86,11 +87,7 @@ function ModulesTabContent() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="py-8">
-          <p className="text-center text-muted-foreground">Chargement des modules...</p>
-        </CardContent>
-      </Card>
+      <CardSkeleton />
     );
   }
 
@@ -181,11 +178,7 @@ function EnumLabelsTabContent() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="py-8">
-          <p className="text-center text-muted-foreground">Chargement des types...</p>
-        </CardContent>
-      </Card>
+      <CardSkeleton />
     );
   }
 
@@ -692,8 +685,13 @@ function SsoConfigSection() {
 
   if (isLoadingSso) {
     return (
-      <div className="border rounded-lg p-4">
-        <p className="text-sm text-muted-foreground text-center py-4">Chargement de la configuration SSO...</p>
+      <div className="border rounded-lg p-4 space-y-4">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-4 w-2/3" />
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-full" /></div>
+          <div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-full" /></div>
+        </div>
       </div>
     );
   }
@@ -1433,7 +1431,10 @@ function ElectricityConfigTab() {
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
-          <p className="text-sm text-muted-foreground">Chargement...</p>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-10 w-full" /></div>
+            <div className="space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-10 w-full" /></div>
+          </div>
         ) : (
           <>
             <div className="grid md:grid-cols-2 gap-4">
@@ -1573,7 +1574,7 @@ function AssetModelsTabContent() {
   };
 
   if (loading) {
-    return <Card><CardContent className="py-8"><p className="text-center text-muted-foreground">Chargement des modèles...</p></CardContent></Card>;
+    return <CardSkeleton />;
   }
 
   return (
@@ -2482,6 +2483,33 @@ export default function SettingsPage() {
 
         {/* Appearance Tab */}
         <TabsContent value="appearance" className="space-y-6">
+          {isLoadingTenant ? (
+            <Card>
+              <CardHeader><Skeleton className="h-6 w-24" /></CardHeader>
+              <CardContent className="space-y-6">
+                <Skeleton className="h-4 w-2/3" />
+                <div className="grid grid-cols-3 gap-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-32 w-full rounded-lg" />
+                  ))}
+                </div>
+                {isAdmin && (
+                  <div className="border-t pt-4 space-y-4">
+                    <Skeleton className="h-5 w-40" />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {Array.from({ length: 7 }).map((_, i) => (
+                        <Skeleton key={i} className="h-24 w-full rounded-lg" />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="border-t pt-4 space-y-3">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-32 w-full rounded-lg" />
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
           <Card>
             <CardHeader>
               <CardTitle>Thème</CardTitle>
@@ -2641,6 +2669,7 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+          )}
 
           {/* v1.4 — Source + tenant override controls (ADR-010) */}
           <AppearancePreferencesCard />
@@ -2668,7 +2697,16 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {isLoadingTenant ? (
-                <p className="text-sm text-muted-foreground">Chargement...</p>
+                <div className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2"><Skeleton className="h-4 w-40" /><Skeleton className="h-10 w-full" /></div>
+                    <div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-full" /></div>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-full" /></div>
+                    <div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-full" /></div>
+                  </div>
+                </div>
               ) : (
                 <>
                   <div className="grid md:grid-cols-2 gap-4">
@@ -3375,7 +3413,7 @@ function AppearancePreferencesCard() {
   const { appearance, reload } = useAppearance();
   const [saving, setSaving] = useState(false);
 
-  if (!appearance) return null;
+  if (!appearance) return <CardSkeleton />;
 
   const isLocked = !appearance.allowUserOverride;
   const source = appearance.source;
@@ -3477,7 +3515,7 @@ function TenantAppearanceCard() {
   const { appearance, reload } = useAppearance();
   const [saving, setSaving] = useState(false);
 
-  if (!appearance) return null;
+  if (!appearance) return <CardSkeleton />;
   const tenant = appearance.tenant;
 
   const save = async (patch: UpdateTenantAppearanceInput) => {
