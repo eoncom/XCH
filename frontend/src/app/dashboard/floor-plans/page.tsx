@@ -25,39 +25,6 @@ import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import type { FloorPlan, Site } from '@/types';
 
-/**
- * Deduplicate floor plans by planGroupId, keeping only the latest version.
- * Plans without planGroupId are treated as unique.
- */
-function getLatestVersions(plans: FloorPlan[]): FloorPlan[] {
-  const groupMap = new Map<string, FloorPlan>();
-
-  for (const plan of plans) {
-    const groupKey = plan.planGroupId || plan.id;
-    const existing = groupMap.get(groupKey);
-
-    if (!existing || plan.version > existing.version) {
-      groupMap.set(groupKey, plan);
-    }
-  }
-
-  return Array.from(groupMap.values());
-}
-
-/**
- * Count total versions per planGroupId
- */
-function getVersionCounts(plans: FloorPlan[]): Map<string, number> {
-  const counts = new Map<string, number>();
-
-  for (const plan of plans) {
-    const groupKey = plan.planGroupId || plan.id;
-    counts.set(groupKey, (counts.get(groupKey) || 0) + 1);
-  }
-
-  return counts;
-}
-
 export default function FloorPlansPage() {
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState<string>('all');
@@ -89,16 +56,16 @@ export default function FloorPlansPage() {
     queryFn: () => sitesApi.getAll(),
   });
 
-  // Deduplicate: show only latest version per plan group
-  const latestPlans = getLatestVersions(floorPlans);
-  const versionCounts = getVersionCounts(floorPlans);
-
-  const filteredFloorPlans = latestPlans.filter((plan) => {
+  // Track C 2026-05-10 — B3 fix: dedup is now server-side (one row per
+  // planGroupId, latest version, with `totalVersions` populated). Header
+  // counter reads `meta.total` to stay consistent with the pagination
+  // footer; client-side filter only narrows the current page by free-text
+  // search.
+  const filteredFloorPlans = floorPlans.filter((plan) => {
+    if (!search) return true;
     const searchLower = search.toLowerCase();
     return (
       plan.title?.toLowerCase().includes(searchLower) ||
-      plan.floor?.toLowerCase().includes(searchLower) ||
-      plan.building?.toLowerCase().includes(searchLower) ||
       plan.site?.name?.toLowerCase().includes(searchLower)
     );
   });
@@ -211,7 +178,7 @@ export default function FloorPlansPage() {
         </Select>
       </div>
 
-      <p className="text-sm text-muted-foreground">{filteredFloorPlans.length} plan(s)</p>
+      <p className="text-sm text-muted-foreground">{meta?.total ?? floorPlans.length} plan(s)</p>
 
       {/* Floor Plans List/Grid */}
       {viewMode === 'list' ? (
@@ -243,8 +210,7 @@ export default function FloorPlansPage() {
               </TableHeader>
               <TableBody>
                 {sortedFloorPlans.map((plan) => {
-                  const groupKey = plan.planGroupId || plan.id;
-                  const totalVersions = versionCounts.get(groupKey) || 1;
+                  const totalVersions = plan.totalVersions ?? 1;
                   const buildingFloor = [
                     plan.building ? `Bâtiment ${plan.building}` : null,
                     plan.floor ? `Étage ${plan.floor}` : null,
@@ -292,8 +258,7 @@ export default function FloorPlansPage() {
       ) : (
       <div data-testid="floor-plans-list" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredFloorPlans.map((plan) => {
-          const groupKey = plan.planGroupId || plan.id;
-          const totalVersions = versionCounts.get(groupKey) || 1;
+          const totalVersions = plan.totalVersions ?? 1;
 
           return (
             <Card

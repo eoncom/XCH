@@ -7885,3 +7885,24 @@ fix(uiux): skeleton loading states settings tabs (U7)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-10
+
+**Date:** 2026-05-10 17:10:10
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 4
+
+**Commit message:**
+```
+chore(release): v2.1.2 — bug fixes prod-bloquants + UI/UX professionnalisation (#66)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
