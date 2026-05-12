@@ -8,7 +8,6 @@ import { NativeMonitorsList } from '@/components/monitoring/NativeMonitorsList';
 /**
  * Monitoring overview page (ADR-016).
  * Single source of truth = MonitorCheck rows, listed by NativeMonitorsList.
- * The legacy useLiveMonitors / Gatus / Uptime Kuma path was removed.
  */
 export default function MonitoringOverviewPage() {
   return (

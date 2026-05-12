@@ -1,6 +1,6 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-05-10 17:10:10 (Auto-update)
+**Dernière mise à jour :** 2026-05-12 08:05:40 (Auto-update)
 **Version actuelle :** 1.9.0 (taguée 2026-05-02)
 **Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + **Sessions 1-7 finalization v2 livrées** + 10/10 critical paths E2E couverts + smoke @full-user-journey régression bloquante automatisée
 
@@ -174,7 +174,7 @@ Sections dashboard actuelles (`frontend/src/app/dashboard/<section>/`) :
 | 6 | **Floor-plans** | Viewer Konva, pins typés, heatmap WiFi, calibration échelle |
 | 7 | **Contacts** | CRUD, types personnalisables, catégories INTERNAL/PROVIDER/PARTNER, import |
 | 8 | **Integrations** | Dashboard providers, NetBox (4 tabs), mapping drag&drop |
-| 9 | **Monitoring** | Sondes natives (ICMP/HTTP/TCP) + résultats `MonitorCheck` (ADR-014/016, plus de Gatus/Kuma) |
+| 9 | **Monitoring** | Sondes natives (ICMP/HTTP/TCP) + résultats `MonitorCheck` (ADR-014/016) |
 | 10 | **NetBox** | Config dédiée + historique sync |
 | 11 | **Users** | Liste, filtres, invite, édition (MANAGE+) |
 | 12 | **Admin > Audit** | Journal d'audit (super-admin only) |

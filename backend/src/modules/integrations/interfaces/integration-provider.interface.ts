@@ -1,8 +1,6 @@
 /**
  * Base interface for all integration providers (NetBox today, more later).
- * Monitoring providers (Gatus/Kuma) were removed in ADR-016 — the native
- * monitoring module owns its data end-to-end and no longer needs an
- * adapter abstraction.
+ * Native monitoring (ADR-016) owns its data end-to-end; no adapter needed.
  */
 export interface IntegrationProvider {
   /** Test connection to external system */

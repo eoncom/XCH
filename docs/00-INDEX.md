@@ -191,12 +191,12 @@
 #### ADR-006 → ADR-013
 
 Décisions intermédiaires (Docker network, E2E Playwright, fix SSR/CSR cookies,
-delegation-first model, Apparence, inline expense creation, Gatus
-bidirectional, JSON debt baseline). Voir [`docs/decisions/`](docs/decisions/).
+delegation-first model, Apparence, inline expense creation, monitoring legacy,
+JSON debt baseline). Voir [`docs/decisions/`](docs/decisions/).
 
 #### ADR-014: Monitoring natif (S2)
 **📍 Chemin:** [`docs/decisions/adr-014-native-monitoring.md`](docs/decisions/adr-014-native-monitoring.md)
-**📝 Décision:** Probes ICMP/HTTP/TCP natives (BullMQ + cron) — fin du couplage Uptime Kuma / Gatus.
+**📝 Décision:** Probes ICMP/HTTP/TCP natives (BullMQ + cron) — monitoring intégré au worker XCH.
 **📅 Date:** 2026-04-23
 **✅ Statut:** Accepté
 

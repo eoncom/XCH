@@ -145,7 +145,7 @@ Services :
 - `postgres` : PostgreSQL 15 + PostGIS
 - `redis` : Redis 7 Alpine
 - `minio` : MinIO + minio-init (creation buckets)
-- `gatus` : Monitoring / health dashboard
+- `backend-worker` : Worker XCH natif (sondes ICMP/HTTP/TCP via BullMQ, ADR-014)
 - `nginx` : Reverse proxy (profil optionnel, pour deployments sans proxy externe)
 
 ### Reverse proxy
@@ -169,7 +169,7 @@ Services :
 - HealthAggregationService recompute Site.healthStatus en temps réel sur transition
 - Notifications MONITOR_DOWN / MONITOR_UP via NotificationConfigService (héritage délégation)
 - SSRF defense en profondeur : validateUrl/validateHost + safe-lookup DNS hook
-- Gatus + Uptime Kuma retirés (zéro dépendance externe)
+- Aucune dépendance monitoring externe (ADR-016)
 
 ---
 

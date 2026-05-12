@@ -186,9 +186,6 @@ services:
       - xch-network
     restart: unless-stopped
 
-  # ADR-016 — Gatus container removed. Native monitoring (xch-backend-worker)
-  # owns all probes + alerts now.
-
   # Nginx Reverse Proxy (single entry point)
   # Uses Docker profile: only starts with --profile proxy or COMPOSE_PROFILES=proxy
   # Skip this when using an external nginx (e.g. Nginx Proxy Manager)

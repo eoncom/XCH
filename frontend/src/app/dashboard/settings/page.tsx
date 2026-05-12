@@ -1974,7 +1974,7 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState('Europe/Paris');
   const [language, setLanguage] = useState('Français');
 
-  // Integration state (NetBox only — ADR-016 dropped Gatus/Kuma)
+  // Integration state (NetBox only — ADR-016 native monitoring)
   const [netboxUrl, setNetboxUrl] = useState('');
   const [netboxToken, setNetboxToken] = useState('');
   const [isTesting, setIsTesting] = useState<string | null>(null);

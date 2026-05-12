@@ -178,8 +178,8 @@ model TenantSecurityConfig {
   @@map("tenant_security_configs")
 }
 
-// External integrations credentials (NetBox today; Gatus/Kuma removed in
-// ADR-016). Single 1:0..1 with the providers we actually support.
+// External integrations credentials (NetBox today; native monitoring per
+// ADR-016 owns probes/results internally). Single 1:0..1 with supported providers.
 model TenantIntegrationConfig {
   tenantId     String   @id
   tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)

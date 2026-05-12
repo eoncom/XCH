@@ -54,7 +54,7 @@
 - **Surveillance native (ADR-014 + ADR-016)** — sondes ICMP / HTTP / TCP exécutées
   par un worker XCH dédié (BullMQ + scheduler 30s + retry exponentiel + cap_add NET_RAW
   pour l'ICMP réel). Site.healthStatus mis à jour en temps réel sur transition.
-  Aucune dépendance externe (Gatus / Uptime Kuma retirés).
+  Aucune dépendance monitoring externe.
 - **NetBox** (READ-ONLY) — mapping sites/devices, enrichissement donnees
 - **Import CSV assets** — endpoint multipart, headers FR/EN, validation ligne par ligne, rapport erreurs
 
@@ -184,28 +184,15 @@ cp .env.production.example backend/.env
 nano backend/.env   # Personnaliser secrets (JWT, PostgreSQL, MinIO, SMTP)
 
 # Lancer la stack
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-### Deploiement air-gapped
-
-```bash
-# Sur la machine de build (avec Internet)
-bash scripts/package-release.sh v1.4.0
-
-# Transferer l'archive, puis sur le serveur cible
-tar xzf xch-v1.4.0-full.tar.gz
-cd xch-release-v1.4.0
-bash scripts/install-airgap.sh /opt/xch
+docker compose up -d --build
 ```
 
 ### Mise a jour
 
 ```bash
 cd /opt/xch
-bash scripts/deploy-prod.sh                # Rebuild backend + frontend
-bash scripts/deploy-prod.sh --backend-only  # Backend uniquement
-bash scripts/deploy-prod.sh --frontend-only # Frontend uniquement
+git pull
+docker compose up -d --build backend backend-worker frontend
 ```
 
 ### Rollback
@@ -246,11 +233,11 @@ bash rollback.sh    # Interactif, avec option restauration DB
 
 | Script | Description |
 |--------|-------------|
-| `scripts/deploy-prod.sh` | Deploiement production local (git pull + build + restart + NPM restart) |
+| `scripts/deploy-auto.sh` | Deploiement production (git pull + build + restart) |
+| `scripts/rotate-secrets.sh` | Rotation des secrets prod (JWT, MinIO, Redis, XCH_MASTER_KEY) |
 | `scripts/backup-full.sh` | Backup complet (DB + MinIO) |
 | `scripts/restore-full.sh` | Restauration depuis backup |
-| `scripts/package-release.sh` | Empaquetage archive portable pour deploiement air-gapped |
-| `scripts/install-airgap.sh` | Installation sur serveur isole |
+| `scripts/generate-ssl.sh` | Generation cert SSL auto-signe |
 | `deploy.sh` | Script deploiement principal (racine) |
 | `install.sh` | Installation zero-to-hero (3 modes) |
 | `rollback.sh` | Rollback interactif avec option restauration DB |
@@ -307,7 +294,7 @@ xch/
 │   │   └── lib/             # Utils, hooks, API client
 │   └── e2e/                 # Tests Playwright (57 tests)
 ├── scripts/                 # Scripts deploiement/backup
-├── docker-compose.prod.yml  # Production Docker Compose
+├── docker-compose.yml       # Docker Compose principal (dev + prod)
 ├── deploy.sh                # Script deploiement principal
 ├── install.sh               # Installation zero-to-hero
 ├── rollback.sh              # Rollback interactif

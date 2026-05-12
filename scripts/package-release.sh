@@ -5,6 +5,10 @@
 #
 # Usage: ./scripts/package-release.sh [version]
 # Example: ./scripts/package-release.sh v1.1.1
+#
+# WARNING: Legacy script (last touched v1.0.0-rc1, predates ADR-014/016/019/
+# 020/021/022/023/024). Compose layout v2.x diverges; airgap workflow needs
+# rework. Kept as reference for future revival.
 # =============================================================================
 
 set -euo pipefail
@@ -27,7 +31,7 @@ echo ""
 echo "[1/5] Building Docker images..."
 cd "$PROJECT_DIR"
 
-docker compose -f docker-compose.prod.yml build backend frontend
+docker compose build backend frontend
 
 # Tag images
 docker tag xch-backend:${VERSION} xch-backend:${VERSION}
@@ -50,7 +54,6 @@ INFRA_IMAGES=(
   "redis:7-alpine"
   "minio/minio:latest"
   "minio/mc:latest"
-  "twinproduction/gatus:latest"
   "nginx:alpine"
 )
 
@@ -68,7 +71,7 @@ echo "  Total size: $(du -sh "${BUILD_DIR}/images" | cut -f1)"
 echo "[3/5] Copying configuration files..."
 
 # docker-compose
-cp "${PROJECT_DIR}/docker-compose.prod.yml" "${BUILD_DIR}/docker-compose.prod.yml"
+cp "${PROJECT_DIR}/docker-compose.yml" "${BUILD_DIR}/docker-compose.yml"
 
 # nginx
 mkdir -p "${BUILD_DIR}/docker/nginx"
@@ -78,10 +81,6 @@ mkdir -p "${BUILD_DIR}/docker/nginx/ssl"
 # postgres init
 mkdir -p "${BUILD_DIR}/docker/postgres"
 cp "${PROJECT_DIR}/docker/postgres/init.sql" "${BUILD_DIR}/docker/postgres/init.sql"
-
-# gatus
-mkdir -p "${BUILD_DIR}/gatus"
-cp "${PROJECT_DIR}/gatus/config.yaml" "${BUILD_DIR}/gatus/config.yaml"
 
 # env example
 cp "${PROJECT_DIR}/.env.production.example" "${BUILD_DIR}/.env.production.example"
@@ -117,7 +116,6 @@ cat > "${BUILD_DIR}/VERSION.json" <<EOF
     "redis:7-alpine",
     "minio/minio:latest",
     "minio/mc:latest",
-    "twinproduction/gatus:latest",
     "nginx:alpine"
   ]
 }
