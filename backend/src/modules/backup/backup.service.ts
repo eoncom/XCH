@@ -7,9 +7,14 @@ import { validateMagicBytes } from '../../common/utils/upload-security';
 import * as archiver from 'archiver';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require('adm-zip');
-import { PassThrough } from 'stream';
+import { PassThrough, Readable, Transform, TransformCallback } from 'stream';
+import { pipeline } from 'stream/promises';
+import { once } from 'events';
 import * as fs from 'fs/promises';
+import { createWriteStream } from 'fs';
 import * as os from 'os';
+import * as path from 'path';
+import { createHash, randomBytes } from 'crypto';
 import { BackupOptionsDto } from './dto/backup-options.dto';
 
 // ============================================================================
@@ -28,6 +33,37 @@ interface BackupMetadata {
   counts: Record<string, number>;
 }
 
+/**
+ * Track D.1 — Backup format v2 metadata schema.
+ *
+ * Discriminant for v1 vs v2 : `typeof metadata.version` (string '1.0' vs
+ * number 2). Restore parses the metadata first and routes to the right
+ * pipeline accordingly.
+ *
+ * `files` maps the in-archive path (e.g. 'minio/xch-storage/photos/abc.jpg')
+ * to {size, sha256, bucket, key}. Populated by streamBucketIntoArchive as
+ * each MinIO object is streamed through HashingStream.
+ */
+export interface BackupFileEntryV2 {
+  size: number;
+  sha256: string;
+  bucket: string;
+  key: string;
+}
+
+export interface BackupMetadataV2 {
+  version: 2;
+  createdAt: string;
+  tenantId: string;
+  type: 'full' | 'site' | 'db-only';
+  siteId: string | null;
+  siteCode: string | null;
+  appVersion: string;
+  buckets: string[];
+  counts: Record<string, number>;
+  files: Record<string, BackupFileEntryV2>;
+}
+
 export interface BackupListItem {
   id: string;
   filename: string;
@@ -35,6 +71,50 @@ export interface BackupListItem {
   siteCode?: string;
   size: number;
   createdAt: string;
+}
+
+/**
+ * Progress callback signature for streaming backup/restore operations.
+ * Track D.1 Phase 1 step 2.
+ *
+ * Phases the backup can be in (one of) :
+ *  - 'collect'  : prisma findMany for all tables
+ *  - 'archive'  : streaming objects from MinIO into the archive
+ *  - 'upload'   : fPutObject to xch-backups bucket
+ *  - 'done'     : final
+ */
+export type ProgressCallback = (
+  phase: string,
+  current: number,
+  total: number,
+  message: string,
+) => void;
+
+/**
+ * Transform stream that updates a sha256 hash and counts bytes as data
+ * passes through, then forwards the chunk unchanged downstream. Used by
+ * streamBucketIntoArchive to compute per-file integrity hashes without
+ * buffering the file content in memory.
+ *
+ * Convention: read `digest()` + `bytesProcessed` AFTER the stream has
+ * emitted 'end' (consumer drained). Reading earlier yields a partial
+ * hash for the chunks transformed so far.
+ *
+ * Track D.1 Phase 1 step 2.
+ */
+export class HashingStream extends Transform {
+  private hash = createHash('sha256');
+  public bytesProcessed = 0;
+
+  override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
+    this.hash.update(chunk);
+    this.bytesProcessed += chunk.length;
+    callback(null, chunk);
+  }
+
+  digest(): string {
+    return this.hash.digest('hex');
+  }
 }
 
 @Injectable()
@@ -1332,10 +1412,10 @@ export class BackupService {
     let filesBytes = 0;
     let fileCount = 0;
     if (!opts.dbOnly) {
-      const bucket = this.configService.get<string>('MINIO_BUCKET', 'xch-storage');
+      const bucket = this.configService.get<string>('MINIO_BUCKET', 'xch-storage') ?? 'xch-storage';
       const objects = await this.listAllObjectsInBucket(bucket);
-      filesBytes = objects.totalSize;
-      fileCount = objects.count;
+      for (const obj of objects) filesBytes += obj.size;
+      fileCount = objects.length;
     }
 
     const totalBytes = dataBytes + filesBytes;
@@ -1384,30 +1464,317 @@ export class BackupService {
   }
 
   /**
-   * Stream `listObjectsV2` on a bucket, summing object sizes.
+   * Stream `listObjectsV2` on a bucket, returning the full list of objects
+   * with their names and sizes.
    *
-   * Used by {@link estimateBackupSize}. Recursive (prefix='', recursive=true)
-   * — walks the whole bucket. Metadata-only, no payload transfer, so it
-   * stays in seconds even on multi-GB buckets.
+   * Used by {@link estimateBackupSize} (aggregates sizes) and by
+   * {@link streamBucketIntoArchive} (iterates to fetch each object).
+   * Recursive (prefix='', recursive=true) — walks the whole bucket.
+   * Metadata-only, no payload transfer, so it stays in seconds even on
+   * multi-GB buckets.
    *
-   * Track D.1 Phase 1 step 1.
+   * Track D.1 Phase 1 step 1 (refactored in step 2 to return the full list).
    */
-  private listAllObjectsInBucket(bucket: string): Promise<{
-    totalSize: number;
-    count: number;
-  }> {
+  private listAllObjectsInBucket(bucket: string): Promise<Array<{ name: string; size: number }>> {
     const client = this.getMinioClient();
     return new Promise((resolve, reject) => {
-      let totalSize = 0;
-      let count = 0;
+      const items: Array<{ name: string; size: number }> = [];
       const stream = client.listObjectsV2(bucket, '', true);
-      stream.on('data', (obj: { size?: number }) => {
-        totalSize += obj.size ?? 0;
-        count += 1;
+      stream.on('data', (obj: { name: string; size?: number }) => {
+        items.push({ name: obj.name, size: obj.size ?? 0 });
       });
-      stream.on('end', () => resolve({ totalSize, count }));
+      stream.on('end', () => resolve(items));
       stream.on('error', (err: Error) => reject(err));
     });
+  }
+
+  // ==========================================================================
+  // TRACK D.1 — STREAMING EXPORT V2
+  // ==========================================================================
+
+  /**
+   * Stream every object of a MinIO bucket into the archive, populating
+   * `fileMap` with per-file SHA-256 hashes computed mid-stream via
+   * {@link HashingStream}.
+   *
+   * Entry naming convention : `minio/<bucket>/<key>` (mirror the bucket
+   * structure 1:1 in the archive). Restore Phase 1 step 3 routes entries
+   * back to `minio.putObject(bucket, key, ...)` based on this prefix.
+   *
+   * Processing is sequential (one object at a time, awaiting `end` between
+   * iterations) — keeps memory footprint bounded and lets archiver back-
+   * pressure naturally. Parallelism optimization is a future iteration if
+   * benchmark prod shows a bottleneck.
+   *
+   * Track D.1 Phase 1 step 2. Primitive consumed by buildArchiveV2ToTmp.
+   */
+  private async streamBucketIntoArchive(
+    archive: archiver.Archiver,
+    bucket: string,
+    fileMap: Record<string, BackupFileEntryV2>,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
+    const objects = await this.listAllObjectsInBucket(bucket);
+    const total = objects.length;
+    const client = this.getMinioClient();
+
+    for (let i = 0; i < objects.length; i++) {
+      const obj = objects[i];
+      onProgress?.('archive', i, total, `Streaming ${bucket}/${obj.name}`);
+
+      // Fetch the object as a stream. minio's getObject takes a Node-style
+      // callback that yields a Readable.
+      const sourceStream = await new Promise<Readable>((resolve, reject) => {
+        client.getObject(bucket, obj.name, (err: Error | null, s: Readable) => {
+          if (err) return reject(err);
+          resolve(s);
+        });
+      });
+
+      // Tee through HashingStream: archive consumes the transformed stream,
+      // hash + byte count are populated as chunks flow through.
+      const hashing = new HashingStream();
+      sourceStream.on('error', (err) => hashing.destroy(err));
+      sourceStream.pipe(hashing);
+
+      const entryName = `minio/${bucket}/${obj.name}`;
+      archive.append(hashing, { name: entryName });
+
+      // Wait until archive has consumed every chunk of this entry.
+      // hashing emits 'end' on its readable side once the consumer (archive)
+      // has drained it — by which point _transform has been called for
+      // every chunk and the hash internal state is final.
+      await once(hashing, 'end');
+
+      fileMap[entryName] = {
+        size: hashing.bytesProcessed,
+        sha256: hashing.digest(),
+        bucket,
+        key: obj.name,
+      };
+    }
+
+    onProgress?.('archive', total, total, `Done streaming ${bucket} (${total} files)`);
+  }
+
+  /**
+   * Orchestrate the archiver pipeline → tmp file on disk. Zero
+   * `Buffer.concat` — the entire archive is streamed via
+   * `pipeline(archive, writeStream)` of `node:stream/promises`, which
+   * also propagates back-pressure and errors correctly.
+   *
+   * Order of append (matters for the restore parser, see Phase 1 step 3
+   * router with `metadataPending: true` flag) :
+   *   1. data/<table>.json (small, in-memory)
+   *   2. minio/<bucket>/<key> (large, streamed, fills metadata.files map)
+   *   3. metadata.json LAST (so files map is fully populated with sha256)
+   *
+   * Also computes a sha256 over the final archive bytes for catalog
+   * integrity — surfaces in BACKUP_FULL_V2 audit log.
+   *
+   * Track D.1 Phase 1 step 2.
+   */
+  private async buildArchiveV2ToTmp(args: {
+    tmpPath: string;
+    data: Record<string, any[]>;
+    buckets: string[];
+    metadata: BackupMetadataV2;
+    onProgress?: ProgressCallback;
+  }): Promise<{ size: number; sha256: string }> {
+    const { tmpPath, data, buckets, metadata, onProgress } = args;
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    const writeStream = createWriteStream(tmpPath);
+
+    // Tee the archive output through a hash for end-to-end integrity.
+    const archiveHasher = createHash('sha256');
+    archive.on('data', (chunk: Buffer) => archiveHasher.update(chunk));
+
+    archive.on('warning', (err: { message: string; code?: string }) => {
+      this.logger.warn(`Archiver warning: ${err.message}`);
+    });
+
+    // Start the pipeline FIRST so archive can be drained as we append.
+    // pipeline() awaits archive 'end' + writeStream 'finish' + cleans up
+    // on error (closes writeStream, propagates the rejection).
+    const pipelinePromise = pipeline(archive, writeStream);
+
+    // 1. Append data/*.json (small JSON payloads, in-memory)
+    for (const [table, records] of Object.entries(data)) {
+      archive.append(JSON.stringify(records, null, 2), { name: `data/${table}.json` });
+    }
+
+    // 2. Stream each bucket — populates metadata.files with sha256 per entry
+    for (const bucket of buckets) {
+      await this.streamBucketIntoArchive(archive, bucket, metadata.files, onProgress);
+    }
+
+    // 3. Append metadata.json LAST — files map is now fully populated.
+    // Restore router buffers data/* until metadata.json arrives (Phase 1 step 3).
+    archive.append(JSON.stringify(metadata, null, 2), { name: 'metadata.json' });
+
+    // Finalize tells archive no more entries are coming. pipeline then
+    // waits for writeStream to flush + close.
+    await archive.finalize();
+    await pipelinePromise;
+
+    const stat = await fs.stat(tmpPath);
+    return {
+      size: stat.size,
+      sha256: archiveHasher.digest('hex'),
+    };
+  }
+
+  /**
+   * Upload a tmp ZIP file to the `xch-backups` bucket via MinIO's native
+   * `fPutObject` — streams from the file path directly, never loads the
+   * archive in memory (in contrast with the v1 path which called
+   * `putObject(bucket, name, buffer, length)`).
+   *
+   * Creates the backup bucket on the fly if it doesn't exist.
+   *
+   * Track D.1 Phase 1 step 2.
+   */
+  private async uploadTmpToBackupBucket(tmpPath: string, filename: string): Promise<void> {
+    const client = this.getMinioClient();
+
+    // Ensure bucket exists (idempotent).
+    try {
+      const exists = await client.bucketExists(this.BACKUP_BUCKET);
+      if (!exists) {
+        await client.makeBucket(this.BACKUP_BUCKET, 'us-east-1');
+        this.logger.log(`Created backup bucket: ${this.BACKUP_BUCKET}`);
+      }
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Could not verify backup bucket: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
+    }
+
+    // fPutObject = native streaming upload from file path.
+    // No buffer materialization on this side of the wire.
+    await client.fPutObject(this.BACKUP_BUCKET, filename, tmpPath, {
+      'Content-Type': 'application/zip',
+    });
+
+    const stat = await fs.stat(tmpPath);
+    this.logger.log(
+      `Backup uploaded (streaming v2) to ${this.BACKUP_BUCKET}/${filename} (${stat.size} bytes)`,
+    );
+  }
+
+  /**
+   * Streaming full backup v2 (Track D.1) — public orchestrator.
+   *
+   * Pipeline:
+   *   exportAllTenantData(tenantId) ─┐
+   *                                  ▼
+   *   ┌── data/*.json ──┐
+   *   │                 ▼
+   *   │   archive ──pipeline──▶ fs.createWriteStream(tmpPath)
+   *   │                 ▲
+   *   └── minio/* ──HashingStream──┘  (fills metadata.files w/ sha256)
+   *                 │
+   *                 └── metadata.json LAST (files map populated)
+   *
+   *   fs.stat(tmpPath) → size + archive-level sha256
+   *   minio.fPutObject(xch-backups, filename, tmpPath) → streaming upload
+   *   fs.rm(tmpPath, force: true) in finally → always cleaned up
+   *
+   * V1 path (createFullBackup) remains untouched — coexistence v1/v2
+   * during Phase 1 implementation (cf decisions in MCP
+   * `XCH_TRACK_D1_BACKUP_V2_2026_05_10`).
+   *
+   * Track D.1 Phase 1 step 2.
+   */
+  async createFullBackupV2(
+    tenantId: string,
+    userId?: string,
+    opts: BackupOptionsDto = {},
+    onProgress?: ProgressCallback,
+  ): Promise<{
+    message: string;
+    filename: string;
+    size: number;
+    sha256: string;
+  }> {
+    this.logger.log(
+      `Starting full backup v2 for tenant ${tenantId} (dbOnly=${opts.dbOnly ?? false})`,
+    );
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `full-backup-v2-${timestamp}.zip`;
+    const tmpId = randomBytes(4).toString('hex');
+    const tmpPath = path.join(os.tmpdir(), `xch-backup-${timestamp}-${tmpId}.zip`);
+
+    try {
+      // 1. Collect tenant data (DB).
+      onProgress?.('collect', 0, 1, 'Exporting tenant data…');
+      const data = await this.exportAllTenantData(tenantId);
+
+      // 2. Decide which buckets to walk (dbOnly skips MinIO entirely).
+      const buckets = opts.dbOnly
+        ? []
+        : [this.configService.get<string>('MINIO_BUCKET', 'xch-storage') ?? 'xch-storage'];
+
+      // 3. Build metadata skeleton — files{} populated by streamBucketIntoArchive.
+      const metadata: BackupMetadataV2 = {
+        version: 2,
+        createdAt: new Date().toISOString(),
+        tenantId,
+        type: opts.dbOnly ? 'db-only' : 'full',
+        siteId: null,
+        siteCode: null,
+        appVersion: this.configService.get<string>('APP_VERSION', '2.2.0') ?? '2.2.0',
+        buckets,
+        counts: this.countRecords(data),
+        files: {},
+      };
+
+      // 4. Pipeline archive → tmp file.
+      onProgress?.('archive', 0, 1, 'Building archive…');
+      const archiveResult = await this.buildArchiveV2ToTmp({
+        tmpPath,
+        data,
+        buckets,
+        metadata,
+        onProgress,
+      });
+
+      // 5. Stream tmp → xch-backups bucket via fPutObject.
+      onProgress?.('upload', 0, 1, 'Uploading to xch-backups…');
+      await this.uploadTmpToBackupBucket(tmpPath, filename);
+
+      // 6. Audit log row (visible in BACKUP_FULL_V2 catalog).
+      await this.logBackupAction(tenantId, userId, 'BACKUP_FULL_V2', {
+        filename,
+        size: archiveResult.size,
+        sha256: archiveResult.sha256,
+      });
+
+      onProgress?.('done', 1, 1, 'Backup complete');
+      this.logger.log(
+        `Full backup v2 completed: ${filename} ` +
+          `(${archiveResult.size} bytes, sha256=${archiveResult.sha256.slice(0, 12)}…, ` +
+          `files=${Object.keys(metadata.files).length})`,
+      );
+
+      return {
+        message: 'Backup complet créé avec succès (v2 streaming)',
+        filename,
+        size: archiveResult.size,
+        sha256: archiveResult.sha256,
+      };
+    } finally {
+      // Always clean up the tmp file, even on exception path.
+      // force:true silences ENOENT (file never created on early failure).
+      await fs.rm(tmpPath, { force: true }).catch((err: unknown) => {
+        this.logger.warn(
+          `Failed to clean up tmp backup file ${tmpPath}: ` +
+            `${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+    }
   }
 
   // ==========================================================================

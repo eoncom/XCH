@@ -9,13 +9,58 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Added — Track D.1 Backup v2 (phase 1 step 1 / 9, ~6.75 j scope)
+### Added — Track D.1 Backup v2 (phase 1 steps 1-2 / 9, ~6.75 j scope)
 
-Phase 1 step 1 pose les fondations DTOs + pre-flight check pour la
-refonte streaming du backup (cf MCP `XCH_TRACK_D1_BACKUP_V2_2026_05_10`).
-Aucun changement comportemental sur les endpoints existants — les
-nouveaux services + endpoint coexistent avec le path v1 (legacy backup
-en mémoire `AdmZip` + `Buffer.concat`).
+Phases 1.1 (pré-flight DTOs + check) et 1.2 (streaming export v2) posent
+les fondations pour la refonte streaming du backup
+(cf MCP `XCH_TRACK_D1_BACKUP_V2_2026_05_10`). Aucun changement
+comportemental sur les endpoints existants — les nouveaux services
+coexistent avec le path v1 (legacy backup en mémoire `AdmZip` +
+`Buffer.concat`). Le path v2 sera exposé via endpoint async Bull v3
+en phase 1.5.
+
+#### Step 2 — Streaming export v2 (~1.5 j budgété)
+
+- **`createFullBackupV2(tenantId, userId?, opts?, onProgress?)`** —
+  orchestrateur public. Pipeline `exportAllTenantData → archive →
+  tmp → fPutObject` + audit `BACKUP_FULL_V2`. `try/finally` cleanup
+  garanti via `fs.rm(tmpPath, { force: true })` même sur exception.
+- **`HashingStream`** (Transform exported) — pattern Node v16+
+  propre : `_transform` met à jour `createHash('sha256')` et compte
+  `bytesProcessed` en passant, `digest()` finalisé après l'event
+  `end`. Backpressure native via `.pipe()`, plus maintenable que
+  `PassThrough + on('data')` manuel.
+- **`streamBucketIntoArchive(archive, bucket, fileMap, onProgress?)`** —
+  primitive bas niveau. Liste tous les objets d'un bucket via
+  `listObjectsV2` (refactor de `listAllObjectsInBucket` pour renvoyer
+  la liste détaillée), puis pour chaque objet : `getObject` stream
+  → `HashingStream` → `archive.append(...)` → `await once(hashing,
+  'end')` → push `{size, sha256, bucket, key}` dans `fileMap`.
+  Séquentiel (1 fichier à la fois) — bornage mémoire prouvé.
+- **`buildArchiveV2ToTmp(...)`** — pipeline archive complet via
+  `pipeline(archive, writeStream)` de `node:stream/promises`.
+  Ordre append : `data/<table>.json` → `minio/<bucket>/<key>` →
+  `metadata.json` LAST (files map populé). Tee output via
+  `archive.on('data', ...) → createHash('sha256')` pour produire un
+  sha256 d'intégrité du ZIP final.
+- **`uploadTmpToBackupBucket(tmpPath, filename)`** — streaming
+  upload via `minioClient.fPutObject()` natif (lit le fichier en
+  chunks, jamais chargé en mémoire). Crée le bucket `xch-backups`
+  à la volée si manquant. Test négatif : tolère `bucketExists`
+  rejetant.
+- **Backup format v2 metadata** — interface `BackupMetadataV2` :
+  `version: 2` (NUMBER, discriminant vs v1 string `'1.0'`),
+  `createdAt`, `tenantId`, `type: 'full'|'site'|'db-only'`,
+  `siteId`/`siteCode`, `appVersion`, `buckets[]`, `counts{}`,
+  `files{}` (Record<entryPath, BackupFileEntryV2 = {size, sha256,
+  bucket, key}>).
+
+Tests unitaires (`backup-v2.service.spec.ts`) : 4 sections couvrant
+les 4 primitives, en évitant les dépendances externes via mocks
+inline du client MinIO et utilisation de `fs/tmp` réel pour
+l'archive. Tests round-trip avec vrai MinIO restent pour phase 1.8.
+
+#### Step 1 — Pre-flight (livré 2026-05-12, commit `485f57f`)
 
 - **`POST /backup/estimate`** — pre-flight sizing pour le pré-launch
   dialog UI. Retourne `EstimateResponseDto` avec `dataBytes` (sum
