@@ -8,9 +8,8 @@ import { CryptoService } from '../../common/crypto/crypto.service';
 /**
  * IntegrationsService — NetBox-only after ADR-016.
  *
- * Monitoring providers (Gatus, Uptime Kuma) and their factory/webhook/sync
- * machinery were removed. Native monitoring lives in modules/monitoring/
- * and computes Site.healthStatus directly via HealthAggregationService.
+ * Native monitoring (modules/monitoring/) runs ICMP/HTTP/TCP probes via
+ * BullMQ and computes Site.healthStatus through HealthAggregationService.
  */
 @Injectable()
 export class IntegrationsService {

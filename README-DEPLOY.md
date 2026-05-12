@@ -30,33 +30,7 @@ nano backend/.env  # Personnaliser DATABASE_URL, JWT secrets, MinIO keys
 # etre identiques entre .env (root) et backend/.env
 
 # 4. Lancer la stack
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
----
-
-## Deploiement air-gapped (serveur isole)
-
-### Sur la machine de build (avec Internet)
-
-```bash
-# Builder et empaqueter toutes les images
-bash scripts/package-release.sh v1.1.1
-
-# Transferer l'archive sur le serveur cible
-scp releases/xch-v1.1.1-full.tar.gz user@serveur:/tmp/
-```
-
-### Sur le serveur cible (sans Internet)
-
-```bash
-# Extraire
-cd /tmp
-tar xzf xch-v1.1.1-full.tar.gz
-cd xch-release-v1.1.1
-
-# Installer (charge les images + configure + demarre)
-bash scripts/install-airgap.sh /opt/xch
+docker compose up -d --build
 ```
 
 ---
@@ -90,8 +64,8 @@ docker compose logs postgres --tail 50
 | Service | URL | Attendu |
 |---------|-----|---------|
 | Frontend | `http://<IP>/` | Page login |
-| API Health | `http://<IP>/api/health` | `{"status":"ok"}` |
-| Gatus | `http://<IP>:8080` | Dashboard monitoring |
+| API | `http://<IP>/api/auth/session` | 401 (non auth) |
+| Monitoring | UI XCH `/dashboard/monitoring` | Sondes natives (ADR-014/016) |
 
 ---
 
@@ -134,7 +108,7 @@ bash scripts/generate-ssl.sh
 sed -i 's/COOKIE_SECURE=false/COOKIE_SECURE=true/' backend/.env
 
 # 3. Redemarrer
-docker compose -f docker-compose.prod.yml restart nginx backend
+docker compose restart nginx backend
 ```
 
 ### HTTPS avec vrai certificat
@@ -147,7 +121,7 @@ docker compose -f docker-compose.prod.yml restart nginx backend
    ```bash
    bash scripts/generate-ssl.sh votre-domaine.com
    sed -i 's/COOKIE_SECURE=false/COOKIE_SECURE=true/' backend/.env
-   docker compose -f docker-compose.prod.yml restart nginx backend
+   docker compose restart nginx backend
    ```
 
 ### Proxy externe (Nginx Proxy Manager, Traefik, etc.)
@@ -174,7 +148,6 @@ frontend:
 | `MINIO_SECRET_KEY` | Secret MinIO (min 16 car.) | (requis) |
 | `COOKIE_SECURE` | `true` pour HTTPS, `false` pour HTTP | `false` |
 | `HTTP_PORT` | Port HTTP expose | `80` |
-| `GATUS_PORT` | Port monitoring Gatus | `8080` |
 | `SMTP_HOST` | Serveur SMTP (notifications email) | (optionnel) |
 | `SMTP_PORT` | Port SMTP | `587` |
 | `SMTP_USER` | Utilisateur SMTP | (optionnel) |
@@ -196,7 +169,7 @@ Internet/LAN
      +-- /storage/* --> [MinIO :9000]
      +-- /*         --> [Frontend :3001]
 
-  [Gatus :8080] --> monitoring endpoints
+  [Backend Worker] --> sondes natives ICMP/HTTP/TCP (ADR-014/016)
 ```
 
 ---
@@ -209,6 +182,6 @@ Internet/LAN
 | Erreur connexion DB | Verifier `DATABASE_URL` dans `backend/.env` |
 | 502 Bad Gateway | Backend pas encore pret — attendre 30s |
 | Permissions MinIO | Relancer `docker compose restart minio-init` |
-| Port deja utilise | Changer `HTTP_PORT` / `GATUS_PORT` dans `.env` |
+| Port deja utilise | Changer `HTTP_PORT` / `HTTPS_PORT` dans `.env` |
 | Login silencieux | Verifier `COOKIE_SECURE` : `false` en HTTP, `true` en HTTPS |
 | 502 apres rebuild | Nginx Proxy Manager cache les IPs Docker — `docker restart <npm-container>` |

@@ -7,6 +7,43 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.4] - 2026-05-12 — Chore : nettoyage Gatus vestigial + retrait legacy `docker-compose.prod.yml`
+
+Chore release post-v2.1.3 supprimant les références vestigiales à Gatus
+(retiré runtime en v1.10.0 / ADR-016) et le couple legacy `docker-compose.prod.yml`
++ `scripts/deploy-prod.sh` (frozen `image: xch-backend:v1.1.1`, désynchronisé depuis
+v1.4.x). Aucun changement comportemental — le standard `docker compose`
+(sans `-f`) reste le canonical workflow (cf MCP `DEPLOY_WORKFLOW`).
+
+### Removed
+
+- **`docker-compose.prod.yml`** : fichier legacy avec `image: xch-backend:v1.1.1` hardcodé (frozen v1.4.x, ignoré en pratique depuis xch-deploy utilise `docker-compose.yml` direct). Bombe à retardement levée — plus de risque de drift si quelqu'un lance `-f docker-compose.prod.yml`. Cf MCP `XCH_DOCKER_IMAGE_DISCIPLINE`.
+- **`scripts/deploy-prod.sh`** : wrapper de `-f docker-compose.prod.yml`, désynchronisé. Remplacé par `scripts/deploy-auto.sh` (canonical) ou `docker compose build && up -d` direct.
+
+### Changed
+
+- **Gatus vestigial code** — 7 fichiers code (3 backend src + 3 frontend src + `prisma/schema.prisma`) : comments JSDoc historiques épurés des mentions Gatus/Kuma actives. Runtime monitoring inchangé (native ADR-014/016 via `xch-backend-worker`).
+- **Config files** — `.env.production.example` + `backend/.env.example` : retrait `GATUS_PORT` + `GATUS_WEBHOOK_SECRET` + section "Gatus Monitoring".
+- **`scripts/rotate-secrets.sh`** Phase A : retrait WEBHOOK_SECRET synchronisé Gatus + container gatus restart + smoke webhook (~50 lignes). Phase A reste fonctionnelle sur JWT + MinIO.
+- **`scripts/install-airgap.sh` + `scripts/package-release.sh`** : dormants depuis v1.0.0-rc1 (predates 8 ADRs). Retrait copy/install Gatus assets + image `twinproduction/gatus` + ajout WARNING header "Legacy script, airgap workflow needs rework for v2.x". Conservés comme référence pour future revival.
+- **`scripts/generate-ssl.sh`** : echo `restart nginx` sans `-f docker-compose.prod.yml`.
+- **`README.md` + `README-DEPLOY.md`** : sections "Deploiement air-gapped" retirées du flow nominal. Commandes deploy migrées sur `docker compose` standard. Architecture diagram backend-worker au lieu de Gatus :8080.
+- **`docs/architecture/tech-stack.md` + `docs/00-INDEX.md` + `docs/status/PROJECT_STATUS.md`** : références Gatus/Kuma retirées des descriptions actives ; ADRs historiques 012/013/014/015/016 préservés inchangés.
+- **`docs/KUMA_V2_CONTEXT.md` + `docs/guides/MONITORING_CONVENTION.md`** : remplacés par stubs redirige ADR-014/016 (architecture pré-ADR-016 obsolète, contenu historique retiré).
+- **`docker-compose.yml`** : retrait commentaire historique Gatus removed (redondant post-cleanup).
+
+### Internal
+
+- ADRs `adr-012-gatus-bidirectional.md` + `adr-013` à `adr-016` préservés comme archive décisionnelle (mention historique de Gatus dans le contexte décisionnel).
+- Reports `phase*-audit-*` + `docs/prompts/archive/*` + `DEVELOPMENT_LOG.md` historique préservés sans modification.
+
+### MCP audit trail
+
+- `XCH_PROD_PORTS` ← observation append-only confirmant runtime v2.1.3 actuel sur xch-deploy (image SHA `41a733de8c09`, build 2026-05-10) + le hardcode v1.1.1 était ignoré, pas une régression.
+- `XCH_DOCKER_IMAGE_DISCIPLINE` (engineering_pattern, créé 2026-05-10) ← pattern d'hygiène images Docker : ne jamais hardcoder de tag de version dans compose files, vérifier image SHA backend == backend-worker, code synchronisé ≠ image runtime synchronisée.
+
+---
+
 ## [2.1.3] - 2026-05-10 — Bugs secondaires Track C : floor plans + backup completeness + dette TS
 
 Patch release post-v2.1.2 fermant la liste Track C des bugs secondaires

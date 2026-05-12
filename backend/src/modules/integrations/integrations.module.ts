@@ -7,9 +7,7 @@ import { IntegrationMappingModule } from './mapping/integration-mapping.module';
 
 /**
  * Integrations module — NetBox today (asset / site sync).
- * Monitoring providers (Gatus / Uptime Kuma) and the webhook controller
- * were removed in ADR-016. Native monitoring lives in modules/monitoring/
- * and owns its data end-to-end.
+ * Native monitoring (ADR-016) owns its data end-to-end in modules/monitoring/.
  */
 @Module({
   imports: [DatabaseModule, IntegrationMappingModule],

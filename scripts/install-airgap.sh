@@ -59,9 +59,8 @@ echo "[2/5] Setting up installation directory..."
 mkdir -p "${INSTALL_DIR}"
 
 # Copy configuration files
-cp "${PACKAGE_DIR}/docker-compose.prod.yml" "${INSTALL_DIR}/docker-compose.yml"
+cp "${PACKAGE_DIR}/docker-compose.yml" "${INSTALL_DIR}/docker-compose.yml"
 cp -r "${PACKAGE_DIR}/docker" "${INSTALL_DIR}/docker"
-cp -r "${PACKAGE_DIR}/gatus" "${INSTALL_DIR}/gatus"
 cp -r "${PACKAGE_DIR}/scripts" "${INSTALL_DIR}/scripts"
 cp "${PACKAGE_DIR}/README-DEPLOY.md" "${INSTALL_DIR}/README-DEPLOY.md" 2>/dev/null || true
 cp "${PACKAGE_DIR}/VERSION.json" "${INSTALL_DIR}/VERSION.json" 2>/dev/null || true
@@ -82,7 +81,6 @@ else
   PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
   MINIO_KEY=$(head -c 16 /dev/urandom | base64 | tr -d '/+=' | head -c 20)
   MINIO_SECRET=$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
-  WEBHOOK_SECRET=$(head -c 16 /dev/urandom | base64 | tr -d '/+=' | head -c 24)
 
   # Create backend/.env (used by NestJS via env_file in docker-compose)
   cat > "${ENV_FILE}" <<EOF
@@ -140,8 +138,6 @@ MINIO_ACCESS_KEY=${MINIO_KEY}
 MINIO_SECRET_KEY=${MINIO_SECRET}
 HTTP_PORT=80
 HTTPS_PORT=443
-GATUS_PORT=8080
-GATUS_WEBHOOK_SECRET=${WEBHOOK_SECRET}
 EOF
 
   echo "  Secrets generated and applied."
