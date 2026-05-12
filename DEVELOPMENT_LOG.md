@@ -7927,3 +7927,24 @@ chore(release): v2.1.3 — Track C bugs secondaires (floor plans + backup) (#68)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-12
+
+**Date:** 2026-05-12 21:08:06
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 10
+- Frontend files modified: 0
+
+**Commit message:**
+```
+chore(infra): retire Gatus vestiges + legacy docker-compose.prod.yml (v2.1.4) (#69)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

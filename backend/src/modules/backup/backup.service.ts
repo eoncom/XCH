@@ -8,6 +8,9 @@ import * as archiver from 'archiver';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require('adm-zip');
 import { PassThrough } from 'stream';
+import * as fs from 'fs/promises';
+import * as os from 'os';
+import { BackupOptionsDto } from './dto/backup-options.dto';
 
 // ============================================================================
 // Pin rendering constants (mirror from frontend FloorPlanViewer.tsx)
@@ -1289,6 +1292,122 @@ export class BackupService {
     } catch (err: unknown) {
       this.logger.error(`Scheduled backup failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
+  }
+
+  // ==========================================================================
+  // TRACK D.1 — PRE-FLIGHT (estimate + disk space)
+  // ==========================================================================
+
+  /**
+   * Pre-flight size estimate for a backup run.
+   *
+   * DB bytes : full `exportAllTenantData()` + JSON.stringify each table.
+   * Accurate but loads everything in memory ; acceptable for the estimate
+   * use-case (one-shot, called interactively before deciding to launch).
+   *
+   * Files bytes : stream `listObjectsV2` on the storage bucket, sum
+   * `obj.size`. Metadata-only listing — fast even on multi-GB buckets.
+   *
+   * Disk space : delegates to {@link checkDiskSpace}.
+   *
+   * Track D.1 Phase 1 step 1. See scope MCP `XCH_TRACK_D1_BACKUP_V2_2026_05_10`.
+   */
+  async estimateBackupSize(
+    tenantId: string,
+    opts: BackupOptionsDto = {},
+  ): Promise<{
+    dataBytes: number;
+    filesBytes: number;
+    totalBytes: number;
+    fileCount: number;
+    freeBytes: number;
+    ok: boolean;
+  }> {
+    const data = await this.exportAllTenantData(tenantId);
+    let dataBytes = 0;
+    for (const [, records] of Object.entries(data)) {
+      dataBytes += Buffer.byteLength(JSON.stringify(records));
+    }
+
+    let filesBytes = 0;
+    let fileCount = 0;
+    if (!opts.dbOnly) {
+      const bucket = this.configService.get<string>('MINIO_BUCKET', 'xch-storage');
+      const objects = await this.listAllObjectsInBucket(bucket);
+      filesBytes = objects.totalSize;
+      fileCount = objects.count;
+    }
+
+    const totalBytes = dataBytes + filesBytes;
+    const disk = await this.checkDiskSpace(totalBytes);
+
+    return {
+      dataBytes,
+      filesBytes,
+      totalBytes,
+      fileCount,
+      freeBytes: disk.freeBytes,
+      ok: disk.ok,
+    };
+  }
+
+  /**
+   * Free-space pre-flight on the worker tmpfs ({@link os.tmpdir}).
+   *
+   * Required = `estimatedBytes × 1.2 + 512 MB` :
+   *  - 20 % buffer absorbs archiver overhead (zip headers, JSON
+   *    pretty-print padding) plus uncertainty on the DB sampling estimate.
+   *  - 512 MB margin keeps headroom for concurrent Prisma working files.
+   *
+   * Returns the result rather than throwing : caller decides (estimate
+   * endpoint surfaces `ok: false`, job startup throws
+   * `InsufficientStorageException`).
+   *
+   * Track D.1 Phase 1 step 1.
+   */
+  async checkDiskSpace(estimatedBytes: number): Promise<{
+    freeBytes: number;
+    requiredBytes: number;
+    ok: boolean;
+  }> {
+    const safetyMargin = 512 * 1024 * 1024;
+    const requiredBytes = Math.ceil(estimatedBytes * 1.2) + safetyMargin;
+
+    const stat = await fs.statfs(os.tmpdir());
+    const freeBytes = stat.bavail * stat.bsize;
+
+    return {
+      freeBytes,
+      requiredBytes,
+      ok: freeBytes >= requiredBytes,
+    };
+  }
+
+  /**
+   * Stream `listObjectsV2` on a bucket, summing object sizes.
+   *
+   * Used by {@link estimateBackupSize}. Recursive (prefix='', recursive=true)
+   * — walks the whole bucket. Metadata-only, no payload transfer, so it
+   * stays in seconds even on multi-GB buckets.
+   *
+   * Track D.1 Phase 1 step 1.
+   */
+  private listAllObjectsInBucket(bucket: string): Promise<{
+    totalSize: number;
+    count: number;
+  }> {
+    const client = this.getMinioClient();
+    return new Promise((resolve, reject) => {
+      let totalSize = 0;
+      let count = 0;
+      const stream = client.listObjectsV2(bucket, '', true);
+      stream.on('data', (obj: { size?: number }) => {
+        totalSize += obj.size ?? 0;
+        count += 1;
+      });
+      stream.on('end', () => resolve({ totalSize, count }));
+      stream.on('error', (err: Error) => reject(err));
+    });
   }
 
   // ==========================================================================

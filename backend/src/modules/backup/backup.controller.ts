@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Post,
   Get,
@@ -36,6 +37,8 @@ import {
 import { CleanupStorageResultResponseDto } from './dto/cleanup-storage-result.response.dto';
 import { BackupListResponseDto } from './dto/backup-list.response.dto';
 import { DeleteBackupResultResponseDto } from './dto/delete-backup-result.response.dto';
+import { BackupOptionsDto } from './dto/backup-options.dto';
+import { EstimateResponseDto } from './dto/estimate.response.dto';
 
 @ApiTags('backup')
 @ApiBearerAuth()
@@ -44,6 +47,26 @@ import { DeleteBackupResultResponseDto } from './dto/delete-backup-result.respon
 @RequireManage()
 export class BackupController {
   constructor(private readonly backupService: BackupService) {}
+
+  // ===== Pre-flight (Track D.1) =====
+
+  @Post('estimate')
+  @RequireRead()
+  @SkipThrottle()
+  @ApiOperation({
+    summary: '[ADMIN] Pre-flight backup size estimate + disk-space check',
+  })
+  @ApiOkResponse({ type: EstimateResponseDto })
+  async estimate(
+    @Body() options: BackupOptionsDto,
+    @Request() req: AuthRequest,
+  ): Promise<EstimateResponseDto> {
+    const result = await this.backupService.estimateBackupSize(
+      req.user.tenantId,
+      options,
+    );
+    return toResponse(EstimateResponseDto, result);
+  }
 
   // ===== Full Backup =====
 

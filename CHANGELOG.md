@@ -7,6 +7,45 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased]
+
+### Added — Track D.1 Backup v2 (phase 1 step 1 / 9, ~6.75 j scope)
+
+Phase 1 step 1 pose les fondations DTOs + pre-flight check pour la
+refonte streaming du backup (cf MCP `XCH_TRACK_D1_BACKUP_V2_2026_05_10`).
+Aucun changement comportemental sur les endpoints existants — les
+nouveaux services + endpoint coexistent avec le path v1 (legacy backup
+en mémoire `AdmZip` + `Buffer.concat`).
+
+- **`POST /backup/estimate`** — pre-flight sizing pour le pré-launch
+  dialog UI. Retourne `EstimateResponseDto` avec `dataBytes` (sum
+  JSON-stringify des 19 tables exportées via `exportAllTenantData`),
+  `filesBytes` (somme `obj.size` via `listObjectsV2` stream sur le
+  bucket `xch-storage`), `totalBytes`, `fileCount`, `freeBytes`
+  (`fs.statfs` Node 20 natif sur `os.tmpdir()`), `ok` (seuil
+  `total × 1.2 + 512 MB`). Body `BackupOptionsDto { dbOnly? }` permet
+  d'estimer un backup DB-only (skip MinIO walk).
+- **6 DTOs co-localisés** dans `backend/src/modules/backup/dto/` —
+  `BackupOptionsDto` (request), `RestoreOptionsDto` (request),
+  `EstimateResponseDto` (Cas A), `BackupJobEnqueuedResponseDto`
+  (Cas A, futur 202 ack), `JobStatusResponseDto` + `JobProgressResponseDto`
+  (Cas C nested, futur polling progress), `DryRunReportResponseDto`
+  + helper `toDryRunReportResponseDto` (Cas B — `Record<string, number>`
+  dynamic keys). Conformes ADR-023 DTO discipline (`@Expose()` whitelist,
+  `@ApiProperty` Swagger, dto-shape.spec.ts étendu).
+- **`InsufficientStorageException`** (`backend/src/modules/backup/exceptions/`)
+   — HTTP 507 levée par le job startup quand `freeBytes < requiredBytes`.
+   L'endpoint `estimate` surface `ok: false` à la place pour permettre
+   au frontend de désactiver le bouton avant lancement.
+
+Prochaines étapes (~6.25 j restants) : streaming export v2 (1.5 j),
+streaming restore v2 (1.5 j), idempotent upsert refactor (1 j),
+Bull v3 wiring (0.5 j), dry-run + v1 compat (0.5 j), frontend
+useBackupJob hook + progress UI (1 j), tests intégration round-trip
+(1 j), docs ADR-025 + README (0.25 j). Décision split mi-parcours à J4.
+
+---
+
 ## [2.1.4] - 2026-05-12 — Chore : nettoyage Gatus vestigial + retrait legacy `docker-compose.prod.yml`
 
 Chore release post-v2.1.3 supprimant les références vestigiales à Gatus
