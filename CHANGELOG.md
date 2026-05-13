@@ -9,7 +9,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Added — Track D.1 Backup v2 (phase 1 steps 1-2 / 9, ~6.75 j scope)
+### Added — Track D.1 Backup v2 (phase 1 steps 1-3 / 9, ~6.75 j scope)
 
 Phases 1.1 (pré-flight DTOs + check) et 1.2 (streaming export v2) posent
 les fondations pour la refonte streaming du backup
@@ -59,6 +59,79 @@ Tests unitaires (`backup-v2.service.spec.ts`) : 4 sections couvrant
 les 4 primitives, en évitant les dépendances externes via mocks
 inline du client MinIO et utilisation de `fs/tmp` réel pour
 l'archive. Tests round-trip avec vrai MinIO restent pour phase 1.8.
+
+#### Step 3 — Streaming restore v2 (~1.5 j budgété)
+
+- **`MagicByteValidator`** (Transform exporté) — buffer le 1er chunk
+  jusqu'à ≥4 octets, valide signature ZIP PKZip `50 4B 03 04`. Sur
+  mismatch ou EOF prématuré → `BadRequestException` propagée via
+  stream error → catch dans l'orchestrateur. Pas de surcoût après
+  validation : pass-through pur.
+- **`restoreFullBackupV2(tenantId, backupId, opts?, onProgress?, userId?)`**
+   — orchestrateur public. Pipeline : `fGetObject(xch-backups, filename,
+   tmpPath)` (streaming download) → `createReadStream(tmpPath)` →
+   `MagicByteValidator` → `unzipper.Parse({ forceStream: true })` →
+   router par entry. Entry types :
+  - `metadata.json` (top-level) → `entry.buffer()` + JSON.parse → v2 metadata
+  - `<full-backup-…|site-…>/metadata.json` → buffer + flag v1 prefix
+  - `data/<table>.json` → buffer + JSON.parse → dataFiles[table]
+  - `minio/<bucket>/<key>` → `pipeline(entry, HashingStream, writeStream)`
+    vers staging dir + record {sha256, size, bucket, key}
+  - Sinon → `entry.autodrain()` (évite stream stall)
+  - Forward d'erreur explicite `validator.on('error', err => zipStream.destroy(err))`
+    car `.pipe().pipe()` ne propage PAS les erreurs automatiquement
+    (sinon le for-await consumer hang indéfiniment).
+- **Validation cascade** (4 checks figés plan) :
+  1. v1 backup détecté (par prefix layout OU par `typeof version === 'string'`)
+     → délégation : `fs.readFile(tmpPath)` → `restoreFullBackup(tenantId, buffer, userId)`
+     (legacy AdmZip path).
+  2. `metadata.json` absent → `BadRequestException('… missing or corrupted')`.
+  3. `typeof metadata.version !== 'number' || version !== 2` →
+     `BadRequestException('Unsupported backup version: …')`.
+  4. Per-file sha256 mismatch vs `metadata.files[entry].sha256` →
+     `invalidChecksums[]` ; declared-but-absent → `missingFiles[]`.
+- **`opts.dryRun: true`** → retourne `DryRunReportResponseDto` avec
+  `wouldCreate{}` (tous les records taggés create, step 4 affinera
+  via natural-key lookups), `missingFiles[]`, `invalidChecksums[]`,
+  `totalSize`, `estimatedDurationSec` (50 MB/s model). PAS de writes.
+- **`opts.dryRun: false` + integrity OK** → délègue à
+  `applyDataFilesToDb` (step 3 stub) qui throw `BadRequestException`
+  clair : "step 3 ships streaming + dry-run only ; use dryRun: true
+  to inspect diff ; meanwhile use legacy POST /backup/full/restore
+  multipart for destructive path". Pas de naive `createMany` (step 4
+  intégrera upsertByNaturalKey + 5-phase split `$transaction`).
+- **Discriminated result** :
+  `{ kind: 'dry-run', report } | { kind: 'applied', message, counts, siteIds }
+   | { kind: 'delegated-v1', message, counts, siteIds }`.
+- **Cleanup garanti** via double `try/finally` : `fs.rm(tmpZipPath,
+  { force: true })` + `fs.rm(stagingDir, { recursive: true, force: true })`,
+  warn sans masquer l'erreur originale.
+- **`downloadFromBackupBucket(filename, tmpPath)`** — `minioClient.fGetObject()`
+  natif streaming (miroir de `uploadTmpToBackupBucket`).
+
+Dépendances ajoutées : `unzipper@^0.12.3` + `@types/unzipper@^0.10.11`.
+
+Tests (`backup-v2.service.spec.ts` étendu, 15 tests neufs) :
+- MagicByteValidator (4) : pass-through ZIP, reject non-ZIP, buffer
+  partial <4 bytes, reject truncated stream
+- restoreFullBackupV2 (11) :
+  1. magic byte valide → round-trip backup v2 → restore v2 dryRun →
+     counts identiques (couvre étape 2 + étape 3 ensemble)
+  2. magic byte invalide (.txt) → BadRequestException
+  3. metadata.json absent → BadRequestException
+  4. metadata.json JSON.parse fail → BadRequestException
+  5. version string "1.0" → délégation legacy (spy.toHaveBeenCalled)
+  5b. v1 par prefix layout → délégation legacy
+  6. version number 2 → streaming path (dryRun)
+  7. version number 3 → BadRequestException unsupported
+  8. sha256 mismatch 1 fichier → dryRunReport.invalidChecksums populé
+  9. sha256 mismatch + non dry-run → BadRequestException integrity
+  10. real-run intact ZIP → applyDataFilesToDb stub throws clair step-4
+
+Tous tests passent localement (25/25 inclus step 2). Tests round-trip
+avec vrai MinIO restent pour phase 1.8.
+
+#### Step 2 — Streaming export v2 (livré 2026-05-13, commit `06b97a9`)
 
 #### Step 1 — Pre-flight (livré 2026-05-12, commit `485f57f`)
 

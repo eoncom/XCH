@@ -11,11 +11,17 @@ import { PassThrough, Readable, Transform, TransformCallback } from 'stream';
 import { pipeline } from 'stream/promises';
 import { once } from 'events';
 import * as fs from 'fs/promises';
-import { createWriteStream } from 'fs';
+import { createWriteStream, createReadStream } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createHash, randomBytes } from 'crypto';
+import * as unzipper from 'unzipper';
 import { BackupOptionsDto } from './dto/backup-options.dto';
+import { RestoreOptionsDto } from './dto/restore-options.dto';
+import {
+  DryRunReportResponseDto,
+  toDryRunReportResponseDto,
+} from './dto/dry-run-report.response.dto';
 
 // ============================================================================
 // Pin rendering constants (mirror from frontend FloorPlanViewer.tsx)
@@ -116,6 +122,91 @@ export class HashingStream extends Transform {
     return this.hash.digest('hex');
   }
 }
+
+/**
+ * Transform stream that validates the first 4 bytes of input against
+ * the ZIP local-file-header magic (PK\x03\x04 = 50 4B 03 04) before
+ * passing data through unchanged. Used by restoreFullBackupV2 at the
+ * head of the unzip pipeline.
+ *
+ * Behaviour :
+ *  - Buffers incoming chunks until ≥4 bytes have been received (handles
+ *    the pathological case of a 1-byte first chunk).
+ *  - Validates the first 4 bytes. On mismatch → calls the transform
+ *    callback with a {@link BadRequestException}, which propagates as a
+ *    stream error and surfaces in the orchestrator's try/catch.
+ *  - On success → flushes the buffered prefix downstream and switches
+ *    to pure pass-through for subsequent chunks (no per-chunk overhead).
+ *  - On premature EOF (< 4 bytes total) → `_flush` errors out with the
+ *    same BadRequestException semantics.
+ *
+ * Catches both "uploaded a `.txt` masquerading as a backup" and
+ * "truncated download" failure modes. Cheap (no allocation past the
+ * 4-byte prefix).
+ *
+ * Track D.1 Phase 1 step 3.
+ */
+export class MagicByteValidator extends Transform {
+  private static readonly ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+  private static readonly REQUIRED_BYTES = 4;
+
+  private prefix: Buffer = Buffer.alloc(0);
+  private validated = false;
+
+  override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
+    if (this.validated) {
+      callback(null, chunk);
+      return;
+    }
+
+    this.prefix = Buffer.concat([this.prefix, chunk]);
+    if (this.prefix.length < MagicByteValidator.REQUIRED_BYTES) {
+      // Wait for more bytes — pathological case of a 1-byte first chunk.
+      callback();
+      return;
+    }
+
+    const magic = this.prefix.subarray(0, MagicByteValidator.REQUIRED_BYTES);
+    if (!magic.equals(MagicByteValidator.ZIP_MAGIC)) {
+      callback(
+        new BadRequestException(
+          `Invalid backup archive: expected ZIP magic bytes ` +
+            `${MagicByteValidator.ZIP_MAGIC.toString('hex')}, got ${magic.toString('hex')}`,
+        ),
+      );
+      return;
+    }
+
+    // Magic OK — flush the buffered prefix and switch to pass-through.
+    this.validated = true;
+    const flushed = this.prefix;
+    this.prefix = Buffer.alloc(0);
+    callback(null, flushed);
+  }
+
+  override _flush(callback: TransformCallback): void {
+    if (!this.validated) {
+      callback(
+        new BadRequestException(
+          `Invalid backup archive: stream ended before ` +
+            `${MagicByteValidator.REQUIRED_BYTES} bytes could be read ` +
+            `(got ${this.prefix.length}). File may be truncated or empty.`,
+        ),
+      );
+      return;
+    }
+    callback();
+  }
+}
+
+/**
+ * Discriminated union result of {@link BackupService.restoreFullBackupV2}.
+ * Track D.1 Phase 1 step 3.
+ */
+export type RestoreFullV2Result =
+  | { kind: 'dry-run'; report: DryRunReportResponseDto }
+  | { kind: 'applied'; message: string; counts: Record<string, number>; siteIds: string[] }
+  | { kind: 'delegated-v1'; message: string; counts: Record<string, number>; siteIds: string[] };
 
 @Injectable()
 export class BackupService {
@@ -1572,6 +1663,19 @@ export class BackupService {
    * Also computes a sha256 over the final archive bytes for catalog
    * integrity — surfaces in BACKUP_FULL_V2 audit log.
    *
+   * **Determinism caveat (do not change without understanding):**
+   * archiver produces byte-identical output for byte-identical input
+   * ONLY because we do NOT call `archive.append(..., { date: ... })`
+   * on any entry. Setting `date` (entry mtime) makes the ZIP local file
+   * headers carry that timestamp, breaking the sha256 determinism the
+   * `buildArchiveV2ToTmp` deterministic-input test asserts. If a future
+   * change needs per-entry mtime (e.g. for restore preserving original
+   * file timestamps), the determinism test must be updated AND the
+   * archive-level sha256 must NO LONGER be used as a stable integrity
+   * key in BACKUP_FULL_V2 audit metadata. Per-file sha256 in
+   * metadata.files{} stays valid regardless. Cf MCP
+   * `XCH_TRACK_D1_BACKUP_V2_2026_05_10` decisions log.
+   *
    * Track D.1 Phase 1 step 2.
    */
   private async buildArchiveV2ToTmp(args: {
@@ -1771,6 +1875,367 @@ export class BackupService {
       await fs.rm(tmpPath, { force: true }).catch((err: unknown) => {
         this.logger.warn(
           `Failed to clean up tmp backup file ${tmpPath}: ` +
+            `${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+    }
+  }
+
+  // ==========================================================================
+  // TRACK D.1 — STREAMING RESTORE V2
+  // ==========================================================================
+
+  /**
+   * Stream the contents of the xch-backups bucket down to a local tmp
+   * file via MinIO's native `fGetObject` (streaming download). Mirror of
+   * {@link uploadTmpToBackupBucket}.
+   *
+   * Track D.1 Phase 1 step 3.
+   */
+  private async downloadFromBackupBucket(filename: string, tmpPath: string): Promise<void> {
+    const client = this.getMinioClient();
+    await client.fGetObject(this.BACKUP_BUCKET, filename, tmpPath);
+    const stat = await fs.stat(tmpPath);
+    this.logger.log(
+      `Backup downloaded (streaming v2) from ${this.BACKUP_BUCKET}/${filename} ` +
+        `(${stat.size} bytes)`,
+    );
+  }
+
+  /**
+   * Apply parsed data files to the database.
+   *
+   * **STEP 3 STUB** — not implemented for non-dry-run. The full implementation
+   * lands in Phase 1 step 4 alongside `upsertByNaturalKey`, per-table natural
+   * key strategy, and the 5-phase split `$transaction` design (cf MCP
+   * `XCH_TRACK_D1_BACKUP_V2_2026_05_10`).
+   *
+   * Rationale for not shipping a naive `createMany` here in step 3 : a naive
+   * loop on a populated tenant would either fail on FK ordering or create
+   * duplicates on every re-run, which is exactly what step 4's idempotence
+   * refactor exists to fix. Shipping a naive intermediate would be a
+   * regression footgun. Step 3 ships streaming + verification + dry-run
+   * preview, which IS useful in isolation (operators can inspect the diff
+   * before committing). Real restore is blocked until step 4.
+   *
+   * Step 3 callers should ALWAYS use `opts.dryRun: true`. The orchestrator
+   * raises a clear error if the caller forgets.
+   *
+   * Track D.1 Phase 1 step 3 (stub) / step 4 (full).
+   */
+  private async applyDataFilesToDb(
+    _tenantId: string,
+    _dataFiles: Record<string, unknown[]>,
+    _stagedFiles: Map<string, { tmpPath: string; sha256: string; size: number; bucket: string; key: string }>,
+    _userId?: string,
+  ): Promise<{ counts: Record<string, number>; siteIds: string[] }> {
+    throw new BadRequestException(
+      'Track D.1 Phase 1 step 3 ships streaming restore + dry-run preview only. ' +
+        'Real restore (DB writes + MinIO uploads) lands in step 4 with per-table ' +
+        'idempotence via upsertByNaturalKey. Re-issue this request with `dryRun: true` ' +
+        'to inspect the projected diff; meanwhile use the legacy ' +
+        '`POST /backup/full/restore` (multipart upload) for the destructive path.',
+    );
+  }
+
+  /**
+   * Streaming full restore v2 (Track D.1) — public orchestrator.
+   *
+   * Pipeline:
+   *   1. Resolve `backupId` → filename via AuditLog catalog row.
+   *   2. `downloadFromBackupBucket(filename, tmpPath)` (streaming fGetObject).
+   *   3. Stream-process the tmp ZIP via :
+   *        `createReadStream(tmpPath) ─▶ MagicByteValidator ─▶ unzipper.Parse()`
+   *        for await (entry) :
+   *          - `metadata.json`             → buffer + JSON.parse → v2Metadata
+   *          - `<v1Prefix>/metadata.json`  → buffer + remember v1MetadataRaw
+   *          - `data/<table>.json`         → buffer + JSON.parse → dataFiles[table]
+   *          - `minio/<bucket>/<key>`      → stage to tmp dir via HashingStream,
+   *                                          record {tmpPath, sha256, size}
+   *          - <v1Prefix>/*                → autodrain (delegation will reread)
+   *          - else                        → autodrain (unknown entry)
+   *   4. Validate metadata (4 checks figés plan) :
+   *        a. v1MetadataRaw present (and no v2) → delegate to legacy restoreFullBackup
+   *           via `fs.readFile(tmpPath)` buffer (v1 path uses AdmZip).
+   *        b. typeof v2Metadata.version === 'string' → delegate same way.
+   *        c. v2Metadata missing → BadRequestException('metadata.json missing or corrupted')
+   *        d. v2Metadata.version not number 2 → BadRequestException('Unsupported version: X')
+   *   5. Verify per-file sha256 against metadata.files[entryPath].sha256.
+   *      Mismatches → invalidChecksums[] ; declared-but-absent → missingFiles[].
+   *   6. opts.dryRun === true → return DryRunReportResponseDto with would{Create,Update,Skip}
+   *      computed from dataFiles + the integrity diff. NO writes.
+   *   7. opts.dryRun !== true && integrity errors → BadRequestException('integrity check failed').
+   *   8. opts.dryRun !== true && integrity ok → delegate to applyDataFilesToDb (step 4 stub
+   *      currently throws BadRequestException with a hint).
+   *
+   * V1 backward compat is best-effort delegation : we re-read the tmp file as a
+   * Buffer and call the existing v1 `restoreFullBackup(tenantId, buffer, userId)`,
+   * which has its own AdmZip parsing + DB logic. v1 archives are small enough to
+   * fit in RAM (the whole reason Track D.1 exists is that v1 was RAM-bounded).
+   *
+   * Track D.1 Phase 1 step 3.
+   */
+  async restoreFullBackupV2(
+    tenantId: string,
+    backupId: string,
+    opts: RestoreOptionsDto = {},
+    onProgress?: ProgressCallback,
+    userId?: string,
+  ): Promise<RestoreFullV2Result> {
+    this.logger.log(
+      `Starting full restore v2 for tenant ${tenantId} from backup ${backupId} ` +
+        `(dryRun=${opts.dryRun ?? false})`,
+    );
+
+    // 1. Resolve backupId → filename from AuditLog catalog.
+    // AuditLog row stores {filename, size, ...} under the `changes` JsonValue
+    // column (cf createFullBackup audit pattern at logBackupAction site).
+    const log = await this.prisma.auditLog.findUnique({ where: { id: backupId } });
+    if (!log) {
+      throw new NotFoundException(`Backup ${backupId} not found in catalog`);
+    }
+    const changes = (log.changes as { filename?: string } | null) ?? {};
+    const filename = changes.filename;
+    if (!filename || typeof filename !== 'string') {
+      throw new BadRequestException(
+        `Backup catalog entry ${backupId} is missing the 'filename' field in changes`,
+      );
+    }
+
+    // 2. Prepare tmp paths
+    const stagingId = randomBytes(4).toString('hex');
+    const tmpZipPath = path.join(os.tmpdir(), `xch-restore-${stagingId}.zip`);
+    const stagingDir = path.join(os.tmpdir(), `xch-restore-stage-${stagingId}`);
+    await fs.mkdir(stagingDir, { recursive: true });
+
+    try {
+      // 3. Download to tmp file (streaming)
+      onProgress?.('download', 0, 1, `Downloading backup ${filename}`);
+      await this.downloadFromBackupBucket(filename, tmpZipPath);
+
+      // 4. Stream-process : magic byte → unzipper → router
+      onProgress?.('extract', 0, 1, 'Parsing archive…');
+      const fileStream = createReadStream(tmpZipPath);
+      const validator = new MagicByteValidator();
+      const zipStream = unzipper.Parse({ forceStream: true });
+      fileStream.pipe(validator).pipe(zipStream);
+      // Node `.pipe()` chains do NOT propagate errors automatically. Without
+      // explicit forwarding, an error emitted by `validator` (e.g. magic-byte
+      // mismatch via `callback(new BadRequestException(...))`) is never seen
+      // by `zipStream`, and the `for await` consumer hangs forever. The
+      // forwarding below destroys `zipStream` with the upstream error, which
+      // makes the for-await loop reject with that error and lets the outer
+      // catch turn it back into a clean BadRequestException.
+      fileStream.on('error', (err) => validator.destroy(err));
+      validator.on('error', (err) => zipStream.destroy(err));
+
+      const dataFiles: Record<string, unknown[]> = {};
+      const stagedFiles = new Map<
+        string,
+        { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
+      >();
+      let v2Metadata: BackupMetadataV2 | undefined;
+      let v1MetadataRaw: Buffer | undefined;
+      let v1Prefix: string | undefined;
+      const parseErrors: string[] = [];
+
+      try {
+        // unzipper.Parse exposes the entry stream as an async iterable when
+        // `forceStream: true`. Each entry is a Readable + has .path / .type /
+        // .vars / .buffer() / .autodrain().
+        for await (const entry of zipStream as AsyncIterable<unzipper.Entry>) {
+          const entryPath = entry.path;
+
+          // V2 top-level metadata
+          if (entryPath === 'metadata.json') {
+            const raw = await entry.buffer();
+            try {
+              v2Metadata = JSON.parse(raw.toString('utf8')) as BackupMetadataV2;
+            } catch {
+              parseErrors.push('metadata.json');
+            }
+            continue;
+          }
+
+          // V1 prefix metadata — capture for potential delegation
+          const v1Match = entryPath.match(/^(full-backup-[^/]+|site-[^/]+)\/metadata\.json$/);
+          if (v1Match) {
+            v1MetadataRaw = await entry.buffer();
+            v1Prefix = v1Match[1];
+            continue;
+          }
+
+          // V2 data table
+          if (entryPath.startsWith('data/') && entryPath.endsWith('.json')) {
+            const table = entryPath.slice('data/'.length, -'.json'.length);
+            const raw = await entry.buffer();
+            try {
+              dataFiles[table] = JSON.parse(raw.toString('utf8')) as unknown[];
+            } catch {
+              parseErrors.push(entryPath);
+            }
+            continue;
+          }
+
+          // V2 minio file — stage to disk with hash mid-stream
+          if (entryPath.startsWith('minio/')) {
+            // Layout: minio/<bucket>/<key…> — bucket is first segment after 'minio/'
+            const rest = entryPath.slice('minio/'.length);
+            const slash = rest.indexOf('/');
+            if (slash < 0) {
+              entry.autodrain();
+              parseErrors.push(`malformed minio entry name: ${entryPath}`);
+              continue;
+            }
+            const bucket = rest.slice(0, slash);
+            const key = rest.slice(slash + 1);
+
+            const stagedPath = path.join(stagingDir, randomBytes(8).toString('hex'));
+            const hashing = new HashingStream();
+            const writeStream = createWriteStream(stagedPath);
+            await pipeline(entry, hashing, writeStream);
+
+            stagedFiles.set(entryPath, {
+              tmpPath: stagedPath,
+              sha256: hashing.digest(),
+              size: hashing.bytesProcessed,
+              bucket,
+              key,
+            });
+            continue;
+          }
+
+          // V1 prefix data/file entries — autodrain (delegation will re-read tmp)
+          if (v1Prefix && entryPath.startsWith(`${v1Prefix}/`)) {
+            entry.autodrain();
+            continue;
+          }
+
+          // Unknown — autodrain to avoid stream stall
+          entry.autodrain();
+        }
+      } catch (err: unknown) {
+        // Propagate BadRequestException from MagicByteValidator unchanged.
+        if (err instanceof BadRequestException) throw err;
+        throw new BadRequestException(
+          `Failed to parse backup archive: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
+      // 5. Validation cascade — 4 checks (figés plan)
+
+      // (a) V1 archive : delegate to legacy AdmZip path.
+      // Two ways an archive is recognized as v1 :
+      //   - it has a `<v1-prefix>/metadata.json` entry and NO top-level metadata.json
+      //   - it has a top-level metadata.json but its `version` is a string (e.g. '1.0')
+      const looksV1ByPrefix = !!v1MetadataRaw && !v2Metadata;
+      const looksV1ByVersion = !!v2Metadata && typeof v2Metadata.version === 'string';
+      if (looksV1ByPrefix || looksV1ByVersion) {
+        this.logger.log(
+          `Detected v1 backup (${looksV1ByPrefix ? 'prefix layout' : 'string version'}) ` +
+            `— delegating to legacy restoreFullBackup`,
+        );
+        const buffer = await fs.readFile(tmpZipPath);
+        const result = await this.restoreFullBackup(tenantId, buffer, userId);
+        return { kind: 'delegated-v1', ...result };
+      }
+
+      // (b) Metadata absent or unparseable.
+      if (!v2Metadata) {
+        if (parseErrors.includes('metadata.json')) {
+          throw new BadRequestException(
+            'Backup metadata.json missing or corrupted: JSON parse failed',
+          );
+        }
+        throw new BadRequestException(
+          'Backup metadata.json missing or corrupted: entry not found in archive',
+        );
+      }
+
+      // (c) Unsupported version.
+      if (typeof v2Metadata.version !== 'number' || v2Metadata.version !== 2) {
+        throw new BadRequestException(`Unsupported backup version: ${v2Metadata.version}`);
+      }
+
+      // (d) Per-file SHA-256 integrity vs metadata.files map.
+      const invalidChecksums: string[] = [];
+      const missingFiles: string[] = [];
+      for (const [entryPath, expected] of Object.entries(v2Metadata.files)) {
+        const staged = stagedFiles.get(entryPath);
+        if (!staged) {
+          missingFiles.push(entryPath);
+          continue;
+        }
+        if (staged.sha256 !== expected.sha256) {
+          invalidChecksums.push(entryPath);
+        }
+      }
+
+      // 6. Dry-run path — return the projected diff, no writes.
+      if (opts.dryRun) {
+        onProgress?.('dry-run', 1, 1, 'Computing dry-run report…');
+        const wouldCreate: Record<string, number> = {};
+        const wouldUpdate: Record<string, number> = {};
+        const wouldSkip: Record<string, number> = {};
+        // Step 3 stub : without upsertByNaturalKey we cannot tell create from
+        // update, so all rows are tagged 'wouldCreate'. Step 4 refines this
+        // with real natural-key lookups against the live DB.
+        for (const [table, records] of Object.entries(dataFiles)) {
+          wouldCreate[table] = records.length;
+        }
+
+        const totalSize = Array.from(stagedFiles.values()).reduce((acc, f) => acc + f.size, 0);
+        // Rough 50 MB/s throughput model — indicative, not an SLA.
+        const estimatedDurationSec = Math.max(1, Math.ceil(totalSize / (50 * 1024 * 1024)));
+
+        const report = toDryRunReportResponseDto({
+          wouldCreate,
+          wouldUpdate,
+          wouldSkip,
+          missingFiles,
+          invalidChecksums,
+          totalSize,
+          estimatedDurationSec,
+        });
+        return { kind: 'dry-run', report };
+      }
+
+      // 7. Real run — refuse on integrity violation.
+      if (invalidChecksums.length > 0 || missingFiles.length > 0) {
+        throw new BadRequestException(
+          `Backup integrity check failed: ` +
+            `${invalidChecksums.length} sha256 mismatch(es), ` +
+            `${missingFiles.length} declared file(s) missing from archive`,
+        );
+      }
+
+      // 8. Real run — delegate to step 4 (currently a clear-error stub).
+      onProgress?.('apply', 0, 1, 'Applying data to DB…');
+      const applied = await this.applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId);
+      onProgress?.('done', 1, 1, 'Restore complete');
+
+      await this.logBackupAction(tenantId, userId, 'RESTORE_FULL_V2', {
+        filename,
+        counts: applied.counts,
+      });
+
+      return {
+        kind: 'applied',
+        message: 'Restore complet v2 appliqué avec succès',
+        counts: applied.counts,
+        siteIds: applied.siteIds,
+      };
+    } finally {
+      // Always cleanup tmp zip + staging dir, even on exception path.
+      await fs.rm(tmpZipPath, { force: true }).catch((err: unknown) => {
+        this.logger.warn(
+          `Failed to clean up tmp restore zip ${tmpZipPath}: ` +
+            `${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+      await fs.rm(stagingDir, { recursive: true, force: true }).catch((err: unknown) => {
+        this.logger.warn(
+          `Failed to clean up staging dir ${stagingDir}: ` +
             `${err instanceof Error ? err.message : 'Unknown error'}`,
         );
       });

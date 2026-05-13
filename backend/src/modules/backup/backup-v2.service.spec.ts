@@ -1,18 +1,22 @@
 import { Readable } from 'stream';
-import { createHash } from 'crypto';
+import { pipeline } from 'stream/promises';
+import { createHash, randomBytes } from 'crypto';
 import * as fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as archiver from 'archiver';
+import { BadRequestException } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require('adm-zip');
 
 import {
   BackupService,
   HashingStream,
+  MagicByteValidator,
   BackupMetadataV2,
   BackupFileEntryV2,
+  RestoreFullV2Result,
 } from './backup.service';
 
 /**
@@ -422,6 +426,452 @@ describe('BackupService.uploadTmpToBackupBucket (Track D.1 step 2)', () => {
       expect(mockClient.fPutObject).toHaveBeenCalled();
     } finally {
       await fs.rm(tmpPath, { force: true });
+    }
+  });
+});
+
+// ============================================================================
+// Track D.1 Phase 1 step 3 — streaming restore v2 + MagicByteValidator
+// ============================================================================
+
+describe('MagicByteValidator (Track D.1 step 3)', () => {
+  /** Helper: drain validator + collect output, resolve/reject on end/error. */
+  async function feedAndCollect(
+    validator: MagicByteValidator,
+    chunks: Buffer[],
+  ): Promise<{ output: Buffer; error: Error | null }> {
+    const sink: Buffer[] = [];
+    let error: Error | null = null;
+    validator.on('data', (chunk: Buffer) => sink.push(chunk));
+    validator.on('error', (err: Error) => {
+      error = err;
+    });
+
+    Readable.from(chunks).pipe(validator);
+    await new Promise<void>((resolve) => {
+      validator.on('end', resolve);
+      validator.on('error', () => resolve());
+    });
+    return { output: Buffer.concat(sink), error };
+  }
+
+  it('passes ZIP magic bytes through unchanged (single chunk)', async () => {
+    const validator = new MagicByteValidator();
+    const payload = Buffer.concat([
+      Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+      Buffer.from('rest of the zip file…'),
+    ]);
+    const { output, error } = await feedAndCollect(validator, [payload]);
+    expect(error).toBeNull();
+    expect(output.equals(payload)).toBe(true);
+  });
+
+  it('rejects non-ZIP bytes with BadRequestException', async () => {
+    const validator = new MagicByteValidator();
+    const txt = Buffer.from('Hello world — definitely not a zip archive');
+    const { error } = await feedAndCollect(validator, [txt]);
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect((error as BadRequestException).message).toMatch(/ZIP magic bytes/i);
+  });
+
+  it('handles partial first chunk (<4 bytes) by buffering until 4 bytes', async () => {
+    const validator = new MagicByteValidator();
+    // 1 byte chunk then 3 bytes chunk — must reassemble before validating.
+    const { output, error } = await feedAndCollect(validator, [
+      Buffer.from([0x50]),
+      Buffer.from([0x4b, 0x03, 0x04]),
+      Buffer.from('payload'),
+    ]);
+    expect(error).toBeNull();
+    expect(output.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))).toBe(true);
+    expect(output.subarray(4).toString()).toBe('payload');
+  });
+
+  it('rejects truncated stream (< 4 bytes total)', async () => {
+    const validator = new MagicByteValidator();
+    const { error } = await feedAndCollect(validator, [Buffer.from([0x50, 0x4b])]);
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect((error as BadRequestException).message).toMatch(/stream ended before/i);
+  });
+});
+
+describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
+  /**
+   * Build a real v2 backup ZIP at `tmpPath` using buildArchiveV2ToTmp
+   * (production code path). Returns the populated metadata.
+   */
+  async function buildV2BackupFixture(
+    service: BackupService,
+    tmpPath: string,
+    args: {
+      tenantId?: string;
+      data?: Record<string, unknown[]>;
+      buckets?: string[];
+      metadataOverrides?: Partial<BackupMetadataV2>;
+    } = {},
+  ): Promise<BackupMetadataV2> {
+    const tenantId = args.tenantId ?? 'tnt-test';
+    const data = args.data ?? { sites: [{ id: 's1', name: 'Site A' }] };
+    const buckets = args.buckets ?? [];
+    const metadata: BackupMetadataV2 = {
+      version: 2,
+      createdAt: '2026-05-13T10:00:00.000Z',
+      tenantId,
+      type: 'db-only',
+      siteId: null,
+      siteCode: null,
+      appVersion: '2.2.0',
+      buckets,
+      counts: Object.fromEntries(
+        Object.entries(data).map(([k, v]) => [k, v.length]),
+      ),
+      files: {},
+      ...args.metadataOverrides,
+    };
+
+    await (service as never as {
+      buildArchiveV2ToTmp: (a: {
+        tmpPath: string;
+        data: Record<string, unknown[]>;
+        buckets: string[];
+        metadata: BackupMetadataV2;
+      }) => Promise<{ size: number; sha256: string }>;
+    }).buildArchiveV2ToTmp({ tmpPath, data, buckets, metadata });
+    return metadata;
+  }
+
+  /**
+   * Build a hand-crafted ZIP for the edge-case tests (raw archiver, bypass
+   * the v2 builder so we can produce malformed / v1-shaped / version-3
+   * archives that the production builder would refuse).
+   */
+  async function buildRawArchive(
+    tmpPath: string,
+    entries: Array<{ name: string; content: string | Buffer }>,
+  ): Promise<void> {
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    const writeStream = createWriteStream(tmpPath);
+    const pipelinePromise = pipeline(archive, writeStream);
+    for (const entry of entries) {
+      archive.append(entry.content, { name: entry.name });
+    }
+    await archive.finalize();
+    await pipelinePromise;
+  }
+
+  /**
+   * Wire a BackupService with mocked deps : auditLog row resolves to the
+   * fixture filename ; fGetObject copies the fixture to the requested
+   * tmpPath (simulates streaming download).
+   */
+  function wireService(zipFixturePath: string): {
+    service: BackupService;
+    mockClient: Record<string, jest.Mock>;
+    prismaStub: { auditLog: { findUnique: jest.Mock } };
+  } {
+    const filename = path.basename(zipFixturePath);
+    const auditLog = { id: 'audit-1', changes: { filename } };
+    const prismaStub = {
+      auditLog: { findUnique: jest.fn().mockResolvedValue(auditLog), create: jest.fn() },
+    };
+    const mockClient = {
+      fGetObject: jest.fn(async (_bucket: string, _name: string, target: string) => {
+        await fs.copyFile(zipFixturePath, target);
+      }),
+    };
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      {
+        get: jest.fn((k: string, fb?: string) =>
+          k === 'MINIO_BUCKET' ? 'xch-storage' : fb ?? '',
+        ),
+      } as never,
+    );
+    (service as unknown as { _minioClient: unknown })._minioClient = mockClient;
+    return { service, mockClient, prismaStub };
+  }
+
+  // -- 10 tests per user's spec --------------------------------------------
+
+  it('1. magic byte valide ZIP → pass-through (round-trip basique)', async () => {
+    // Round-trip step 2 → step 3 dryRun. Counts identiques entre backup et report.
+    const tmpDir = os.tmpdir();
+    const tmpZip = path.join(tmpDir, `v2-rt-${randomBytes(4).toString('hex')}.zip`);
+    const stubService = new BackupService(
+      {} as never,
+      {} as never,
+      { get: jest.fn() } as never,
+    );
+    const data = {
+      sites: [{ id: 's1', name: 'A' }, { id: 's2', name: 'B' }],
+      assets: [{ id: 'a1', siteId: 's1', name: 'Switch' }],
+    };
+    const metadata = await buildV2BackupFixture(stubService, tmpZip, { data });
+
+    try {
+      const { service } = wireService(tmpZip);
+      const result = await service.restoreFullBackupV2('tnt-test', 'audit-1', { dryRun: true });
+
+      expect(result.kind).toBe('dry-run');
+      if (result.kind !== 'dry-run') throw new Error('unreachable');
+
+      // Counts from the dry-run report match the metadata.counts written at step 2.
+      expect(result.report.wouldCreate).toEqual(metadata.counts);
+      expect(result.report.invalidChecksums).toEqual([]);
+      expect(result.report.missingFiles).toEqual([]);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('2. magic byte invalide (.txt) → BadRequestException', async () => {
+    const tmpZip = path.join(os.tmpdir(), `not-a-zip-${randomBytes(4).toString('hex')}.txt`);
+    await fs.writeFile(tmpZip, Buffer.from('not a zip at all just text content'));
+    try {
+      const { service } = wireService(tmpZip);
+      await expect(
+        service.restoreFullBackupV2('tnt-test', 'audit-1', { dryRun: true }),
+      ).rejects.toThrow(BadRequestException);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('3. metadata.json absent → BadRequestException', async () => {
+    const tmpZip = path.join(os.tmpdir(), `no-meta-${randomBytes(4).toString('hex')}.zip`);
+    await buildRawArchive(tmpZip, [
+      { name: 'data/sites.json', content: '[]' },
+      // NO metadata.json
+    ]);
+    try {
+      const { service } = wireService(tmpZip);
+      await expect(
+        service.restoreFullBackupV2('tnt-test', 'audit-1', { dryRun: true }),
+      ).rejects.toThrow(/metadata\.json missing or corrupted/i);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('4. metadata.json JSON.parse fail → BadRequestException', async () => {
+    const tmpZip = path.join(os.tmpdir(), `bad-meta-${randomBytes(4).toString('hex')}.zip`);
+    await buildRawArchive(tmpZip, [
+      { name: 'data/sites.json', content: '[]' },
+      { name: 'metadata.json', content: '{ not valid json :' },
+    ]);
+    try {
+      const { service } = wireService(tmpZip);
+      await expect(
+        service.restoreFullBackupV2('tnt-test', 'audit-1', { dryRun: true }),
+      ).rejects.toThrow(/JSON parse failed/i);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('5. version string "1.0" → délégation legacy restoreFullBackup', async () => {
+    // V1-version archive with TOP-LEVEL metadata (anomaly variant): typeof
+    // metadata.version === 'string' triggers delegation regardless of
+    // prefix layout.
+    const tmpZip = path.join(os.tmpdir(), `v1-vers-${randomBytes(4).toString('hex')}.zip`);
+    await buildRawArchive(tmpZip, [
+      { name: 'data/sites.json', content: '[]' },
+      {
+        name: 'metadata.json',
+        content: JSON.stringify({ version: '1.0', type: 'full', tenantId: 'tnt-test' }),
+      },
+    ]);
+    try {
+      const { service } = wireService(tmpZip);
+      const restoreFullBackupSpy = jest
+        .spyOn(service, 'restoreFullBackup')
+        .mockResolvedValue({
+          message: 'v1 restored',
+          counts: { sites: 3, assets: 12 },
+          siteIds: ['s1', 's2', 's3'],
+        });
+
+      const result = await service.restoreFullBackupV2('tnt-test', 'audit-1');
+      expect(restoreFullBackupSpy).toHaveBeenCalledTimes(1);
+      expect(result.kind).toBe('delegated-v1');
+      if (result.kind !== 'delegated-v1') throw new Error('unreachable');
+      expect(result.counts).toEqual({ sites: 3, assets: 12 });
+      expect(result.siteIds).toEqual(['s1', 's2', 's3']);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('5b. v1 archive by PREFIX (full-backup-<ts>/) → délégation legacy', async () => {
+    const tmpZip = path.join(os.tmpdir(), `v1-pref-${randomBytes(4).toString('hex')}.zip`);
+    await buildRawArchive(tmpZip, [
+      {
+        name: 'full-backup-2026-05-09-22-00-00/metadata.json',
+        content: JSON.stringify({ version: '1.0', type: 'full' }),
+      },
+      {
+        name: 'full-backup-2026-05-09-22-00-00/data/sites.json',
+        content: '[]',
+      },
+    ]);
+    try {
+      const { service } = wireService(tmpZip);
+      const restoreFullBackupSpy = jest
+        .spyOn(service, 'restoreFullBackup')
+        .mockResolvedValue({
+          message: 'v1 restored',
+          counts: { sites: 0 },
+          siteIds: [],
+        });
+
+      const result = await service.restoreFullBackupV2('tnt-test', 'audit-1');
+      expect(restoreFullBackupSpy).toHaveBeenCalled();
+      expect(result.kind).toBe('delegated-v1');
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('6. version number 2 → streaming path (dryRun returns report)', async () => {
+    // Already exercised by test 1 (round-trip). Reassert version=2 path explicitly.
+    const tmpZip = path.join(os.tmpdir(), `v2-path-${randomBytes(4).toString('hex')}.zip`);
+    const stub = new BackupService({} as never, {} as never, { get: jest.fn() } as never);
+    await buildV2BackupFixture(stub, tmpZip, { data: { sites: [] } });
+    try {
+      const { service } = wireService(tmpZip);
+      const result = await service.restoreFullBackupV2('tnt-test', 'audit-1', { dryRun: true });
+      expect(result.kind).toBe('dry-run');
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('7. version number 3 → BadRequestException Unsupported', async () => {
+    const tmpZip = path.join(os.tmpdir(), `v3-${randomBytes(4).toString('hex')}.zip`);
+    await buildRawArchive(tmpZip, [
+      { name: 'data/sites.json', content: '[]' },
+      {
+        name: 'metadata.json',
+        content: JSON.stringify({
+          version: 3,
+          createdAt: '2026-05-13T10:00:00Z',
+          tenantId: 'tnt-test',
+          type: 'full',
+          siteId: null,
+          siteCode: null,
+          appVersion: '3.0.0',
+          buckets: [],
+          counts: {},
+          files: {},
+        }),
+      },
+    ]);
+    try {
+      const { service } = wireService(tmpZip);
+      await expect(
+        service.restoreFullBackupV2('tnt-test', 'audit-1', { dryRun: true }),
+      ).rejects.toThrow(/Unsupported backup version: 3/i);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('8. sha256 mismatch on 1 file → reject entry + dryRunReport populates invalidChecksums', async () => {
+    // Hand-craft a ZIP with one minio entry whose content does NOT match the
+    // sha256 declared in metadata.files. The dry-run path captures the
+    // mismatch without throwing.
+    const tmpZip = path.join(os.tmpdir(), `mismatch-${randomBytes(4).toString('hex')}.zip`);
+    const wrongSha = 'a'.repeat(64);
+    await buildRawArchive(tmpZip, [
+      { name: 'minio/test-bucket/file.txt', content: 'actual content here' },
+      {
+        name: 'metadata.json',
+        content: JSON.stringify({
+          version: 2,
+          createdAt: '2026-05-13T10:00:00Z',
+          tenantId: 'tnt-test',
+          type: 'full',
+          siteId: null,
+          siteCode: null,
+          appVersion: '2.2.0',
+          buckets: ['test-bucket'],
+          counts: {},
+          files: {
+            'minio/test-bucket/file.txt': {
+              size: 999,
+              sha256: wrongSha,
+              bucket: 'test-bucket',
+              key: 'file.txt',
+            },
+          },
+        }),
+      },
+    ]);
+    try {
+      const { service } = wireService(tmpZip);
+      const result = await service.restoreFullBackupV2('tnt-test', 'audit-1', { dryRun: true });
+      expect(result.kind).toBe('dry-run');
+      if (result.kind !== 'dry-run') throw new Error('unreachable');
+      expect(result.report.invalidChecksums).toEqual(['minio/test-bucket/file.txt']);
+      expect(result.report.missingFiles).toEqual([]);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('9. sha256 mismatch + NOT dry-run → BadRequestException integrity check failed', async () => {
+    const tmpZip = path.join(os.tmpdir(), `mismatch-fail-${randomBytes(4).toString('hex')}.zip`);
+    await buildRawArchive(tmpZip, [
+      { name: 'minio/test-bucket/file.txt', content: 'actual' },
+      {
+        name: 'metadata.json',
+        content: JSON.stringify({
+          version: 2,
+          createdAt: '2026-05-13T10:00:00Z',
+          tenantId: 'tnt-test',
+          type: 'full',
+          siteId: null,
+          siteCode: null,
+          appVersion: '2.2.0',
+          buckets: ['test-bucket'],
+          counts: {},
+          files: {
+            'minio/test-bucket/file.txt': {
+              size: 6,
+              sha256: 'b'.repeat(64),
+              bucket: 'test-bucket',
+              key: 'file.txt',
+            },
+          },
+        }),
+      },
+    ]);
+    try {
+      const { service } = wireService(tmpZip);
+      await expect(
+        service.restoreFullBackupV2('tnt-test', 'audit-1', { dryRun: false }),
+      ).rejects.toThrow(/integrity check failed/i);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('10. real-run intact ZIP → applyDataFilesToDb stub throws clear step-4 message', async () => {
+    // Step 3 explicitly DOES NOT ship DB writes. A non-dry-run on an
+    // otherwise-valid v2 archive must reach applyDataFilesToDb which throws
+    // a clear "use step 4" / "use legacy" message. This locks the safety
+    // semantic until step 4 lands.
+    const tmpZip = path.join(os.tmpdir(), `step3-stub-${randomBytes(4).toString('hex')}.zip`);
+    const stub = new BackupService({} as never, {} as never, { get: jest.fn() } as never);
+    await buildV2BackupFixture(stub, tmpZip, { data: { sites: [{ id: 's1' }] } });
+    try {
+      const { service } = wireService(tmpZip);
+      await expect(
+        service.restoreFullBackupV2('tnt-test', 'audit-1', { dryRun: false }),
+      ).rejects.toThrow(/step 3 ships streaming restore .* dry-run preview only/i);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
     }
   });
 });
