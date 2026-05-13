@@ -857,21 +857,367 @@ describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
     }
   });
 
-  it('10. real-run intact ZIP → applyDataFilesToDb stub throws clear step-4 message', async () => {
-    // Step 3 explicitly DOES NOT ship DB writes. A non-dry-run on an
-    // otherwise-valid v2 archive must reach applyDataFilesToDb which throws
-    // a clear "use step 4" / "use legacy" message. This locks the safety
-    // semantic until step 4 lands.
-    const tmpZip = path.join(os.tmpdir(), `step3-stub-${randomBytes(4).toString('hex')}.zip`);
+  it('10. real-run intact ZIP → reaches applyDataFilesToDb (step 4 lands DB writes)', async () => {
+    // Track D.1 step 4 : the stub from step 3 is now replaced by the full
+    // idempotent implementation. A non-dry-run reaches applyDataFilesToDb,
+    // which calls `prisma.$transaction(...)`. With a plain `{}` prisma stub,
+    // that throws "$transaction is not a function" — proof that the
+    // orchestrator wires through to the real DB write path (vs the step 3
+    // hard-coded BadRequestException). End-to-end DB integration test
+    // lives in step 8 with a real Postgres.
+    const tmpZip = path.join(os.tmpdir(), `step4-wire-${randomBytes(4).toString('hex')}.zip`);
     const stub = new BackupService({} as never, {} as never, { get: jest.fn() } as never);
     await buildV2BackupFixture(stub, tmpZip, { data: { sites: [{ id: 's1' }] } });
     try {
       const { service } = wireService(tmpZip);
       await expect(
         service.restoreFullBackupV2('tnt-test', 'audit-1', { dryRun: false }),
-      ).rejects.toThrow(/step 3 ships streaming restore .* dry-run preview only/i);
+      ).rejects.toThrow(/\$transaction is not a function/);
     } finally {
       await fs.rm(tmpZip, { force: true });
     }
+  });
+});
+
+// ============================================================================
+// Track D.1 Phase 1 step 4 — upsertByNaturalKey + idempotent restore
+// ============================================================================
+
+describe('BackupService.upsertByNaturalKey (Track D.1 step 4)', () => {
+  function buildService(): BackupService {
+    return new BackupService(
+      {} as never,
+      {} as never,
+      { get: jest.fn() } as never,
+    );
+  }
+
+  it('returns wasCreated:true when no row matches (create called)', async () => {
+    const service = buildService();
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const create = jest.fn().mockResolvedValue({ id: 'new-1', code: 'SITE-A' });
+    const tx = { site: { findFirst, create } };
+
+    const result = await (
+      service as never as {
+        upsertByNaturalKey: (
+          tx: unknown,
+          model: string,
+          where: object,
+          data: object,
+        ) => Promise<{ row: { id: string }; wasCreated: boolean }>;
+      }
+    ).upsertByNaturalKey(
+      tx,
+      'site',
+      { tenantId: 'tnt-1', code: 'SITE-A' },
+      { tenantId: 'tnt-1', code: 'SITE-A', name: 'Site A' },
+    );
+
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { tenantId: 'tnt-1', code: 'SITE-A' },
+    });
+    expect(create).toHaveBeenCalledWith({
+      data: { tenantId: 'tnt-1', code: 'SITE-A', name: 'Site A' },
+    });
+    expect(result.row.id).toBe('new-1');
+    expect(result.wasCreated).toBe(true);
+  });
+
+  it('returns wasCreated:false when row exists (create NOT called — skip-if-exists)', async () => {
+    const service = buildService();
+    const existing = { id: 'existing-1', code: 'SITE-A' };
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const create = jest.fn();
+    const tx = { site: { findFirst, create } };
+
+    const result = await (
+      service as never as {
+        upsertByNaturalKey: (
+          tx: unknown,
+          model: string,
+          where: object,
+          data: object,
+        ) => Promise<{ row: { id: string }; wasCreated: boolean }>;
+      }
+    ).upsertByNaturalKey(
+      tx,
+      'site',
+      { tenantId: 'tnt-1', code: 'SITE-A' },
+      { tenantId: 'tnt-1', code: 'SITE-A', name: 'Site A' },
+    );
+
+    expect(findFirst).toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(result.row.id).toBe('existing-1');
+    expect(result.wasCreated).toBe(false);
+  });
+
+  it('throws when modelName does not exist on tx', async () => {
+    const service = buildService();
+    const tx = { site: { findFirst: jest.fn() } };
+
+    await expect(
+      (
+        service as never as {
+          upsertByNaturalKey: (
+            tx: unknown,
+            model: string,
+            where: object,
+            data: object,
+          ) => Promise<unknown>;
+        }
+      ).upsertByNaturalKey(tx, 'nonExistentModel', {}, {}),
+    ).rejects.toThrow(/unknown Prisma model 'nonExistentModel'/);
+  });
+});
+
+describe('BackupService.applyDataFilesToDb idempotence (Track D.1 step 4)', () => {
+  /**
+   * Build an in-memory Prisma stub that tracks created rows per model and
+   * simulates findFirst/create idempotently.
+   */
+  function buildInMemoryPrismaStub(): {
+    prisma: Record<string, unknown>;
+    getAllCounts: () => Record<string, number>;
+  } {
+    const stores: Record<string, Array<Record<string, unknown>>> = {};
+    let nextId = 0;
+
+    const makeModel = (modelName: string): Record<string, unknown> => ({
+      findFirst: jest.fn(({ where }: { where: Record<string, unknown> }) => {
+        const store = stores[modelName] ?? [];
+        const hit = store.find((row) =>
+          Object.entries(where).every(([k, v]) => {
+            const rowV = row[k];
+            if (v instanceof Date && rowV instanceof Date) {
+              return v.getTime() === rowV.getTime();
+            }
+            if (v && typeof v === 'object' && 'startsWith' in v) {
+              return typeof rowV === 'string' &&
+                rowV.startsWith((v as { startsWith: string }).startsWith);
+            }
+            return rowV === v;
+          }),
+        );
+        return Promise.resolve(hit ?? null);
+      }),
+      create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
+        const id = data.id ?? `${modelName}-${++nextId}`;
+        const row = { ...data, id };
+        stores[modelName] ??= [];
+        stores[modelName].push(row);
+        return Promise.resolve(row);
+      }),
+      findUnique: jest.fn(() => Promise.resolve(null)),
+      upsert: jest.fn(({ where, create, update }: { where: { siteId: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
+        const store = stores['siteHealthSnapshot'] ??= [];
+        const hit = store.find((row) => row.siteId === where.siteId);
+        if (hit) {
+          Object.assign(hit, update);
+          return Promise.resolve(hit);
+        }
+        const row = { ...create, id: `siteHealthSnapshot-${++nextId}` };
+        store.push(row);
+        return Promise.resolve(row);
+      }),
+    });
+
+    const models = [
+      'contactType', 'contact', 'user', 'site', 'rack', 'asset',
+      'floorPlan', 'pin', 'assetMovement', 'task', 'taskComment',
+      'attachment', 'photo', 'billingEntity', 'expense', 'costAllocation',
+      'connectivityLink', 'budget', 'siteHealthSnapshot', 'auditLog',
+      'delegation',
+    ];
+
+    const prisma: Record<string, unknown> = {};
+    for (const m of models) prisma[m] = makeModel(m);
+    (prisma.delegation as { findFirst: jest.Mock }).findFirst = jest.fn().mockResolvedValue({
+      id: 'del-default',
+    });
+    prisma.$transaction = jest.fn(async (fn: (tx: typeof prisma) => Promise<unknown>) => fn(prisma));
+    prisma.$executeRawUnsafe = jest.fn();
+
+    return {
+      prisma,
+      getAllCounts: () => {
+        const counts: Record<string, number> = {};
+        for (const m of models) {
+          const calls = (prisma[m] as { create?: jest.Mock }).create?.mock.calls.length ?? 0;
+          if (calls > 0) counts[m] = calls;
+        }
+        return counts;
+      },
+    };
+  }
+
+  it('first call creates rows ; second call with same dataFiles creates 0 (idempotent)', async () => {
+    const { prisma, getAllCounts } = buildInMemoryPrismaStub();
+    const service = new BackupService(
+      prisma as never,
+      {} as never,
+      { get: jest.fn((k: string, fb?: string) => fb ?? '') } as never,
+    );
+
+    const dataFiles: Record<string, unknown[]> = {
+      'contact-types': [
+        { id: 'ct1', slug: 'provider', name: 'Fournisseur', category: 'PROVIDER' },
+      ],
+      sites: [{ id: 's1', code: 'SITE-A', name: 'Site A' }],
+      assets: [
+        { id: 'a1', siteId: 's1', name: 'Switch core', serialNumber: 'SN-001', type: 'SWITCH' },
+      ],
+    };
+    const stagedFiles = new Map<
+      string,
+      { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
+    >();
+
+    const first = await (
+      service as never as {
+        applyDataFilesToDb: (
+          tid: string,
+          df: Record<string, unknown[]>,
+          sf: Map<string, unknown>,
+          uid?: string,
+        ) => Promise<{ counts: Record<string, number>; siteIds: string[] }>;
+      }
+    ).applyDataFilesToDb('tnt-test', dataFiles, stagedFiles);
+
+    expect(first.counts._created).toBeGreaterThan(0);
+    expect(first.counts._skipped).toBe(0);
+    const firstCreatedTotals = getAllCounts();
+
+    const second = await (
+      service as never as {
+        applyDataFilesToDb: (
+          tid: string,
+          df: Record<string, unknown[]>,
+          sf: Map<string, unknown>,
+          uid?: string,
+        ) => Promise<{ counts: Record<string, number>; siteIds: string[] }>;
+      }
+    ).applyDataFilesToDb('tnt-test', dataFiles, stagedFiles);
+
+    // KEY assertion : second run creates ZERO new rows.
+    expect(second.counts._created).toBe(0);
+    expect(second.counts._skipped).toBeGreaterThan(0);
+    const secondCreatedTotals = getAllCounts();
+    expect(secondCreatedTotals).toEqual(firstCreatedTotals);
+  });
+
+  it('Expense fallback : receiptFile null path uses (tenantId, amount, date, label.trim().toLowerCase())', async () => {
+    const { prisma } = buildInMemoryPrismaStub();
+    const service = new BackupService(
+      prisma as never,
+      {} as never,
+      { get: jest.fn((k: string, fb?: string) => fb ?? '') } as never,
+    );
+
+    const dataFiles: Record<string, unknown[]> = {
+      'billing-entities': [
+        { id: 'be1', code: 'BE-A', name: 'Bearer A', type: 'INTERNAL' },
+      ],
+      expenses: [
+        {
+          id: 'exp1',
+          bearerId: 'be1',
+          label: '  Subscription FOO  ',
+          totalAmount: 100,
+          dateIncurred: '2026-05-13T00:00:00Z',
+          delegationId: 'del-default',
+          type: 'OPEX',
+        },
+      ],
+    };
+    const stagedFiles = new Map<
+      string,
+      { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
+    >();
+
+    await (
+      service as never as {
+        applyDataFilesToDb: (
+          tid: string,
+          df: Record<string, unknown[]>,
+          sf: Map<string, unknown>,
+          uid?: string,
+        ) => Promise<unknown>;
+      }
+    ).applyDataFilesToDb('tnt-test', dataFiles, stagedFiles);
+
+    const expenseFindFirst = (prisma.expense as { findFirst: jest.Mock }).findFirst;
+    expect(expenseFindFirst).toHaveBeenCalled();
+    const lastCall = expenseFindFirst.mock.calls[expenseFindFirst.mock.calls.length - 1][0];
+    expect(lastCall.where.label).toBe('subscription foo');
+    expect(lastCall.where.tenantId).toBe('tnt-test');
+    expect(lastCall.where.totalAmount).toBe(100);
+    expect(lastCall.where.dateIncurred).toBeInstanceOf(Date);
+    expect(lastCall.where.receiptFile).toBeUndefined();
+  });
+
+  it('Budget 2-pass : children created only after their parent (parentId remapped via idMap)', async () => {
+    const { prisma } = buildInMemoryPrismaStub();
+    const service = new BackupService(
+      prisma as never,
+      {} as never,
+      { get: jest.fn((k: string, fb?: string) => fb ?? '') } as never,
+    );
+
+    const dataFiles: Record<string, unknown[]> = {
+      'billing-entities': [{ id: 'be1', code: 'BE-A', type: 'INTERNAL', name: 'BE' }],
+      budgets: [
+        {
+          id: 'budget-child',
+          parentId: 'budget-root',
+          label: 'Child',
+          period: 'MONTH',
+          startDate: '2026-01-01',
+          endDate: '2026-01-31',
+          amount: 100,
+          billingEntityId: 'be1',
+        },
+        {
+          id: 'budget-root',
+          parentId: null,
+          label: 'Root',
+          period: 'YEAR',
+          startDate: '2026-01-01',
+          endDate: '2026-12-31',
+          amount: 1200,
+          billingEntityId: 'be1',
+        },
+      ],
+    };
+    const stagedFiles = new Map<
+      string,
+      { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
+    >();
+
+    await (
+      service as never as {
+        applyDataFilesToDb: (
+          tid: string,
+          df: Record<string, unknown[]>,
+          sf: Map<string, unknown>,
+          uid?: string,
+        ) => Promise<unknown>;
+      }
+    ).applyDataFilesToDb('tnt-test', dataFiles, stagedFiles);
+
+    const budgetCreate = (prisma.budget as { create: jest.Mock }).create;
+    expect(budgetCreate).toHaveBeenCalledTimes(2);
+    // Pass 1 : root first (parentId null)
+    const firstCall = budgetCreate.mock.calls[0][0].data;
+    expect(firstCall.label).toBe('Root');
+    expect(firstCall.parentId).toBeNull();
+    // Pass 2 : child with remapped parentId. The in-memory stub uses a
+    // global nextId counter, so the root's generated id depends on how
+    // many rows were created before it (here : 1 billingEntity then the
+    // budget root → root gets `budget-2`).
+    const secondCall = budgetCreate.mock.calls[1][0].data;
+    expect(secondCall.label).toBe('Child');
+    expect(secondCall.parentId).toBe('budget-2');
   });
 });

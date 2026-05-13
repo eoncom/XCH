@@ -9,7 +9,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Added — Track D.1 Backup v2 (phase 1 steps 1-3 / 9, ~6.75 j scope)
+### Added — Track D.1 Backup v2 (phase 1 steps 1-4 / 9, ~6.75 j scope)
 
 Phases 1.1 (pré-flight DTOs + check) et 1.2 (streaming export v2) posent
 les fondations pour la refonte streaming du backup
@@ -59,6 +59,71 @@ Tests unitaires (`backup-v2.service.spec.ts`) : 4 sections couvrant
 les 4 primitives, en évitant les dépendances externes via mocks
 inline du client MinIO et utilisation de `fs/tmp` réel pour
 l'archive. Tests round-trip avec vrai MinIO restent pour phase 1.8.
+
+#### Step 4 — Idempotent upsert refactor (~1 j budgété)
+
+- **`upsertByNaturalKey<T>(tx, modelName, where, createData)`** —
+  helper privé générique. Dispatch via `tx[modelName].findFirst` →
+  `tx[modelName].create`. Skip-if-exists (pas de field-level merge) :
+  re-restore sur DB peuplée = 0 nouveau row, idempotence stricte. Throw
+  clair si `modelName` inconnu (`tx[name]` undefined). Pragmatic `any`
+  sur le tx pour éviter une union TypeScript géante.
+- **`applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId?)`** —
+  remplace le stub step 3. Implémentation complète : 19 tables couvertes
+  avec natural keys idempotents, split en **5 transactions séquentielles
+  par phase FK** avec `{ timeout: 60_000 }` chacune :
+  1. **Tenant config** — ContactType (slug), Contact (name+typeId),
+     User (email)
+  2. **Sites + structure** — Site (code), Rack (siteId+name), Asset
+     (siteId+serialNumber, fallback siteId+name si null), FloorPlan
+     (siteId+title+version), Pin (floorPlanId+x+y+pinType)
+     + GPS coords via raw SQL `ST_SetSRID(ST_MakePoint($2,$3), 4326)`
+     (uniquement sur création — préserve les edits opérateur sur re-restore)
+  3. **Lifecycle** — AssetMovement (assetId+timestamp+fromSiteId+toSiteId),
+     Task (siteId+title+createdAt), TaskComment (taskId+authorId+createdAt
+     +body[:64]), Attachment (path = MinIO key), Photo (entityType+entityId
+     +fileUrl pour dedup)
+  4. **Finance** — BillingEntity (code), Expense (avec **fallback
+     receiptFile**), CostAllocation (expenseId+targetId), ConnectivityLink
+     (siteId+role+assetId), Budget en **2-pass parent-then-children**
+     (reuse v1 pattern backup.service.ts:1234, itère tant que progrès
+     possible, warn sur orphelins)
+  5. **Snapshots** — SiteHealthSnapshot via `tx.upsert` natif (unique
+     constraint sur siteId), AuditLog **SKIPPED** (restaurer corrompt
+     l'audit trail forensique — v1 ne le restaurait pas non plus)
+- **Expense fallback receiptFile null** (per user spec figée plan v3) :
+  si `exp.receiptFile != null` → NK = `(tenantId, totalAmount, dateIncurred,
+  label, receiptFile)`. Sinon → fallback `(tenantId, totalAmount, dateIncurred,
+  label.trim().toLowerCase())`. Documenté inline + testé. Schema Prisma
+  Expense n'a pas encore de colonne `receiptFile` → fallback est le path
+  actif aujourd'hui ; futur migration ajoutera receiptFile + contentHash
+  pour upgrade transparent.
+- **Photo content-hash dedup** : NK = `(entityType, entityId, fileUrl)`
+  (le `fileUrl` EST le MinIO key, équivalent à content-hash en pratique
+  puisqu'il ne collide que pour la même photo uploadée). Future
+  migration schema pour `Photo.contentHash` colonne offrira un dedup
+  strict par contenu indépendant du chemin.
+- **MinIO uploads post-transactions** : iterate stagedFiles, fPutObject
+  par fichier. Outside des transactions (MinIO non transactionnel).
+  Erreurs par fichier loggées mais ne roll-back PAS les DB writes —
+  l'opérateur re-run pour retry les uploads échoués (idempotence couvre
+  DB).
+- **Counts breakdown** : `{ table: total, _created: N, _skipped: M }`.
+  Re-restore = `_created: 0`, `_skipped: N` ; vérifié par test.
+
+**Redis state journal** `backup:restore:<jobId>:phase:<n>:done` est
+**parqué** (backlog → step 5 alongside Bull v3 wiring où le Redis context
+est naturel). Sans state journal, si une phase échoue, le caller re-run
+le restore entier — idempotence rend ça safe.
+
+Tests (`backup-v2.service.spec.ts` étendu, 6 nouveaux, 31 total) :
+- `upsertByNaturalKey` (3) : wasCreated:true quand pas de match (create
+  appelé), wasCreated:false sinon (create NOT called — skip-if-exists),
+  throw "unknown Prisma model" quand `tx[name]` undefined
+- `applyDataFilesToDb` (3) : idempotence smoke (1er call = N créés, 2e
+  call = 0 créés / N skippés via in-memory Prisma stub) ; Expense fallback
+  receiptFile null path utilise `label.trim().toLowerCase()` dans where ;
+  Budget 2-pass parent-then-children ordering avec parentId remappé
 
 #### Step 3 — Streaming restore v2 (~1.5 j budgété)
 

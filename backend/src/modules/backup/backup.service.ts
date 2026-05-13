@@ -1903,39 +1903,838 @@ export class BackupService {
   }
 
   /**
-   * Apply parsed data files to the database.
+   * Generic upsert-by-natural-key helper. Dispatches to the right Prisma
+   * model accessor via `tx[modelName]`. Returns the row + `wasCreated`
+   * flag, which the orchestrator uses to track idempotent re-runs
+   * (re-restore on same DB = wasCreated:false across the board).
    *
-   * **STEP 3 STUB** — not implemented for non-dry-run. The full implementation
-   * lands in Phase 1 step 4 alongside `upsertByNaturalKey`, per-table natural
-   * key strategy, and the 5-phase split `$transaction` design (cf MCP
-   * `XCH_TRACK_D1_BACKUP_V2_2026_05_10`).
+   * Convention :
+   *  - `where` MUST identify the row by its NATURAL key (e.g. `{tenantId, code}`
+   *    for Site, `{tenantId, siteId, serialNumber}` for Asset, …).
+   *    The natural-key composition is the responsibility of the caller —
+   *    per-table choices are documented in the orchestrator inline.
+   *  - `createData` is the full payload for a fresh insert. Not used when
+   *    a row already exists.
+   *  - If a row already exists for `where`, this method does NOT update it
+   *    (skip-if-exists semantics). Field-level merge is a future iteration;
+   *    skip-if-exists is the safe default for first-restore-on-populated-DB.
    *
-   * Rationale for not shipping a naive `createMany` here in step 3 : a naive
-   * loop on a populated tenant would either fail on FK ordering or create
-   * duplicates on every re-run, which is exactly what step 4's idempotence
-   * refactor exists to fix. Shipping a naive intermediate would be a
-   * regression footgun. Step 3 ships streaming + verification + dry-run
-   * preview, which IS useful in isolation (operators can inspect the diff
-   * before committing). Real restore is blocked until step 4.
+   * `tx` is typed loosely (`any`) because Prisma's model accessor map is
+   * not statically introspectable without a discriminated union of all
+   * model names — pragmatic vs. forcing every caller into a giant generic
+   * narrowing.
    *
-   * Step 3 callers should ALWAYS use `opts.dryRun: true`. The orchestrator
-   * raises a clear error if the caller forgets.
+   * Track D.1 Phase 1 step 4 — replaces the step 3 NotImplemented stub.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async upsertByNaturalKey<T extends { id: string }>(
+    tx: any,
+    modelName: string,
+    where: Record<string, unknown>,
+    createData: Record<string, unknown>,
+  ): Promise<{ row: T; wasCreated: boolean }> {
+    const model = tx[modelName];
+    if (!model || typeof model.findFirst !== 'function') {
+      throw new Error(`upsertByNaturalKey: unknown Prisma model '${modelName}'`);
+    }
+    const existing = (await model.findFirst({ where })) as T | null;
+    if (existing) return { row: existing, wasCreated: false };
+    const created = (await model.create({ data: createData })) as T;
+    return { row: created, wasCreated: true };
+  }
+
+  /**
+   * Apply parsed data files to the database — full idempotent
+   * implementation (Track D.1 Phase 1 step 4).
    *
-   * Track D.1 Phase 1 step 3 (stub) / step 4 (full).
+   * Pipeline :
+   *   5 sequential `prisma.$transaction({ timeout: 60_000 })` phases ordered
+   *   by FK dependency, each populating per-model id maps reused downstream :
+   *
+   *   ┌── Phase 1 — Tenant config ──────────────────────────┐
+   *   │  ContactType  → idMap.contactType                   │
+   *   │  Contact      → idMap.contact (depends contactType) │
+   *   │  User         → idMap.user                          │
+   *   └─────────────────────────────────────────────────────┘
+   *   ┌── Phase 2 — Sites + structure ──────────────────────┐
+   *   │  Site         → idMap.site (+ GPS coords raw SQL)   │
+   *   │  Rack         → idMap.rack                          │
+   *   │  Asset        → idMap.asset                         │
+   *   │  FloorPlan    → idMap.floorPlan                     │
+   *   │  Pin          (no idMap needed)                     │
+   *   └─────────────────────────────────────────────────────┘
+   *   ┌── Phase 3 — Lifecycle ──────────────────────────────┐
+   *   │  AssetMovement                                      │
+   *   │  Task         → idMap.task                          │
+   *   │  TaskComment                                        │
+   *   │  Attachment   (polymorphic FK)                      │
+   *   │  Photo        (polymorphic FK + content-hash dedup) │
+   *   └─────────────────────────────────────────────────────┘
+   *   ┌── Phase 4 — Finance ────────────────────────────────┐
+   *   │  BillingEntity → idMap.billingEntity                │
+   *   │  Expense       → idMap.expense (receiptFile-aware)  │
+   *   │  CostAllocation                                     │
+   *   │  ConnectivityLink                                   │
+   *   │  Budget         (2-pass parent-then-children)       │
+   *   └─────────────────────────────────────────────────────┘
+   *   ┌── Phase 5 — Snapshots + audit ──────────────────────┐
+   *   │  SiteHealthSnapshot  (upsert on siteId)             │
+   *   │  AuditLog            (append-only — SKIPPED, see §) │
+   *   └─────────────────────────────────────────────────────┘
+   *   ┌── Post-transactions — MinIO uploads ────────────────┐
+   *   │  for each stagedFile : fPutObject(bucket, key, …)   │
+   *   └─────────────────────────────────────────────────────┘
+   *
+   * Idempotence semantics : every business table uses `upsertByNaturalKey`
+   * with skip-if-exists. Re-restoring the same archive on the same DB
+   * yields `_created: 0` (everything found by natural key).
+   *
+   * AuditLog skipped : restoring audit rows would corrupt the actual audit
+   * trail (forensic). The original audit log stays intact. Mirror the v1
+   * behaviour (v1 never restored AuditLog either).
+   *
+   * Redis state journal `backup:restore:<jobId>:phase:<n>:done` is OUT OF
+   * SCOPE for step 4 (parked to step 5 alongside Bull v3 wiring where the
+   * Redis context is natural). If a phase fails, the caller re-runs the
+   * whole restore — idempotence makes that safe.
+   *
+   * Track D.1 Phase 1 step 4.
    */
   private async applyDataFilesToDb(
-    _tenantId: string,
-    _dataFiles: Record<string, unknown[]>,
-    _stagedFiles: Map<string, { tmpPath: string; sha256: string; size: number; bucket: string; key: string }>,
-    _userId?: string,
+    tenantId: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dataFiles: Record<string, any[]>,
+    stagedFiles: Map<
+      string,
+      { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
+    >,
+    userId?: string,
   ): Promise<{ counts: Record<string, number>; siteIds: string[] }> {
-    throw new BadRequestException(
-      'Track D.1 Phase 1 step 3 ships streaming restore + dry-run preview only. ' +
-        'Real restore (DB writes + MinIO uploads) lands in step 4 with per-table ' +
-        'idempotence via upsertByNaturalKey. Re-issue this request with `dryRun: true` ' +
-        'to inspect the projected diff; meanwhile use the legacy ' +
-        '`POST /backup/full/restore` (multipart upload) for the destructive path.',
+    const ids = {
+      contactType: new Map<string, string>(),
+      contact: new Map<string, string>(),
+      user: new Map<string, string>(),
+      billingEntity: new Map<string, string>(),
+      site: new Map<string, string>(),
+      floorPlan: new Map<string, string>(),
+      rack: new Map<string, string>(),
+      asset: new Map<string, string>(),
+      task: new Map<string, string>(),
+      expense: new Map<string, string>(),
+      budget: new Map<string, string>(),
+    };
+    const created: Record<string, number> = {};
+    const skipped: Record<string, number> = {};
+    const siteIds: string[] = [];
+
+    const track = (table: string, wasCreated: boolean): void => {
+      if (wasCreated) created[table] = (created[table] ?? 0) + 1;
+      else skipped[table] = (skipped[table] ?? 0) + 1;
+    };
+
+    // ====================================================================
+    // PHASE 1 — Tenant config
+    // ====================================================================
+    await this.prisma.$transaction(
+      async (tx) => {
+        // ContactType — NK: (tenantId, slug)
+        for (const ct of dataFiles['contact-types'] ?? []) {
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'contactType',
+            { tenantId, slug: ct.slug },
+            {
+              tenantId,
+              name: ct.name,
+              slug: ct.slug,
+              category: ct.category || 'PROVIDER',
+              icon: ct.icon,
+              color: ct.color,
+              isSystem: ct.isSystem || false,
+              isActive: ct.isActive !== false,
+            },
+          );
+          ids.contactType.set(ct.id, r.row.id);
+          track('contactTypes', r.wasCreated);
+        }
+
+        // Contact — NK: (tenantId, name, typeId)
+        for (const c of dataFiles['contacts'] ?? []) {
+          const typeId = c.typeId ? ids.contactType.get(c.typeId) : null;
+          if (c.typeId && !typeId) continue; // orphan
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'contact',
+            { tenantId, name: c.name, typeId: typeId ?? null },
+            {
+              tenantId,
+              name: c.name,
+              typeId: typeId,
+              email: c.email,
+              phone: c.phone,
+              mobile: c.mobile,
+              address: c.address,
+              company: c.company,
+              role: c.role,
+              notes: c.notes,
+            },
+          );
+          ids.contact.set(c.id, r.row.id);
+          track('contacts', r.wasCreated);
+        }
+
+        // User — NK: (tenantId, email). Restoring users carries credentials
+        // as-is from the source tenant ; same-tenant assumption (cf v1).
+        for (const u of dataFiles['users'] ?? []) {
+          if (!u.email) continue;
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'user',
+            { tenantId, email: u.email },
+            {
+              tenantId,
+              email: u.email,
+              name: u.name,
+              role: u.role,
+              status: u.status ?? 'ACTIVE',
+              passwordHash: u.passwordHash ?? null,
+              externalId: u.externalId ?? null,
+            },
+          );
+          ids.user.set(u.id, r.row.id);
+          track('users', r.wasCreated);
+        }
+      },
+      { timeout: 60_000 },
     );
+
+    // ====================================================================
+    // PHASE 2 — Sites + structure
+    // ====================================================================
+    const sitesWithCoords: { id: string; lat: number; lng: number }[] = [];
+    await this.prisma.$transaction(
+      async (tx) => {
+        const defaultDelId = await this.getOrCreateDefaultDelegation(tx, tenantId);
+
+        // Site — NK: (tenantId, code)
+        for (const s of dataFiles['sites'] ?? []) {
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'site',
+            { tenantId, code: s.code },
+            {
+              tenantId,
+              delegationId: s.delegationId || defaultDelId,
+              code: s.code,
+              name: s.name,
+              status: s.status || 'ACTIVE',
+              address: s.address,
+              city: s.city,
+              postalCode: s.postalCode,
+              country: s.country || 'France',
+              healthStatus: s.healthStatus || 'UNKNOWN',
+              accessSchedules: s.accessSchedules ?? null,
+              accessBadges: s.accessBadges ?? null,
+              accessProcedures: s.accessProcedures ?? null,
+              accessSafety: s.accessSafety ?? null,
+              smbPath: s.smbPath ?? null,
+              sharepointUrl: s.sharepointUrl ?? null,
+              gedUrl: s.gedUrl ?? null,
+              accessRightsUrl: s.accessRightsUrl ?? null,
+              cutProcedure: s.cutProcedure || undefined,
+              governanceDocsRef: s.governanceDocsRef || undefined,
+              notes: s.notes || undefined,
+              monitoringEnabled: s.monitoringEnabled ?? true,
+            },
+          );
+          ids.site.set(s.id, r.row.id);
+          if (r.wasCreated) siteIds.push(r.row.id);
+          track('sites', r.wasCreated);
+          // GPS coords queued for raw SQL (only when newly created — re-restore
+          // doesn't overwrite operator GPS edits).
+          if (r.wasCreated && s.latitude != null && s.longitude != null) {
+            sitesWithCoords.push({
+              id: r.row.id,
+              lat: Number(s.latitude),
+              lng: Number(s.longitude),
+            });
+          }
+        }
+
+        // GPS raw SQL update inside the same transaction.
+        for (const sc of sitesWithCoords) {
+          try {
+            await tx.$executeRawUnsafe(
+              `UPDATE "sites" SET coordinates = ST_SetSRID(ST_MakePoint($2, $3), 4326) WHERE id = $1`,
+              sc.id,
+              sc.lng,
+              sc.lat,
+            );
+          } catch {
+            /* non-critical */
+          }
+        }
+
+        // Rack — NK: (tenantId, siteId, name)
+        for (const rk of dataFiles['racks'] ?? []) {
+          const siteId = ids.site.get(rk.siteId);
+          if (!siteId) continue;
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'rack',
+            { tenantId, siteId, name: rk.name },
+            {
+              tenantId,
+              siteId,
+              name: rk.name,
+              heightU: rk.heightU || 42,
+              location: rk.location,
+              specs: rk.specs,
+              notes: rk.notes,
+              serialNumber: rk.serialNumber,
+              model: rk.model,
+              manufacturer: rk.manufacturer,
+              rackType: rk.rackType || 'FLOOR_STANDING',
+              status: rk.status || 'IN_SERVICE',
+            },
+          );
+          ids.rack.set(rk.id, r.row.id);
+          track('racks', r.wasCreated);
+        }
+
+        // Asset — NK: (tenantId, siteId, serialNumber) ; fallback (tenantId, siteId, name)
+        // when serialNumber is absent (field equipment without a stable serial).
+        for (const a of dataFiles['assets'] ?? []) {
+          const siteId = ids.site.get(a.siteId);
+          if (!siteId) continue;
+          const rackId = a.rackId ? ids.rack.get(a.rackId) ?? null : null;
+          const where: Record<string, unknown> = a.serialNumber
+            ? { tenantId, siteId, serialNumber: a.serialNumber }
+            : { tenantId, siteId, name: a.name };
+          const r = await this.upsertByNaturalKey<{ id: string }>(tx, 'asset', where, {
+            tenantId,
+            siteId,
+            delegationId: a.delegationId || defaultDelId,
+            name: a.name,
+            type: a.type,
+            status: a.status || 'IN_SERVICE',
+            manufacturer: a.manufacturer,
+            model: a.model,
+            serialNumber: a.serialNumber,
+            ip: a.ip ?? null,
+            mac: a.mac ?? null,
+            hostname: a.hostname ?? null,
+            vlan: a.vlan ?? null,
+            port: a.port ?? null,
+            locationText: a.locationText,
+            inventoryTag: a.inventoryTag,
+            qrCodeUrl: a.qrCodeUrl,
+            qrCodeToken: a.qrCodeToken,
+            purchaseDate: a.purchaseDate ? new Date(a.purchaseDate) : undefined,
+            warrantyEnd: a.warrantyEnd ? new Date(a.warrantyEnd) : undefined,
+            weight: a.weight != null ? Number(a.weight) : undefined,
+            powerConsumption:
+              a.powerConsumption != null ? Number(a.powerConsumption) : undefined,
+            notes: a.notes,
+            rackId,
+            rackPositionU: a.rackPositionU,
+            rackHeightU: a.rackHeightU,
+            rackNotes: a.rackNotes,
+          });
+          ids.asset.set(a.id, r.row.id);
+          track('assets', r.wasCreated);
+        }
+
+        // FloorPlan — NK: (siteId, title, version)
+        for (const fp of dataFiles['floor-plans'] ?? []) {
+          const siteId = ids.site.get(fp.siteId);
+          if (!siteId) continue;
+          const title = fp.title || fp.name || 'Untitled';
+          const version = fp.version || 1;
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'floorPlan',
+            { siteId, title, version },
+            {
+              siteId,
+              title,
+              version,
+              fileUrl: fp.fileUrl || '',
+              uploadedBy: fp.uploadedBy || userId || 'restore',
+              notes: fp.notes,
+              planGroupId: fp.planGroupId,
+              fileSize: fp.fileSize != null ? Number(fp.fileSize) : undefined,
+              mimeType: fp.mimeType,
+              scaleMetersPerPixel:
+                fp.scaleMetersPerPixel != null ? Number(fp.scaleMetersPerPixel) : undefined,
+              scaleRefLine: fp.scaleRefLine || undefined,
+            },
+          );
+          ids.floorPlan.set(fp.id, r.row.id);
+          track('floorPlans', r.wasCreated);
+        }
+
+        // Pin — NK: (floorPlanId, x, y, pinType)
+        for (const pin of dataFiles['pins'] ?? []) {
+          const fpId = ids.floorPlan.get(pin.floorPlanId);
+          if (!fpId) continue;
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'pin',
+            { floorPlanId: fpId, x: pin.x, y: pin.y, pinType: pin.pinType },
+            {
+              floorPlanId: fpId,
+              pinType: pin.pinType,
+              label: pin.label,
+              description: pin.description,
+              x: pin.x,
+              y: pin.y,
+              assetId: pin.assetId ? ids.asset.get(pin.assetId) : undefined,
+              rackId: pin.rackId ? ids.rack.get(pin.rackId) : undefined,
+            },
+          );
+          track('pins', r.wasCreated);
+        }
+      },
+      { timeout: 60_000 },
+    );
+
+    // ====================================================================
+    // PHASE 3 — Lifecycle
+    // ====================================================================
+    await this.prisma.$transaction(
+      async (tx) => {
+        // AssetMovement — NK: (assetId, timestamp, fromSiteId, toSiteId)
+        for (const mov of dataFiles['asset-movements'] ?? []) {
+          const assetId = ids.asset.get(mov.assetId);
+          if (!assetId) continue;
+          const fromSiteId = mov.fromSiteId ? ids.site.get(mov.fromSiteId) ?? null : null;
+          const toSiteId = mov.toSiteId ? ids.site.get(mov.toSiteId) ?? null : null;
+          const fromRackId = mov.fromRackId ? ids.rack.get(mov.fromRackId) ?? null : null;
+          const toRackId = mov.toRackId ? ids.rack.get(mov.toRackId) ?? null : null;
+          const timestamp = mov.timestamp ? new Date(mov.timestamp) : new Date();
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'assetMovement',
+            { assetId, timestamp, fromSiteId, toSiteId },
+            {
+              tenantId,
+              assetId,
+              userId: null,
+              type: mov.type,
+              fromSiteId,
+              toSiteId,
+              fromRackId,
+              toRackId,
+              fromRackPositionU: mov.fromRackPositionU ?? null,
+              toRackPositionU: mov.toRackPositionU ?? null,
+              fromStatus: mov.fromStatus ?? null,
+              toStatus: mov.toStatus ?? null,
+              notes: mov.notes ?? null,
+              timestamp,
+            },
+          );
+          track('assetMovements', r.wasCreated);
+        }
+
+        // Task — NK: (tenantId, siteId, title, createdAt)
+        for (const t of dataFiles['tasks'] ?? []) {
+          const siteId = ids.site.get(t.siteId);
+          if (!siteId) continue;
+          const createdAt = t.createdAt ? new Date(t.createdAt) : new Date();
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'task',
+            { tenantId, siteId, title: t.title, createdAt },
+            {
+              tenantId,
+              siteId,
+              title: t.title,
+              description: t.description,
+              status: t.status || 'TODO',
+              priority: t.priority || 'MEDIUM',
+              createdBy: userId || t.createdBy,
+              dueDate: t.dueDate ? new Date(t.dueDate) : null,
+              ticketRef: t.ticketRef,
+              ticketUrl: t.ticketUrl,
+              ticketStatus: t.ticketStatus,
+              completedAt: t.completedAt ? new Date(t.completedAt) : undefined,
+              assetId: t.assetId ? ids.asset.get(t.assetId) : undefined,
+              createdAt,
+            },
+          );
+          ids.task.set(t.id, r.row.id);
+          track('tasks', r.wasCreated);
+        }
+
+        // TaskComment — NK: (taskId, authorId, createdAt, body[:64])
+        // body[:64] handles long comments (Postgres index size limits) ; in
+        // practice unique enough for natural key purposes.
+        for (const com of dataFiles['task-comments'] ?? []) {
+          const taskId = ids.task.get(com.taskId);
+          if (!taskId) continue;
+          const authorId = userId || com.authorId;
+          const createdAt = com.createdAt ? new Date(com.createdAt) : new Date();
+          const textPrefix = (com.text ?? '').slice(0, 64);
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'taskComment',
+            { taskId, authorId, createdAt, text: { startsWith: textPrefix } },
+            {
+              taskId,
+              authorId,
+              text: com.text,
+              isSystem: com.isSystem ?? false,
+              createdAt,
+            },
+          );
+          track('taskComments', r.wasCreated);
+        }
+
+        // Attachment — NK: (tenantId, path)
+        // `path` is the MinIO key, which is unique per upload.
+        for (const att of dataFiles['attachments'] ?? []) {
+          if (!att.path) continue;
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'attachment',
+            { tenantId, path: att.path },
+            {
+              tenantId,
+              assetId: att.assetId ? ids.asset.get(att.assetId) : undefined,
+              taskId: att.taskId ? ids.task.get(att.taskId) : undefined,
+              rackId: att.rackId ? ids.rack.get(att.rackId) : undefined,
+              siteId: att.siteId ? ids.site.get(att.siteId) : undefined,
+              filename: att.filename,
+              originalFilename: att.originalFilename,
+              size: att.size,
+              mimetype: att.mimetype,
+              path: att.path,
+              description: att.description,
+              category: att.category,
+              uploadedBy: att.uploadedBy || userId || 'restore',
+            },
+          );
+          track('attachments', r.wasCreated);
+        }
+
+        // Photo — content-hash dedup via fileUrl + (entityType, entityId).
+        // The Photo schema does not yet have a contentHash column ; we use
+        // (entityType, entityId, fileUrl) as the natural key, which is
+        // equivalent in practice because fileUrl IS the storage path and
+        // would only collide if the same photo was uploaded twice
+        // (rare ; the dedup catches the re-restore case cleanly).
+        for (const photo of dataFiles['photos'] ?? []) {
+          let entityId: string | undefined;
+          switch (photo.entityType) {
+            case 'site':
+              entityId = ids.site.get(photo.entityId);
+              break;
+            case 'asset':
+              entityId = ids.asset.get(photo.entityId);
+              break;
+            case 'task':
+              entityId = ids.task.get(photo.entityId);
+              break;
+          }
+          if (!entityId) continue;
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'photo',
+            { entityType: photo.entityType, entityId, fileUrl: photo.fileUrl },
+            {
+              entityType: photo.entityType,
+              entityId,
+              fileUrl: photo.fileUrl,
+              fileName: photo.fileName,
+              fileSize: photo.fileSize ?? null,
+              mimeType: photo.mimeType,
+              caption: photo.caption ?? null,
+              uploadedBy: userId || photo.uploadedBy,
+            },
+          );
+          track('photos', r.wasCreated);
+        }
+      },
+      { timeout: 60_000 },
+    );
+
+    // ====================================================================
+    // PHASE 4 — Finance
+    // ====================================================================
+    await this.prisma.$transaction(
+      async (tx) => {
+        // BillingEntity — NK: (tenantId, code)
+        for (const be of dataFiles['billing-entities'] ?? []) {
+          const siteId = be.siteId ? ids.site.get(be.siteId) ?? null : null;
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'billingEntity',
+            { tenantId, code: be.code },
+            {
+              tenantId,
+              name: be.name,
+              code: be.code,
+              type: be.type,
+              description: be.description ?? null,
+              isActive: be.isActive ?? true,
+              delegationId: be.delegationId ?? null,
+              siteId,
+            },
+          );
+          ids.billingEntity.set(be.id, r.row.id);
+          track('billingEntities', r.wasCreated);
+        }
+
+        // Expense — NK with receiptFile fallback (per user spec) :
+        //   - If exp.receiptFile present : add sha256(receiptFile) to the composite
+        //     (best dedup — same expense re-imported with different metadata still matches)
+        //   - Else fallback : (tenantId, totalAmount, dateIncurred, label.trim().toLowerCase())
+        // Schema has no receiptFile column today, so the fallback is the active path.
+        // Future schema migration to add Expense.receiptFile + contentHash will
+        // upgrade the dedup automatically (the helper reads `exp.receiptFile`).
+        for (const exp of dataFiles['expenses'] ?? []) {
+          const bearerId = ids.billingEntity.get(exp.bearerId);
+          if (!bearerId) {
+            this.logger.warn(`Skipping expense ${exp.id}: bearer not in idMap`);
+            continue;
+          }
+          const siteId = exp.siteId ? ids.site.get(exp.siteId) ?? null : null;
+          const assetId = exp.assetId ? ids.asset.get(exp.assetId) ?? null : null;
+          const vendorId = exp.vendorId ? ids.contact.get(exp.vendorId) ?? null : null;
+
+          const dateIncurred = new Date(exp.dateIncurred);
+          const where: Record<string, unknown> = exp.receiptFile
+            ? {
+                tenantId,
+                totalAmount: exp.totalAmount,
+                dateIncurred,
+                label: exp.label,
+                receiptFile: exp.receiptFile,
+              }
+            : {
+                tenantId,
+                totalAmount: exp.totalAmount,
+                dateIncurred,
+                label: (exp.label ?? '').trim().toLowerCase(),
+              };
+          const r = await this.upsertByNaturalKey<{ id: string }>(tx, 'expense', where, {
+            tenantId,
+            label: exp.label,
+            description: exp.description ?? null,
+            type: exp.type || 'OTHER',
+            totalAmount: exp.totalAmount,
+            currency: exp.currency || 'EUR',
+            frequency: exp.frequency || 'ONE_TIME',
+            dateIncurred,
+            dateStart: exp.dateStart ? new Date(exp.dateStart) : null,
+            dateEnd: exp.dateEnd ? new Date(exp.dateEnd) : null,
+            bearerId,
+            delegationId: exp.delegationId,
+            siteId,
+            assetId,
+            externalRef: exp.externalRef ?? null,
+            vendorId,
+            invoiceRef: exp.invoiceRef ?? null,
+            poNumber: exp.poNumber ?? null,
+            notes: exp.notes ?? null,
+            createdBy: userId || exp.createdBy,
+          });
+          ids.expense.set(exp.id, r.row.id);
+          track('expenses', r.wasCreated);
+        }
+
+        // CostAllocation — NK: (expenseId, targetId). Cascade-follows Expense.
+        for (const alloc of dataFiles['cost-allocations'] ?? []) {
+          const expenseId = ids.expense.get(alloc.expenseId);
+          const targetId = ids.billingEntity.get(alloc.targetId);
+          if (!expenseId || !targetId) continue;
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'costAllocation',
+            { expenseId, targetId },
+            {
+              expenseId,
+              targetId,
+              percentage: alloc.percentage,
+              amount: alloc.amount,
+              notes: alloc.notes ?? null,
+            },
+          );
+          track('costAllocations', r.wasCreated);
+        }
+
+        // ConnectivityLink — NK: (tenantId, siteId, role, assetId)
+        for (const link of dataFiles['connectivity-links'] ?? []) {
+          const siteId = ids.site.get(link.siteId);
+          if (!siteId) continue;
+          const assetId = link.assetId ? ids.asset.get(link.assetId) ?? null : null;
+          const expenseId = link.expenseId ? ids.expense.get(link.expenseId) ?? null : null;
+          const r = await this.upsertByNaturalKey<{ id: string }>(
+            tx,
+            'connectivityLink',
+            { tenantId, siteId, role: link.role || 'PRIMARY', assetId },
+            {
+              tenantId,
+              siteId,
+              role: link.role || 'PRIMARY',
+              technology: link.technology,
+              monthlyCost: link.monthlyCost,
+              currency: link.currency || 'EUR',
+              startDate: link.startDate ? new Date(link.startDate) : null,
+              endDate: link.endDate ? new Date(link.endDate) : null,
+              contractRef: link.contractRef ?? null,
+              notes: link.notes ?? null,
+              assetId,
+              expenseId,
+            },
+          );
+          track('connectivityLinks', r.wasCreated);
+        }
+
+        // Budget — NK: (tenantId, label, period, startDate). 2-pass hierarchy
+        // (parent → children) per v1 pattern at backup.service.ts:1234 :
+        //   pass 1 = roots (parentId null)
+        //   pass 2+ = iterate while progress, children whose parent is in idMap
+        if (dataFiles['budgets']?.length) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const restoreBudget = async (b: any): Promise<void> => {
+            const siteId = b.siteId ? ids.site.get(b.siteId) ?? null : null;
+            const beId = b.billingEntityId
+              ? ids.billingEntity.get(b.billingEntityId) ?? null
+              : null;
+            const parentId = b.parentId ? ids.budget.get(b.parentId) ?? null : null;
+            const startDate = new Date(b.startDate);
+            const r = await this.upsertByNaturalKey<{ id: string }>(
+              tx,
+              'budget',
+              { tenantId, label: b.label, period: b.period || 'YEAR', startDate },
+              {
+                tenantId,
+                label: b.label,
+                delegationId: b.delegationId ?? null,
+                siteId,
+                billingEntityId: beId,
+                expenseType: b.expenseType ?? null,
+                period: b.period || 'YEAR',
+                startDate,
+                endDate: new Date(b.endDate),
+                amount: b.amount,
+                currency: b.currency || 'EUR',
+                notes: b.notes ?? null,
+                alertsEnabled: b.alertsEnabled ?? true,
+                alertThresholdPct: b.alertThresholdPct ?? 80,
+                parentId,
+              },
+            );
+            ids.budget.set(b.id, r.row.id);
+            track('budgets', r.wasCreated);
+          };
+
+          for (const b of dataFiles['budgets'].filter((x) => !x.parentId)) {
+            await restoreBudget(b);
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let pending: any[] = dataFiles['budgets'].filter((x) => x.parentId);
+          let progressed = true;
+          while (pending.length > 0 && progressed) {
+            progressed = false;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const stillPending: any[] = [];
+            for (const b of pending) {
+              if (ids.budget.has(b.parentId)) {
+                await restoreBudget(b);
+                progressed = true;
+              } else {
+                stillPending.push(b);
+              }
+            }
+            pending = stillPending;
+          }
+          if (pending.length > 0) {
+            this.logger.warn(
+              `${pending.length} budgets could not be linked to parent — ` +
+                `orphaned references skipped`,
+            );
+          }
+        }
+      },
+      { timeout: 60_000 },
+    );
+
+    // ====================================================================
+    // PHASE 5 — Snapshots + audit
+    // ====================================================================
+    await this.prisma.$transaction(
+      async (tx) => {
+        // SiteHealthSnapshot — schema has @unique(siteId) so prisma.upsert
+        // works natively (no need for findFirst + create dance).
+        for (const snap of dataFiles['site-health-snapshots'] ?? []) {
+          const siteId = ids.site.get(snap.siteId);
+          if (!siteId) continue;
+          const existing = await tx.siteHealthSnapshot.findUnique({ where: { siteId } });
+          await tx.siteHealthSnapshot.upsert({
+            where: { siteId },
+            update: {
+              overall: snap.overall,
+              componentsJson: snap.componentsJson,
+              computedAt: new Date(snap.computedAt),
+            },
+            create: {
+              siteId,
+              overall: snap.overall,
+              componentsJson: snap.componentsJson,
+              computedAt: new Date(snap.computedAt),
+            },
+          });
+          track('siteHealthSnapshots', !existing);
+        }
+
+        // AuditLog — SKIPPED. Restoring audit rows would corrupt the actual
+        // audit trail (the row says "user X did Y at T" — replaying that
+        // claim N years later is misleading at best, falsifies forensic
+        // evidence at worst). v1 also never restored AuditLog.
+      },
+      { timeout: 60_000 },
+    );
+
+    // ====================================================================
+    // POST-TRANSACTIONS — MinIO uploads from staging
+    // ====================================================================
+    // Outside transactions because MinIO isn't transactional. Errors per
+    // file are logged but do NOT roll back the DB writes — the operator
+    // can re-run to retry the failed uploads (idempotence covers DB).
+    for (const [entryPath, staged] of stagedFiles) {
+      try {
+        const client = this.getMinioClient();
+        const exists = await client.bucketExists(staged.bucket);
+        if (!exists) await client.makeBucket(staged.bucket, 'us-east-1');
+        await client.fPutObject(staged.bucket, staged.key, staged.tmpPath, {});
+        track('minioFiles', true);
+      } catch (err: unknown) {
+        this.logger.warn(
+          `Failed to restore MinIO file ${entryPath}: ` +
+            `${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      }
+    }
+
+    // ====================================================================
+    // Roll up counts
+    // ====================================================================
+    const counts: Record<string, number> = {};
+    for (const table of new Set([...Object.keys(created), ...Object.keys(skipped)])) {
+      counts[table] = (created[table] ?? 0) + (skipped[table] ?? 0);
+    }
+    counts._created = Object.values(created).reduce((a, b) => a + b, 0);
+    counts._skipped = Object.values(skipped).reduce((a, b) => a + b, 0);
+
+    this.logger.log(
+      `Restore v2 applied : created=${counts._created}, skipped=${counts._skipped}, ` +
+        `siteIds=${siteIds.length}`,
+    );
+
+    return { counts, siteIds };
   }
 
   /**
