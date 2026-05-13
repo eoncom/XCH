@@ -4,6 +4,11 @@ import {
   Post,
   Get,
   Delete,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  BadRequestException,
   Param,
   Request,
   Res,
@@ -11,6 +16,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
 import { memoryStorage } from 'multer';
 import {
   ApiTags,
@@ -18,6 +25,9 @@ import {
   ApiBearerAuth,
   ApiOkResponse,
   ApiCreatedResponse,
+  ApiAcceptedResponse,
+  ApiHeader,
+  ApiBody,
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Response } from 'express';
@@ -38,7 +48,23 @@ import { CleanupStorageResultResponseDto } from './dto/cleanup-storage-result.re
 import { BackupListResponseDto } from './dto/backup-list.response.dto';
 import { DeleteBackupResultResponseDto } from './dto/delete-backup-result.response.dto';
 import { BackupOptionsDto } from './dto/backup-options.dto';
+import { RestoreOptionsDto } from './dto/restore-options.dto';
 import { EstimateResponseDto } from './dto/estimate.response.dto';
+import { BackupJobEnqueuedResponseDto } from './dto/backup-job-enqueued.response.dto';
+import {
+  JobStatusResponseDto,
+  JobProgressResponseDto,
+} from './dto/job-status.response.dto';
+import {
+  BACKUP_QUEUE,
+  JOB_BACKUP_FULL,
+  JOB_BACKUP_SITE,
+  JOB_RESTORE_FULL,
+  BACKUP_JOB_OPTIONS,
+  BackupFullJobData,
+  BackupSiteJobData,
+  RestoreFullJobData,
+} from './backup.queue';
 
 @ApiTags('backup')
 @ApiBearerAuth()
@@ -46,7 +72,18 @@ import { EstimateResponseDto } from './dto/estimate.response.dto';
 @SkipDelegation()
 @RequireManage()
 export class BackupController {
-  constructor(private readonly backupService: BackupService) {}
+  constructor(
+    private readonly backupService: BackupService,
+    @InjectQueue(BACKUP_QUEUE) private readonly backupQueue: Queue,
+  ) {}
+
+  /**
+   * Header that forces the legacy synchronous path on `/backup/full` (and
+   * the JSON-mode `/backup/full/restore`). Useful when Redis is down or
+   * for one-shot ops debugging. Sent by clients as `X-Backup-Sync: 1`.
+   * Slated for removal in D.2 once async path is validated in prod.
+   */
+  private static readonly SYNC_HEADER = 'x-backup-sync';
 
   // ===== Pre-flight (Track D.1) =====
 
@@ -73,11 +110,98 @@ export class BackupController {
   @Post('full')
   @RequireWrite()
   @SkipThrottle()
-  @ApiOperation({ summary: '[ADMIN] Create full database + files backup' })
-  @ApiCreatedResponse({ type: BackupResultResponseDto })
-  async createFullBackup(@Request() req: AuthRequest): Promise<BackupResultResponseDto> {
-    const result = await this.backupService.createFullBackup(req.user.tenantId, req.user.id);
-    return toResponse(BackupResultResponseDto, result);
+  @ApiOperation({
+    summary: '[ADMIN] Create full backup (async via Bull v3 by default)',
+    description:
+      'Default: 202 + jobId — caller polls GET /backup/jobs/:jobId. ' +
+      'Header X-Backup-Sync: 1 forces the legacy synchronous path (returns 201 + filename).',
+  })
+  @ApiHeader({
+    name: 'X-Backup-Sync',
+    description: 'Set to "1" to force the legacy synchronous path.',
+    required: false,
+  })
+  @ApiAcceptedResponse({ type: BackupJobEnqueuedResponseDto })
+  @ApiCreatedResponse({ type: BackupResultResponseDto, description: 'Sync mode only' })
+  async createFullBackup(
+    @Body() options: BackupOptionsDto,
+    @Headers(BackupController.SYNC_HEADER) syncHeader: string | undefined,
+    @Request() req: AuthRequest,
+  ): Promise<BackupResultResponseDto | BackupJobEnqueuedResponseDto> {
+    if (syncHeader === '1') {
+      // Legacy sync path — v1 createFullBackup body, kept for fallback.
+      const result = await this.backupService.createFullBackup(
+        req.user.tenantId,
+        req.user.id,
+      );
+      return toResponse(BackupResultResponseDto, result);
+    }
+    // Async path : enqueue + return 202 with jobId.
+    const jobData: BackupFullJobData = {
+      tenantId: req.user.tenantId,
+      userId: req.user.id,
+      options: { dbOnly: options?.dbOnly },
+    };
+    const job = await this.backupQueue.add(JOB_BACKUP_FULL, jobData, BACKUP_JOB_OPTIONS);
+    return toResponse(BackupJobEnqueuedResponseDto, {
+      enqueued: true,
+      jobId: String(job.id),
+    });
+  }
+
+  // ===== Job status polling (Track D.1 step 5) =====
+
+  @Get('jobs/:jobId')
+  @RequireRead()
+  @SkipThrottle()
+  @ApiOperation({
+    summary: '[ADMIN] Poll backup-jobs queue status for a previously enqueued job',
+  })
+  @ApiOkResponse({ type: JobStatusResponseDto })
+  async getJobStatus(@Param('jobId') jobId: string): Promise<JobStatusResponseDto> {
+    const job = await this.backupQueue.getJob(jobId);
+    if (!job) {
+      throw new NotFoundException(`Backup job ${jobId} not found`);
+    }
+
+    const rawState = await job.getState();
+    // Bull v3 states : 'completed' | 'waiting' | 'active' | 'delayed' |
+    // 'failed' | 'paused' | 'stuck' | 'unknown'. Map non-DTO states to
+    // the closest equivalent so the frontend hook never sees an unexpected
+    // value.
+    const state: JobStatusResponseDto['state'] =
+      rawState === 'completed' || rawState === 'failed' || rawState === 'active'
+        ? rawState
+        : 'waiting'; // 'delayed' | 'paused' | 'unknown' → treat as waiting
+
+    // Bull `job.progress()` returns whatever was last set : number, object,
+    // or 0 if never updated. Normalize to JobProgressResponseDto shape.
+    const rawProgress = job.progress();
+    const progress: JobProgressResponseDto =
+      typeof rawProgress === 'object' && rawProgress !== null
+        ? (rawProgress as JobProgressResponseDto)
+        : {
+            phase: rawState,
+            percent: typeof rawProgress === 'number' ? rawProgress : 0,
+            current: 0,
+            total: 1,
+            message: '',
+          };
+
+    // Cas B helper-style : we construct the DTO manually (rather than via
+    // `toResponse(JobStatusResponseDto, ...)`) because the `result` field is
+    // typed `unknown` and class-transformer's `excludeExtraneousValues: true`
+    // would strip its nested keys. The orchestrator return values
+    // (BackupResult, RestoreFullV2Result, DryRunReport, …) each have their
+    // own DTO contract at the job level — what we surface here is opaque
+    // pass-through that the frontend interprets per kind.
+    const dto: JobStatusResponseDto = {
+      state,
+      progress,
+      result: state === 'completed' ? (job.returnvalue as unknown) : undefined,
+      error: state === 'failed' ? job.failedReason ?? undefined : undefined,
+    };
+    return dto;
   }
 
   // ===== Full Restore =====
@@ -92,18 +216,85 @@ export class BackupController {
       fileFilter: backupFileFilter,
     }),
   )
-  @ApiOperation({ summary: '[ADMIN] Restore full backup from ZIP' })
-  @ApiOkResponse({ type: RestoreFullResultResponseDto })
+  @ApiOperation({
+    summary: '[ADMIN] Restore full backup — multipart (sync) OR JSON {backupId} (async)',
+    description:
+      'Multipart `file` upload → synchronous v1 path (AdmZip + in-memory parse). ' +
+      'JSON `{backupId, dryRun?}` → async v2 path (Bull v3 streaming + integrity verify ' +
+      '+ dry-run preview support). Header X-Backup-Sync: 1 forces the v2 sync path on JSON mode.',
+  })
+  @ApiHeader({
+    name: 'X-Backup-Sync',
+    description: 'On JSON mode, set to "1" to force synchronous v2 execution.',
+    required: false,
+  })
+  @ApiOkResponse({ type: RestoreFullResultResponseDto, description: 'Sync path (multipart or X-Backup-Sync: 1)' })
+  @ApiAcceptedResponse({ type: BackupJobEnqueuedResponseDto, description: 'Async JSON path' })
   async restoreFullBackup(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() restoreOptions: RestoreOptionsDto | undefined,
+    @Headers(BackupController.SYNC_HEADER) syncHeader: string | undefined,
     @Request() req: AuthRequest,
-  ): Promise<RestoreFullResultResponseDto> {
-    const result = await this.backupService.restoreFullBackup(
-      req.user.tenantId,
-      file.buffer,
-      req.user.id,
-    );
-    return toRestoreFullResultResponseDto(result);
+  ): Promise<RestoreFullResultResponseDto | BackupJobEnqueuedResponseDto> {
+    // Multipart upload → sync v1 path (kept as-is for step 5 scope ;
+    // async multipart upload via tmp staging is deferred to D.2).
+    if (file?.buffer) {
+      const result = await this.backupService.restoreFullBackup(
+        req.user.tenantId,
+        file.buffer,
+        req.user.id,
+      );
+      return toRestoreFullResultResponseDto(result);
+    }
+
+    // JSON path : { backupId, dryRun? } against an existing catalog entry.
+    const backupId = restoreOptions?.backupId;
+    if (!backupId) {
+      throw new BadRequestException(
+        'Provide multipart `file` (sync v1) OR JSON body { backupId, dryRun? } (async v2)',
+      );
+    }
+
+    if (syncHeader === '1') {
+      // Sync v2 fallback — bypass the queue, run in-process. Useful when
+      // Redis is unhealthy.
+      const result = await this.backupService.restoreFullBackupV2(
+        req.user.tenantId,
+        backupId,
+        { dryRun: restoreOptions?.dryRun },
+        undefined,
+        req.user.id,
+      );
+      // Coerce the v2 discriminated union back to the v1 wire shape for
+      // legacy consumers. dry-run / delegated-v1 / applied all map to
+      // {message, counts, siteIds}.
+      const flat: { message: string; counts: Record<string, number>; siteIds: string[] } =
+        result.kind === 'dry-run'
+          ? {
+              message: 'Dry-run report computed (no DB writes)',
+              counts: {
+                ...result.report.wouldCreate,
+                _created: 0,
+                _skipped: Object.values(result.report.wouldCreate).reduce((a, b) => a + b, 0),
+              },
+              siteIds: [],
+            }
+          : { message: result.message, counts: result.counts, siteIds: result.siteIds };
+      return toRestoreFullResultResponseDto(flat);
+    }
+
+    // Async path : enqueue + return 202 with jobId.
+    const jobData: RestoreFullJobData = {
+      tenantId: req.user.tenantId,
+      backupId,
+      userId: req.user.id,
+      options: { dryRun: restoreOptions?.dryRun },
+    };
+    const job = await this.backupQueue.add(JOB_RESTORE_FULL, jobData, BACKUP_JOB_OPTIONS);
+    return toResponse(BackupJobEnqueuedResponseDto, {
+      enqueued: true,
+      jobId: String(job.id),
+    });
   }
 
   // ===== Site Restore (MUST be before :siteId to avoid route conflict) =====
@@ -137,25 +328,56 @@ export class BackupController {
   @Post('site/:siteId')
   @RequireWrite()
   @SkipThrottle()
-  @ApiOperation({ summary: '[ADMIN] Create site-specific backup (ZIP)' })
-  @ApiOkResponse({ description: 'Binary ZIP file stream (application/zip)' })
+  @ApiOperation({
+    summary:
+      '[ADMIN] Create site-specific backup — async (default) OR streamed ZIP (X-Backup-Sync: 1)',
+    description:
+      'Default: 202 + jobId, the archive is uploaded to xch-backups by the worker. ' +
+      'Header X-Backup-Sync: 1 keeps the legacy synchronous behaviour (streams ZIP inline).',
+  })
+  @ApiHeader({
+    name: 'X-Backup-Sync',
+    description: 'Set to "1" to stream the ZIP back inline (legacy v1 path).',
+    required: false,
+  })
+  @ApiAcceptedResponse({ type: BackupJobEnqueuedResponseDto })
+  @ApiOkResponse({ description: 'Sync only — binary ZIP stream (application/zip)' })
   async createSiteBackup(
     @Param('siteId') siteId: string,
+    @Headers(BackupController.SYNC_HEADER) syncHeader: string | undefined,
     @Request() req: AuthRequest,
-    @Res() res: Response,
-  ) {
-    const { buffer, filename } = await this.backupService.createSiteBackup(
-      req.user.tenantId,
-      siteId,
-      req.user.id,
-    );
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<BackupJobEnqueuedResponseDto | void> {
+    if (syncHeader === '1') {
+      // Legacy sync path — stream the binary ZIP inline.
+      const { buffer, filename } = await this.backupService.createSiteBackup(
+        req.user.tenantId,
+        siteId,
+        req.user.id,
+      );
+      res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': buffer.length,
+      });
+      res.end(buffer);
+      return;
+    }
 
-    res.set({
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Content-Length': buffer.length,
+    // Async path : enqueue. The processor calls createSiteBackup which
+    // ALREADY uploads to xch-backups (cf service line ~289), so the
+    // caller polls GET /backup/jobs/:jobId then downloads via GET
+    // /backup/:id/download once the job is `completed`.
+    const jobData: BackupSiteJobData = {
+      tenantId: req.user.tenantId,
+      siteId,
+      userId: req.user.id,
+    };
+    const job = await this.backupQueue.add(JOB_BACKUP_SITE, jobData, BACKUP_JOB_OPTIONS);
+    return toResponse(BackupJobEnqueuedResponseDto, {
+      enqueued: true,
+      jobId: String(job.id),
     });
-    res.end(buffer);
   }
 
   // ===== Storage Cleanup =====

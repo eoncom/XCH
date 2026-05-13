@@ -7969,3 +7969,24 @@ feat(track-d1): step 2/9 — streaming export v2 (zero Buffer.concat)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-14
+
+**Date:** 2026-05-14 01:55:28
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 9
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat(track-d1): step 4/9 — upsertByNaturalKey + idempotent restore 19 tables
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

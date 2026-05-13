@@ -284,7 +284,9 @@ describe('Backup response DTO shapes', () => {
       const dto = toDryRunReportResponseDto(input);
       const wire = JSON.stringify(dto);
       expect(wire).toContain('"sites":2');
-      expect(wire).toContain('"floor-plans/lost.pdf"');
+      // missingFiles[0] is 'minio/xch-storage/floor-plans/lost.pdf' — match
+      // a substring that appears verbatim in the JSON output.
+      expect(wire).toContain('floor-plans/lost.pdf');
       expect(wire).toContain('"estimatedDurationSec":92');
     });
   });
@@ -303,13 +305,11 @@ describe('Backup response DTO shapes', () => {
 // Track D.1 Phase 1 step 1 — InsufficientStorageException shape
 // ============================================================================
 
-import { HttpStatus } from '@nestjs/common';
 import { InsufficientStorageException } from './exceptions/insufficient-storage.exception';
 
 describe('InsufficientStorageException', () => {
   it('uses HTTP 507 + payload carries estimatedBytes + freeBytes', () => {
     const ex = new InsufficientStorageException(1_000_000, 500_000);
-    expect(ex.getStatus()).toBe(HttpStatus.INSUFFICIENT_STORAGE);
     expect(ex.getStatus()).toBe(507);
     const payload = ex.getResponse() as Record<string, unknown>;
     expect(payload).toMatchObject({

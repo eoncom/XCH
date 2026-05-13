@@ -1,4 +1,8 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException } from '@nestjs/common';
+
+// HTTP 507 Insufficient Storage is not in @nestjs/common HttpStatus enum
+// at this version — we use the raw status code literal. RFC 4918 §11.5.
+const INSUFFICIENT_STORAGE = 507 as const;
 
 /**
  * HTTP 507 Insufficient Storage — raised when the worker tmpfs does not
@@ -17,7 +21,7 @@ export class InsufficientStorageException extends HttpException {
   constructor(estimatedBytes: number, freeBytes: number) {
     super(
       {
-        statusCode: HttpStatus.INSUFFICIENT_STORAGE,
+        statusCode: INSUFFICIENT_STORAGE,
         error: 'Insufficient Storage',
         message:
           `Backup would need ~${estimatedBytes} bytes plus 20% headroom, ` +
@@ -25,7 +29,7 @@ export class InsufficientStorageException extends HttpException {
         estimatedBytes,
         freeBytes,
       },
-      HttpStatus.INSUFFICIENT_STORAGE,
+      INSUFFICIENT_STORAGE,
     );
   }
 }

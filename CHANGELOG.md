@@ -9,7 +9,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Added — Track D.1 Backup v2 (phase 1 steps 1-4 / 9, ~6.75 j scope)
+### Added — Track D.1 Backup v2 (phase 1 steps 1-5 / 9, ~6.75 j scope)
 
 Phases 1.1 (pré-flight DTOs + check) et 1.2 (streaming export v2) posent
 les fondations pour la refonte streaming du backup
@@ -59,6 +59,82 @@ Tests unitaires (`backup-v2.service.spec.ts`) : 4 sections couvrant
 les 4 primitives, en évitant les dépendances externes via mocks
 inline du client MinIO et utilisation de `fs/tmp` réel pour
 l'archive. Tests round-trip avec vrai MinIO restent pour phase 1.8.
+
+#### Step 5 — Bull v3 wiring (~0.5 j budgété)
+
+- **`backup.queue.ts`** (neuf) — constantes `BACKUP_QUEUE = 'backup-jobs'`,
+  `JOB_BACKUP_FULL`, `JOB_BACKUP_SITE`, `JOB_RESTORE_FULL`, `JOB_RESTORE_SITE` +
+  `BACKUP_JOB_OPTIONS` (attempts:1, timeout:7200000ms, no removeOnComplete)
+  + 4 interfaces de job data + `BackupJobProgress` payload.
+- **`backup.processor.ts`** (neuf) — `@Processor(BACKUP_QUEUE)` class.
+  Pattern repris à l'identique de `MonitorProcessor`
+  ([monitor.processor.ts:47](backend/src/modules/monitoring/monitor.processor.ts:47)) :
+  - 4 `@Process(JOB_NAME)` handlers (full / site / restore-full / restore-site)
+  - `@OnQueueCompleted` + `@OnQueueFailed` avec guard retry (only emit
+    after retries exhausted, matches MonitorProcessor)
+  - `makeProgressCallback(job)` builder qui retourne un `ProgressCallback`
+    invoquant `job.progress({ phase, current, total, percent, message })`
+    avec percent clampé à [0,100] (gère total=0 sans NaN)
+  - `WorkerEventLogger` injecté → capture Sentry/GlitchTip gratuite via
+    ADR-024 (tag `mode=worker`, `queue=backup-jobs`, `job_name=...`).
+    Aucun code Sentry à écrire dans le processor.
+- **`backup.module.ts`** modifié — `BullModule.registerQueue({ name:
+  BACKUP_QUEUE })` + `ObservabilityModule` import + `BackupProcessor`
+  provider.
+- **`worker.module.ts`** modifié — import `BackupModule` (worker
+  consume la queue). Commentaire inline rappelle le caveat XCH_PROD_PORTS
+  + XCH_DOCKER_IMAGE_DISCIPLINE : worker rebuild en même temps que
+  backend (`docker compose up -d backend backend-worker frontend`).
+- **`backup.controller.ts`** modifié — `@InjectQueue(BACKUP_QUEUE) queue: Queue` +
+  endpoints transformés :
+  - `POST /backup/full` — async par défaut (202 + `BackupJobEnqueuedResponseDto`).
+    Header `X-Backup-Sync: 1` force le path v1 synchrone (fallback urgence
+    si Redis down). Slated for removal en D.2.
+  - `POST /backup/site/:siteId` — async par défaut. Header `X-Backup-Sync: 1`
+    keeps the legacy binary ZIP inline stream.
+  - `POST /backup/full/restore` — multipart `file` upload reste **sync v1**
+    (path AdmZip + in-memory). JSON `{backupId, dryRun?}` enqueue en
+    async via Bull. Header `X-Backup-Sync: 1` force v2 in-process pour
+    le JSON path.
+  - `GET /backup/jobs/:jobId` (nouveau) — `queue.getJob(id)` →
+    `JobStatusResponseDto`. Bull v3 states ('delayed', 'paused',
+    'unknown') mapped to 'waiting' pour ne jamais surprendre le frontend
+    hook. Progress numérique fallback vers `JobProgressResponseDto` shape.
+  - `NotFoundException` clair si jobId inconnu.
+
+**Caveats opérationnels** :
+- **Concurrency 1** : Bull v3 default = 1 job at a time per worker
+  process. Pas de jobs backup parallèles (contention disque + RAM si
+  multi-GB). Conservé en défaut.
+- **No retry** (`attempts: 1`) : un backup 5 GB qui échoue ne se
+  relance PAS automatiquement. Le caller voit le `failedReason` via
+  `GET /backup/jobs/:jobId` et décide de re-soumettre.
+- **`HttpStatus.INSUFFICIENT_STORAGE` absent du @nestjs/common enum** :
+  fix step 5 — literal `507` dans `InsufficientStorageException` +
+  `dto-shape.spec.ts` adapté.
+
+**Async multipart restore upload → D.2** : pour rester sous le 0.5 j
+budgété, l'upload multipart de `POST /backup/full/restore` reste sync
+v1. Tmp staging + enqueue depuis multer buffer est un raffinement
+D.2 (alongside encryption + observabilité approfondie).
+
+Tests (2 nouveaux fichiers spec, 21 nouveaux tests, 72 total) :
+- `backup.processor.spec.ts` (10 tests) : handleBackupFull/RestoreFull/Site
+  delegation + progress callback wired + percent clamping (total=0 → 0,
+  current > total → 100) ; handleRestoreSite explicite throw (parked
+  D.2) ; onCompleted emits jobCompleted avec duration + tenant_id ;
+  onFailed retry guard (n'émet qu'après retries exhausted, attempts:1 →
+  immediate)
+- `backup.controller.spec.ts` (11 tests) : POST /backup/full async (queue.add
+  + 202) ; POST /backup/full sync (X-Backup-Sync: 1 → service.createFullBackup) ;
+  POST /backup/full/restore multipart → sync v1 ; JSON {backupId} async ;
+  JSON sans backupId → BadRequestException ; JSON + X-Backup-Sync: 1 → v2
+  in-process avec adapter dry-run → wire shape ; POST /backup/site/:siteId
+  async + sync ; GET /backup/jobs/:jobId completed/failed/delayed mapping ;
+  numeric progress fallback ; NotFoundException sur jobId inconnu
+
+Tous tests passent localement (72/72 backup module). Tests intégration
+end-to-end avec real Redis + Bull queue restent pour Phase 1 step 8.
 
 #### Step 4 — Idempotent upsert refactor (~1 j budgété)
 
