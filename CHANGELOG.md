@@ -9,7 +9,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Added — Track D.1 Backup v2 (phase 1 steps 1-6 / 9, ~6.75 j scope)
+### Added — Track D.1 Backup v2 (phase 1 steps 1-7 / 9, ~6.75 j scope)
 
 Phases 1.1 (pré-flight DTOs + check) et 1.2 (streaming export v2) posent
 les fondations pour la refonte streaming du backup
@@ -59,6 +59,70 @@ Tests unitaires (`backup-v2.service.spec.ts`) : 4 sections couvrant
 les 4 primitives, en évitant les dépendances externes via mocks
 inline du client MinIO et utilisation de `fs/tmp` réel pour
 l'archive. Tests round-trip avec vrai MinIO restent pour phase 1.8.
+
+#### Step 7 — Frontend `useBackupJob` hook + progress UI + dry-run report (~1 j budgété)
+
+- **`frontend/src/lib/api/backup.ts`** étendu — 5 nouveaux endpoints +
+  6 nouveaux types alignés sur les DTOs backend Phase 1 :
+  - `estimate(options)` → `POST /api/backup/estimate`
+  - `createFullAsync(options)` → `POST /api/backup/full` (async 202)
+  - `createSiteBackupAsync(siteId)` → `POST /api/backup/site/:siteId` (async)
+  - `restoreFullAsync({backupId, dryRun})` → JSON-mode async
+  - `getJobStatus(jobId)` → `GET /api/backup/jobs/:jobId`
+  - Legacy `createFull`, `restoreFull` (multipart sync) preserved
+  - Types : `BackupOptions`, `RestoreOptions`, `EstimateResponse`,
+    `BackupJobEnqueued`, `BackupJobProgress`, `DryRunReport`,
+    `RestoreFullV2JobResult` (discriminated union 'dry-run' | 'applied' | 'delegated-v1'),
+    `BackupJobStatus`
+  - `createSiteBackup` (legacy stream) ajoute `X-Backup-Sync: 1` header
+    pour forcer le sync v1 inline ZIP (sinon le backend default async ne
+    retourne plus de binary stream)
+- **`frontend/src/hooks/useBackupJob.ts`** (nouveau) — hook React qui poll
+  `getJobStatus(jobId)` toutes les 2000 ms et stoppe sur `completed` /
+  `failed` / `unknown` (404 ou erreur réseau = `isUnknown: true`).
+  Cleanup `clearInterval` au unmount + au changement de jobId. Retourne
+  `{status, isRunning, isCompleted, isFailed, isUnknown, error, result}`
+  avec cohérence type-safe.
+- **`frontend/src/app/dashboard/settings/page.tsx`** — backup tab refondu :
+  - États ajoutés : `currentBackupJobId`, `backupEstimate`, `backupDbOnly`,
+    `selectedRestoreBackupId`, `restoreDryRun` (default true — safe),
+    `dryRunReport`
+  - **Pré-launch estimate** : bouton "Calculer la taille estimée" qui call
+    `backupApi.estimate()` ; affichage grid `data/files/total/fileCount/freeBytes`
+    avec format `tabular-nums` ; alerte rouge si `!estimate.ok`
+  - Toggle "Base de données seule" (`dbOnly`) qui invalide l'estimation
+    stale au toggle
+  - Bouton "Lancer la sauvegarde" disabled si `!estimate.ok` ou job déjà actif
+  - **Progress panel** (rendu si `currentBackupJobId` actif) : Shadcn
+    `<Progress value={percent}>` + phase + message + bouton Fermer post-job
+  - **Restore section refondu** : 2 sub-cards :
+    - **Async path** depuis catalogue MinIO : `<Select>` backups type 'full',
+      Switch dry-run (default true, safe), info text "le dry-run probe les
+      clés naturelles…"
+    - **Legacy multipart sync** : kept tel quel pour imports ZIP externes
+  - **Dry-run report card** (rendu si `dryRunReport` set après job dry-run
+    completed) : tableau dense `Table | À créer | À conserver` avec union
+    sorted des tables ; bas de carte liste `missingFiles` + `invalidChecksums`
+    avec fallback "Aucun" ; bouton "Confirmer l'application réelle" qui
+    re-submit `restoreFullAsync(backupId, dryRun: false)`
+  - `useEffect` watcher sur `backupJob.isCompleted`/`isFailed`/`isUnknown`
+    → toast.success/error + capture `dryRunReport` si `result.kind === 'dry-run'`
+    + refresh `loadBackups()`
+- **`const T = {}` local** dans le component — strings français centralisées
+  pour faciliter future i18n migration sans toucher JSX
+
+**Workflow polling stop sur 'unknown'** — figé : si Bull a perdu la trace du
+job (Redis flush, worker crash pre-persist), le hook stop polling immédiatement,
+surface `isUnknown: true` + message "Job introuvable". Évite poll infini.
+
+**Workflow X-Backup-Sync: 1 fallback** — pas exposé dans l'UI normale.
+Documenté en commentaire `backupApi.createFullAsync` JSDoc : admin peut
+issue le request via `curl -H 'X-Backup-Sync: 1' …` (CLI escape hatch
+si Redis injoignable).
+
+Tests : pas de jest unit côté frontend (Playwright E2E only — `frontend/package.json`).
+Tests E2E du flow async (POST /backup/full → poll → completed) restent
+pour phase 1 step 8 avec real Redis + xch-deploy round-trip.
 
 #### Step 6 — Dry-run via natural-key lookups + v1 compat preservation (~0.5 j budgété)
 

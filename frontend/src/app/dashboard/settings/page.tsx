@@ -51,7 +51,15 @@ import {
 import { cn } from '@/lib/utils';
 import { authApi } from '@/lib/api/auth';
 import { integrationsApi, type IntegrationConfigResponse } from '@/lib/api/integrations';
-import { backupApi, type BackupMetadata } from '@/lib/api/backup';
+import {
+  backupApi,
+  type BackupMetadata,
+  type EstimateResponse,
+  type DryRunReport,
+  type RestoreFullV2JobResult,
+} from '@/lib/api/backup';
+import { useBackupJob } from '@/hooks/useBackupJob';
+import { Progress } from '@/components/ui/progress';
 import { assetModelsApi, type AssetModel, type CreateAssetModelData } from '@/lib/api/asset-models';
 import { VendorCatalogImportMenu } from '@/components/asset-models/vendor-catalog-import-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -2016,6 +2024,75 @@ export default function SettingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [availableSites, setAvailableSites] = useState<{ id: string; name: string; code: string }[]>([]);
 
+  // Track D.1 step 7 — async backup/restore via Bull v3 + dry-run preview
+  /** Active backup-jobs jobId — drives the useBackupJob polling hook. */
+  const [currentBackupJobId, setCurrentBackupJobId] = useState<string | null>(null);
+  /** Pre-flight estimate for the create-full dialog. */
+  const [backupEstimate, setBackupEstimate] = useState<EstimateResponse | null>(null);
+  const [isFetchingEstimate, setIsFetchingEstimate] = useState(false);
+  /** Backup options toggled in the pre-launch dialog. */
+  const [backupDbOnly, setBackupDbOnly] = useState(false);
+  /** Selected catalog backup for async restore + dry-run preview. */
+  const [selectedRestoreBackupId, setSelectedRestoreBackupId] = useState<string | null>(null);
+  const [restoreDryRun, setRestoreDryRun] = useState(true); // safe default
+  /** Dry-run report shown after a completed dry-run job. */
+  const [dryRunReport, setDryRunReport] = useState<DryRunReport | null>(null);
+
+  // Subscribe to the active job's status (polls every 2s, stops on completed/failed).
+  const backupJob = useBackupJob(currentBackupJobId);
+
+  /**
+   * Local strings table for the Track D.1 backup UI. Extracted to ease a
+   * future i18n migration without touching the JSX tree.
+   */
+  const T = {
+    estimateBtn: 'Calculer la taille estimée',
+    estimateLoading: 'Calcul en cours…',
+    estimateLabels: {
+      data: 'Données métier (DB)',
+      files: 'Fichiers MinIO',
+      total: 'Total estimé',
+      fileCount: 'Nombre de fichiers',
+      diskFree: 'Espace disque disponible',
+    },
+    estimateInsufficient: 'Espace disque insuffisant pour le backup (besoin × 1.2 + 512 MB).',
+    dbOnlyToggle: 'Base de données seule (skip MinIO)',
+    launchBackup: 'Lancer la sauvegarde',
+    backupInProgress: 'Sauvegarde en cours…',
+    backupCompleted: 'Sauvegarde terminée',
+    backupFailed: 'Échec de la sauvegarde',
+    jobUnknown: 'Job introuvable (Redis peut avoir perdu la trace)',
+    dryRunToggle: 'Aperçu seulement (dry-run)',
+    dryRunInfo:
+      'Le dry-run probe les clés naturelles contre la DB sans rien écrire, ' +
+      'et liste ce qui serait créé ou conservé.',
+    confirmApply: 'Confirmer l’application réelle',
+    dryRunHeaders: {
+      table: 'Table',
+      wouldCreate: 'À créer',
+      wouldSkip: 'À conserver (existe déjà)',
+    },
+    dryRunIssues: {
+      missing: 'Fichiers manquants dans l’archive',
+      invalid: 'Checksums sha256 invalides',
+      none: 'Aucun',
+    },
+  } as const;
+
+  /** Fetch pre-flight backup size estimate. Called when the user toggles
+   * `dbOnly` or opens the create-backup card. */
+  const fetchEstimate = async (dbOnly: boolean): Promise<void> => {
+    setIsFetchingEstimate(true);
+    try {
+      const est = await backupApi.estimate({ dbOnly });
+      setBackupEstimate(est);
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors du calcul de l’estimation');
+    } finally {
+      setIsFetchingEstimate(false);
+    }
+  };
+
   // Load tenant data on mount
   useEffect(() => {
     const loadTenant = async () => {
@@ -2082,18 +2159,69 @@ export default function SettingsPage() {
     }
   };
 
+  /**
+   * Track D.1 step 7 — enqueue an async backup job on the Bull v3
+   * `backup-jobs` queue. Returns 202 + jobId ; the `useBackupJob` hook
+   * picks up the jobId and starts polling for progress.
+   */
   const handleCreateFullBackup = async () => {
     setIsCreatingFullBackup(true);
     try {
-      const result = await backupApi.createFull();
-      toast.success(result.message || 'Backup complet créé avec succès');
-      loadBackups();
+      const enqueued = await backupApi.createFullAsync({ dbOnly: backupDbOnly });
+      setCurrentBackupJobId(enqueued.jobId);
+      setDryRunReport(null); // clear any previous dry-run report
+      toast.success(`Sauvegarde lancée (job ${enqueued.jobId})`);
     } catch (error: any) {
       toast.error(error.message || 'Erreur lors de la création du backup');
     } finally {
       setIsCreatingFullBackup(false);
     }
   };
+
+  /**
+   * Track D.1 step 7 — enqueue an async restore job from a catalog backup.
+   * `dryRun: true` (safe default) returns a `DryRunReport` ; user must
+   * explicitly re-submit with `dryRun: false` to actually apply.
+   */
+  const handleRestoreFullAsync = async (backupId: string, dryRun: boolean) => {
+    setIsRestoringFull(true);
+    try {
+      const enqueued = await backupApi.restoreFullAsync({ backupId, dryRun });
+      setCurrentBackupJobId(enqueued.jobId);
+      setDryRunReport(null);
+      toast.success(
+        dryRun
+          ? `Aperçu (dry-run) lancé (job ${enqueued.jobId})`
+          : `Restauration lancée (job ${enqueued.jobId})`,
+      );
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors de la restauration');
+    } finally {
+      setIsRestoringFull(false);
+    }
+  };
+
+  // Watch the active job for terminal states. On completion : refresh
+  // catalog + show toast (or capture dry-run report for inline display).
+  // On failure : surface error message.
+  useEffect(() => {
+    if (!backupJob.status) return;
+    if (backupJob.isCompleted) {
+      const result = backupJob.result as
+        | { kind?: 'dry-run' | 'applied' | 'delegated-v1'; report?: DryRunReport; message?: string }
+        | undefined;
+      if (result?.kind === 'dry-run' && result.report) {
+        setDryRunReport(result.report);
+        toast.success('Aperçu (dry-run) calculé — revoyez le diff ci-dessous');
+      } else {
+        toast.success(result?.message || T.backupCompleted);
+      }
+      loadBackups();
+    } else if (backupJob.isFailed || backupJob.isUnknown) {
+      const msg = backupJob.isUnknown ? T.jobUnknown : backupJob.error || T.backupFailed;
+      toast.error(msg);
+    }
+  }, [backupJob.isCompleted, backupJob.isFailed, backupJob.isUnknown]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateSiteBackup = async () => {
     if (!selectedBackupSiteId) {
@@ -3113,7 +3241,7 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Full backup */}
-                <div className="flex items-center justify-between p-4 border rounded-lg gap-4">
+                <div className="p-4 border rounded-lg space-y-4">
                   <div>
                     <h4 className="font-medium">Backup complet</h4>
                     <p className="text-sm text-muted-foreground">
@@ -3126,18 +3254,189 @@ export default function SettingsPage() {
                       ne sont pas inclus.
                     </p>
                   </div>
-                  <Button
-                    onClick={handleCreateFullBackup}
-                    disabled={isCreatingFullBackup}
-                  >
-                    {isCreatingFullBackup ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Database className="mr-2 h-4 w-4" />
-                    )}
-                    {isCreatingFullBackup ? 'Création en cours...' : 'Lancer le backup'}
-                  </Button>
+
+                  {/* Track D.1 step 7 — pre-launch estimate + dbOnly toggle */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="backup-db-only"
+                        checked={backupDbOnly}
+                        onCheckedChange={(v) => {
+                          setBackupDbOnly(v);
+                          setBackupEstimate(null); // invalidate stale estimate
+                        }}
+                        disabled={!!currentBackupJobId}
+                      />
+                      <Label htmlFor="backup-db-only" className="text-sm">
+                        {T.dbOnlyToggle}
+                      </Label>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fetchEstimate(backupDbOnly)}
+                      disabled={isFetchingEstimate || !!currentBackupJobId}
+                    >
+                      {isFetchingEstimate ? (
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                      ) : (
+                        <HardDrive className="mr-2 h-3 w-3" />
+                      )}
+                      {isFetchingEstimate ? T.estimateLoading : T.estimateBtn}
+                    </Button>
+                  </div>
+
+                  {backupEstimate && (
+                    <div className="text-sm bg-muted/30 rounded-md p-3 space-y-1">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
+                        <span>{T.estimateLabels.data}</span>
+                        <span className="text-right tabular-nums">{formatFileSize(backupEstimate.dataBytes)}</span>
+                        <span>{T.estimateLabels.files}</span>
+                        <span className="text-right tabular-nums">{formatFileSize(backupEstimate.filesBytes)}</span>
+                        <span className="font-medium text-foreground">{T.estimateLabels.total}</span>
+                        <span className="text-right tabular-nums font-medium text-foreground">
+                          {formatFileSize(backupEstimate.totalBytes)}
+                        </span>
+                        <span>{T.estimateLabels.fileCount}</span>
+                        <span className="text-right tabular-nums">{backupEstimate.fileCount}</span>
+                        <span>{T.estimateLabels.diskFree}</span>
+                        <span className="text-right tabular-nums">{formatFileSize(backupEstimate.freeBytes)}</span>
+                      </div>
+                      {!backupEstimate.ok && (
+                        <p className="text-xs text-destructive font-medium pt-1">
+                          {T.estimateInsufficient}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={handleCreateFullBackup}
+                      disabled={
+                        isCreatingFullBackup ||
+                        !!currentBackupJobId ||
+                        (backupEstimate !== null && !backupEstimate.ok)
+                      }
+                    >
+                      {isCreatingFullBackup || (currentBackupJobId && backupJob.isRunning) ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Database className="mr-2 h-4 w-4" />
+                      )}
+                      {currentBackupJobId && backupJob.isRunning
+                        ? T.backupInProgress
+                        : T.launchBackup}
+                    </Button>
+                  </div>
                 </div>
+
+                {/* Track D.1 step 7 — Active job progress panel */}
+                {currentBackupJobId && backupJob.status && (
+                  <div className="p-4 border rounded-lg space-y-3 bg-muted/20">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          Job {currentBackupJobId} —{' '}
+                          <span className="text-muted-foreground font-normal">
+                            {backupJob.status.progress.phase}
+                          </span>
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {backupJob.status.progress.message ||
+                            `${backupJob.status.progress.current} / ${backupJob.status.progress.total}`}
+                        </p>
+                      </div>
+                      <span className="text-sm tabular-nums font-mono">
+                        {backupJob.status.progress.percent}%
+                      </span>
+                    </div>
+                    <Progress value={backupJob.status.progress.percent} className="h-2" />
+                    {(backupJob.isCompleted || backupJob.isFailed) && (
+                      <div className="flex justify-end pt-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setCurrentBackupJobId(null);
+                            setDryRunReport(null);
+                          }}
+                        >
+                          <X className="mr-1 h-3 w-3" /> Fermer
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Track D.1 step 7 — Dry-run report (after a dry-run job completes) */}
+                {dryRunReport && (
+                  <div className="p-4 border rounded-lg space-y-3 bg-muted/10">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium flex items-center gap-2">
+                        <Info className="h-4 w-4" />
+                        Aperçu de la restauration (dry-run)
+                      </h4>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (!selectedRestoreBackupId) {
+                            toast.error('Aucun backup sélectionné pour la confirmation');
+                            return;
+                          }
+                          handleRestoreFullAsync(selectedRestoreBackupId, false);
+                        }}
+                        disabled={!selectedRestoreBackupId || isRestoringFull}
+                      >
+                        {T.confirmApply}
+                      </Button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50 text-left">
+                          <tr>
+                            <th className="p-2 font-medium">{T.dryRunHeaders.table}</th>
+                            <th className="p-2 font-medium text-right">
+                              {T.dryRunHeaders.wouldCreate}
+                            </th>
+                            <th className="p-2 font-medium text-right">
+                              {T.dryRunHeaders.wouldSkip}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...new Set([
+                            ...Object.keys(dryRunReport.wouldCreate),
+                            ...Object.keys(dryRunReport.wouldSkip),
+                          ])].sort().map((table) => (
+                            <tr key={table} className="border-t">
+                              <td className="p-2 font-mono">{table}</td>
+                              <td className="p-2 text-right tabular-nums">
+                                {dryRunReport.wouldCreate[table] ?? 0}
+                              </td>
+                              <td className="p-2 text-right tabular-nums">
+                                {dryRunReport.wouldSkip[table] ?? 0}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {(dryRunReport.missingFiles.length > 0 ||
+                      dryRunReport.invalidChecksums.length > 0) && (
+                      <div className="text-xs space-y-1 pt-2 border-t">
+                        <p className="text-muted-foreground">
+                          <span className="font-medium">{T.dryRunIssues.missing}</span> :{' '}
+                          {dryRunReport.missingFiles.length || T.dryRunIssues.none}
+                        </p>
+                        <p className="text-muted-foreground">
+                          <span className="font-medium">{T.dryRunIssues.invalid}</span> :{' '}
+                          {dryRunReport.invalidChecksums.length || T.dryRunIssues.none}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Site backup */}
                 <div className="p-4 border rounded-lg space-y-3">
@@ -3357,44 +3656,117 @@ export default function SettingsPage() {
                   Restaurer un backup complet
                 </CardTitle>
                 <CardDescription>
-                  Importez un fichier ZIP de backup complet pour restaurer tous les sites et données.
+                  Restaurez depuis un backup existant (catalogue MinIO, async + dry-run preview)
+                  ou importez un fichier ZIP externe (multipart, sync v1).
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex-1">
-                    <Label htmlFor="restore-full-file" className="sr-only">Fichier ZIP de backup complet</Label>
-                    <Input
-                      id="restore-full-file"
-                      type="file"
-                      accept=".zip"
-                      onChange={(e) => setRestoreFullFile(e.target.files?.[0] || null)}
-                      className="cursor-pointer"
-                    />
+              <CardContent className="space-y-6">
+                {/* Track D.1 step 7 — async path from catalog entry with dry-run */}
+                <div className="space-y-3 p-3 border rounded-lg bg-muted/10">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <FileArchive className="h-4 w-4" />
+                    Depuis un backup existant (async + dry-run)
+                  </h4>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <Select
+                      value={selectedRestoreBackupId || undefined}
+                      onValueChange={setSelectedRestoreBackupId}
+                    >
+                      <SelectTrigger className="w-full max-w-md">
+                        <SelectValue placeholder="Sélectionner un backup du catalogue…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {backupList
+                          .filter((b) => b.type === 'full')
+                          .map((b) => (
+                            <SelectItem key={b.id} value={b.id}>
+                              {b.filename} ({formatFileSize(b.size)})
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="restore-dry-run"
+                        checked={restoreDryRun}
+                        onCheckedChange={setRestoreDryRun}
+                        disabled={isRestoringFull || !!currentBackupJobId}
+                      />
+                      <Label htmlFor="restore-dry-run" className="text-sm">
+                        {T.dryRunToggle}
+                      </Label>
+                    </div>
                   </div>
-                  <Button
-                    onClick={handleRestoreFull}
-                    disabled={isRestoringFull || !restoreFullFile}
-                    variant="outline"
-                  >
-                    {isRestoringFull ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="mr-2 h-4 w-4" />
-                    )}
-                    {isRestoringFull ? 'Restauration...' : 'Restaurer'}
-                  </Button>
+                  <p className="text-xs text-muted-foreground italic">{T.dryRunInfo}</p>
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={() => {
+                        if (!selectedRestoreBackupId) {
+                          toast.error('Sélectionnez un backup du catalogue');
+                          return;
+                        }
+                        handleRestoreFullAsync(selectedRestoreBackupId, restoreDryRun);
+                      }}
+                      disabled={
+                        isRestoringFull ||
+                        !!currentBackupJobId ||
+                        !selectedRestoreBackupId
+                      }
+                    >
+                      {isRestoringFull ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="mr-2 h-4 w-4" />
+                      )}
+                      {restoreDryRun ? 'Lancer le dry-run' : 'Lancer la restauration'}
+                    </Button>
+                  </div>
                 </div>
-                {restoreFullFile && (
-                  <p className="text-xs text-muted-foreground">
-                    Fichier sélectionné : <span className="font-mono">{restoreFullFile.name}</span> ({formatFileSize(restoreFullFile.size)})
-                  </p>
-                )}
+
+                {/* Legacy multipart sync path — kept for external ZIP imports */}
+                <div className="space-y-3">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <Upload className="h-4 w-4" />
+                    Depuis un fichier ZIP externe (sync v1)
+                  </h4>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <Label htmlFor="restore-full-file" className="sr-only">Fichier ZIP de backup complet</Label>
+                      <Input
+                        id="restore-full-file"
+                        type="file"
+                        accept=".zip"
+                        onChange={(e) => setRestoreFullFile(e.target.files?.[0] || null)}
+                        className="cursor-pointer"
+                      />
+                    </div>
+                    <Button
+                      onClick={handleRestoreFull}
+                      disabled={isRestoringFull || !restoreFullFile}
+                      variant="outline"
+                    >
+                      {isRestoringFull ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="mr-2 h-4 w-4" />
+                      )}
+                      {isRestoringFull ? 'Restauration...' : 'Restaurer (sync)'}
+                    </Button>
+                  </div>
+                  {restoreFullFile && (
+                    <p className="text-xs text-muted-foreground">
+                      Fichier sélectionné : <span className="font-mono">{restoreFullFile.name}</span> ({formatFileSize(restoreFullFile.size)})
+                    </p>
+                  )}
+                </div>
+
                 <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
                   <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-red-700 dark:text-red-400">
                     La restauration complète importe tous les sites du backup.
-                    Les sites existants (même code) seront ignorés. Les fichiers (plans, pièces jointes) sont restaurés.
+                    Les sites existants (même code) sont conservés tels quels (skip-if-exists).
+                    Les fichiers (plans, pièces jointes) sont restaurés. <strong>Utilisez le
+                    dry-run sur un tenant peuplé pour visualiser le diff avant application.</strong>
                   </p>
                 </div>
               </CardContent>

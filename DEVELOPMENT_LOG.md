@@ -7990,3 +7990,24 @@ feat(track-d1): step 4/9 — upsertByNaturalKey + idempotent restore 19 tables
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-14
+
+**Date:** 2026-05-14 10:56:53
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 3
+
+**Commit message:**
+```
+feat(track-d1): step 6/9 — dry-run via natural-key lookups + v1 compat preservation
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

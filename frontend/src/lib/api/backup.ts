@@ -112,8 +112,119 @@ function triggerBlobDownload(blob: Blob, response: Response, fallbackName: strin
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+// ============================================================================
+// Track D.1 step 7 — async Bull v3 + dry-run frontend types
+// ============================================================================
+
+/** Request body for POST /backup/estimate and POST /backup/full (v2 async). */
+export interface BackupOptions {
+  dbOnly?: boolean;
+}
+
+/** Request body for POST /backup/full/restore JSON-mode (async). */
+export interface RestoreOptions {
+  backupId?: string;
+  dryRun?: boolean;
+}
+
+/** POST /backup/estimate response. */
+export interface EstimateResponse {
+  dataBytes: number;
+  filesBytes: number;
+  totalBytes: number;
+  fileCount: number;
+  freeBytes: number;
+  ok: boolean;
+}
+
+/** POST /backup/full | /backup/full/restore | /backup/site/:id async 202 response. */
+export interface BackupJobEnqueued {
+  enqueued: boolean;
+  jobId: string;
+}
+
+/** Progress payload emitted by BackupProcessor via job.progress(). */
+export interface BackupJobProgress {
+  phase: string;
+  percent: number;
+  current: number;
+  total: number;
+  message: string;
+}
+
+/** Dry-run report shape (kind: 'dry-run' result). */
+export interface DryRunReport {
+  wouldCreate: Record<string, number>;
+  wouldUpdate: Record<string, number>;
+  wouldSkip: Record<string, number>;
+  missingFiles: string[];
+  invalidChecksums: string[];
+  totalSize: number;
+  estimatedDurationSec: number;
+}
+
+/** Discriminated result returned by `result` of a completed restore job. */
+export type RestoreFullV2JobResult =
+  | { kind: 'dry-run'; report: DryRunReport }
+  | { kind: 'applied'; message: string; counts: Record<string, number>; siteIds: string[] }
+  | { kind: 'delegated-v1'; message: string; counts: Record<string, number>; siteIds: string[] };
+
+/** GET /backup/jobs/:jobId response. */
+export interface BackupJobStatus {
+  state: 'waiting' | 'active' | 'completed' | 'failed';
+  progress: BackupJobProgress;
+  result?: unknown; // BackupResult (v2 backup) | RestoreFullV2JobResult (restore)
+  error?: string;
+}
+
 export const backupApi = {
-  /** Create a full backup (database + MinIO files) */
+  // -------- Track D.1 step 7 — async endpoints --------
+
+  /**
+   * Pre-flight size estimate for a backup run.
+   * POST /api/backup/estimate
+   */
+  estimate: (options: BackupOptions = {}) =>
+    apiClient.post<EstimateResponse>('/api/backup/estimate', options),
+
+  /**
+   * Create a full backup — async by default (returns 202 + jobId).
+   * Caller should poll `getJobStatus(jobId)` for progress.
+   *
+   * Legacy synchronous fallback via header `X-Backup-Sync: 1` is NOT exposed
+   * here ; if Redis is unreachable, operators can issue the request directly
+   * via `curl -H 'X-Backup-Sync: 1' …` (CLI escape hatch).
+   */
+  createFullAsync: (options: BackupOptions = {}) =>
+    apiClient.post<BackupJobEnqueued>('/api/backup/full', options),
+
+  /** Async site backup — 202 + jobId. */
+  createSiteBackupAsync: (siteId: string) =>
+    apiClient.post<BackupJobEnqueued>(`/api/backup/site/${siteId}`),
+
+  /**
+   * Restore from an existing catalog entry (JSON path) — async via Bull v3.
+   * `dryRun: true` returns a {@link DryRunReport} ; `dryRun: false` actually
+   * applies the restore via {@link upsertByNaturalKey} on the live DB.
+   */
+  restoreFullAsync: (options: RestoreOptions) =>
+    apiClient.post<BackupJobEnqueued>('/api/backup/full/restore', options),
+
+  /**
+   * Poll the status of a previously enqueued backup-jobs job.
+   * Returns `{state, progress, result?, error?}`.
+   * 404 NotFoundException if the jobId is unknown to Bull.
+   */
+  getJobStatus: (jobId: string) =>
+    apiClient.get<BackupJobStatus>(`/api/backup/jobs/${encodeURIComponent(jobId)}`),
+
+  // -------- Legacy v1 endpoints (kept for sync fallback + multipart) --------
+
+  /**
+   * Legacy synchronous full backup — kept for completeness, but the UI
+   * uses `createFullAsync` + polling. Useful if Redis is down.
+   * @deprecated Use createFullAsync + useBackupJob hook.
+   */
   createFull: () =>
     apiClient.post<BackupResult>('/api/backup/full'),
 
@@ -121,6 +232,7 @@ export const backupApi = {
   createSiteBackup: async (siteId: string): Promise<void> => {
     const response = await fetchBinary(`/api/backup/site/${siteId}`, {
       method: 'POST',
+      headers: { 'X-Backup-Sync': '1' }, // force legacy inline ZIP stream
     });
     const blob = await response.blob();
     triggerBlobDownload(blob, response, `backup-site-${siteId}.zip`);
@@ -130,7 +242,10 @@ export const backupApi = {
   restoreSite: (file: File) =>
     apiClient.upload<RestoreResult>('/api/backup/site/restore', file),
 
-  /** Restore a full backup from a ZIP */
+  /**
+   * Restore a full backup from a ZIP — multipart upload, **sync v1 path**.
+   * For async + dry-run support, use `restoreFullAsync({backupId, dryRun})`.
+   */
   restoreFull: (file: File) =>
     apiClient.upload<RestoreResult>('/api/backup/full/restore', file),
 
