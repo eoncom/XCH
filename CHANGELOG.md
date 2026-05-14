@@ -7,17 +7,195 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [Unreleased]
+## [2.2.0] - 2026-05-14 — Track D.1 Backup v2 (streaming + idempotent restore + dry-run + async Bull v3)
 
-### Added — Track D.1 Backup v2 (phase 1 steps 1-8 / 9, ~6.75 j scope)
+Track D.1 Backup v2 Core — refonte complète du backup-restore pour
+scalabilité DR multi-GB tenant employeur. Pattern release feature
+(2-PRs : code + release CHANGELOG-only) per `XCH_RELEASE_PATTERNS`.
 
-Phases 1.1 (pré-flight DTOs + check) et 1.2 (streaming export v2) posent
-les fondations pour la refonte streaming du backup
-(cf MCP `XCH_TRACK_D1_BACKUP_V2_2026_05_10`). Aucun changement
-comportemental sur les endpoints existants — les nouveaux services
-coexistent avec le path v1 (legacy backup en mémoire `AdmZip` +
-`Buffer.concat`). Le path v2 sera exposé via endpoint async Bull v3
-en phase 1.5.
+Scope budgeté ~6.75 j, livré ~13 h sur 9 étapes (8 incrémentales + docs).
+Cumulé tests : 77 jest unit + 3 integration round-trip + 3 Playwright
+E2E `@smoke`. Tous tests verts localement.
+
+Pré-requis satisfaits : Track C v2.1.3 mergé (`a497675` PR #67), v2.1.3
+tag posée, scope figé MCP `XCH_TRACK_D_BACKUP_V2_SCOPE`. ADR-025 détaille
+le design + alternatives rejetées + patterns figés.
+
+### Added — Streaming end-to-end (zéro `Buffer.concat`)
+
+- **Pipeline backup** : `exportAllTenantData` → `archiver` →
+  `pipeline(archive, fs.createWriteStream(tmp))` via `node:stream/promises`
+  → `minio.fPutObject(xch-backups, tmpPath)` streaming upload. Tee
+  output via `archive.on('data', …)` → `createHash('sha256')` pour
+  sha256 d'intégrité du ZIP. Cleanup tmp via `try/finally fs.rm(force: true)`
+  garanti même sur exception.
+- **Pipeline restore** : `minio.getObject` → tmp file → `createReadStream` →
+  `MagicByteValidator` (Transform PKZip `50 4B 03 04`, EOF prématuré
+  → BadRequestException) → `unzipper.Parse({ forceStream: true })` →
+  router for-await (`metadata.json` / `data/<table>.json` / `minio/<bucket>/<key>` /
+  v1-prefix delegation). Forward erreurs explicites `validator.on('error',
+  err => zipStream.destroy(err))` car `.pipe().pipe()` Node ne propage
+  PAS les erreurs.
+- **`HashingStream extends Transform`** (exporté) — `_transform` update
+  `sha256` + `bytesProcessed` en passant. `digest()` finalisé après
+  event `end`. Pattern Node v16+ avec backpressure native via `.pipe()`.
+- Per-file `sha256` calculé mid-stream + stocké dans `metadata.files[entry]`.
+  Verify à la restauration → `invalidChecksums[]` / `missingFiles[]`.
+- **Full bucket walk** (orphan-aware) : `listObjectsV2(bucket, '', true)`
+  → tous les blobs MinIO sont inclus, y compris ceux non référencés par
+  une row DB (FloorPlan.fileUrl, etc.). Critère DR-safe acceptance D.1.
+- **RSS worker < 1 GB** sur backup 5 GB tenant vérifié (Test 1 integration).
+
+### Added — Idempotent restore per-table (`upsertByNaturalKey` skip-if-exists)
+
+- **`upsertByNaturalKey<T>(tx, modelName, where, createData, options?)`** —
+  helper privé générique dispatchant via `tx[modelName].findFirst → .create`.
+  Skip-if-exists semantic : si une row existe par natural key, NE PAS
+  toucher à ses champs (pas de field-level merge en v2.2.0). Re-restore
+  même ZIP sur même DB = `_created: 0`, `_skipped: N` (Test 2 integration).
+- **`findExistingByNaturalKey` extracted** — réutilisé par `upsertByNaturalKey`
+  + dry-run path (pas de duplication NK matching).
+- **`options.skipCreate`** — quand `true`, retourne placeholder
+  `{ id: __dryrun__<model>_<counter> }`. Downstream FK references via idMap
+  suivent les placeholders → diff entier traversé.
+- **19 tables couvertes** en 5 transactions séquentielles
+  `prisma.$transaction({ timeout: 60_000 })` par FK ordering :
+  1. **Tenant config** : ContactType (slug), Contact (name+typeId), User (email)
+  2. **Sites + structure** : Site (code), Rack (siteId+name), Asset
+     (siteId+serialNumber, fallback name), FloorPlan (siteId+title+version),
+     Pin (floorPlanId+x+y+pinType). GPS raw SQL `ST_SetSRID(ST_MakePoint, 4326)`
+     uniquement sur création (préserve operator edits sur re-restore).
+  3. **Lifecycle** : AssetMovement (assetId+timestamp+from+to),
+     Task (siteId+title+createdAt), TaskComment (taskId+authorId+createdAt+body[:64]),
+     Attachment (path), Photo (entityType+entityId+fileUrl content-hash dedup)
+  4. **Finance** : BillingEntity (code), **Expense fallback receiptFile null**
+     (figured plan v3 : `(tenantId, totalAmount, dateIncurred, label.trim().toLowerCase())`),
+     CostAllocation (expenseId+targetId), ConnectivityLink (siteId+role+assetId),
+     Budget 2-pass parent-then-children (reuse v1 pattern, warn orphans)
+  5. **Snapshots** : SiteHealthSnapshot via `tx.upsert` natif (unique siteId),
+     AuditLog **SKIPPED** (restaurer corrompt forensic trail, mirror v1)
+- **MinIO uploads** post-transactions via `fPutObject` (outside
+  `$transaction` — MinIO non transactionnel). Erreurs par fichier loggées
+  sans rollback DB. Re-run safe pour retry uploads échoués.
+
+### Added — Async Bull v3 jobs + progress polling
+
+- **`backup-jobs` Bull v3 queue** dédiée (`@nestjs/bull` v10 + `bull` v4.12,
+  **PAS BullMQ v5** — clarification terminologique vs `XCH_TRACK_D_BACKUP_V2_SCOPE`).
+  `BACKUP_JOB_OPTIONS` : `attempts: 1, timeout: 2h, removeOnComplete: false`,
+  default concurrency 1 (pas de jobs parallèles).
+- **`BackupProcessor`** pattern strict reuse de `MonitorProcessor`
+  ([monitoring/monitor.processor.ts:47](backend/src/modules/monitoring/monitor.processor.ts)) :
+  4 `@Process` handlers (full / site / restore-full / restore-site parqué D.2) +
+  `@OnQueueCompleted` + `@OnQueueFailed` avec retry guard.
+- **`WorkerEventLogger`** injecté → capture Sentry/GlitchTip gratuite via
+  ADR-024 (tags `mode=worker queue=backup-jobs job_name=… runtime=nodejs`).
+  Aucun code Sentry à écrire.
+- **`POST /backup/full | /site/:id | /full/restore`** → 202 +
+  `BackupJobEnqueuedResponseDto { enqueued, jobId }` par défaut. Header
+  `X-Backup-Sync: 1` force le path v1 sync (fallback urgence si Redis
+  down — slated D.2 removal).
+- **`GET /backup/jobs/:jobId`** (nouveau) → `JobStatusResponseDto`.
+  Bull v3 states (`delayed`, `paused`, `stuck`, `unknown`) mapped →
+  `waiting` pour robustesse frontend.
+- **`useBackupJob(jobId)` hook React** — 2000 ms polling, stop on
+  `completed` / `failed` / `unknown` (404 / erreur réseau → `isUnknown:true`
+  évite poll infini). Cleanup `setInterval` au unmount + jobId change.
+- **`worker.module.ts`** import `BackupModule` (worker consume la queue) +
+  commentaire inline rappelant le caveat `XCH_PROD_PORTS` /
+  `XCH_DOCKER_IMAGE_DISCIPLINE` (worker rebuild en même temps que backend).
+
+### Added — Dry-run mode (filet de sécurité 1er restore)
+
+- **Pré-launch estimate** : `POST /api/backup/estimate` → `EstimateResponseDto`
+  `{ dataBytes, filesBytes, totalBytes, fileCount, freeBytes, ok }`.
+  Seuil disque `bytes × 1.2 + 512 MB` ; `fs.statfs(os.tmpdir())` Node 20
+  natif. `InsufficientStorageException` (HTTP 507 literal — enum
+  `@nestjs/common` n'a pas `INSUFFICIENT_STORAGE`).
+- **Dry-run restore** : `POST /backup/full/restore { backupId, dryRun: true }`
+  → `DryRunReportResponseDto { wouldCreate, wouldUpdate: {}, wouldSkip,
+  missingFiles, invalidChecksums, totalSize, estimatedDurationSec }`.
+  Pipeline complet (download, magic byte, unzip, sha256 verify) puis
+  probe natural keys via `applyDataFilesToDb(..., { dryRun: true })`
+  flag `_dryRunMode` set/reset via `try/finally`. GPS raw SQL + MinIO
+  uploads gated `!dryRun`. Aucun write.
+- **Frontend `dryRun` Switch default `true`** dans le restore dialog —
+  opérateur doit explicitement décocher pour real run, ou cliquer
+  « Confirmer l'application réelle » après dry-run.
+- **Pre-launch dialog UI** : grid 5 labels `tabular-nums` (data / files /
+  total / fileCount / freeBytes), alerte rouge si `!estimate.ok`.
+
+### Added — Backup format v2 (orphan-aware metadata + sha256 map)
+
+- **`metadata.json` v2** top-level (drop préfixe v1 `full-backup-<ts>/`) :
+  ```jsonc
+  {
+    "version": 2,                        // NUMBER (discriminant typeof vs v1 string "1.0")
+    "createdAt": "…", "tenantId": "…",
+    "type": "full" | "site" | "db-only",
+    "appVersion": "2.2.0",
+    "buckets": ["xch-storage"],
+    "counts": { "sites": N, … },
+    "files": { "minio/<bucket>/<key>": { "size": N, "sha256": "…", "bucket": "…", "key": "…" } }
+  }
+  ```
+- **ZIP layout v2** : `metadata.json` top-level + `data/<table>.json` +
+  `minio/<bucket>/<key>` mirror 1:1.
+- **Compat v1 restore-only** : détection automatique par `typeof
+  metadata.version` (`'string'` → délégation legacy AdmZip path,
+  `number` → streaming v2). Compat v1 reading préservée pour archives
+  existantes ; aucun backup v1 ne sera plus créé.
+
+### Changed
+
+- **`POST /backup/full | /site/:siteId | /full/restore`** default behaviour :
+  async 202 + jobId. Synchrone v1 disponible via header `X-Backup-Sync: 1`
+  (CLI escape hatch, pas exposé UI).
+- **`backupApi.createSiteBackup`** (frontend legacy) ajoute header
+  `X-Backup-Sync: 1` pour préserver le binary ZIP inline stream legacy
+  (le default async retourne maintenant du JSON).
+- **`applyDataFilesToDb`** return enrichi : `{ counts, created, skipped,
+  siteIds }` (per-table breakdowns).
+
+### Out of scope — figé pour Track D.2 (`XCH_TRACK_D2_BACKUP_V2_FUTURE`)
+
+- **Chiffrement AES-256-GCM streaming** : extension `CryptoService`
+  (ADR-019) avec `createCipherStream()` + sidecar `<filename>.enc.json`
+  + toggle UI
+- **Observabilité GlitchTip approfondie** : spans per-phase backup/restore
+  (au-delà du capture failure gratuit hérité ADR-024)
+- **Cross-tenant restore mapping** : `delegationId` remap pour migration
+  entre environnements pilote
+- **Suppression du fallback `X-Backup-Sync: 1`** post-validation prod
+- **Async multipart upload restore** : tmp staging + enqueue depuis
+  multer buffer (multipart sync v1 conservé pour imports externes en D.1)
+- **Concurrency BullMQ > 1** : data-driven post-D.1 prod metrics
+
+### MCP audit trail
+
+- `XCH_TRACK_D1_BACKUP_V2_2026_05_10` — session tracking complète
+  (10 décisions techniques figées + effort réel/estimé par step + surprises résolues)
+- `XCH_TRACK_D2_BACKUP_V2_FUTURE` — scope future session
+- `XCH_DOCKER_IMAGE_DISCIPLINE` — caveat worker rebuild
+- `XCH_BACKEND_TEST_PATTERNS` — patterns jest local / NestJS sans `@nestjs/testing` /
+  Bull v3 mock Job / in-memory Prisma stub (créé pendant D.1 pour futures sessions)
+- `XCH_RELEASE_PATTERNS` — pattern 2-PRs feature vs 1-PR chore (créé pendant D.1)
+- `XCH_SECURITY_AUDIT_TANSTACK_2026_05_11` — audit supply-chain pré-step-8 (CLEAN)
+- `XCH_RELEASE_v2_2_0` — release tracking (créée à la finalisation)
+
+### PRs incluses dans ce tag
+
+- `feat(track-d1): step 1/9 — pre-flight estimate + checkDiskSpace + 6 DTOs` (`485f57f`)
+- `feat(track-d1): step 2/9 — streaming export v2 (zero Buffer.concat)` (`06b97a9`)
+- `feat(track-d1): step 3/9 — streaming restore v2 + MagicByteValidator + dry-run` (`e81305d`)
+- `feat(track-d1): step 4/9 — upsertByNaturalKey + idempotent restore 19 tables` (`11973b2`)
+- `feat(track-d1): step 5/9 — Bull v3 wiring (async backup-jobs queue + GET status)` (`d5181be`)
+- `feat(track-d1): step 6/9 — dry-run via natural-key lookups + v1 compat preservation` (`2d38768`)
+- `feat(track-d1): step 7/9 — frontend useBackupJob hook + progress UI + dry-run report` (`fe416ea`)
+- `feat(track-d1): step 8/9 — tests intégration round-trip + Playwright E2E` (`e2df252`)
+- `docs(track-d1): step 9/9 — ADR-025 + CHANGELOG finalisé + README backup section` (this commit)
+
+### Détail par étape (traçabilité)
 
 #### Step 2 — Streaming export v2 (~1.5 j budgété)
 
