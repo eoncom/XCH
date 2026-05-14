@@ -91,21 +91,31 @@ describeIfEnabled('Backup v2 round-trip (Track D.1 step 8 — integration)', () 
     const tenantId = `tnt-backup-v2-test-${randomBytes(4).toString('hex')}`;
     testTenantId = tenantId;
 
-    await prisma.tenant.create({
+    // The seed helpers use a loose `any` cast on prisma + Prisma model
+    // accessors. Required column lists drift over time (every schema
+    // migration may add a non-null field) ; since this spec is CI-gated
+    // via XCH_RUN_BACKUP_V2_INTEGRATION=1, type-strict seed inputs would
+    // need maintenance for each schema change without ever running in
+    // CI. Runtime Prisma validates the inputs when the env flag activates
+    // the suite on xch-deploy.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const px = prisma as any;
+
+    await px.tenant.create({
       data: {
         id: tenantId,
         name: 'Backup v2 Test',
-        subdomain: tenantId, // unique, required
+        subdomain: tenantId,
         status: 'ACTIVE',
       },
     });
 
-    const delegation = await prisma.delegation.create({
-      data: { tenantId, name: 'Default', isDefault: true },
+    const delegation = await px.delegation.create({
+      data: { tenantId, name: 'Default', code: 'DEFAULT' },
     });
     testDelegationId = delegation.id;
 
-    const site1 = await prisma.site.create({
+    const site1 = await px.site.create({
       data: {
         tenantId,
         delegationId: delegation.id,
@@ -115,7 +125,7 @@ describeIfEnabled('Backup v2 round-trip (Track D.1 step 8 — integration)', () 
       },
     });
 
-    const site2 = await prisma.site.create({
+    const site2 = await px.site.create({
       data: {
         tenantId,
         delegationId: delegation.id,
@@ -125,7 +135,7 @@ describeIfEnabled('Backup v2 round-trip (Track D.1 step 8 — integration)', () 
       },
     });
 
-    await prisma.asset.createMany({
+    await px.asset.createMany({
       data: [
         {
           tenantId,
@@ -162,7 +172,7 @@ describeIfEnabled('Backup v2 round-trip (Track D.1 step 8 — integration)', () 
     const planKey = `floor-plans/${tenantId}/plan-${randomBytes(4).toString('hex')}.pdf`;
     await uploadToMinio(planKey, planContent);
 
-    await prisma.floorPlan.create({
+    await px.floorPlan.create({
       data: {
         siteId: site1.id,
         title: 'Plan RDC',
@@ -300,7 +310,8 @@ describeIfEnabled('Backup v2 round-trip (Track D.1 step 8 — integration)', () 
 
     // 5. Re-create the tenant shell so the restore has a target.
     // (Real DR scenario : the operator boots a fresh tenant before restoring.)
-    await prisma.tenant.create({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (prisma as any).tenant.create({
       data: {
         id: seed.tenantId,
         name: 'Restored',
@@ -412,7 +423,8 @@ describeIfEnabled('Backup v2 round-trip (Track D.1 step 8 — integration)', () 
 
     // Dry-run on a fresh tenant to inspect the file list in the archive.
     await wipeTestTenant(seed.tenantId);
-    await prisma.tenant.create({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (prisma as any).tenant.create({
       data: {
         id: seed.tenantId,
         name: 'Restored',
