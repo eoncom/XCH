@@ -1375,7 +1375,7 @@ export class BackupService {
     const logs = await this.prisma.auditLog.findMany({
       where: {
         tenantId,
-        action: { in: ['BACKUP_FULL', 'BACKUP_SITE'] },
+        action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] },
       },
       orderBy: { timestamp: 'desc' },
       take: 50,
@@ -1386,7 +1386,7 @@ export class BackupService {
       return {
         id: log.id,
         filename: changes.filename || 'unknown',
-        type: log.action === 'BACKUP_FULL' ? 'full' as const : 'site' as const,
+        type: log.action.startsWith('BACKUP_FULL') ? 'full' as const : 'site' as const,
         siteCode: changes.siteCode,
         size: changes.size || 0,
         createdAt: log.timestamp.toISOString(),
@@ -1399,7 +1399,7 @@ export class BackupService {
     backupId: string,
   ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
     const log = await this.prisma.auditLog.findFirst({
-      where: { id: backupId, tenantId, action: { in: ['BACKUP_FULL', 'BACKUP_SITE'] } },
+      where: { id: backupId, tenantId, action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] } },
     });
     if (!log) throw new NotFoundException('Backup not found');
 
@@ -1417,7 +1417,7 @@ export class BackupService {
 
   async deleteBackup(tenantId: string, backupId: string): Promise<{ message: string }> {
     const log = await this.prisma.auditLog.findFirst({
-      where: { id: backupId, tenantId, action: { in: ['BACKUP_FULL', 'BACKUP_SITE'] } },
+      where: { id: backupId, tenantId, action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] } },
     });
     if (!log) throw new NotFoundException('Backup not found');
 
@@ -3624,7 +3624,7 @@ export class BackupService {
       const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const oldLogs = await this.prisma.auditLog.findMany({
         where: {
-          action: { in: ['BACKUP_FULL', 'BACKUP_SITE'] },
+          action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] },
           timestamp: { lt: cutoff },
         },
         take: 20,
