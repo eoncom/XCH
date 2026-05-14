@@ -22,6 +22,7 @@ import {
   DryRunReportResponseDto,
   toDryRunReportResponseDto,
 } from './dto/dry-run-report.response.dto';
+import { BACKUP_CATALOG_ACTIONS, BackupAuditAction } from './backup.actions.constants';
 
 // ============================================================================
 // Pin rendering constants (mirror from frontend FloorPlanViewer.tsx)
@@ -1375,7 +1376,7 @@ export class BackupService {
     const logs = await this.prisma.auditLog.findMany({
       where: {
         tenantId,
-        action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] },
+        action: { in: [...BACKUP_CATALOG_ACTIONS] },
       },
       orderBy: { timestamp: 'desc' },
       take: 50,
@@ -1399,7 +1400,7 @@ export class BackupService {
     backupId: string,
   ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
     const log = await this.prisma.auditLog.findFirst({
-      where: { id: backupId, tenantId, action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] } },
+      where: { id: backupId, tenantId, action: { in: [...BACKUP_CATALOG_ACTIONS] } },
     });
     if (!log) throw new NotFoundException('Backup not found');
 
@@ -1417,7 +1418,7 @@ export class BackupService {
 
   async deleteBackup(tenantId: string, backupId: string): Promise<{ message: string }> {
     const log = await this.prisma.auditLog.findFirst({
-      where: { id: backupId, tenantId, action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] } },
+      where: { id: backupId, tenantId, action: { in: [...BACKUP_CATALOG_ACTIONS] } },
     });
     if (!log) throw new NotFoundException('Backup not found');
 
@@ -3600,7 +3601,7 @@ export class BackupService {
   private async logBackupAction(
     tenantId: string,
     userId: string | undefined,
-    action: string,
+    action: BackupAuditAction,
     changes: Record<string, any>,
   ): Promise<void> {
     try {
@@ -3624,7 +3625,7 @@ export class BackupService {
       const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const oldLogs = await this.prisma.auditLog.findMany({
         where: {
-          action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] },
+          action: { in: [...BACKUP_CATALOG_ACTIONS] },
           timestamp: { lt: cutoff },
         },
         take: 20,

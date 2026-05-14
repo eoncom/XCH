@@ -8032,3 +8032,24 @@ docs(track-d1): step 9/9 — ADR-025 + CHANGELOG finalisé v2.2.0 + README backu
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-14
+
+**Date:** 2026-05-14 21:17:24
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 0
+
+**Commit message:**
+```
+chore(d.2): preflight — .gitignore + ADR-026 skeleton + CHANGELOG opener
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
