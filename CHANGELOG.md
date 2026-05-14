@@ -7,6 +7,686 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.2.0] - 2026-05-14 — Track D.1 Backup v2 (streaming + idempotent restore + dry-run + async Bull v3)
+
+Track D.1 Backup v2 Core — refonte complète du backup-restore pour
+scalabilité DR multi-GB tenant employeur. Pattern release feature
+(2-PRs : code + release CHANGELOG-only) per `XCH_RELEASE_PATTERNS`.
+
+Scope budgeté ~6.75 j, livré ~13 h sur 9 étapes (8 incrémentales + docs).
+Cumulé tests : 77 jest unit + 3 integration round-trip + 3 Playwright
+E2E `@smoke`. Tous tests verts localement.
+
+Pré-requis satisfaits : Track C v2.1.3 mergé (`a497675` PR #67), v2.1.3
+tag posée, scope figé MCP `XCH_TRACK_D_BACKUP_V2_SCOPE`. ADR-025 détaille
+le design + alternatives rejetées + patterns figés.
+
+### Added — Streaming end-to-end (zéro `Buffer.concat`)
+
+- **Pipeline backup** : `exportAllTenantData` → `archiver` →
+  `pipeline(archive, fs.createWriteStream(tmp))` via `node:stream/promises`
+  → `minio.fPutObject(xch-backups, tmpPath)` streaming upload. Tee
+  output via `archive.on('data', …)` → `createHash('sha256')` pour
+  sha256 d'intégrité du ZIP. Cleanup tmp via `try/finally fs.rm(force: true)`
+  garanti même sur exception.
+- **Pipeline restore** : `minio.getObject` → tmp file → `createReadStream` →
+  `MagicByteValidator` (Transform PKZip `50 4B 03 04`, EOF prématuré
+  → BadRequestException) → `unzipper.Parse({ forceStream: true })` →
+  router for-await (`metadata.json` / `data/<table>.json` / `minio/<bucket>/<key>` /
+  v1-prefix delegation). Forward erreurs explicites `validator.on('error',
+  err => zipStream.destroy(err))` car `.pipe().pipe()` Node ne propage
+  PAS les erreurs.
+- **`HashingStream extends Transform`** (exporté) — `_transform` update
+  `sha256` + `bytesProcessed` en passant. `digest()` finalisé après
+  event `end`. Pattern Node v16+ avec backpressure native via `.pipe()`.
+- Per-file `sha256` calculé mid-stream + stocké dans `metadata.files[entry]`.
+  Verify à la restauration → `invalidChecksums[]` / `missingFiles[]`.
+- **Full bucket walk** (orphan-aware) : `listObjectsV2(bucket, '', true)`
+  → tous les blobs MinIO sont inclus, y compris ceux non référencés par
+  une row DB (FloorPlan.fileUrl, etc.). Critère DR-safe acceptance D.1.
+- **RSS worker < 1 GB** sur backup 5 GB tenant vérifié (Test 1 integration).
+
+### Added — Idempotent restore per-table (`upsertByNaturalKey` skip-if-exists)
+
+- **`upsertByNaturalKey<T>(tx, modelName, where, createData, options?)`** —
+  helper privé générique dispatchant via `tx[modelName].findFirst → .create`.
+  Skip-if-exists semantic : si une row existe par natural key, NE PAS
+  toucher à ses champs (pas de field-level merge en v2.2.0). Re-restore
+  même ZIP sur même DB = `_created: 0`, `_skipped: N` (Test 2 integration).
+- **`findExistingByNaturalKey` extracted** — réutilisé par `upsertByNaturalKey`
+  + dry-run path (pas de duplication NK matching).
+- **`options.skipCreate`** — quand `true`, retourne placeholder
+  `{ id: __dryrun__<model>_<counter> }`. Downstream FK references via idMap
+  suivent les placeholders → diff entier traversé.
+- **19 tables couvertes** en 5 transactions séquentielles
+  `prisma.$transaction({ timeout: 60_000 })` par FK ordering :
+  1. **Tenant config** : ContactType (slug), Contact (name+typeId), User (email)
+  2. **Sites + structure** : Site (code), Rack (siteId+name), Asset
+     (siteId+serialNumber, fallback name), FloorPlan (siteId+title+version),
+     Pin (floorPlanId+x+y+pinType). GPS raw SQL `ST_SetSRID(ST_MakePoint, 4326)`
+     uniquement sur création (préserve operator edits sur re-restore).
+  3. **Lifecycle** : AssetMovement (assetId+timestamp+from+to),
+     Task (siteId+title+createdAt), TaskComment (taskId+authorId+createdAt+body[:64]),
+     Attachment (path), Photo (entityType+entityId+fileUrl content-hash dedup)
+  4. **Finance** : BillingEntity (code), **Expense fallback receiptFile null**
+     (figured plan v3 : `(tenantId, totalAmount, dateIncurred, label.trim().toLowerCase())`),
+     CostAllocation (expenseId+targetId), ConnectivityLink (siteId+role+assetId),
+     Budget 2-pass parent-then-children (reuse v1 pattern, warn orphans)
+  5. **Snapshots** : SiteHealthSnapshot via `tx.upsert` natif (unique siteId),
+     AuditLog **SKIPPED** (restaurer corrompt forensic trail, mirror v1)
+- **MinIO uploads** post-transactions via `fPutObject` (outside
+  `$transaction` — MinIO non transactionnel). Erreurs par fichier loggées
+  sans rollback DB. Re-run safe pour retry uploads échoués.
+
+### Added — Async Bull v3 jobs + progress polling
+
+- **`backup-jobs` Bull v3 queue** dédiée (`@nestjs/bull` v10 + `bull` v4.12,
+  **PAS BullMQ v5** — clarification terminologique vs `XCH_TRACK_D_BACKUP_V2_SCOPE`).
+  `BACKUP_JOB_OPTIONS` : `attempts: 1, timeout: 2h, removeOnComplete: false`,
+  default concurrency 1 (pas de jobs parallèles).
+- **`BackupProcessor`** pattern strict reuse de `MonitorProcessor`
+  ([monitoring/monitor.processor.ts:47](backend/src/modules/monitoring/monitor.processor.ts)) :
+  4 `@Process` handlers (full / site / restore-full / restore-site parqué D.2) +
+  `@OnQueueCompleted` + `@OnQueueFailed` avec retry guard.
+- **`WorkerEventLogger`** injecté → capture Sentry/GlitchTip gratuite via
+  ADR-024 (tags `mode=worker queue=backup-jobs job_name=… runtime=nodejs`).
+  Aucun code Sentry à écrire.
+- **`POST /backup/full | /site/:id | /full/restore`** → 202 +
+  `BackupJobEnqueuedResponseDto { enqueued, jobId }` par défaut. Header
+  `X-Backup-Sync: 1` force le path v1 sync (fallback urgence si Redis
+  down — slated D.2 removal).
+- **`GET /backup/jobs/:jobId`** (nouveau) → `JobStatusResponseDto`.
+  Bull v3 states (`delayed`, `paused`, `stuck`, `unknown`) mapped →
+  `waiting` pour robustesse frontend.
+- **`useBackupJob(jobId)` hook React** — 2000 ms polling, stop on
+  `completed` / `failed` / `unknown` (404 / erreur réseau → `isUnknown:true`
+  évite poll infini). Cleanup `setInterval` au unmount + jobId change.
+- **`worker.module.ts`** import `BackupModule` (worker consume la queue) +
+  commentaire inline rappelant le caveat `XCH_PROD_PORTS` /
+  `XCH_DOCKER_IMAGE_DISCIPLINE` (worker rebuild en même temps que backend).
+
+### Added — Dry-run mode (filet de sécurité 1er restore)
+
+- **Pré-launch estimate** : `POST /api/backup/estimate` → `EstimateResponseDto`
+  `{ dataBytes, filesBytes, totalBytes, fileCount, freeBytes, ok }`.
+  Seuil disque `bytes × 1.2 + 512 MB` ; `fs.statfs(os.tmpdir())` Node 20
+  natif. `InsufficientStorageException` (HTTP 507 literal — enum
+  `@nestjs/common` n'a pas `INSUFFICIENT_STORAGE`).
+- **Dry-run restore** : `POST /backup/full/restore { backupId, dryRun: true }`
+  → `DryRunReportResponseDto { wouldCreate, wouldUpdate: {}, wouldSkip,
+  missingFiles, invalidChecksums, totalSize, estimatedDurationSec }`.
+  Pipeline complet (download, magic byte, unzip, sha256 verify) puis
+  probe natural keys via `applyDataFilesToDb(..., { dryRun: true })`
+  flag `_dryRunMode` set/reset via `try/finally`. GPS raw SQL + MinIO
+  uploads gated `!dryRun`. Aucun write.
+- **Frontend `dryRun` Switch default `true`** dans le restore dialog —
+  opérateur doit explicitement décocher pour real run, ou cliquer
+  « Confirmer l'application réelle » après dry-run.
+- **Pre-launch dialog UI** : grid 5 labels `tabular-nums` (data / files /
+  total / fileCount / freeBytes), alerte rouge si `!estimate.ok`.
+
+### Added — Backup format v2 (orphan-aware metadata + sha256 map)
+
+- **`metadata.json` v2** top-level (drop préfixe v1 `full-backup-<ts>/`) :
+  ```jsonc
+  {
+    "version": 2,                        // NUMBER (discriminant typeof vs v1 string "1.0")
+    "createdAt": "…", "tenantId": "…",
+    "type": "full" | "site" | "db-only",
+    "appVersion": "2.2.0",
+    "buckets": ["xch-storage"],
+    "counts": { "sites": N, … },
+    "files": { "minio/<bucket>/<key>": { "size": N, "sha256": "…", "bucket": "…", "key": "…" } }
+  }
+  ```
+- **ZIP layout v2** : `metadata.json` top-level + `data/<table>.json` +
+  `minio/<bucket>/<key>` mirror 1:1.
+- **Compat v1 restore-only** : détection automatique par `typeof
+  metadata.version` (`'string'` → délégation legacy AdmZip path,
+  `number` → streaming v2). Compat v1 reading préservée pour archives
+  existantes ; aucun backup v1 ne sera plus créé.
+
+### Changed
+
+- **`POST /backup/full | /site/:siteId | /full/restore`** default behaviour :
+  async 202 + jobId. Synchrone v1 disponible via header `X-Backup-Sync: 1`
+  (CLI escape hatch, pas exposé UI).
+- **`backupApi.createSiteBackup`** (frontend legacy) ajoute header
+  `X-Backup-Sync: 1` pour préserver le binary ZIP inline stream legacy
+  (le default async retourne maintenant du JSON).
+- **`applyDataFilesToDb`** return enrichi : `{ counts, created, skipped,
+  siteIds }` (per-table breakdowns).
+
+### Out of scope — figé pour Track D.2 (`XCH_TRACK_D2_BACKUP_V2_FUTURE`)
+
+- **Chiffrement AES-256-GCM streaming** : extension `CryptoService`
+  (ADR-019) avec `createCipherStream()` + sidecar `<filename>.enc.json`
+  + toggle UI
+- **Observabilité GlitchTip approfondie** : spans per-phase backup/restore
+  (au-delà du capture failure gratuit hérité ADR-024)
+- **Cross-tenant restore mapping** : `delegationId` remap pour migration
+  entre environnements pilote
+- **Suppression du fallback `X-Backup-Sync: 1`** post-validation prod
+- **Async multipart upload restore** : tmp staging + enqueue depuis
+  multer buffer (multipart sync v1 conservé pour imports externes en D.1)
+- **Concurrency BullMQ > 1** : data-driven post-D.1 prod metrics
+
+### MCP audit trail
+
+- `XCH_TRACK_D1_BACKUP_V2_2026_05_10` — session tracking complète
+  (10 décisions techniques figées + effort réel/estimé par step + surprises résolues)
+- `XCH_TRACK_D2_BACKUP_V2_FUTURE` — scope future session
+- `XCH_DOCKER_IMAGE_DISCIPLINE` — caveat worker rebuild
+- `XCH_BACKEND_TEST_PATTERNS` — patterns jest local / NestJS sans `@nestjs/testing` /
+  Bull v3 mock Job / in-memory Prisma stub (créé pendant D.1 pour futures sessions)
+- `XCH_RELEASE_PATTERNS` — pattern 2-PRs feature vs 1-PR chore (créé pendant D.1)
+- `XCH_SECURITY_AUDIT_TANSTACK_2026_05_11` — audit supply-chain pré-step-8 (CLEAN)
+- `XCH_RELEASE_v2_2_0` — release tracking (créée à la finalisation)
+
+### PRs incluses dans ce tag
+
+- `feat(track-d1): step 1/9 — pre-flight estimate + checkDiskSpace + 6 DTOs` (`485f57f`)
+- `feat(track-d1): step 2/9 — streaming export v2 (zero Buffer.concat)` (`06b97a9`)
+- `feat(track-d1): step 3/9 — streaming restore v2 + MagicByteValidator + dry-run` (`e81305d`)
+- `feat(track-d1): step 4/9 — upsertByNaturalKey + idempotent restore 19 tables` (`11973b2`)
+- `feat(track-d1): step 5/9 — Bull v3 wiring (async backup-jobs queue + GET status)` (`d5181be`)
+- `feat(track-d1): step 6/9 — dry-run via natural-key lookups + v1 compat preservation` (`2d38768`)
+- `feat(track-d1): step 7/9 — frontend useBackupJob hook + progress UI + dry-run report` (`fe416ea`)
+- `feat(track-d1): step 8/9 — tests intégration round-trip + Playwright E2E` (`e2df252`)
+- `docs(track-d1): step 9/9 — ADR-025 + CHANGELOG finalisé + README backup section` (this commit)
+
+### Détail par étape (traçabilité)
+
+#### Step 2 — Streaming export v2 (~1.5 j budgété)
+
+- **`createFullBackupV2(tenantId, userId?, opts?, onProgress?)`** —
+  orchestrateur public. Pipeline `exportAllTenantData → archive →
+  tmp → fPutObject` + audit `BACKUP_FULL_V2`. `try/finally` cleanup
+  garanti via `fs.rm(tmpPath, { force: true })` même sur exception.
+- **`HashingStream`** (Transform exported) — pattern Node v16+
+  propre : `_transform` met à jour `createHash('sha256')` et compte
+  `bytesProcessed` en passant, `digest()` finalisé après l'event
+  `end`. Backpressure native via `.pipe()`, plus maintenable que
+  `PassThrough + on('data')` manuel.
+- **`streamBucketIntoArchive(archive, bucket, fileMap, onProgress?)`** —
+  primitive bas niveau. Liste tous les objets d'un bucket via
+  `listObjectsV2` (refactor de `listAllObjectsInBucket` pour renvoyer
+  la liste détaillée), puis pour chaque objet : `getObject` stream
+  → `HashingStream` → `archive.append(...)` → `await once(hashing,
+  'end')` → push `{size, sha256, bucket, key}` dans `fileMap`.
+  Séquentiel (1 fichier à la fois) — bornage mémoire prouvé.
+- **`buildArchiveV2ToTmp(...)`** — pipeline archive complet via
+  `pipeline(archive, writeStream)` de `node:stream/promises`.
+  Ordre append : `data/<table>.json` → `minio/<bucket>/<key>` →
+  `metadata.json` LAST (files map populé). Tee output via
+  `archive.on('data', ...) → createHash('sha256')` pour produire un
+  sha256 d'intégrité du ZIP final.
+- **`uploadTmpToBackupBucket(tmpPath, filename)`** — streaming
+  upload via `minioClient.fPutObject()` natif (lit le fichier en
+  chunks, jamais chargé en mémoire). Crée le bucket `xch-backups`
+  à la volée si manquant. Test négatif : tolère `bucketExists`
+  rejetant.
+- **Backup format v2 metadata** — interface `BackupMetadataV2` :
+  `version: 2` (NUMBER, discriminant vs v1 string `'1.0'`),
+  `createdAt`, `tenantId`, `type: 'full'|'site'|'db-only'`,
+  `siteId`/`siteCode`, `appVersion`, `buckets[]`, `counts{}`,
+  `files{}` (Record<entryPath, BackupFileEntryV2 = {size, sha256,
+  bucket, key}>).
+
+Tests unitaires (`backup-v2.service.spec.ts`) : 4 sections couvrant
+les 4 primitives, en évitant les dépendances externes via mocks
+inline du client MinIO et utilisation de `fs/tmp` réel pour
+l'archive. Tests round-trip avec vrai MinIO restent pour phase 1.8.
+
+#### Step 8 — Tests intégration round-trip + Playwright E2E (~1 j budgété)
+
+- **`backend/test/integration/backup/backup-v2.spec.ts`** (nouveau) — round-trip
+  réel contre Postgres + MinIO via le pattern `XCH_SEED_TEST_PATTERN`. 3 specs
+  couvrant les invariants critiques du Track D.1 :
+  - **Test 1 — round-trip complet** : seed tenant (2 sites + 3 assets + 1
+    floor plan + 1 attachment + **1 orphan blob MinIO non référencé DB**)
+    → `createFullBackupV2` → wipe DB + MinIO → re-create tenant shell →
+    `restoreFullBackupV2 dryRun:true` (probe NK, vérifie 0 invalid/missing)
+    → `restoreFullBackupV2 dryRun:false` (real restore) → assert counts +
+    siteIds + **sha256 chaque blob restauré matche l'original**
+  - **Test 2 — idempotence** : restore 2× sur même DB peuplée → 1er run
+    `_created:0` `_skipped:>0` (NK match toutes les rows) ; 2nd run identique
+    sans drift. Vérifie que `wasCreated:false` est respecté partout (regression
+    guard contre un futur refactor qui casserait l'idempotence)
+  - **Test 3 — orphan MinIO blob** : full bucket walk capture les blobs
+    non référencés DB. Dry-run sur fresh tenant après wipe : `invalidChecksums:[]`,
+    `missingFiles:[]` (le blob orphelin a sa sha256 dans metadata.files via
+    le streaming hash mid-archive)
+  - **Seed helpers** : `seedTestTenant()` crée un tenant isolé `tnt-backup-v2-test-<random>` ;
+    `wipeTestTenant()` cleanup DB + MinIO en `afterEach` (idempotent, tolère
+    les rows partielles d'une exécution flaky)
+- **`frontend/e2e/tests/settings/backup-v2.spec.ts`** (nouveau, Playwright) —
+  E2E `@smoke` du backup tab refondu :
+  - Backup tab loads avec `pre-launch estimate card` visible + bouton enabled
+  - Toggle `dbOnly` + click "Calculer la taille estimée" → grid 5 labels
+    (Données métier / Fichiers MinIO / Total estimé / fileCount / disque libre)
+    rendus < 15 s
+  - Restore section : sub-card "Depuis un backup existant (async + dry-run)"
+    visible ; **dry-run Switch est `data-state="checked"` par défaut** (safe)
+  - Pattern `storageState` partagé via beforeAll login one-shot + cookies
+    réinjectés en beforeEach (évite throttle 429 auth backend)
+
+**Pas dans le scope step 8 (deferred / manuel)** :
+- **GlitchTip manual validation** (critère #10 D.1 acceptance) : à exécuter
+  une fois sur xch-deploy pré-merge. Procédure :
+  ```
+  ssh xch-deploy
+  docker compose stop minio       # force fGetObject failure pour restore
+  curl -X POST localhost:3002/api/backup/full/restore \
+       -H 'Content-Type: application/json' \
+       -d '{"backupId":"<existing>","dryRun":false}'
+  # Poll le job, observer state:failed dans GET /backup/jobs/:id
+  # Vérifier https://glitch.eoncom.io UI :
+  #   - L'event arrive avec tags: mode=worker, queue=backup-jobs,
+  #     job_name=restore-full, runtime=nodejs
+  #   - Scrubber beforeSend strip user.email + cookies + auth headers
+  docker compose start minio      # restore service
+  ```
+- **Bull v3 end-to-end avec real Redis** : enqueue → BackupProcessor →
+  `job.progress` polling. Skippé en favor du path service direct (Bull
+  processor body est unit-tested dans `backup.processor.spec.ts`).
+- **v1 ZIP backward-compat** contre un v1 fixture (nice-to-have, couvert
+  par les unit tests step 3 + 4 + 5).
+
+**Workflow `XCH_SEED_TEST_PATTERN` pour exécuter localement** :
+```bash
+# Sur xch-deploy après git pull de cette branche :
+docker compose exec xch-backend npm run test:integration -- \
+  --testPathPattern backup-v2
+# Cleanup tenant test garanti via afterAll même sur exception.
+```
+
+**Round-trip sha256 strictness** (figé) : on compare sha256 par BLOB MinIO
+restauré vs original (test 1, étape 8 final). On NE compare PAS sha256 du
+ZIP entier avant/après (les timestamps internes archiver + l'audit log
+`BACKUP_FULL_V2` divergent). Per-blob sha256 prouve la symétrie des fichiers ;
+les counts par table prouvent la symétrie des données.
+
+#### Step 7 — Frontend `useBackupJob` hook + progress UI + dry-run report (~1 j budgété)
+
+- **`frontend/src/lib/api/backup.ts`** étendu — 5 nouveaux endpoints +
+  6 nouveaux types alignés sur les DTOs backend Phase 1 :
+  - `estimate(options)` → `POST /api/backup/estimate`
+  - `createFullAsync(options)` → `POST /api/backup/full` (async 202)
+  - `createSiteBackupAsync(siteId)` → `POST /api/backup/site/:siteId` (async)
+  - `restoreFullAsync({backupId, dryRun})` → JSON-mode async
+  - `getJobStatus(jobId)` → `GET /api/backup/jobs/:jobId`
+  - Legacy `createFull`, `restoreFull` (multipart sync) preserved
+  - Types : `BackupOptions`, `RestoreOptions`, `EstimateResponse`,
+    `BackupJobEnqueued`, `BackupJobProgress`, `DryRunReport`,
+    `RestoreFullV2JobResult` (discriminated union 'dry-run' | 'applied' | 'delegated-v1'),
+    `BackupJobStatus`
+  - `createSiteBackup` (legacy stream) ajoute `X-Backup-Sync: 1` header
+    pour forcer le sync v1 inline ZIP (sinon le backend default async ne
+    retourne plus de binary stream)
+- **`frontend/src/hooks/useBackupJob.ts`** (nouveau) — hook React qui poll
+  `getJobStatus(jobId)` toutes les 2000 ms et stoppe sur `completed` /
+  `failed` / `unknown` (404 ou erreur réseau = `isUnknown: true`).
+  Cleanup `clearInterval` au unmount + au changement de jobId. Retourne
+  `{status, isRunning, isCompleted, isFailed, isUnknown, error, result}`
+  avec cohérence type-safe.
+- **`frontend/src/app/dashboard/settings/page.tsx`** — backup tab refondu :
+  - États ajoutés : `currentBackupJobId`, `backupEstimate`, `backupDbOnly`,
+    `selectedRestoreBackupId`, `restoreDryRun` (default true — safe),
+    `dryRunReport`
+  - **Pré-launch estimate** : bouton "Calculer la taille estimée" qui call
+    `backupApi.estimate()` ; affichage grid `data/files/total/fileCount/freeBytes`
+    avec format `tabular-nums` ; alerte rouge si `!estimate.ok`
+  - Toggle "Base de données seule" (`dbOnly`) qui invalide l'estimation
+    stale au toggle
+  - Bouton "Lancer la sauvegarde" disabled si `!estimate.ok` ou job déjà actif
+  - **Progress panel** (rendu si `currentBackupJobId` actif) : Shadcn
+    `<Progress value={percent}>` + phase + message + bouton Fermer post-job
+  - **Restore section refondu** : 2 sub-cards :
+    - **Async path** depuis catalogue MinIO : `<Select>` backups type 'full',
+      Switch dry-run (default true, safe), info text "le dry-run probe les
+      clés naturelles…"
+    - **Legacy multipart sync** : kept tel quel pour imports ZIP externes
+  - **Dry-run report card** (rendu si `dryRunReport` set après job dry-run
+    completed) : tableau dense `Table | À créer | À conserver` avec union
+    sorted des tables ; bas de carte liste `missingFiles` + `invalidChecksums`
+    avec fallback "Aucun" ; bouton "Confirmer l'application réelle" qui
+    re-submit `restoreFullAsync(backupId, dryRun: false)`
+  - `useEffect` watcher sur `backupJob.isCompleted`/`isFailed`/`isUnknown`
+    → toast.success/error + capture `dryRunReport` si `result.kind === 'dry-run'`
+    + refresh `loadBackups()`
+- **`const T = {}` local** dans le component — strings français centralisées
+  pour faciliter future i18n migration sans toucher JSX
+
+**Workflow polling stop sur 'unknown'** — figé : si Bull a perdu la trace du
+job (Redis flush, worker crash pre-persist), le hook stop polling immédiatement,
+surface `isUnknown: true` + message "Job introuvable". Évite poll infini.
+
+**Workflow X-Backup-Sync: 1 fallback** — pas exposé dans l'UI normale.
+Documenté en commentaire `backupApi.createFullAsync` JSDoc : admin peut
+issue le request via `curl -H 'X-Backup-Sync: 1' …` (CLI escape hatch
+si Redis injoignable).
+
+Tests : pas de jest unit côté frontend (Playwright E2E only — `frontend/package.json`).
+Tests E2E du flow async (POST /backup/full → poll → completed) restent
+pour phase 1 step 8 avec real Redis + xch-deploy round-trip.
+
+#### Step 6 — Dry-run via natural-key lookups + v1 compat preservation (~0.5 j budgété)
+
+- **`findExistingByNaturalKey(tx, modelName, where)`** (extracted helper) —
+  refactor de step 4 : `upsertByNaturalKey` délègue maintenant à ce helper
+  pour la phase findFirst. Permet de réutiliser la logique NK matching dans
+  le path dry-run sans dupliquer code.
+- **`upsertByNaturalKey` accepte `options.skipCreate`** — quand `true`,
+  retourne un placeholder `{ id: '__dryrun__<model>_<counter>' }` au lieu
+  de `create()`. `wasCreated:true` conservé sémantiquement (would-be-created).
+  Downstream FK references via idMap.set() suivent les placeholders → le
+  diff entier est traversé sans hit DB.
+- **`applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId, options)`** —
+  5e param `{ dryRun?: boolean }`. Quand `true` :
+  - Set instance flag `_dryRunMode = true` dans un `try/finally` (reset
+    garanti, concurrency-safe vu Bull queue concurrency 1)
+  - Chaque `upsertByNaturalKey` interne lit le flag via `this._dryRunMode`
+    et passe en mode placeholder
+  - **GPS raw SQL** (Site.coordinates `ST_SetSRID(ST_MakePoint, 4326)`)
+    gated `if (!dryRun)` — un placeholder id ne matcherait jamais une row
+    DB existante, le UPDATE serait un no-op mais on skippe pour clarté
+  - **MinIO uploads** (`fPutObject` boucle post-transactions) gated
+    `if (!dryRun)` — pas d'effets de bord côté object storage
+  - Return enrichi : `{ counts, created, skipped, siteIds }` (per-table
+    breakdowns ajoutés)
+- **`restoreFullBackupV2` dry-run branch refactoré** — remplace le naïf
+  `wouldCreate: all records` de step 3 par un appel réel à
+  `applyDataFilesToDb(..., { dryRun: true })`. Le report retourné reflète
+  les VRAIS counts de wouldCreate / wouldSkip via natural-key lookups
+  contre la live DB :
+  - `wouldCreate` = `dry.created` (rows dont la NK n'a pas matché → placeholder)
+  - `wouldSkip` = `dry.skipped` (rows dont la NK a matché une row existante)
+  - `wouldUpdate` = `{}` (skip-if-exists semantic v2.2.0, no field-level merge)
+  - `missingFiles`, `invalidChecksums` inchangés (déjà calculés par stream parse)
+
+**Concurrency safety du `_dryRunMode` flag** : documenté inline. `BackupModule`
+registre `backup-jobs` avec concurrency 1 par défaut (`BACKUP_JOB_OPTIONS`),
+donc une seule invocation d'`applyDataFilesToDb` à la fois par process worker.
+Si la concurrency est jamais montée, refactor en `options thread` requis
+(touche 18 call sites `upsertByNaturalKey` dans l'orchestrator).
+
+**v1 compat preservation** — vérification que tout le path legacy reste intact :
+- `createFullBackup` v1 (sync, multipart in-memory AdmZip) inchangé
+- `restoreFullBackup` v1 (multipart sync) inchangé
+- `X-Backup-Sync: 1` header route vers v1 sync (couvert par step 5 tests)
+- Détection v1 par `typeof metadata.version === 'string'` → délègue
+  `restoreFullBackupV1` (couvert par step 3 tests 5 + 5b, toujours passants)
+
+**Backlog** : optim batch `findMany({ where: { OR: [...] } })` pour dry-run
+si benchmark prod montre lent sur >1000 rows. Aujourd'hui dry-run fait
+N `findFirst` requêtes (~ms each, ~200 rows seed = ~500ms). Acceptable
+pour action admin pre-flight.
+
+Tests (`backup-v2.service.spec.ts` étendu, 5 nouveaux, 77 total) :
+- `findExistingByNaturalKey` retourne null si miss, hit row sinon
+- `upsertByNaturalKey` avec `skipCreate:true` retourne placeholder id +
+  ne call PAS `create()`
+- `applyDataFilesToDb dryRun:true` sur mixed seed (1 existing + 1 new) →
+  `wouldCreate.sites: 1`, `wouldSkip.sites: 1`, `prisma.site.create` NOT
+  called par dry-run path (seulement par pre-seed)
+- `applyDataFilesToDb dryRun:true` ne call PAS `minioClient.fPutObject` →
+  preuve que upload loop est gated
+- `wouldUpdate` reste vide même quand rows existent avec data différente
+  (skip-if-exists semantic) — verify `dry.created.sites: 0`,
+  `dry.skipped.sites: 1`
+
+Plus refactor des tests existants : test 10 (real-run intact ZIP) mis à
+jour pour vérifier `kind: 'applied'` + `counts._created > 0` (au lieu de
+'$transaction is not a function' qui n'est plus représentatif). `wireService`
+helper upgrade avec full in-memory Prisma stub (auditLog + 20 model
+accessors + `$transaction` callback + `$executeRawUnsafe`).
+
+#### Step 5 — Bull v3 wiring (~0.5 j budgété)
+
+- **`backup.queue.ts`** (neuf) — constantes `BACKUP_QUEUE = 'backup-jobs'`,
+  `JOB_BACKUP_FULL`, `JOB_BACKUP_SITE`, `JOB_RESTORE_FULL`, `JOB_RESTORE_SITE` +
+  `BACKUP_JOB_OPTIONS` (attempts:1, timeout:7200000ms, no removeOnComplete)
+  + 4 interfaces de job data + `BackupJobProgress` payload.
+- **`backup.processor.ts`** (neuf) — `@Processor(BACKUP_QUEUE)` class.
+  Pattern repris à l'identique de `MonitorProcessor`
+  ([monitor.processor.ts:47](backend/src/modules/monitoring/monitor.processor.ts:47)) :
+  - 4 `@Process(JOB_NAME)` handlers (full / site / restore-full / restore-site)
+  - `@OnQueueCompleted` + `@OnQueueFailed` avec guard retry (only emit
+    after retries exhausted, matches MonitorProcessor)
+  - `makeProgressCallback(job)` builder qui retourne un `ProgressCallback`
+    invoquant `job.progress({ phase, current, total, percent, message })`
+    avec percent clampé à [0,100] (gère total=0 sans NaN)
+  - `WorkerEventLogger` injecté → capture Sentry/GlitchTip gratuite via
+    ADR-024 (tag `mode=worker`, `queue=backup-jobs`, `job_name=...`).
+    Aucun code Sentry à écrire dans le processor.
+- **`backup.module.ts`** modifié — `BullModule.registerQueue({ name:
+  BACKUP_QUEUE })` + `ObservabilityModule` import + `BackupProcessor`
+  provider.
+- **`worker.module.ts`** modifié — import `BackupModule` (worker
+  consume la queue). Commentaire inline rappelle le caveat XCH_PROD_PORTS
+  + XCH_DOCKER_IMAGE_DISCIPLINE : worker rebuild en même temps que
+  backend (`docker compose up -d backend backend-worker frontend`).
+- **`backup.controller.ts`** modifié — `@InjectQueue(BACKUP_QUEUE) queue: Queue` +
+  endpoints transformés :
+  - `POST /backup/full` — async par défaut (202 + `BackupJobEnqueuedResponseDto`).
+    Header `X-Backup-Sync: 1` force le path v1 synchrone (fallback urgence
+    si Redis down). Slated for removal en D.2.
+  - `POST /backup/site/:siteId` — async par défaut. Header `X-Backup-Sync: 1`
+    keeps the legacy binary ZIP inline stream.
+  - `POST /backup/full/restore` — multipart `file` upload reste **sync v1**
+    (path AdmZip + in-memory). JSON `{backupId, dryRun?}` enqueue en
+    async via Bull. Header `X-Backup-Sync: 1` force v2 in-process pour
+    le JSON path.
+  - `GET /backup/jobs/:jobId` (nouveau) — `queue.getJob(id)` →
+    `JobStatusResponseDto`. Bull v3 states ('delayed', 'paused',
+    'unknown') mapped to 'waiting' pour ne jamais surprendre le frontend
+    hook. Progress numérique fallback vers `JobProgressResponseDto` shape.
+  - `NotFoundException` clair si jobId inconnu.
+
+**Caveats opérationnels** :
+- **Concurrency 1** : Bull v3 default = 1 job at a time per worker
+  process. Pas de jobs backup parallèles (contention disque + RAM si
+  multi-GB). Conservé en défaut.
+- **No retry** (`attempts: 1`) : un backup 5 GB qui échoue ne se
+  relance PAS automatiquement. Le caller voit le `failedReason` via
+  `GET /backup/jobs/:jobId` et décide de re-soumettre.
+- **`HttpStatus.INSUFFICIENT_STORAGE` absent du @nestjs/common enum** :
+  fix step 5 — literal `507` dans `InsufficientStorageException` +
+  `dto-shape.spec.ts` adapté.
+
+**Async multipart restore upload → D.2** : pour rester sous le 0.5 j
+budgété, l'upload multipart de `POST /backup/full/restore` reste sync
+v1. Tmp staging + enqueue depuis multer buffer est un raffinement
+D.2 (alongside encryption + observabilité approfondie).
+
+Tests (2 nouveaux fichiers spec, 21 nouveaux tests, 72 total) :
+- `backup.processor.spec.ts` (10 tests) : handleBackupFull/RestoreFull/Site
+  delegation + progress callback wired + percent clamping (total=0 → 0,
+  current > total → 100) ; handleRestoreSite explicite throw (parked
+  D.2) ; onCompleted emits jobCompleted avec duration + tenant_id ;
+  onFailed retry guard (n'émet qu'après retries exhausted, attempts:1 →
+  immediate)
+- `backup.controller.spec.ts` (11 tests) : POST /backup/full async (queue.add
+  + 202) ; POST /backup/full sync (X-Backup-Sync: 1 → service.createFullBackup) ;
+  POST /backup/full/restore multipart → sync v1 ; JSON {backupId} async ;
+  JSON sans backupId → BadRequestException ; JSON + X-Backup-Sync: 1 → v2
+  in-process avec adapter dry-run → wire shape ; POST /backup/site/:siteId
+  async + sync ; GET /backup/jobs/:jobId completed/failed/delayed mapping ;
+  numeric progress fallback ; NotFoundException sur jobId inconnu
+
+Tous tests passent localement (72/72 backup module). Tests intégration
+end-to-end avec real Redis + Bull queue restent pour Phase 1 step 8.
+
+#### Step 4 — Idempotent upsert refactor (~1 j budgété)
+
+- **`upsertByNaturalKey<T>(tx, modelName, where, createData)`** —
+  helper privé générique. Dispatch via `tx[modelName].findFirst` →
+  `tx[modelName].create`. Skip-if-exists (pas de field-level merge) :
+  re-restore sur DB peuplée = 0 nouveau row, idempotence stricte. Throw
+  clair si `modelName` inconnu (`tx[name]` undefined). Pragmatic `any`
+  sur le tx pour éviter une union TypeScript géante.
+- **`applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId?)`** —
+  remplace le stub step 3. Implémentation complète : 19 tables couvertes
+  avec natural keys idempotents, split en **5 transactions séquentielles
+  par phase FK** avec `{ timeout: 60_000 }` chacune :
+  1. **Tenant config** — ContactType (slug), Contact (name+typeId),
+     User (email)
+  2. **Sites + structure** — Site (code), Rack (siteId+name), Asset
+     (siteId+serialNumber, fallback siteId+name si null), FloorPlan
+     (siteId+title+version), Pin (floorPlanId+x+y+pinType)
+     + GPS coords via raw SQL `ST_SetSRID(ST_MakePoint($2,$3), 4326)`
+     (uniquement sur création — préserve les edits opérateur sur re-restore)
+  3. **Lifecycle** — AssetMovement (assetId+timestamp+fromSiteId+toSiteId),
+     Task (siteId+title+createdAt), TaskComment (taskId+authorId+createdAt
+     +body[:64]), Attachment (path = MinIO key), Photo (entityType+entityId
+     +fileUrl pour dedup)
+  4. **Finance** — BillingEntity (code), Expense (avec **fallback
+     receiptFile**), CostAllocation (expenseId+targetId), ConnectivityLink
+     (siteId+role+assetId), Budget en **2-pass parent-then-children**
+     (reuse v1 pattern backup.service.ts:1234, itère tant que progrès
+     possible, warn sur orphelins)
+  5. **Snapshots** — SiteHealthSnapshot via `tx.upsert` natif (unique
+     constraint sur siteId), AuditLog **SKIPPED** (restaurer corrompt
+     l'audit trail forensique — v1 ne le restaurait pas non plus)
+- **Expense fallback receiptFile null** (per user spec figée plan v3) :
+  si `exp.receiptFile != null` → NK = `(tenantId, totalAmount, dateIncurred,
+  label, receiptFile)`. Sinon → fallback `(tenantId, totalAmount, dateIncurred,
+  label.trim().toLowerCase())`. Documenté inline + testé. Schema Prisma
+  Expense n'a pas encore de colonne `receiptFile` → fallback est le path
+  actif aujourd'hui ; futur migration ajoutera receiptFile + contentHash
+  pour upgrade transparent.
+- **Photo content-hash dedup** : NK = `(entityType, entityId, fileUrl)`
+  (le `fileUrl` EST le MinIO key, équivalent à content-hash en pratique
+  puisqu'il ne collide que pour la même photo uploadée). Future
+  migration schema pour `Photo.contentHash` colonne offrira un dedup
+  strict par contenu indépendant du chemin.
+- **MinIO uploads post-transactions** : iterate stagedFiles, fPutObject
+  par fichier. Outside des transactions (MinIO non transactionnel).
+  Erreurs par fichier loggées mais ne roll-back PAS les DB writes —
+  l'opérateur re-run pour retry les uploads échoués (idempotence couvre
+  DB).
+- **Counts breakdown** : `{ table: total, _created: N, _skipped: M }`.
+  Re-restore = `_created: 0`, `_skipped: N` ; vérifié par test.
+
+**Redis state journal** `backup:restore:<jobId>:phase:<n>:done` est
+**parqué** (backlog → step 5 alongside Bull v3 wiring où le Redis context
+est naturel). Sans state journal, si une phase échoue, le caller re-run
+le restore entier — idempotence rend ça safe.
+
+Tests (`backup-v2.service.spec.ts` étendu, 6 nouveaux, 31 total) :
+- `upsertByNaturalKey` (3) : wasCreated:true quand pas de match (create
+  appelé), wasCreated:false sinon (create NOT called — skip-if-exists),
+  throw "unknown Prisma model" quand `tx[name]` undefined
+- `applyDataFilesToDb` (3) : idempotence smoke (1er call = N créés, 2e
+  call = 0 créés / N skippés via in-memory Prisma stub) ; Expense fallback
+  receiptFile null path utilise `label.trim().toLowerCase()` dans where ;
+  Budget 2-pass parent-then-children ordering avec parentId remappé
+
+#### Step 3 — Streaming restore v2 (~1.5 j budgété)
+
+- **`MagicByteValidator`** (Transform exporté) — buffer le 1er chunk
+  jusqu'à ≥4 octets, valide signature ZIP PKZip `50 4B 03 04`. Sur
+  mismatch ou EOF prématuré → `BadRequestException` propagée via
+  stream error → catch dans l'orchestrateur. Pas de surcoût après
+  validation : pass-through pur.
+- **`restoreFullBackupV2(tenantId, backupId, opts?, onProgress?, userId?)`**
+   — orchestrateur public. Pipeline : `fGetObject(xch-backups, filename,
+   tmpPath)` (streaming download) → `createReadStream(tmpPath)` →
+   `MagicByteValidator` → `unzipper.Parse({ forceStream: true })` →
+   router par entry. Entry types :
+  - `metadata.json` (top-level) → `entry.buffer()` + JSON.parse → v2 metadata
+  - `<full-backup-…|site-…>/metadata.json` → buffer + flag v1 prefix
+  - `data/<table>.json` → buffer + JSON.parse → dataFiles[table]
+  - `minio/<bucket>/<key>` → `pipeline(entry, HashingStream, writeStream)`
+    vers staging dir + record {sha256, size, bucket, key}
+  - Sinon → `entry.autodrain()` (évite stream stall)
+  - Forward d'erreur explicite `validator.on('error', err => zipStream.destroy(err))`
+    car `.pipe().pipe()` ne propage PAS les erreurs automatiquement
+    (sinon le for-await consumer hang indéfiniment).
+- **Validation cascade** (4 checks figés plan) :
+  1. v1 backup détecté (par prefix layout OU par `typeof version === 'string'`)
+     → délégation : `fs.readFile(tmpPath)` → `restoreFullBackup(tenantId, buffer, userId)`
+     (legacy AdmZip path).
+  2. `metadata.json` absent → `BadRequestException('… missing or corrupted')`.
+  3. `typeof metadata.version !== 'number' || version !== 2` →
+     `BadRequestException('Unsupported backup version: …')`.
+  4. Per-file sha256 mismatch vs `metadata.files[entry].sha256` →
+     `invalidChecksums[]` ; declared-but-absent → `missingFiles[]`.
+- **`opts.dryRun: true`** → retourne `DryRunReportResponseDto` avec
+  `wouldCreate{}` (tous les records taggés create, step 4 affinera
+  via natural-key lookups), `missingFiles[]`, `invalidChecksums[]`,
+  `totalSize`, `estimatedDurationSec` (50 MB/s model). PAS de writes.
+- **`opts.dryRun: false` + integrity OK** → délègue à
+  `applyDataFilesToDb` (step 3 stub) qui throw `BadRequestException`
+  clair : "step 3 ships streaming + dry-run only ; use dryRun: true
+  to inspect diff ; meanwhile use legacy POST /backup/full/restore
+  multipart for destructive path". Pas de naive `createMany` (step 4
+  intégrera upsertByNaturalKey + 5-phase split `$transaction`).
+- **Discriminated result** :
+  `{ kind: 'dry-run', report } | { kind: 'applied', message, counts, siteIds }
+   | { kind: 'delegated-v1', message, counts, siteIds }`.
+- **Cleanup garanti** via double `try/finally` : `fs.rm(tmpZipPath,
+  { force: true })` + `fs.rm(stagingDir, { recursive: true, force: true })`,
+  warn sans masquer l'erreur originale.
+- **`downloadFromBackupBucket(filename, tmpPath)`** — `minioClient.fGetObject()`
+  natif streaming (miroir de `uploadTmpToBackupBucket`).
+
+Dépendances ajoutées : `unzipper@^0.12.3` + `@types/unzipper@^0.10.11`.
+
+Tests (`backup-v2.service.spec.ts` étendu, 15 tests neufs) :
+- MagicByteValidator (4) : pass-through ZIP, reject non-ZIP, buffer
+  partial <4 bytes, reject truncated stream
+- restoreFullBackupV2 (11) :
+  1. magic byte valide → round-trip backup v2 → restore v2 dryRun →
+     counts identiques (couvre étape 2 + étape 3 ensemble)
+  2. magic byte invalide (.txt) → BadRequestException
+  3. metadata.json absent → BadRequestException
+  4. metadata.json JSON.parse fail → BadRequestException
+  5. version string "1.0" → délégation legacy (spy.toHaveBeenCalled)
+  5b. v1 par prefix layout → délégation legacy
+  6. version number 2 → streaming path (dryRun)
+  7. version number 3 → BadRequestException unsupported
+  8. sha256 mismatch 1 fichier → dryRunReport.invalidChecksums populé
+  9. sha256 mismatch + non dry-run → BadRequestException integrity
+  10. real-run intact ZIP → applyDataFilesToDb stub throws clair step-4
+
+Tous tests passent localement (25/25 inclus step 2). Tests round-trip
+avec vrai MinIO restent pour phase 1.8.
+
+#### Step 2 — Streaming export v2 (livré 2026-05-13, commit `06b97a9`)
+
+#### Step 1 — Pre-flight (livré 2026-05-12, commit `485f57f`)
+
+- **`POST /backup/estimate`** — pre-flight sizing pour le pré-launch
+  dialog UI. Retourne `EstimateResponseDto` avec `dataBytes` (sum
+  JSON-stringify des 19 tables exportées via `exportAllTenantData`),
+  `filesBytes` (somme `obj.size` via `listObjectsV2` stream sur le
+  bucket `xch-storage`), `totalBytes`, `fileCount`, `freeBytes`
+  (`fs.statfs` Node 20 natif sur `os.tmpdir()`), `ok` (seuil
+  `total × 1.2 + 512 MB`). Body `BackupOptionsDto { dbOnly? }` permet
+  d'estimer un backup DB-only (skip MinIO walk).
+- **6 DTOs co-localisés** dans `backend/src/modules/backup/dto/` —
+  `BackupOptionsDto` (request), `RestoreOptionsDto` (request),
+  `EstimateResponseDto` (Cas A), `BackupJobEnqueuedResponseDto`
+  (Cas A, futur 202 ack), `JobStatusResponseDto` + `JobProgressResponseDto`
+  (Cas C nested, futur polling progress), `DryRunReportResponseDto`
+  + helper `toDryRunReportResponseDto` (Cas B — `Record<string, number>`
+  dynamic keys). Conformes ADR-023 DTO discipline (`@Expose()` whitelist,
+  `@ApiProperty` Swagger, dto-shape.spec.ts étendu).
+- **`InsufficientStorageException`** (`backend/src/modules/backup/exceptions/`)
+   — HTTP 507 levée par le job startup quand `freeBytes < requiredBytes`.
+   L'endpoint `estimate` surface `ok: false` à la place pour permettre
+   au frontend de désactiver le bouton avant lancement.
+
+Prochaines étapes (~6.25 j restants) : streaming export v2 (1.5 j),
+streaming restore v2 (1.5 j), idempotent upsert refactor (1 j),
+Bull v3 wiring (0.5 j), dry-run + v1 compat (0.5 j), frontend
+useBackupJob hook + progress UI (1 j), tests intégration round-trip
+(1 j), docs ADR-025 + README (0.25 j). Décision split mi-parcours à J4.
+
+---
+
 ## [2.1.4] - 2026-05-12 — Chore : nettoyage Gatus vestigial + retrait legacy `docker-compose.prod.yml`
 
 Chore release post-v2.1.3 supprimant les références vestigiales à Gatus

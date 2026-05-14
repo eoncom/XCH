@@ -72,10 +72,35 @@
 - 8 modules : assets, sites, tasks, contacts, expenses, racks, users, floor-plans
 - Composant `<Pagination>` frontend avec selecteur taille page
 
-### Sauvegarde / Restauration
-- Backup complet (DB + fichiers MinIO) avec UI dans Parametres
-- Restauration site individuel + restauration complete
-- Nettoyage stockage orphelin (manuel + cron)
+### Sauvegarde / Restauration (v2.2.0 — Track D.1 Backup v2)
+- **Streaming end-to-end** (zero `Buffer.concat`) — backup + restore scale au multi-GB
+  tenant employeur sans OOM (RSS worker < 1 GB sur backup 5 GB)
+- **Orphan-aware** — full bucket walk MinIO inclus dans le ZIP (blobs non
+  référencés DB préservés pour DR)
+- **Per-file SHA-256** dans `metadata.json` v2 + verify à la restauration
+  (mismatch → BadRequestException explicite)
+- **Idempotent restore** via `upsertByNaturalKey` skip-if-exists sur 19 tables
+  + 5 phases FK ordering. Re-restore = 0 inserts garanti.
+- **Dry-run preview** safe-default (Switch UI checked par défaut) — filet
+  de sécurité critique pour 1er restore sur tenant peuplé. Affiche le
+  diff `wouldCreate / wouldSkip / missingFiles / invalidChecksums`
+  avant commit.
+- **Async Bull v3 jobs** : `POST /backup/full` retourne 202 + jobId,
+  frontend `useBackupJob` poll `GET /backup/jobs/:jobId` toutes les 2s.
+  Progress bar live + capture Sentry/GlitchTip gratuite via `WorkerEventLogger`
+  (ADR-024).
+- **Pre-launch estimate** : `POST /backup/estimate` retourne taille
+  projetée + check disque (`fs.statfs` Node 20). HTTP 507 si insuffisant.
+- **Compat v1 restore-only** : ZIP v1 existants restaurables via délégation
+  legacy `AdmZip` path (détection automatique par `typeof metadata.version`).
+- **CLI escape hatch** : header `X-Backup-Sync: 1` force le path v1
+  synchrone (fallback urgence si Redis down).
+- Référence : [ADR-025 Backup v2 streaming](docs/decisions/adr-025-backup-v2-streaming.md)
+  + [CHANGELOG v2.2.0](CHANGELOG.md)
+
+### Sauvegarde / Restauration (legacy v1, restore-only depuis v2.2.0)
+- Restauration site individuel + restauration complete (multipart sync)
+- Nettoyage stockage orphelin (manuel + cron `cleanupOrphanedStorage`)
 
 ### Export
 - **Sites** : CSV, Excel, PDF, JSON, ZIP (plans PDF avec pins + equipements en baies)

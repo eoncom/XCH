@@ -7927,3 +7927,108 @@ chore(release): v2.1.3 — Track C bugs secondaires (floor plans + backup) (#68)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-12
+
+**Date:** 2026-05-12 21:08:06
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 10
+- Frontend files modified: 0
+
+**Commit message:**
+```
+chore(infra): retire Gatus vestiges + legacy docker-compose.prod.yml (v2.1.4) (#69)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-13
+
+**Date:** 2026-05-13 19:31:22
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat(track-d1): step 2/9 — streaming export v2 (zero Buffer.concat)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-14
+
+**Date:** 2026-05-14 01:55:28
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 9
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat(track-d1): step 4/9 — upsertByNaturalKey + idempotent restore 19 tables
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-14
+
+**Date:** 2026-05-14 10:56:53
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 0
+- Frontend files modified: 3
+
+**Commit message:**
+```
+feat(track-d1): step 6/9 — dry-run via natural-key lookups + v1 compat preservation
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-14
+
+**Date:** 2026-05-14 12:08:18
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 1
+
+**Commit message:**
+```
+docs(track-d1): step 9/9 — ADR-025 + CHANGELOG finalisé v2.2.0 + README backup section
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
