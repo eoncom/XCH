@@ -9,7 +9,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Added — Track D.1 Backup v2 (phase 1 steps 1-7 / 9, ~6.75 j scope)
+### Added — Track D.1 Backup v2 (phase 1 steps 1-8 / 9, ~6.75 j scope)
 
 Phases 1.1 (pré-flight DTOs + check) et 1.2 (streaming export v2) posent
 les fondations pour la refonte streaming du backup
@@ -59,6 +59,75 @@ Tests unitaires (`backup-v2.service.spec.ts`) : 4 sections couvrant
 les 4 primitives, en évitant les dépendances externes via mocks
 inline du client MinIO et utilisation de `fs/tmp` réel pour
 l'archive. Tests round-trip avec vrai MinIO restent pour phase 1.8.
+
+#### Step 8 — Tests intégration round-trip + Playwright E2E (~1 j budgété)
+
+- **`backend/test/integration/backup/backup-v2.spec.ts`** (nouveau) — round-trip
+  réel contre Postgres + MinIO via le pattern `XCH_SEED_TEST_PATTERN`. 3 specs
+  couvrant les invariants critiques du Track D.1 :
+  - **Test 1 — round-trip complet** : seed tenant (2 sites + 3 assets + 1
+    floor plan + 1 attachment + **1 orphan blob MinIO non référencé DB**)
+    → `createFullBackupV2` → wipe DB + MinIO → re-create tenant shell →
+    `restoreFullBackupV2 dryRun:true` (probe NK, vérifie 0 invalid/missing)
+    → `restoreFullBackupV2 dryRun:false` (real restore) → assert counts +
+    siteIds + **sha256 chaque blob restauré matche l'original**
+  - **Test 2 — idempotence** : restore 2× sur même DB peuplée → 1er run
+    `_created:0` `_skipped:>0` (NK match toutes les rows) ; 2nd run identique
+    sans drift. Vérifie que `wasCreated:false` est respecté partout (regression
+    guard contre un futur refactor qui casserait l'idempotence)
+  - **Test 3 — orphan MinIO blob** : full bucket walk capture les blobs
+    non référencés DB. Dry-run sur fresh tenant après wipe : `invalidChecksums:[]`,
+    `missingFiles:[]` (le blob orphelin a sa sha256 dans metadata.files via
+    le streaming hash mid-archive)
+  - **Seed helpers** : `seedTestTenant()` crée un tenant isolé `tnt-backup-v2-test-<random>` ;
+    `wipeTestTenant()` cleanup DB + MinIO en `afterEach` (idempotent, tolère
+    les rows partielles d'une exécution flaky)
+- **`frontend/e2e/tests/settings/backup-v2.spec.ts`** (nouveau, Playwright) —
+  E2E `@smoke` du backup tab refondu :
+  - Backup tab loads avec `pre-launch estimate card` visible + bouton enabled
+  - Toggle `dbOnly` + click "Calculer la taille estimée" → grid 5 labels
+    (Données métier / Fichiers MinIO / Total estimé / fileCount / disque libre)
+    rendus < 15 s
+  - Restore section : sub-card "Depuis un backup existant (async + dry-run)"
+    visible ; **dry-run Switch est `data-state="checked"` par défaut** (safe)
+  - Pattern `storageState` partagé via beforeAll login one-shot + cookies
+    réinjectés en beforeEach (évite throttle 429 auth backend)
+
+**Pas dans le scope step 8 (deferred / manuel)** :
+- **GlitchTip manual validation** (critère #10 D.1 acceptance) : à exécuter
+  une fois sur xch-deploy pré-merge. Procédure :
+  ```
+  ssh xch-deploy
+  docker compose stop minio       # force fGetObject failure pour restore
+  curl -X POST localhost:3002/api/backup/full/restore \
+       -H 'Content-Type: application/json' \
+       -d '{"backupId":"<existing>","dryRun":false}'
+  # Poll le job, observer state:failed dans GET /backup/jobs/:id
+  # Vérifier https://glitch.eoncom.io UI :
+  #   - L'event arrive avec tags: mode=worker, queue=backup-jobs,
+  #     job_name=restore-full, runtime=nodejs
+  #   - Scrubber beforeSend strip user.email + cookies + auth headers
+  docker compose start minio      # restore service
+  ```
+- **Bull v3 end-to-end avec real Redis** : enqueue → BackupProcessor →
+  `job.progress` polling. Skippé en favor du path service direct (Bull
+  processor body est unit-tested dans `backup.processor.spec.ts`).
+- **v1 ZIP backward-compat** contre un v1 fixture (nice-to-have, couvert
+  par les unit tests step 3 + 4 + 5).
+
+**Workflow `XCH_SEED_TEST_PATTERN` pour exécuter localement** :
+```bash
+# Sur xch-deploy après git pull de cette branche :
+docker compose exec xch-backend npm run test:integration -- \
+  --testPathPattern backup-v2
+# Cleanup tenant test garanti via afterAll même sur exception.
+```
+
+**Round-trip sha256 strictness** (figé) : on compare sha256 par BLOB MinIO
+restauré vs original (test 1, étape 8 final). On NE compare PAS sha256 du
+ZIP entier avant/après (les timestamps internes archiver + l'audit log
+`BACKUP_FULL_V2` divergent). Per-blob sha256 prouve la symétrie des fichiers ;
+les counts par table prouvent la symétrie des données.
 
 #### Step 7 — Frontend `useBackupJob` hook + progress UI + dry-run report (~1 j budgété)
 
