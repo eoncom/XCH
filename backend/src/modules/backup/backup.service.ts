@@ -24,6 +24,7 @@ import {
 } from './dto/dry-run-report.response.dto';
 import { BACKUP_CATALOG_ACTIONS, BackupAuditAction } from './backup.actions.constants';
 import { CryptoService } from '../../common/crypto/crypto.service';
+import * as Sentry from '@sentry/node';
 
 // ============================================================================
 // Track D.2 Step 2 — Encryption sidecar constants & types
@@ -2031,21 +2032,51 @@ export class BackupService {
       };
 
       // 4. Pipeline archive → tmp file (cipher injected if encrypt:true).
+      // Track D.2 Step 3 — wrap in a Sentry span so phase duration is
+      // visible in the GlitchTip Performance trace. `op: 'backup.archive-build'`
+      // makes the tracesSampler in init.ts sample at 100%.
       onProgress?.('archive', 0, 1, 'Building archive…');
-      const archiveResult = await this.buildArchiveV2ToTmp({
-        tmpPath,
-        data,
-        buckets,
-        metadata,
-        onProgress,
-        encrypt: opts.encrypt,
-      });
+      const archiveResult = await Sentry.startSpan(
+        {
+          name: 'backup.archive-build',
+          op: 'backup.archive-build',
+          attributes: {
+            tenant_id: tenantId,
+            backup_format_version: 2,
+            encrypted: opts.encrypt ?? false,
+          },
+        },
+        async (span) => {
+          const result = await this.buildArchiveV2ToTmp({
+            tmpPath,
+            data,
+            buckets,
+            metadata,
+            onProgress,
+            encrypt: opts.encrypt,
+          });
+          span?.setAttribute('archive.size_bytes', result.size);
+          span?.setAttribute('archive.file_count', Object.keys(metadata.files).length);
+          return result;
+        },
+      );
 
       // 5. Stream tmp → xch-backups bucket via fPutObject. If the archive
       // was encrypted, the sidecar uploads AFTER the zip (atomicity
       // zip-before-sidecar — ADR-026 §1).
       onProgress?.('upload', 0, 1, 'Uploading to xch-backups…');
-      await this.uploadTmpToBackupBucket(tmpPath, filename, archiveResult.encryption);
+      await Sentry.startSpan(
+        {
+          name: 'backup.minio-upload',
+          op: 'backup.minio-upload',
+          attributes: {
+            tenant_id: tenantId,
+            'archive.size_bytes': archiveResult.size,
+            encrypted: archiveResult.encryption != null,
+          },
+        },
+        () => this.uploadTmpToBackupBucket(tmpPath, filename, archiveResult.encryption),
+      );
 
       // 6. Audit log row (visible in BACKUP_FULL_V2 catalog).
       // `encrypted: boolean` surfaces as a lock icon in the UI catalog.
@@ -2332,7 +2363,13 @@ export class BackupService {
     // ====================================================================
     // PHASE 1 — Tenant config
     // ====================================================================
-    await this.prisma.$transaction(
+    await Sentry.startSpan(
+      {
+        name: 'backup.restore.phase-1',
+        op: 'backup.prisma-phase',
+        attributes: { tenant_id: tenantId, phase: 1, phase_name: 'Tenant config' },
+      },
+      () => this.prisma.$transaction(
       async (tx) => {
         // ContactType — NK: (tenantId, slug)
         for (const ct of dataFiles['contact-types'] ?? []) {
@@ -2403,13 +2440,20 @@ export class BackupService {
         }
       },
       { timeout: 60_000 },
+    ),
     );
 
     // ====================================================================
     // PHASE 2 — Sites + structure
     // ====================================================================
     const sitesWithCoords: { id: string; lat: number; lng: number }[] = [];
-    await this.prisma.$transaction(
+    await Sentry.startSpan(
+      {
+        name: 'backup.restore.phase-2',
+        op: 'backup.prisma-phase',
+        attributes: { tenant_id: tenantId, phase: 2, phase_name: 'Sites + structure' },
+      },
+      () => this.prisma.$transaction(
       async (tx) => {
         const defaultDelId = await this.getOrCreateDefaultDelegation(tx, tenantId);
 
@@ -2600,12 +2644,19 @@ export class BackupService {
         }
       },
       { timeout: 60_000 },
+    ),
     );
 
     // ====================================================================
     // PHASE 3 — Lifecycle
     // ====================================================================
-    await this.prisma.$transaction(
+    await Sentry.startSpan(
+      {
+        name: 'backup.restore.phase-3',
+        op: 'backup.prisma-phase',
+        attributes: { tenant_id: tenantId, phase: 3, phase_name: 'Lifecycle' },
+      },
+      () => this.prisma.$transaction(
       async (tx) => {
         // AssetMovement — NK: (assetId, timestamp, fromSiteId, toSiteId)
         for (const mov of dataFiles['asset-movements'] ?? []) {
@@ -2760,12 +2811,19 @@ export class BackupService {
         }
       },
       { timeout: 60_000 },
+    ),
     );
 
     // ====================================================================
     // PHASE 4 — Finance
     // ====================================================================
-    await this.prisma.$transaction(
+    await Sentry.startSpan(
+      {
+        name: 'backup.restore.phase-4',
+        op: 'backup.prisma-phase',
+        attributes: { tenant_id: tenantId, phase: 4, phase_name: 'Finance' },
+      },
+      () => this.prisma.$transaction(
       async (tx) => {
         // BillingEntity — NK: (tenantId, code)
         for (const be of dataFiles['billing-entities'] ?? []) {
@@ -2963,12 +3021,19 @@ export class BackupService {
         }
       },
       { timeout: 60_000 },
+    ),
     );
 
     // ====================================================================
     // PHASE 5 — Snapshots + audit
     // ====================================================================
-    await this.prisma.$transaction(
+    await Sentry.startSpan(
+      {
+        name: 'backup.restore.phase-5',
+        op: 'backup.prisma-phase',
+        attributes: { tenant_id: tenantId, phase: 5, phase_name: 'Snapshots + audit' },
+      },
+      () => this.prisma.$transaction(
       async (tx) => {
         // SiteHealthSnapshot — schema has @unique(siteId) so prisma.upsert
         // works natively (no need for findFirst + create dance).
@@ -2999,6 +3064,7 @@ export class BackupService {
         // evidence at worst). v1 also never restored AuditLog.
       },
       { timeout: 60_000 },
+    ),
     );
 
     // ====================================================================
@@ -3117,9 +3183,17 @@ export class BackupService {
     await fs.mkdir(stagingDir, { recursive: true });
 
     try {
-      // 3. Download to tmp file (streaming)
+      // 3. Download to tmp file (streaming) — wrap in span for GlitchTip
+      // duration visibility (Track D.2 Step 3).
       onProgress?.('download', 0, 1, `Downloading backup ${filename}`);
-      await this.downloadFromBackupBucket(filename, tmpZipPath);
+      await Sentry.startSpan(
+        {
+          name: 'backup.minio-download',
+          op: 'backup.minio-download',
+          attributes: { tenant_id: tenantId, filename },
+        },
+        () => this.downloadFromBackupBucket(filename, tmpZipPath),
+      );
 
       // 3b. Track D.2 Step 2 — fetch the optional encryption sidecar
       // BEFORE building the read pipeline. Three possible states:
@@ -3323,12 +3397,19 @@ export class BackupService {
         // takes over when a row is missing (no create() call). FK idMaps
         // resolve to either a real DB id (skip) or a `__dryrun__<table>_N`
         // placeholder (wouldCreate). Returns per-table created/skipped maps.
-        const dry = await this.applyDataFilesToDb(
-          tenantId,
-          dataFiles,
-          stagedFiles,
-          userId,
-          { dryRun: true },
+        const dry = await Sentry.startSpan(
+          {
+            name: 'backup.prisma-import',
+            op: 'backup.prisma-import',
+            attributes: { tenant_id: tenantId, dry_run: true },
+          },
+          () => this.applyDataFilesToDb(
+            tenantId,
+            dataFiles,
+            stagedFiles,
+            userId,
+            { dryRun: true },
+          ),
         );
 
         const totalSize = Array.from(stagedFiles.values()).reduce(
@@ -3368,8 +3449,17 @@ export class BackupService {
       }
 
       // 8. Real run — delegate to step 4 (currently a clear-error stub).
+      // Wrap the prisma-import phase in a parent span so its 5 internal
+      // FK-phase sub-spans appear as children in the GlitchTip trace.
       onProgress?.('apply', 0, 1, 'Applying data to DB…');
-      const applied = await this.applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId);
+      const applied = await Sentry.startSpan(
+        {
+          name: 'backup.prisma-import',
+          op: 'backup.prisma-import',
+          attributes: { tenant_id: tenantId, dry_run: false },
+        },
+        () => this.applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId),
+      );
       onProgress?.('done', 1, 1, 'Restore complete');
 
       await this.logBackupAction(tenantId, userId, 'RESTORE_FULL_V2', {
