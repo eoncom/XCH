@@ -92,7 +92,12 @@ describeIfEnabled('Backup v2 round-trip (Track D.1 step 8 — integration)', () 
     testTenantId = tenantId;
 
     await prisma.tenant.create({
-      data: { id: tenantId, name: 'Backup v2 Test', status: 'ACTIVE' },
+      data: {
+        id: tenantId,
+        name: 'Backup v2 Test',
+        subdomain: tenantId, // unique, required
+        status: 'ACTIVE',
+      },
     });
 
     const delegation = await prisma.delegation.create({
@@ -296,7 +301,12 @@ describeIfEnabled('Backup v2 round-trip (Track D.1 step 8 — integration)', () 
     // 5. Re-create the tenant shell so the restore has a target.
     // (Real DR scenario : the operator boots a fresh tenant before restoring.)
     await prisma.tenant.create({
-      data: { id: seed.tenantId, name: 'Restored', status: 'ACTIVE' },
+      data: {
+        id: seed.tenantId,
+        name: 'Restored',
+        subdomain: seed.tenantId,
+        status: 'ACTIVE',
+      },
     });
 
     // 6. Dry-run restore — probes natural keys against (now empty) DB.
@@ -403,7 +413,12 @@ describeIfEnabled('Backup v2 round-trip (Track D.1 step 8 — integration)', () 
     // Dry-run on a fresh tenant to inspect the file list in the archive.
     await wipeTestTenant(seed.tenantId);
     await prisma.tenant.create({
-      data: { id: seed.tenantId, name: 'Restored', status: 'ACTIVE' },
+      data: {
+        id: seed.tenantId,
+        name: 'Restored',
+        subdomain: seed.tenantId,
+        status: 'ACTIVE',
+      },
     });
 
     const auditLog = await prisma.auditLog.findFirst({
