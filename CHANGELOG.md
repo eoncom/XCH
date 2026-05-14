@@ -9,7 +9,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Added — Track D.1 Backup v2 (phase 1 steps 1-5 / 9, ~6.75 j scope)
+### Added — Track D.1 Backup v2 (phase 1 steps 1-6 / 9, ~6.75 j scope)
 
 Phases 1.1 (pré-flight DTOs + check) et 1.2 (streaming export v2) posent
 les fondations pour la refonte streaming du backup
@@ -59,6 +59,77 @@ Tests unitaires (`backup-v2.service.spec.ts`) : 4 sections couvrant
 les 4 primitives, en évitant les dépendances externes via mocks
 inline du client MinIO et utilisation de `fs/tmp` réel pour
 l'archive. Tests round-trip avec vrai MinIO restent pour phase 1.8.
+
+#### Step 6 — Dry-run via natural-key lookups + v1 compat preservation (~0.5 j budgété)
+
+- **`findExistingByNaturalKey(tx, modelName, where)`** (extracted helper) —
+  refactor de step 4 : `upsertByNaturalKey` délègue maintenant à ce helper
+  pour la phase findFirst. Permet de réutiliser la logique NK matching dans
+  le path dry-run sans dupliquer code.
+- **`upsertByNaturalKey` accepte `options.skipCreate`** — quand `true`,
+  retourne un placeholder `{ id: '__dryrun__<model>_<counter>' }` au lieu
+  de `create()`. `wasCreated:true` conservé sémantiquement (would-be-created).
+  Downstream FK references via idMap.set() suivent les placeholders → le
+  diff entier est traversé sans hit DB.
+- **`applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId, options)`** —
+  5e param `{ dryRun?: boolean }`. Quand `true` :
+  - Set instance flag `_dryRunMode = true` dans un `try/finally` (reset
+    garanti, concurrency-safe vu Bull queue concurrency 1)
+  - Chaque `upsertByNaturalKey` interne lit le flag via `this._dryRunMode`
+    et passe en mode placeholder
+  - **GPS raw SQL** (Site.coordinates `ST_SetSRID(ST_MakePoint, 4326)`)
+    gated `if (!dryRun)` — un placeholder id ne matcherait jamais une row
+    DB existante, le UPDATE serait un no-op mais on skippe pour clarté
+  - **MinIO uploads** (`fPutObject` boucle post-transactions) gated
+    `if (!dryRun)` — pas d'effets de bord côté object storage
+  - Return enrichi : `{ counts, created, skipped, siteIds }` (per-table
+    breakdowns ajoutés)
+- **`restoreFullBackupV2` dry-run branch refactoré** — remplace le naïf
+  `wouldCreate: all records` de step 3 par un appel réel à
+  `applyDataFilesToDb(..., { dryRun: true })`. Le report retourné reflète
+  les VRAIS counts de wouldCreate / wouldSkip via natural-key lookups
+  contre la live DB :
+  - `wouldCreate` = `dry.created` (rows dont la NK n'a pas matché → placeholder)
+  - `wouldSkip` = `dry.skipped` (rows dont la NK a matché une row existante)
+  - `wouldUpdate` = `{}` (skip-if-exists semantic v2.2.0, no field-level merge)
+  - `missingFiles`, `invalidChecksums` inchangés (déjà calculés par stream parse)
+
+**Concurrency safety du `_dryRunMode` flag** : documenté inline. `BackupModule`
+registre `backup-jobs` avec concurrency 1 par défaut (`BACKUP_JOB_OPTIONS`),
+donc une seule invocation d'`applyDataFilesToDb` à la fois par process worker.
+Si la concurrency est jamais montée, refactor en `options thread` requis
+(touche 18 call sites `upsertByNaturalKey` dans l'orchestrator).
+
+**v1 compat preservation** — vérification que tout le path legacy reste intact :
+- `createFullBackup` v1 (sync, multipart in-memory AdmZip) inchangé
+- `restoreFullBackup` v1 (multipart sync) inchangé
+- `X-Backup-Sync: 1` header route vers v1 sync (couvert par step 5 tests)
+- Détection v1 par `typeof metadata.version === 'string'` → délègue
+  `restoreFullBackupV1` (couvert par step 3 tests 5 + 5b, toujours passants)
+
+**Backlog** : optim batch `findMany({ where: { OR: [...] } })` pour dry-run
+si benchmark prod montre lent sur >1000 rows. Aujourd'hui dry-run fait
+N `findFirst` requêtes (~ms each, ~200 rows seed = ~500ms). Acceptable
+pour action admin pre-flight.
+
+Tests (`backup-v2.service.spec.ts` étendu, 5 nouveaux, 77 total) :
+- `findExistingByNaturalKey` retourne null si miss, hit row sinon
+- `upsertByNaturalKey` avec `skipCreate:true` retourne placeholder id +
+  ne call PAS `create()`
+- `applyDataFilesToDb dryRun:true` sur mixed seed (1 existing + 1 new) →
+  `wouldCreate.sites: 1`, `wouldSkip.sites: 1`, `prisma.site.create` NOT
+  called par dry-run path (seulement par pre-seed)
+- `applyDataFilesToDb dryRun:true` ne call PAS `minioClient.fPutObject` →
+  preuve que upload loop est gated
+- `wouldUpdate` reste vide même quand rows existent avec data différente
+  (skip-if-exists semantic) — verify `dry.created.sites: 0`,
+  `dry.skipped.sites: 1`
+
+Plus refactor des tests existants : test 10 (real-run intact ZIP) mis à
+jour pour vérifier `kind: 'applied'` + `counts._created > 0` (au lieu de
+'$transaction is not a function' qui n'est plus représentatif). `wireService`
+helper upgrade avec full in-memory Prisma stub (auditLog + 20 model
+accessors + `$transaction` callback + `$executeRawUnsafe`).
 
 #### Step 5 — Bull v3 wiring (~0.5 j budgété)
 

@@ -1903,6 +1903,53 @@ export class BackupService {
   }
 
   /**
+   * Look up an existing row by its natural key. Used by both
+   * {@link upsertByNaturalKey} (real run) and the dry-run path of
+   * {@link applyDataFilesToDb} (count `wouldCreate` vs `wouldSkip` without
+   * actually creating rows).
+   *
+   * Extracted in Track D.1 Phase 1 step 6 so the dry-run logic doesn't
+   * duplicate the per-table NK-matching logic — both paths share the same
+   * `findFirst` semantics. See {@link upsertByNaturalKey} for `tx: any`
+   * rationale.
+   *
+   * Track D.1 Phase 1 step 6.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async findExistingByNaturalKey<T extends { id: string }>(
+    tx: any,
+    modelName: string,
+    where: Record<string, unknown>,
+  ): Promise<T | null> {
+    const model = tx[modelName];
+    if (!model || typeof model.findFirst !== 'function') {
+      throw new Error(`findExistingByNaturalKey: unknown Prisma model '${modelName}'`);
+    }
+    return (await model.findFirst({ where })) as T | null;
+  }
+
+  /** Synthetic id prefix returned by {@link upsertByNaturalKey} when
+   * `skipCreate` is set (dry-run mode). Downstream FK references via
+   * idMaps follow these placeholders so the diff is fully traversed —
+   * none of these ids hit the actual DB. */
+  private static readonly DRY_RUN_ID_PREFIX = '__dryrun__';
+
+  /**
+   * Internal flag set by {@link applyDataFilesToDb} when called with
+   * `{ dryRun: true }`, read by {@link upsertByNaturalKey} to swap
+   * `create()` for a synthetic-id placeholder.
+   *
+   * **Concurrency safety** : `BackupModule` registers the `backup-jobs`
+   * Bull queue with default concurrency 1 (cf `BACKUP_JOB_OPTIONS`), so
+   * only one `applyDataFilesToDb` runs at a time per worker process.
+   * If the queue concurrency is ever raised, refactor this into an
+   * explicit options thread (every upsert site would need updating).
+   * The flag is always reset in the outer try/finally so a thrown
+   * exception cannot leak the dry-run state into a subsequent call.
+   */
+  private _dryRunMode = false;
+
+  /**
    * Generic upsert-by-natural-key helper. Dispatches to the right Prisma
    * model accessor via `tx[modelName]`. Returns the row + `wasCreated`
    * flag, which the orchestrator uses to track idempotent re-runs
@@ -1911,34 +1958,46 @@ export class BackupService {
    * Convention :
    *  - `where` MUST identify the row by its NATURAL key (e.g. `{tenantId, code}`
    *    for Site, `{tenantId, siteId, serialNumber}` for Asset, …).
-   *    The natural-key composition is the responsibility of the caller —
-   *    per-table choices are documented in the orchestrator inline.
-   *  - `createData` is the full payload for a fresh insert. Not used when
-   *    a row already exists.
+   *  - `createData` is the full payload for a fresh insert.
    *  - If a row already exists for `where`, this method does NOT update it
-   *    (skip-if-exists semantics). Field-level merge is a future iteration;
-   *    skip-if-exists is the safe default for first-restore-on-populated-DB.
+   *    (skip-if-exists semantics).
    *
-   * `tx` is typed loosely (`any`) because Prisma's model accessor map is
-   * not statically introspectable without a discriminated union of all
-   * model names — pragmatic vs. forcing every caller into a giant generic
-   * narrowing.
+   * `options.skipCreate` (Track D.1 step 6) : when true, behaves like a
+   * dry-run probe — looks up the existing row, but if none exists,
+   * returns a synthetic placeholder `{ id: '__dryrun__<model>_<counter>' }`
+   * instead of creating. `wasCreated` is `true` for the placeholder case
+   * too — semantically it means "would create / created". The caller's
+   * `dryRun` flag distinguishes between actual creates and projected ones.
    *
-   * Track D.1 Phase 1 step 4 — replaces the step 3 NotImplemented stub.
+   * `tx` typed loosely (`any`) — Prisma's model accessor map is not
+   * statically introspectable without a giant discriminated union.
+   *
+   * Track D.1 Phase 1 step 4 (initial) / step 6 (added `skipCreate`).
    */
+  private dryRunCounter = 0;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async upsertByNaturalKey<T extends { id: string }>(
     tx: any,
     modelName: string,
     where: Record<string, unknown>,
     createData: Record<string, unknown>,
+    options: { skipCreate?: boolean } = {},
   ): Promise<{ row: T; wasCreated: boolean }> {
-    const model = tx[modelName];
-    if (!model || typeof model.findFirst !== 'function') {
-      throw new Error(`upsertByNaturalKey: unknown Prisma model '${modelName}'`);
-    }
-    const existing = (await model.findFirst({ where })) as T | null;
+    const existing = await this.findExistingByNaturalKey<T>(tx, modelName, where);
     if (existing) return { row: existing, wasCreated: false };
+
+    // Honor BOTH the explicit `options.skipCreate` (used by unit tests) AND
+    // the instance flag `_dryRunMode` (set by applyDataFilesToDb on the
+    // dry-run path). Either triggers the placeholder branch.
+    if (options.skipCreate || this._dryRunMode) {
+      // Dry-run placeholder. The id is unique-per-call so downstream FK
+      // references via idMap.set(originalId, row.id) stay distinct.
+      const placeholderId = `${BackupService.DRY_RUN_ID_PREFIX}${modelName}_${++this.dryRunCounter}`;
+      return { row: { id: placeholderId } as T, wasCreated: true };
+    }
+
+    const model = tx[modelName];
     const created = (await model.create({ data: createData })) as T;
     return { row: created, wasCreated: true };
   }
@@ -2009,7 +2068,41 @@ export class BackupService {
       { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
     >,
     userId?: string,
-  ): Promise<{ counts: Record<string, number>; siteIds: string[] }> {
+    options: { dryRun?: boolean } = {},
+  ): Promise<{
+    counts: Record<string, number>;
+    created: Record<string, number>;
+    skipped: Record<string, number>;
+    siteIds: string[];
+  }> {
+    // Set the dry-run flag for the duration of the call. upsertByNaturalKey
+    // reads it on the placeholder branch ; the outer try/finally guarantees
+    // reset even on exception.
+    this._dryRunMode = options.dryRun === true;
+    try {
+      return await this.applyDataFilesToDbInner(tenantId, dataFiles, stagedFiles, userId);
+    } finally {
+      this._dryRunMode = false;
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async applyDataFilesToDbInner(
+    tenantId: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dataFiles: Record<string, any[]>,
+    stagedFiles: Map<
+      string,
+      { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
+    >,
+    userId?: string,
+  ): Promise<{
+    counts: Record<string, number>;
+    created: Record<string, number>;
+    skipped: Record<string, number>;
+    siteIds: string[];
+  }> {
+    const dryRun = this._dryRunMode;
     const ids = {
       contactType: new Map<string, string>(),
       contact: new Map<string, string>(),
@@ -2162,16 +2255,22 @@ export class BackupService {
         }
 
         // GPS raw SQL update inside the same transaction.
-        for (const sc of sitesWithCoords) {
-          try {
-            await tx.$executeRawUnsafe(
-              `UPDATE "sites" SET coordinates = ST_SetSRID(ST_MakePoint($2, $3), 4326) WHERE id = $1`,
-              sc.id,
-              sc.lng,
-              sc.lat,
-            );
-          } catch {
-            /* non-critical */
+        // Skipped in dry-run mode : sc.id would be a placeholder like
+        // `__dryrun__site_N` which doesn't exist in DB, so the UPDATE
+        // would be a no-op anyway — but we skip explicitly to avoid the
+        // wasted query.
+        if (!dryRun) {
+          for (const sc of sitesWithCoords) {
+            try {
+              await tx.$executeRawUnsafe(
+                `UPDATE "sites" SET coordinates = ST_SetSRID(ST_MakePoint($2, $3), 4326) WHERE id = $1`,
+                sc.id,
+                sc.lng,
+                sc.lat,
+              );
+            } catch {
+              /* non-critical */
+            }
           }
         }
 
@@ -2704,18 +2803,23 @@ export class BackupService {
     // Outside transactions because MinIO isn't transactional. Errors per
     // file are logged but do NOT roll back the DB writes — the operator
     // can re-run to retry the failed uploads (idempotence covers DB).
-    for (const [entryPath, staged] of stagedFiles) {
-      try {
-        const client = this.getMinioClient();
-        const exists = await client.bucketExists(staged.bucket);
-        if (!exists) await client.makeBucket(staged.bucket, 'us-east-1');
-        await client.fPutObject(staged.bucket, staged.key, staged.tmpPath, {});
-        track('minioFiles', true);
-      } catch (err: unknown) {
-        this.logger.warn(
-          `Failed to restore MinIO file ${entryPath}: ` +
-            `${err instanceof Error ? err.message : 'Unknown error'}`,
-        );
+    //
+    // Skipped in dry-run mode — dry-run reports projected MinIO restore
+    // counts via the `stagedFiles.size` (caller side, see restoreFullBackupV2).
+    if (!dryRun) {
+      for (const [entryPath, staged] of stagedFiles) {
+        try {
+          const client = this.getMinioClient();
+          const exists = await client.bucketExists(staged.bucket);
+          if (!exists) await client.makeBucket(staged.bucket, 'us-east-1');
+          await client.fPutObject(staged.bucket, staged.key, staged.tmpPath, {});
+          track('minioFiles', true);
+        } catch (err: unknown) {
+          this.logger.warn(
+            `Failed to restore MinIO file ${entryPath}: ` +
+              `${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        }
       }
     }
 
@@ -2730,11 +2834,12 @@ export class BackupService {
     counts._skipped = Object.values(skipped).reduce((a, b) => a + b, 0);
 
     this.logger.log(
-      `Restore v2 applied : created=${counts._created}, skipped=${counts._skipped}, ` +
+      `Restore v2 applied${dryRun ? ' (dry-run)' : ''} : ` +
+        `created=${counts._created}, skipped=${counts._skipped}, ` +
         `siteIds=${siteIds.length}`,
     );
 
-    return { counts, siteIds };
+    return { counts, created, skipped, siteIds };
   }
 
   /**
@@ -2970,27 +3075,43 @@ export class BackupService {
         }
       }
 
-      // 6. Dry-run path — return the projected diff, no writes.
+      // 6. Dry-run path — probe natural keys against the live DB,
+      // return the projected diff, no writes.
       if (opts.dryRun) {
-        onProgress?.('dry-run', 1, 1, 'Computing dry-run report…');
-        const wouldCreate: Record<string, number> = {};
-        const wouldUpdate: Record<string, number> = {};
-        const wouldSkip: Record<string, number> = {};
-        // Step 3 stub : without upsertByNaturalKey we cannot tell create from
-        // update, so all rows are tagged 'wouldCreate'. Step 4 refines this
-        // with real natural-key lookups against the live DB.
-        for (const [table, records] of Object.entries(dataFiles)) {
-          wouldCreate[table] = records.length;
-        }
+        onProgress?.('dry-run', 0, 1, 'Probing natural keys against live DB…');
+        // Track D.1 step 6 : use the real applyDataFilesToDb in dry-run
+        // mode. Every per-table upsertByNaturalKey does its real findFirst
+        // against the live DB ; the placeholder branch in upsertByNaturalKey
+        // takes over when a row is missing (no create() call). FK idMaps
+        // resolve to either a real DB id (skip) or a `__dryrun__<table>_N`
+        // placeholder (wouldCreate). Returns per-table created/skipped maps.
+        const dry = await this.applyDataFilesToDb(
+          tenantId,
+          dataFiles,
+          stagedFiles,
+          userId,
+          { dryRun: true },
+        );
 
-        const totalSize = Array.from(stagedFiles.values()).reduce((acc, f) => acc + f.size, 0);
+        const totalSize = Array.from(stagedFiles.values()).reduce(
+          (acc, f) => acc + f.size,
+          0,
+        );
         // Rough 50 MB/s throughput model — indicative, not an SLA.
         const estimatedDurationSec = Math.max(1, Math.ceil(totalSize / (50 * 1024 * 1024)));
 
         const report = toDryRunReportResponseDto({
-          wouldCreate,
-          wouldUpdate,
-          wouldSkip,
+          // wouldCreate : per-table rows whose natural key did NOT match
+          // an existing row (placeholder branch fired in upsertByNaturalKey).
+          // 'minioFiles' synthetic tracker is naturally absent — the upload
+          // loop is gated on !dryRun.
+          wouldCreate: dry.created,
+          // wouldUpdate stays empty : skip-if-exists semantic in v2.2.0.
+          // Future "overwrite" / "merge" feature would populate this.
+          wouldUpdate: {},
+          // wouldSkip : per-table rows whose natural key matched an
+          // existing row (would be a no-op on real run).
+          wouldSkip: dry.skipped,
           missingFiles,
           invalidChecksums,
           totalSize,
