@@ -7,6 +7,39 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased] — Track D.2 Backup v2 Polish (en cours, branche `claude/vigilant-yonath-40d25d`)
+
+Track D.2 Backup v2 Polish — ajouts add-only sur la base D.1 v2.2.0 :
+chiffrement AES-256-GCM streaming, observabilité GlitchTip approfondie
+(spans par phase), restore cross-tenant via remap `delegationId`,
+async multipart upload restore, dépréciation `X-Backup-Sync: 1`,
+concurrency BullMQ conditional. Scope figé MCP
+`XCH_TRACK_D2_BACKUP_V2_2026_05_14`, ADR-026.
+
+Soak gate strict : merge ≥ 2026-05-21 (1 semaine post-deploy v2.2.0).
+Tag cible : **v2.3.0** (minor feature).
+
+### Step 0 — Préflight (2026-05-14)
+
+- `.gitignore` worktree root : ajout `.claude/worktrees/` (pattern grouped
+  chore+feature, fix outer repo via merge PR D.2 → main puis pull standard).
+- `docs/decisions/adr-026-backup-v2-polish.md` skeleton 6 sections
+  (encryption stream, scrubEvent transactions, cross-tenant policy,
+  X-Backup-Sync deprecation cycle, BACKUP_ACTIONS centralization, async
+  multipart upload pattern).
+- `CHANGELOG.md` section `[Unreleased]` ouverte.
+
+### [BREAKING - planned v2.4.0]
+
+- **`X-Backup-Sync: 1` header retiré** : la voie sync HTTP de backup/restore
+  v1 introduite comme escape hatch DR par D.1 sera supprimée v2.4.0 après
+  1 cycle de deprecation v2.3.0 (warn log + Swagger `DEPRECATED`).
+  Migration : utiliser les endpoints async + Bull queue (path par défaut
+  depuis v2.2.0) ou le nouveau `POST /backup/full/restore-upload`
+  multipart upload (Step 4.5 D.2, livré v2.3.0).
+
+---
+
 ## [2.2.0] - 2026-05-14 — Track D.1 Backup v2 (streaming + idempotent restore + dry-run + async Bull v3)
 
 Track D.1 Backup v2 Core — refonte complète du backup-restore pour
