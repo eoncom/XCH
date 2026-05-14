@@ -6,6 +6,7 @@ import {
   randomBytes,
   timingSafeEqual,
 } from 'crypto';
+import { Transform } from 'stream';
 
 /**
  * AES-256-GCM secret encryption-at-rest service (ADR-019).
@@ -173,6 +174,109 @@ export class CryptoService {
     const bb = Buffer.from(b);
     if (ba.length !== bb.length) return false;
     return timingSafeEqual(ba, bb);
+  }
+
+  /** True if the service has a usable master key. UI uses this for capability discovery. */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * Create an AES-256-GCM cipher Transform stream for streaming
+   * encryption (Track D.2 — backup zip cipher). Returns the Transform
+   * plus the IV (base64), key version used, and a closure to read the
+   * auth tag once the cipher pipeline has completed.
+   *
+   * Pipeline usage:
+   *   const { cipher, ivB64, keyVersion, getAuthTagB64 } = crypto.createCipherStream();
+   *   await pipeline(archiver, cipher, fs.createWriteStream(tmp));
+   *   // After pipeline resolves, getAuthTagB64() is safe to call.
+   *   const tagB64 = getAuthTagB64();
+   *
+   * Throws if XCH_MASTER_KEY is absent (caller MUST check isEnabled()
+   * first — backup encryption is opt-in via UI toggle, the toggle
+   * should be greyed out client-side when crypto disabled).
+   */
+  createCipherStream(): {
+    cipher: Transform;
+    ivB64: string;
+    keyVersion: number;
+    getAuthTagB64: () => string;
+  } {
+    if (!this.enabled) {
+      throw new Error(
+        'CryptoService disabled (XCH_MASTER_KEY missing) — cannot create cipher stream',
+      );
+    }
+    const key = this.keys.get(this.currentVersion)!;
+    const iv = randomBytes(this.ivLength);
+    const cipher = createCipheriv(this.algorithm, key, iv, {
+      authTagLength: this.authTagLength,
+    });
+    // The auth tag is only available after `final()` has run, which
+    // for a Transform pipeline corresponds to either the `end` event
+    // on the readable side OR the upstream `finish` event on the writable
+    // side. We flip a flag on whichever fires first.
+    let finalized = false;
+    cipher.on('end', () => {
+      finalized = true;
+    });
+    cipher.on('finish', () => {
+      finalized = true;
+    });
+    return {
+      cipher,
+      ivB64: iv.toString('base64'),
+      keyVersion: this.currentVersion,
+      getAuthTagB64: () => {
+        if (!finalized) {
+          throw new Error(
+            'getAuthTagB64 called before cipher pipeline completion — await the downstream writable finish first',
+          );
+        }
+        return cipher.getAuthTag().toString('base64');
+      },
+    };
+  }
+
+  /**
+   * Create an AES-256-GCM decipher Transform for streaming decryption
+   * (Track D.2 — backup zip decipher). The auth tag is set BEFORE the
+   * stream is wired so a tampered ciphertext rejects at the final
+   * chunk's `final()` (callers don't need to verify separately).
+   *
+   * Throws if the key version is unknown (e.g. encrypted backup
+   * produced under a key that was rotated out without registering
+   * `XCH_MASTER_KEY_V<n>` as legacy reader).
+   */
+  createDecipherStream(args: {
+    keyVersion: number;
+    ivB64: string;
+    authTagB64: string;
+  }): Transform {
+    const key = this.keys.get(args.keyVersion);
+    if (!key) {
+      throw new Error(
+        `No master key registered for version v${args.keyVersion} (set XCH_MASTER_KEY_V${args.keyVersion})`,
+      );
+    }
+    const iv = Buffer.from(args.ivB64, 'base64');
+    const tag = Buffer.from(args.authTagB64, 'base64');
+    if (iv.length !== this.ivLength) {
+      throw new Error(
+        `Invalid IV length: expected ${this.ivLength}, got ${iv.length}`,
+      );
+    }
+    if (tag.length !== this.authTagLength) {
+      throw new Error(
+        `Invalid auth tag length: expected ${this.authTagLength}, got ${tag.length}`,
+      );
+    }
+    const decipher = createDecipheriv(this.algorithm, key, iv, {
+      authTagLength: this.authTagLength,
+    });
+    decipher.setAuthTag(tag);
+    return decipher;
   }
 
   private loadKey(envName: string): Buffer | null {
