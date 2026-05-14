@@ -7,6 +7,8 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  HttpException,
+  Logger,
   NotFoundException,
   BadRequestException,
   Param,
@@ -33,6 +35,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { AuthRequest } from '../../types/request.interface';
 import { BackupService } from './backup.service';
+import { CryptoService } from '../../common/crypto/crypto.service';
 import { backupFileFilter } from '../../common/utils/upload-security';
 import { SkipDelegation } from '../../common/decorators/skip-delegation.decorator';
 import { RequireManage, RequireRead, RequireWrite } from '../../common/decorators/require-right.decorator';
@@ -46,6 +49,7 @@ import {
 } from './dto/restore-result.response.dto';
 import { CleanupStorageResultResponseDto } from './dto/cleanup-storage-result.response.dto';
 import { BackupListResponseDto } from './dto/backup-list.response.dto';
+import { BackupCapabilitiesResponseDto } from './dto/backup-capabilities.response.dto';
 import { DeleteBackupResultResponseDto } from './dto/delete-backup-result.response.dto';
 import { BackupOptionsDto } from './dto/backup-options.dto';
 import { RestoreOptionsDto } from './dto/restore-options.dto';
@@ -72,9 +76,13 @@ import {
 @SkipDelegation()
 @RequireManage()
 export class BackupController {
+  private readonly logger = new Logger(BackupController.name);
+
   constructor(
     private readonly backupService: BackupService,
     @InjectQueue(BACKUP_QUEUE) private readonly backupQueue: Queue,
+    /** Track D.2 Step 2 — capability discovery + encrypt:true server gate. */
+    private readonly crypto: CryptoService,
   ) {}
 
   /**
@@ -84,6 +92,28 @@ export class BackupController {
    * Slated for removal in D.2 once async path is validated in prod.
    */
   private static readonly SYNC_HEADER = 'x-backup-sync';
+
+  // ===== Capability discovery (Track D.2) =====
+
+  /**
+   * Server-driven feature flags for the backup module. Frontend calls
+   * this at dialog mount to grey out toggles whose backend prerequisites
+   * are missing (e.g. encryption needs `XCH_MASTER_KEY` per ADR-019).
+   *
+   * Track D.2 Step 2 — see ADR-026 §1.
+   */
+  @Get('capabilities')
+  @RequireRead()
+  @SkipThrottle()
+  @ApiOperation({
+    summary: '[ADMIN] Backup capability flags (server-driven UI toggle gates)',
+  })
+  @ApiOkResponse({ type: BackupCapabilitiesResponseDto })
+  async getCapabilities(): Promise<BackupCapabilitiesResponseDto> {
+    return toResponse(BackupCapabilitiesResponseDto, {
+      encryption: this.crypto.isEnabled(),
+    });
+  }
 
   // ===== Pre-flight (Track D.1) =====
 
@@ -128,8 +158,31 @@ export class BackupController {
     @Headers(BackupController.SYNC_HEADER) syncHeader: string | undefined,
     @Request() req: AuthRequest,
   ): Promise<BackupResultResponseDto | BackupJobEnqueuedResponseDto> {
+    // Track D.2 Step 2 — server-side gate for the `encrypt` flag.
+    // Reject with HTTP 412 Precondition Failed when the toggle is on
+    // but XCH_MASTER_KEY is unset. The frontend toggle should already
+    // be greyed out via GET /backup/capabilities, but defensive servers
+    // never trust the client.
+    if (options?.encrypt && !this.crypto.isEnabled()) {
+      throw new HttpException(
+        'Backup encryption requested but XCH_MASTER_KEY is not configured on the server. ' +
+          'Verify via GET /backup/capabilities.',
+        HttpStatus.PRECONDITION_FAILED,
+      );
+    }
+
     if (syncHeader === '1') {
       // Legacy sync path — v1 createFullBackup body, kept for fallback.
+      // v1 does NOT honor encryption (encryption is a v2 feature). If
+      // encrypt:true was set and we still reach the sync path, the
+      // operator has explicitly chosen the legacy path: log a warning
+      // but proceed without encryption rather than failing the request.
+      if (options?.encrypt) {
+        this.logger.warn(
+          `Backup encrypt:true ignored on legacy sync path (X-Backup-Sync: 1) — ` +
+            `v1 has no streaming cipher. Tenant ${req.user.tenantId}`,
+        );
+      }
       const result = await this.backupService.createFullBackup(
         req.user.tenantId,
         req.user.id,
@@ -140,7 +193,10 @@ export class BackupController {
     const jobData: BackupFullJobData = {
       tenantId: req.user.tenantId,
       userId: req.user.id,
-      options: { dbOnly: options?.dbOnly },
+      options: {
+        dbOnly: options?.dbOnly,
+        encrypt: options?.encrypt,
+      },
     };
     const job = await this.backupQueue.add(JOB_BACKUP_FULL, jobData, BACKUP_JOB_OPTIONS);
     return toResponse(BackupJobEnqueuedResponseDto, {

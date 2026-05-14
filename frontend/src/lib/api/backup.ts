@@ -11,6 +11,8 @@ export interface BackupMetadata {
   siteName?: string;
   siteCode?: string;
   recordCounts?: Record<string, number>;
+  /** Track D.2 — true if the archive is AES-256-GCM encrypted (sidecar present). */
+  encrypted?: boolean;
 }
 
 export interface BackupListResponse {
@@ -119,6 +121,18 @@ function triggerBlobDownload(blob: Blob, response: Response, fallbackName: strin
 /** Request body for POST /backup/estimate and POST /backup/full (v2 async). */
 export interface BackupOptions {
   dbOnly?: boolean;
+  /**
+   * Track D.2 — when true, encrypt the backup ZIP with AES-256-GCM
+   * streaming. Requires server-side `XCH_MASTER_KEY` (ADR-019). Verify
+   * via `backupApi.capabilities()` before enabling the toggle in the
+   * pre-launch dialog.
+   */
+  encrypt?: boolean;
+}
+
+/** Track D.2 — GET /backup/capabilities response. */
+export interface BackupCapabilities {
+  encryption: boolean;
 }
 
 /** Request body for POST /backup/full/restore JSON-mode (async). */
@@ -179,6 +193,14 @@ export interface BackupJobStatus {
 
 export const backupApi = {
   // -------- Track D.1 step 7 — async endpoints --------
+
+  /**
+   * Track D.2 — server-driven capability discovery. Called at dialog
+   * mount to grey out toggles whose backend prerequisites are missing
+   * (e.g. encryption requires `XCH_MASTER_KEY` per ADR-019).
+   */
+  capabilities: () =>
+    apiClient.get<BackupCapabilities>('/api/backup/capabilities'),
 
   /**
    * Pre-flight size estimate for a backup run.

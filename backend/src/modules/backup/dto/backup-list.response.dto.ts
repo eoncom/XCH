@@ -29,6 +29,14 @@ export class BackupListItemResponseDto {
   @ApiProperty({ type: String, format: 'date-time' })
   @Expose()
   createdAt!: string;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    description:
+      'Track D.2 — true if the archive is AES-256-GCM encrypted (sidecar `<filename>.enc.json` present in MinIO). UI surfaces a lock icon on the catalog row.',
+  })
+  @Expose()
+  encrypted?: boolean;
 }
 
 /**

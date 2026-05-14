@@ -18,6 +18,12 @@ export const BACKUP_AUDIT_ACTIONS = [
   'RESTORE_FULL',
   'RESTORE_FULL_V2',
   'RESTORE_SITE',
+  // STORAGE_CLEANUP is emitted by the backup module's cleanupOrphanedStorage
+  // cron, but operates on the `xch-storage` bucket (user assets — floor plans,
+  // attachments), NOT on `xch-backups`. Included here because the action is
+  // written via `logBackupAction` from this module ; semantically broader than
+  // backup. Future refactor (D.3) may relocate to its own STORAGE_AUDIT_ACTIONS
+  // constant if the storage cleanup grows independent enough.
   'STORAGE_CLEANUP',
 ] as const;
 

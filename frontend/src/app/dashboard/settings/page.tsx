@@ -27,7 +27,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton, CardSkeleton } from '@/components/ui/skeleton';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network, X, Bell, Zap } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network, X, Bell, Zap, Lock } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
@@ -2032,6 +2032,10 @@ export default function SettingsPage() {
   const [isFetchingEstimate, setIsFetchingEstimate] = useState(false);
   /** Backup options toggled in the pre-launch dialog. */
   const [backupDbOnly, setBackupDbOnly] = useState(false);
+  /** Track D.2 — encrypt the backup ZIP (AES-256-GCM streaming). */
+  const [backupEncrypt, setBackupEncrypt] = useState(false);
+  /** Track D.2 — server-driven capability flags (loaded once on mount). */
+  const [backupCapabilities, setBackupCapabilities] = useState<{ encryption: boolean } | null>(null);
   /** Selected catalog backup for async restore + dry-run preview. */
   const [selectedRestoreBackupId, setSelectedRestoreBackupId] = useState<string | null>(null);
   const [restoreDryRun, setRestoreDryRun] = useState(true); // safe default
@@ -2057,6 +2061,8 @@ export default function SettingsPage() {
     },
     estimateInsufficient: 'Espace disque insuffisant pour le backup (besoin × 1.2 + 512 MB).',
     dbOnlyToggle: 'Base de données seule (skip MinIO)',
+    encryptToggle: 'Chiffrer le backup (AES-256-GCM)',
+    encryptDisabled: 'Chiffrement indisponible (clé maître non configurée serveur)',
     launchBackup: 'Lancer la sauvegarde',
     backupInProgress: 'Sauvegarde en cours…',
     backupCompleted: 'Sauvegarde terminée',
@@ -2167,7 +2173,10 @@ export default function SettingsPage() {
   const handleCreateFullBackup = async () => {
     setIsCreatingFullBackup(true);
     try {
-      const enqueued = await backupApi.createFullAsync({ dbOnly: backupDbOnly });
+      const enqueued = await backupApi.createFullAsync({
+        dbOnly: backupDbOnly,
+        encrypt: backupEncrypt,
+      });
       setCurrentBackupJobId(enqueued.jobId);
       setDryRunReport(null); // clear any previous dry-run report
       toast.success(`Sauvegarde lancée (job ${enqueued.jobId})`);
@@ -2464,7 +2473,17 @@ export default function SettingsPage() {
         value={activeTab}
         onValueChange={(val) => {
           setActiveTab(val);
-          if (val === 'backup') { loadBackups(); loadSitesForBackup(); }
+          if (val === 'backup') {
+            loadBackups();
+            loadSitesForBackup();
+            // Track D.2 — fetch server capabilities once per tab open.
+            // Cheaper than a useEffect (only loads when user navigates to
+            // the backup tab) and keeps the toggle state honest after a
+            // restart (e.g. XCH_MASTER_KEY added without a page refresh).
+            backupApi.capabilities()
+              .then(setBackupCapabilities)
+              .catch(() => setBackupCapabilities({ encryption: false }));
+          }
         }}
         className="w-full"
       >
@@ -3256,6 +3275,7 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Track D.1 step 7 — pre-launch estimate + dbOnly toggle */}
+                  {/* Track D.2 step 2 — encrypt toggle (server-driven via capabilities) */}
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
                       <Switch
@@ -3270,6 +3290,31 @@ export default function SettingsPage() {
                       <Label htmlFor="backup-db-only" className="text-sm">
                         {T.dbOnlyToggle}
                       </Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="backup-encrypt"
+                        checked={backupEncrypt}
+                        onCheckedChange={setBackupEncrypt}
+                        disabled={
+                          !!currentBackupJobId ||
+                          // Greyed out until capabilities have loaded OR
+                          // when the server reports encryption unavailable
+                          // (XCH_MASTER_KEY unset). The backend rejects with
+                          // 412 either way ; greying out is the friendly UX.
+                          backupCapabilities === null ||
+                          backupCapabilities.encryption === false
+                        }
+                      />
+                      <Label htmlFor="backup-encrypt" className="text-sm flex items-center gap-1">
+                        <Lock className="h-3 w-3" />
+                        {T.encryptToggle}
+                      </Label>
+                      {backupCapabilities?.encryption === false && (
+                        <span className="text-xs text-muted-foreground italic">
+                          ({T.encryptDisabled})
+                        </span>
+                      )}
                     </div>
                     <Button
                       variant="outline"
@@ -3524,6 +3569,14 @@ export default function SettingsPage() {
                           <tr key={backup.id} className="hover:bg-muted/30">
                             <td className="p-3">
                               <span className="font-mono text-xs">{backup.filename}</span>
+                              {backup.encrypted && (
+                                <span
+                                  className="ml-2 inline-flex items-center"
+                                  title="Backup chiffré (AES-256-GCM)"
+                                >
+                                  <Lock className="h-3 w-3 text-muted-foreground" />
+                                </span>
+                              )}
                             </td>
                             <td className="p-3">
                               <Badge variant={backup.type === 'full' ? 'default' : 'secondary'}>

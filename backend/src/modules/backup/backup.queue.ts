@@ -34,6 +34,12 @@ export interface BackupFullJobData {
   userId?: string;
   options: {
     dbOnly?: boolean;
+    /**
+     * Track D.2 Step 2 — AES-256-GCM streaming encryption.
+     * Server-rejected (HTTP 412) at controller-time if XCH_MASTER_KEY is
+     * absent, so the worker can trust the option at face value.
+     */
+    encrypt?: boolean;
   };
 }
 

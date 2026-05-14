@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, NotFoundException } from '@nestjs/common';
 import { BackupController } from './backup.controller';
 import {
   JOB_BACKUP_FULL,
@@ -14,6 +14,7 @@ function buildController(): {
   controller: BackupController;
   service: Record<string, jest.Mock>;
   queue: Record<string, jest.Mock>;
+  crypto: { isEnabled: jest.Mock };
 } {
   const service = {
     createFullBackup: jest.fn(),
@@ -26,8 +27,18 @@ function buildController(): {
     add: jest.fn(),
     getJob: jest.fn(),
   };
-  const controller = new BackupController(service as never, queue as never);
-  return { controller, service, queue };
+  // Track D.2 Step 2 — controller takes a CryptoService for capability
+  // discovery + encrypt:true 412 gate. Tests that don't exercise encryption
+  // pass a stub that reports disabled.
+  const crypto = {
+    isEnabled: jest.fn(() => false),
+  };
+  const controller = new BackupController(
+    service as never,
+    queue as never,
+    crypto as never,
+  );
+  return { controller, service, queue, crypto };
 }
 
 /** A minimal AuthRequest-shaped object for the controller. */
@@ -55,7 +66,7 @@ describe('BackupController (Track D.1 step 5 — Bull v3 wiring)', () => {
       expect(jobData).toEqual({
         tenantId: 'tnt-test',
         userId: 'u-1',
-        options: { dbOnly: false },
+        options: { dbOnly: false, encrypt: undefined },
       });
       // Sync path NOT taken
       expect(service.createFullBackup).not.toHaveBeenCalled();
@@ -349,6 +360,65 @@ describe('BackupController (Track D.1 step 5 — Bull v3 wiring)', () => {
       await expect(controller.getJobStatus('does-not-exist')).rejects.toThrow(
         /Backup job does-not-exist not found/,
       );
+    });
+  });
+
+  // ==========================================================================
+  // Track D.2 Step 2 — Capability discovery + encrypt:true 412 gate
+  // ==========================================================================
+
+  describe('GET /backup/capabilities (Track D.2)', () => {
+    it('returns encryption:true when crypto.isEnabled() is true', async () => {
+      const { controller, crypto } = buildController();
+      crypto.isEnabled.mockReturnValue(true);
+      const result = await controller.getCapabilities();
+      expect(result.encryption).toBe(true);
+    });
+
+    it('returns encryption:false when crypto.isEnabled() is false', async () => {
+      const { controller, crypto } = buildController();
+      crypto.isEnabled.mockReturnValue(false);
+      const result = await controller.getCapabilities();
+      expect(result.encryption).toBe(false);
+    });
+  });
+
+  describe('POST /backup/full with encrypt:true (Track D.2)', () => {
+    it('rejects with HTTP 412 PreconditionFailed when crypto disabled', async () => {
+      const { controller, crypto } = buildController();
+      crypto.isEnabled.mockReturnValue(false);
+      await expect(
+        controller.createFullBackup(
+          { encrypt: true },
+          undefined,
+          authRequest() as never,
+        ),
+      ).rejects.toThrow(HttpException);
+      await expect(
+        controller.createFullBackup(
+          { encrypt: true },
+          undefined,
+          authRequest() as never,
+        ),
+      ).rejects.toMatchObject({ status: 412 });
+    });
+
+    it('threads encrypt:true into the job data when crypto enabled', async () => {
+      const { controller, queue, crypto } = buildController();
+      crypto.isEnabled.mockReturnValue(true);
+      queue.add.mockResolvedValue({ id: '999' });
+
+      await controller.createFullBackup(
+        { encrypt: true },
+        undefined,
+        authRequest() as never,
+      );
+
+      const [, jobData] = queue.add.mock.calls[0];
+      expect(jobData).toMatchObject({
+        tenantId: 'tnt-test',
+        options: { encrypt: true },
+      });
     });
   });
 });

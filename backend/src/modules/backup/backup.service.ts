@@ -23,6 +23,37 @@ import {
   toDryRunReportResponseDto,
 } from './dto/dry-run-report.response.dto';
 import { BACKUP_CATALOG_ACTIONS, BackupAuditAction } from './backup.actions.constants';
+import { CryptoService } from '../../common/crypto/crypto.service';
+
+// ============================================================================
+// Track D.2 Step 2 — Encryption sidecar constants & types
+// ============================================================================
+
+/**
+ * Sidecar suffix appended to encrypted backup filenames in MinIO.
+ * Example: `full-backup-v2-2026-05-14T10-00-00.zip` + `.enc.json`.
+ *
+ * The sidecar holds the IV, auth tag and key version necessary to
+ * decipher the archive — they cannot live inside the ZIP itself
+ * (the ZIP is the ciphertext).
+ */
+const SIDECAR_SUFFIX = '.enc.json';
+
+/**
+ * v1 sidecar JSON shape (Track D.2 Step 2 — see ADR-026 §1).
+ *
+ * The top-level `version: 1` field is the sidecar schema version (NOT
+ * the backup format version). Reserved for future crypto agility
+ * (AES-GCM-SIV, ChaCha20-Poly1305) where a sidecar v2 would carry
+ * different fields. Today: v1 is always AES-256-GCM.
+ */
+interface BackupSidecarV1 {
+  version: 1;
+  algo: 'aes-256-gcm';
+  keyVersion: number;
+  ivBase64: string;
+  authTagBase64: string;
+}
 
 // ============================================================================
 // Pin rendering constants (mirror from frontend FloorPlanViewer.tsx)
@@ -78,6 +109,8 @@ export interface BackupListItem {
   siteCode?: string;
   size: number;
   createdAt: string;
+  /** Track D.2 — true if the archive is AES-256-GCM encrypted (sidecar present). */
+  encrypted?: boolean;
 }
 
 /**
@@ -219,6 +252,13 @@ export class BackupService {
     private prisma: PrismaClient,
     private storageService: StorageService,
     private configService: ConfigService,
+    /**
+     * Track D.2 Step 2 — AES-256-GCM streaming encryption.
+     * Provided globally by `CryptoModule` (@Global). Injectable here without
+     * altering CryptoModule wiring. `crypto.isEnabled()` is the source of
+     * truth for capability discovery (GET /backup/capabilities).
+     */
+    private crypto: CryptoService,
   ) {}
 
   // ==========================================================================
@@ -1391,6 +1431,10 @@ export class BackupService {
         siteCode: changes.siteCode,
         size: changes.size || 0,
         createdAt: log.timestamp.toISOString(),
+        // Track D.2 Step 2 — `encrypted` is undefined for D.1-era audit
+        // rows (catalog row predates the field); UI treats undefined as
+        // "plaintext / unknown" and skips the lock icon.
+        encrypted: typeof changes.encrypted === 'boolean' ? changes.encrypted : undefined,
       };
     });
   }
@@ -1429,6 +1473,9 @@ export class BackupService {
       } catch (err: unknown) {
         this.logger.warn(`Could not delete backup file: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
+      // Track D.2 Step 2 — also remove the sidecar (tolerated NoSuchKey
+      // for plaintext backups produced before D.2 or with encrypt:false).
+      await this.deleteSidecarFromBackupBucket(changes.filename);
     }
 
     // Delete the audit log entry so the backup disappears from the list
@@ -1685,13 +1732,25 @@ export class BackupService {
     buckets: string[];
     metadata: BackupMetadataV2;
     onProgress?: ProgressCallback;
-  }): Promise<{ size: number; sha256: string }> {
-    const { tmpPath, data, buckets, metadata, onProgress } = args;
+    /**
+     * Track D.2 Step 2 — when true, splice an AES-256-GCM cipher
+     * Transform between `archive` and `writeStream`. The `archiveHasher`
+     * stays UPSTREAM of the cipher (it consumes `archive.on('data')`),
+     * so the sha256 in metadata is over the PLAINTEXT archive bytes
+     * — preserves D.1 deterministic-input test invariants regardless
+     * of the `encrypt` toggle.
+     */
+    encrypt?: boolean;
+  }): Promise<{ size: number; sha256: string; encryption?: BackupSidecarV1 }> {
+    const { tmpPath, data, buckets, metadata, onProgress, encrypt } = args;
 
     const archive = archiver('zip', { zlib: { level: 9 } });
     const writeStream = createWriteStream(tmpPath);
 
     // Tee the archive output through a hash for end-to-end integrity.
+    // CRITICAL: this listener taps the archive's readable side BEFORE
+    // any downstream pipe transforms (cipher), so the digest always
+    // reflects the PLAINTEXT archive — deterministic across encrypt on/off.
     const archiveHasher = createHash('sha256');
     archive.on('data', (chunk: Buffer) => archiveHasher.update(chunk));
 
@@ -1699,10 +1758,28 @@ export class BackupService {
       this.logger.warn(`Archiver warning: ${err.message}`);
     });
 
+    // Track D.2 Step 2 — build cipher Transform if requested.
+    // CryptoService.createCipherStream() throws if XCH_MASTER_KEY is
+    // absent ; the controller MUST have rejected the request with HTTP 412
+    // before we reach the queue, so a throw here is an invariant violation
+    // (worker started without restart after env change). Let it bubble up.
+    let cipherCtx: ReturnType<CryptoService['createCipherStream']> | null = null;
+    if (encrypt) {
+      cipherCtx = this.crypto.createCipherStream();
+      this.logger.log(
+        `Backup archive will be encrypted (AES-256-GCM, keyVersion=${cipherCtx.keyVersion})`,
+      );
+    }
+
     // Start the pipeline FIRST so archive can be drained as we append.
     // pipeline() awaits archive 'end' + writeStream 'finish' + cleans up
-    // on error (closes writeStream, propagates the rejection).
-    const pipelinePromise = pipeline(archive, writeStream);
+    // on error (closes downstream streams, propagates the rejection) —
+    // automatic error forwarding between adjacent stages, no manual
+    // .on('error', ...) needed (contrast with the .pipe().pipe() chain
+    // in restoreFullBackupV2 — ADR-025 pattern).
+    const pipelinePromise = cipherCtx
+      ? pipeline(archive, cipherCtx.cipher, writeStream)
+      : pipeline(archive, writeStream);
 
     // 1. Append data/*.json (small JSON payloads, in-memory)
     for (const [table, records] of Object.entries(data)) {
@@ -1724,10 +1801,25 @@ export class BackupService {
     await pipelinePromise;
 
     const stat = await fs.stat(tmpPath);
-    return {
+    const result: { size: number; sha256: string; encryption?: BackupSidecarV1 } = {
       size: stat.size,
       sha256: archiveHasher.digest('hex'),
     };
+
+    // Auth tag is only available after cipher.final() — guaranteed by
+    // the pipeline() await above. getAuthTagB64() throws if the flag
+    // is unset (defensive).
+    if (cipherCtx) {
+      result.encryption = {
+        version: 1,
+        algo: 'aes-256-gcm',
+        keyVersion: cipherCtx.keyVersion,
+        ivBase64: cipherCtx.ivB64,
+        authTagBase64: cipherCtx.getAuthTagB64(),
+      };
+    }
+
+    return result;
   }
 
   /**
@@ -1740,7 +1832,11 @@ export class BackupService {
    *
    * Track D.1 Phase 1 step 2.
    */
-  private async uploadTmpToBackupBucket(tmpPath: string, filename: string): Promise<void> {
+  private async uploadTmpToBackupBucket(
+    tmpPath: string,
+    filename: string,
+    sidecar?: BackupSidecarV1,
+  ): Promise<void> {
     const client = this.getMinioClient();
 
     // Ensure bucket exists (idempotent).
@@ -1766,6 +1862,89 @@ export class BackupService {
     this.logger.log(
       `Backup uploaded (streaming v2) to ${this.BACKUP_BUCKET}/${filename} (${stat.size} bytes)`,
     );
+
+    // Track D.2 Step 2 — atomicity zip-before-sidecar.
+    // The sidecar is uploaded AFTER the zip so a crash mid-process leaves
+    // an orphan zip without a sidecar (detectable as plaintext at restore
+    // time → BadRequestException "Encrypted backup, sidecar missing"
+    // OR — if it really IS plaintext — restore proceeds normally).
+    // Inverting the order would risk an orphan sidecar pointing to
+    // a non-existent or stale zip, which is harder to surface cleanly.
+    if (sidecar) {
+      const sidecarName = `${filename}${SIDECAR_SUFFIX}`;
+      const sidecarBuffer = Buffer.from(JSON.stringify(sidecar), 'utf8');
+      await client.putObject(
+        this.BACKUP_BUCKET,
+        sidecarName,
+        sidecarBuffer,
+        sidecarBuffer.length,
+        { 'Content-Type': 'application/json' },
+      );
+      this.logger.log(
+        `Backup sidecar uploaded to ${this.BACKUP_BUCKET}/${sidecarName} ` +
+          `(keyVersion=${sidecar.keyVersion}, ${sidecarBuffer.length} bytes)`,
+      );
+    }
+  }
+
+  /**
+   * Track D.2 Step 2 — fetch the optional encryption sidecar for a
+   * backup. Returns `null` if the sidecar is absent (plaintext backup,
+   * normal path before D.2 or for unencrypted v2.3.0+ archives).
+   *
+   * NoSuchKey from MinIO is the success-via-absence signal; any other
+   * error bubbles up so the caller (restore) can fail explicitly.
+   */
+  private async fetchSidecar(filename: string): Promise<BackupSidecarV1 | null> {
+    const client = this.getMinioClient();
+    const sidecarName = `${filename}${SIDECAR_SUFFIX}`;
+    try {
+      const stream = await client.getObject(this.BACKUP_BUCKET, sidecarName);
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream as AsyncIterable<Buffer>) {
+        chunks.push(chunk);
+      }
+      const raw = Buffer.concat(chunks).toString('utf8');
+      const parsed = JSON.parse(raw) as BackupSidecarV1;
+      if (parsed.version !== 1) {
+        throw new BadRequestException(
+          `Unsupported backup sidecar version: ${parsed.version}`,
+        );
+      }
+      if (parsed.algo !== 'aes-256-gcm') {
+        throw new BadRequestException(
+          `Unsupported backup sidecar algo: ${parsed.algo}`,
+        );
+      }
+      return parsed;
+    } catch (err: unknown) {
+      // minio-js throws an Error with code 'NoSuchKey' for missing objects.
+      const code = (err as { code?: string })?.code;
+      if (code === 'NoSuchKey' || code === 'NotFound') {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Track D.2 Step 2 — delete the sidecar (if any). Mirror of
+   * {@link deleteFromBackupBucket} for the `.enc.json` partner blob.
+   * NoSuchKey is tolerated (safe to call when no sidecar exists).
+   */
+  private async deleteSidecarFromBackupBucket(filename: string): Promise<void> {
+    const client = this.getMinioClient();
+    const sidecarName = `${filename}${SIDECAR_SUFFIX}`;
+    try {
+      await client.removeObject(this.BACKUP_BUCKET, sidecarName);
+      this.logger.log(`Backup sidecar deleted from ${this.BACKUP_BUCKET}/${sidecarName}`);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'NoSuchKey' || code === 'NotFound') return;
+      this.logger.warn(
+        `Could not delete sidecar ${sidecarName}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
+    }
   }
 
   /**
@@ -1802,10 +1981,25 @@ export class BackupService {
     filename: string;
     size: number;
     sha256: string;
+    encrypted: boolean;
   }> {
     this.logger.log(
-      `Starting full backup v2 for tenant ${tenantId} (dbOnly=${opts.dbOnly ?? false})`,
+      `Starting full backup v2 for tenant ${tenantId} ` +
+        `(dbOnly=${opts.dbOnly ?? false}, encrypt=${opts.encrypt ?? false})`,
     );
+
+    // Track D.2 Step 2 — pre-flight check (worker invariant).
+    // The controller MUST reject with HTTP 412 before enqueue when
+    // encrypt:true is requested with crypto disabled. If we reach here
+    // with encrypt:true and !crypto.isEnabled(), something started the
+    // worker without the env var — fail explicitly instead of writing
+    // a half-encrypted artifact.
+    if (opts.encrypt && !this.crypto.isEnabled()) {
+      throw new Error(
+        'Worker invariant violation: encrypt:true received but XCH_MASTER_KEY unset. ' +
+          'Restart backend-worker after setting the env var.',
+      );
+    }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const filename = `full-backup-v2-${timestamp}.zip`;
@@ -1836,7 +2030,7 @@ export class BackupService {
         files: {},
       };
 
-      // 4. Pipeline archive → tmp file.
+      // 4. Pipeline archive → tmp file (cipher injected if encrypt:true).
       onProgress?.('archive', 0, 1, 'Building archive…');
       const archiveResult = await this.buildArchiveV2ToTmp({
         tmpPath,
@@ -1844,31 +2038,40 @@ export class BackupService {
         buckets,
         metadata,
         onProgress,
+        encrypt: opts.encrypt,
       });
 
-      // 5. Stream tmp → xch-backups bucket via fPutObject.
+      // 5. Stream tmp → xch-backups bucket via fPutObject. If the archive
+      // was encrypted, the sidecar uploads AFTER the zip (atomicity
+      // zip-before-sidecar — ADR-026 §1).
       onProgress?.('upload', 0, 1, 'Uploading to xch-backups…');
-      await this.uploadTmpToBackupBucket(tmpPath, filename);
+      await this.uploadTmpToBackupBucket(tmpPath, filename, archiveResult.encryption);
 
       // 6. Audit log row (visible in BACKUP_FULL_V2 catalog).
+      // `encrypted: boolean` surfaces as a lock icon in the UI catalog.
+      const encrypted = archiveResult.encryption != null;
       await this.logBackupAction(tenantId, userId, 'BACKUP_FULL_V2', {
         filename,
         size: archiveResult.size,
         sha256: archiveResult.sha256,
+        encrypted,
       });
 
       onProgress?.('done', 1, 1, 'Backup complete');
       this.logger.log(
         `Full backup v2 completed: ${filename} ` +
           `(${archiveResult.size} bytes, sha256=${archiveResult.sha256.slice(0, 12)}…, ` +
-          `files=${Object.keys(metadata.files).length})`,
+          `files=${Object.keys(metadata.files).length}, encrypted=${encrypted})`,
       );
 
       return {
-        message: 'Backup complet créé avec succès (v2 streaming)',
+        message: encrypted
+          ? 'Backup complet créé avec succès (v2 streaming chiffré AES-256-GCM)'
+          : 'Backup complet créé avec succès (v2 streaming)',
         filename,
         size: archiveResult.size,
         sha256: archiveResult.sha256,
+        encrypted,
       };
     } finally {
       // Always clean up the tmp file, even on exception path.
@@ -2918,21 +3121,55 @@ export class BackupService {
       onProgress?.('download', 0, 1, `Downloading backup ${filename}`);
       await this.downloadFromBackupBucket(filename, tmpZipPath);
 
-      // 4. Stream-process : magic byte → unzipper → router
+      // 3b. Track D.2 Step 2 — fetch the optional encryption sidecar
+      // BEFORE building the read pipeline. Three possible states:
+      //   (a) sidecar present → encrypted archive, build a decipher
+      //       Transform and insert it BEFORE the MagicByteValidator so
+      //       the validator sees plaintext PKZip bytes (50 4B 03 04).
+      //   (b) sidecar absent + ZIP is plaintext → restore proceeds as
+      //       in D.1 (no decipher in the pipeline).
+      //   (c) sidecar absent + ZIP is actually encrypted → the
+      //       MagicByteValidator fires `BadRequestException` ("not a
+      //       PKZip stream") with the ciphertext's first 4 bytes
+      //       embedded — a clear-enough symptom for the operator.
+      // The reverse case "sidecar present + decipher fails on tampered
+      // bytes" surfaces as an auth tag error at cipher.final() time,
+      // which we forward to `zipStream` so the for-await rejects.
+      const sidecar = await this.fetchSidecar(filename);
+      if (sidecar) {
+        this.logger.log(
+          `Backup ${filename} is encrypted (algo=${sidecar.algo}, ` +
+            `keyVersion=${sidecar.keyVersion}) — decipher will run pre-magic-byte`,
+        );
+      }
+
+      // 4. Stream-process : [decipher?] → magic byte → unzipper → router
       onProgress?.('extract', 0, 1, 'Parsing archive…');
       const fileStream = createReadStream(tmpZipPath);
       const validator = new MagicByteValidator();
       const zipStream = unzipper.Parse({ forceStream: true });
-      fileStream.pipe(validator).pipe(zipStream);
-      // Node `.pipe()` chains do NOT propagate errors automatically. Without
-      // explicit forwarding, an error emitted by `validator` (e.g. magic-byte
-      // mismatch via `callback(new BadRequestException(...))`) is never seen
-      // by `zipStream`, and the `for await` consumer hangs forever. The
-      // forwarding below destroys `zipStream` with the upstream error, which
-      // makes the for-await loop reject with that error and lets the outer
-      // catch turn it back into a clean BadRequestException.
-      fileStream.on('error', (err) => validator.destroy(err));
-      validator.on('error', (err) => zipStream.destroy(err));
+
+      // ADR-025 pattern: Node `.pipe().pipe()` does NOT propagate errors
+      // between adjacent stages. Each stage manually destroys the next
+      // one with its error so the for-await consumer terminates.
+      if (sidecar) {
+        // createDecipherStream throws synchronously if the key version
+        // is unknown (XCH_MASTER_KEY_V<n> not registered). Let it bubble
+        // up — caller will surface as 400/500 with the explicit message.
+        const decipher = this.crypto.createDecipherStream({
+          keyVersion: sidecar.keyVersion,
+          ivB64: sidecar.ivBase64,
+          authTagB64: sidecar.authTagBase64,
+        });
+        fileStream.pipe(decipher).pipe(validator).pipe(zipStream);
+        fileStream.on('error', (err) => decipher.destroy(err));
+        decipher.on('error', (err) => validator.destroy(err));
+        validator.on('error', (err) => zipStream.destroy(err));
+      } else {
+        fileStream.pipe(validator).pipe(zipStream);
+        fileStream.on('error', (err) => validator.destroy(err));
+        validator.on('error', (err) => zipStream.destroy(err));
+      }
 
       const dataFiles: Record<string, unknown[]> = {};
       const stagedFiles = new Map<
