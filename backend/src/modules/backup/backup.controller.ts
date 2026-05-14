@@ -209,6 +209,10 @@ export class BackupController {
   @Post('full/restore')
   @RequireWrite()
   @SkipThrottle()
+  @ApiOperation({ summary: '[ADMIN] Restore full backup — multipart sync OR JSON async + dry-run' })
+  @ApiOkResponse({ type: RestoreFullResultResponseDto })
+  @ApiAcceptedResponse({ type: BackupJobEnqueuedResponseDto })
+  @ApiHeader({ name: 'X-Backup-Sync', required: false })
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -216,20 +220,6 @@ export class BackupController {
       fileFilter: backupFileFilter,
     }),
   )
-  @ApiOperation({
-    summary: '[ADMIN] Restore full backup — multipart (sync) OR JSON {backupId} (async)',
-    description:
-      'Multipart `file` upload → synchronous v1 path (AdmZip + in-memory parse). ' +
-      'JSON `{backupId, dryRun?}` → async v2 path (Bull v3 streaming + integrity verify ' +
-      '+ dry-run preview support). Header X-Backup-Sync: 1 forces the v2 sync path on JSON mode.',
-  })
-  @ApiHeader({
-    name: 'X-Backup-Sync',
-    description: 'On JSON mode, set to "1" to force synchronous v2 execution.',
-    required: false,
-  })
-  @ApiOkResponse({ type: RestoreFullResultResponseDto, description: 'Sync path (multipart or X-Backup-Sync: 1)' })
-  @ApiAcceptedResponse({ type: BackupJobEnqueuedResponseDto, description: 'Async JSON path' })
   async restoreFullBackup(
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body() restoreOptions: RestoreOptionsDto | undefined,

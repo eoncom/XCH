@@ -25,7 +25,21 @@ import { TEST_USERS } from '../../fixtures/auth.fixture';
 
 let sharedCookies: Cookie[] = [];
 
-test.describe.serial('@smoke Backup v2 UI (Track D.1 step 8)', () => {
+/**
+ * **NOT in `@smoke`** : the backup tab is gated `isSuperAdmin` (cf
+ * settings/page.tsx:3100), and the default `TEST_USERS.admin` is a
+ * regular admin without that flag. Running this in the smoke regression
+ * suite fails immediately on the click-estimate step (the tab isn't even
+ * rendered).
+ *
+ * Activation : run separately against an env seeded with a super-admin
+ * test user, e.g.
+ *   npx playwright test tests/settings/backup-v2.spec.ts --grep @backup-v2
+ *
+ * Track D.2 backlog : seed `TEST_USERS.superAdmin` in the auth fixture
+ * + wire the smoke suite to use it for super-admin gated pages.
+ */
+test.describe.serial('@backup-v2 Backup v2 UI (Track D.1 step 8)', () => {
   test.beforeAll(async ({ browser }) => {
     const apiUrl = process.env.PLAYWRIGHT_API_URL || 'http://localhost:3002';
     const setupContext = await browser.newContext();
