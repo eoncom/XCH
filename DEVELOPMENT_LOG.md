@@ -8032,3 +8032,150 @@ docs(track-d1): step 9/9 — ADR-025 + CHANGELOG finalisé v2.2.0 + README backu
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-14
+
+**Date:** 2026-05-14 21:17:24
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 0
+
+**Commit message:**
+```
+chore(d.2): preflight — .gitignore + ADR-026 skeleton + CHANGELOG opener
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-14
+
+**Date:** 2026-05-14 22:20:35
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 9
+- Frontend files modified: 2
+
+**Commit message:**
+```
+feat(crypto): AES-256-GCM stream cipher/decipher factories for backup encryption
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-14
+
+**Date:** 2026-05-14 22:37:17
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 4
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat(backup): AES-256-GCM streaming encryption with MinIO sidecar
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-15
+
+**Date:** 2026-05-15 07:54:32
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 9
+- Frontend files modified: 2
+
+**Commit message:**
+```
+feat(observability): per-phase Sentry spans for backup v2 + scrubEvent on transactions
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-15
+
+**Date:** 2026-05-15 08:08:42
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 2
+
+**Commit message:**
+```
+feat(backup): cross-tenant restore with delegationId remap + ownership rewrite
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-15
+
+**Date:** 2026-05-15 09:02:19
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 0
+
+**Commit message:**
+```
+chore(backup): deprecate X-Backup-Sync header (warn log + Swagger, removal v2.4.0)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+
+
+---
+
+## Session Auto-Update - 2026-05-15
+
+**Date:** 2026-05-15 09:41:08
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 2
+- Frontend files modified: 1
+
+**Commit message:**
+```
+docs(track-d2): ADR-026 finalize + CHANGELOG v2.3.0 + README backup section + key rotation runbook
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

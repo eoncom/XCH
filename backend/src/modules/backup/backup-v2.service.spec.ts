@@ -32,6 +32,22 @@ import {
  * Full round-trip with a real MinIO is Phase 1 step 8 integration test.
  */
 
+/**
+ * Track D.2 Step 2 — stub CryptoService that reports encryption disabled.
+ * Existing D.1 tests don't exercise `encrypt: true`, so this stub never
+ * has its stream factories called. Track D.2 encrypt-on tests below
+ * inject a fully-functional CryptoService instance instead.
+ */
+const disabledCrypto = {
+  isEnabled: () => false,
+  createCipherStream: jest.fn(() => {
+    throw new Error('disabledCrypto.createCipherStream called — test must use enabledCrypto helper');
+  }),
+  createDecipherStream: jest.fn(() => {
+    throw new Error('disabledCrypto.createDecipherStream called — test must use enabledCrypto helper');
+  }),
+} as never;
+
 /** Build a BackupService with stub deps + an injectable mock MinIO client. */
 function buildServiceWithMockedMinio(
   mockClient: Record<string, unknown>,
@@ -44,6 +60,7 @@ function buildServiceWithMockedMinio(
     {} as never,
     {} as never,
     configService as never,
+    disabledCrypto,
   );
   // Inject the mocked client so getMinioClient() returns it instead of
   // constructing a real one via `require('minio')`.
@@ -639,6 +656,14 @@ describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
       fGetObject: jest.fn(async (_bucket: string, _name: string, target: string) => {
         await fs.copyFile(zipFixturePath, target);
       }),
+      // Track D.2 Step 2 — fetchSidecar uses getObject for the sidecar JSON.
+      // Tests in this block use plaintext fixtures so NoSuchKey is the
+      // expected response — the sidecar lookup returns null gracefully.
+      getObject: jest.fn(async () => {
+        const err = new Error('Object not found') as Error & { code?: string };
+        err.code = 'NoSuchKey';
+        throw err;
+      }),
       bucketExists: jest.fn().mockResolvedValue(true),
       makeBucket: jest.fn().mockResolvedValue(undefined),
       fPutObject: jest.fn().mockResolvedValue(undefined),
@@ -651,6 +676,7 @@ describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
           k === 'MINIO_BUCKET' ? 'xch-storage' : fb ?? '',
         ),
       } as never,
+      disabledCrypto,
     );
     (service as unknown as { _minioClient: unknown })._minioClient = mockClient;
     return { service, mockClient, prismaStub };
@@ -666,6 +692,7 @@ describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
       {} as never,
       {} as never,
       { get: jest.fn() } as never,
+      disabledCrypto,
     );
     const data = {
       sites: [{ id: 's1', name: 'A' }, { id: 's2', name: 'B' }],
@@ -800,7 +827,7 @@ describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
   it('6. version number 2 → streaming path (dryRun returns report)', async () => {
     // Already exercised by test 1 (round-trip). Reassert version=2 path explicitly.
     const tmpZip = path.join(os.tmpdir(), `v2-path-${randomBytes(4).toString('hex')}.zip`);
-    const stub = new BackupService({} as never, {} as never, { get: jest.fn() } as never);
+    const stub = new BackupService({} as never, {} as never, { get: jest.fn() } as never, disabledCrypto);
     await buildV2BackupFixture(stub, tmpZip, { data: { sites: [] } });
     try {
       const { service } = wireService(tmpZip);
@@ -927,7 +954,7 @@ describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
     // As a side benefit, the non-dry-run path also runs end-to-end and
     // reports a valid `applied` result with `_created` counts > 0.
     const tmpZip = path.join(os.tmpdir(), `step6-applied-${randomBytes(4).toString('hex')}.zip`);
-    const stub = new BackupService({} as never, {} as never, { get: jest.fn() } as never);
+    const stub = new BackupService({} as never, {} as never, { get: jest.fn() } as never, disabledCrypto);
     await buildV2BackupFixture(stub, tmpZip, {
       data: {
         sites: [{ id: 's1', code: 'SITE-A', name: 'Site A' }],
@@ -959,6 +986,520 @@ describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
 });
 
 // ============================================================================
+// Track D.2 Step 2 — Encryption round-trip (3 new cases)
+// ============================================================================
+
+describe('BackupService encryption round-trip (Track D.2 step 2)', () => {
+  type SidecarV1 = {
+    version: 1;
+    algo: 'aes-256-gcm';
+    keyVersion: number;
+    ivBase64: string;
+    authTagBase64: string;
+  };
+
+  // Real CryptoService instance with a known master key — required to
+  // exercise the cipher/decipher Transform factories end-to-end.
+  const masterKey = require('crypto').randomBytes(32).toString('base64');
+  const realCrypto = new (require('../../common/crypto/crypto.service').CryptoService)({
+    get: (k: string) => (k === 'XCH_MASTER_KEY' ? masterKey : undefined),
+  } as never);
+
+  /**
+   * Build a backup with encrypt:true → returns { tmpZipPath, sidecar, metadata }.
+   * The sidecar JSON is the same shape that `uploadTmpToBackupBucket` would
+   * upload alongside the ZIP.
+   */
+  async function buildEncryptedBackup(): Promise<{
+    tmpZip: string;
+    sidecar: SidecarV1;
+    plaintextSha256: string;
+  }> {
+    const tmpZip = path.join(
+      os.tmpdir(),
+      `v2-enc-${randomBytes(4).toString('hex')}.zip`,
+    );
+    const data = {
+      sites: [{ id: 's-enc', name: 'EncryptedSite' }],
+      assets: [{ id: 'a-enc', siteId: 's-enc', name: 'Switch-Enc' }],
+    };
+    const metadata = {
+      version: 2 as const,
+      createdAt: new Date().toISOString(),
+      tenantId: 'tnt-test',
+      type: 'full' as const,
+      siteId: null,
+      siteCode: null,
+      appVersion: '2.3.0',
+      buckets: [] as string[],
+      counts: { sites: 1, assets: 1 },
+      files: {},
+    };
+    // Build via a service that has real crypto wired in.
+    const builder = new BackupService(
+      {} as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      realCrypto as never,
+    );
+    const result: { size: number; sha256: string; encryption?: SidecarV1 } = await (
+      builder as unknown as {
+        buildArchiveV2ToTmp: (a: object) => Promise<{
+          size: number;
+          sha256: string;
+          encryption?: SidecarV1;
+        }>;
+      }
+    ).buildArchiveV2ToTmp({
+      tmpPath: tmpZip,
+      data,
+      buckets: [],
+      metadata,
+      encrypt: true,
+    });
+    if (!result.encryption) throw new Error('expected encryption sidecar');
+    return { tmpZip, sidecar: result.encryption, plaintextSha256: result.sha256 };
+  }
+
+  /** Wire a restore service that resolves the encrypted ZIP and sidecar via mock MinIO. */
+  function wireEncryptedRestore(args: {
+    encryptedZipPath: string;
+    sidecar: object | null;
+  }) {
+    const auditLog = {
+      id: 'audit-enc-1',
+      tenantId: 'tnt-test',
+      action: 'BACKUP_FULL_V2',
+      changes: { filename: path.basename(args.encryptedZipPath), encrypted: true },
+      timestamp: new Date(),
+    };
+    const prismaStub: Record<string, unknown> = {
+      auditLog: {
+        findUnique: jest.fn().mockResolvedValue(auditLog),
+        create: jest.fn(),
+      },
+      $transaction: jest.fn(
+        async (fn: (tx: typeof prismaStub) => Promise<unknown>) => fn(prismaStub),
+      ),
+      $executeRawUnsafe: jest.fn(),
+    };
+    const baseModels = [
+      'contactType', 'contact', 'user', 'site', 'rack', 'asset',
+      'floorPlan', 'pin', 'assetMovement', 'task', 'taskComment',
+      'attachment', 'photo', 'billingEntity', 'expense', 'costAllocation',
+      'connectivityLink', 'budget', 'siteHealthSnapshot', 'delegation',
+    ];
+    for (const m of baseModels) {
+      prismaStub[m] = {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => data),
+      };
+    }
+    (prismaStub.delegation as { findFirst: jest.Mock }).findFirst = jest
+      .fn()
+      .mockResolvedValue({ id: 'del-default' });
+
+    const mockClient = {
+      fGetObject: jest.fn(async (_bucket: string, _name: string, target: string) => {
+        await fs.copyFile(args.encryptedZipPath, target);
+      }),
+      getObject: jest.fn(async () => {
+        if (args.sidecar) {
+          // Return a stream-like async iterable yielding the JSON bytes.
+          const buf = Buffer.from(JSON.stringify(args.sidecar), 'utf8');
+          return Readable.from([buf]);
+        }
+        const err = new Error('Object not found') as Error & { code?: string };
+        err.code = 'NoSuchKey';
+        throw err;
+      }),
+      bucketExists: jest.fn().mockResolvedValue(true),
+      makeBucket: jest.fn().mockResolvedValue(undefined),
+      fPutObject: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn((k: string, fb?: string) => (k === 'MINIO_BUCKET' ? 'xch-storage' : fb ?? '')) } as never,
+      realCrypto as never,
+    );
+    (service as unknown as { _minioClient: unknown })._minioClient = mockClient;
+    return { service, mockClient };
+  }
+
+  it('encrypt:true round-trip — ZIP + sidecar restored, plaintext data recovered', async () => {
+    const { tmpZip, sidecar } = await buildEncryptedBackup();
+    try {
+      const { service } = wireEncryptedRestore({ encryptedZipPath: tmpZip, sidecar });
+      const result = await service.restoreFullBackupV2(
+        'tnt-test',
+        'audit-enc-1',
+        { dryRun: true },
+      );
+      expect(result.kind).toBe('dry-run');
+      if (result.kind !== 'dry-run') throw new Error('unreachable');
+      // Sites + assets should appear in the would-create map — proves the
+      // archive was deciphered, parsed by unzipper, and natural-key probed.
+      // wouldCreate is keyed by data file basename (sites.json → 'sites').
+      expect(Object.keys(result.report.wouldCreate)).toEqual(
+        expect.arrayContaining(['sites', 'assets']),
+      );
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('encrypt:true tampered ciphertext — restore throws (auth tag mismatch)', async () => {
+    const { tmpZip, sidecar } = await buildEncryptedBackup();
+    try {
+      // Flip 1 byte in the middle of the ciphertext (not in the GCM
+      // auth tag — that's in the sidecar, separate from the file).
+      const buf = await fs.readFile(tmpZip);
+      // Use offset 100 (well into the encrypted body, past header).
+      buf[100] ^= 0x01;
+      await fs.writeFile(tmpZip, buf);
+
+      const { service } = wireEncryptedRestore({ encryptedZipPath: tmpZip, sidecar });
+      await expect(
+        service.restoreFullBackupV2('tnt-test', 'audit-enc-1', { dryRun: true }),
+      ).rejects.toThrow();
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('encrypt:true with WRONG sidecar key version → throws "version v9" explicitly', async () => {
+    const { tmpZip, sidecar } = await buildEncryptedBackup();
+    try {
+      const tampered = { ...sidecar, keyVersion: 9 }; // no XCH_MASTER_KEY_V9 registered
+      const { service } = wireEncryptedRestore({
+        encryptedZipPath: tmpZip,
+        sidecar: tampered,
+      });
+      await expect(
+        service.restoreFullBackupV2('tnt-test', 'audit-enc-1', { dryRun: true }),
+      ).rejects.toThrow(/version v9/);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+});
+
+// ============================================================================
+// Track D.2 Step 4 — Cross-tenant restore (4 unit cases)
+// ============================================================================
+
+describe('BackupService cross-tenant restore (Track D.2 step 4)', () => {
+  /**
+   * Permission gate — assertTargetDelegationAccessible delegates a Prisma
+   * findFirst, scoped by both id AND callerTenantId. We mock the call.
+   */
+  it('assertTargetDelegationAccessible — accepts target in caller tenant', async () => {
+    const findFirst = jest.fn().mockResolvedValue({ id: 'del-target' });
+    const prismaStub = { delegation: { findFirst } };
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    await expect(
+      service.assertTargetDelegationAccessible('del-target', 'tnt-caller'),
+    ).resolves.toBeUndefined();
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { id: 'del-target', tenantId: 'tnt-caller' },
+      select: { id: true },
+    });
+  });
+
+  it('assertTargetDelegationAccessible — refuses target outside caller tenant (403)', async () => {
+    const findFirst = jest.fn().mockResolvedValue(null); // not found in caller's tenant
+    const prismaStub = { delegation: { findFirst } };
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    await expect(
+      service.assertTargetDelegationAccessible('del-foreign', 'tnt-caller'),
+    ).rejects.toMatchObject({
+      status: 403,
+      message: 'Target delegation not accessible',
+    });
+  });
+
+  it('skips users loop in cross-tenant mode + counts skippedCrossTenantUsers', async () => {
+    // Build a small dataFiles payload with 2 users and 0 other rows.
+    const dataFiles = {
+      users: [
+        { id: 'u1', email: 'a@source', firstName: 'A', lastName: 'X' },
+        { id: 'u2', email: 'b@source', firstName: 'B', lastName: 'Y' },
+      ],
+    } as unknown as Record<string, unknown[]>;
+
+    // Prisma stub: collect tx.user.create calls.
+    const userCreate = jest.fn();
+    const prismaStub: Record<string, unknown> = {
+      $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prismaStub)),
+      $executeRawUnsafe: jest.fn(),
+    };
+    const modelStub = () => ({
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn(async ({ data }: { data: unknown }) => data),
+    });
+    for (const m of [
+      'contactType', 'contact', 'site', 'rack', 'asset', 'floorPlan', 'pin',
+      'assetMovement', 'task', 'taskComment', 'attachment', 'photo',
+      'billingEntity', 'expense', 'costAllocation', 'connectivityLink', 'budget',
+      'siteHealthSnapshot', 'delegation',
+    ]) {
+      prismaStub[m] = modelStub();
+    }
+    prismaStub.user = { findFirst: jest.fn(), create: userCreate };
+    (prismaStub.delegation as { findFirst: jest.Mock }).findFirst = jest.fn()
+      .mockResolvedValue({ id: 'del-target' });
+
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    const result = await (
+      service as never as {
+        applyDataFilesToDb: (
+          tenantId: string,
+          dataFiles: Record<string, unknown[]>,
+          stagedFiles: Map<string, unknown>,
+          userId: string | undefined,
+          options: { targetDelegationId: string },
+        ) => Promise<{ skippedCrossTenantUsers?: number; rewrittenOwnership?: number }>;
+      }
+    ).applyDataFilesToDb(
+      'tnt-target',
+      dataFiles,
+      new Map(),
+      'u-admin',
+      { targetDelegationId: 'del-target' },
+    );
+
+    expect(userCreate).not.toHaveBeenCalled(); // users loop skipped
+    expect(result.skippedCrossTenantUsers).toBe(2);
+    expect(result.rewrittenOwnership).toBe(0); // no rows with ownership FK in this fixture
+  });
+
+  it('pre-remap invariant R1 violation aborts restore with explicit message', async () => {
+    // Build dataFiles with a Contact whose delegationId disagrees with its
+    // owning Site's delegationId. Both fields set → R1 violation.
+    const dataFiles = {
+      sites: [{ id: 's-1', delegationId: 'del-A' }],
+      contacts: [
+        { id: 'c-1', name: 'Bad', siteId: 's-1', delegationId: 'del-B' /* mismatch */ },
+      ],
+    } as unknown as Record<string, unknown[]>;
+
+    const prismaStub: Record<string, unknown> = {
+      $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prismaStub)),
+      $executeRawUnsafe: jest.fn(),
+    };
+    const modelStub = () => ({
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn(async ({ data }: { data: unknown }) => data),
+    });
+    for (const m of [
+      'contactType', 'contact', 'user', 'site', 'rack', 'asset', 'floorPlan', 'pin',
+      'assetMovement', 'task', 'taskComment', 'attachment', 'photo',
+      'billingEntity', 'expense', 'costAllocation', 'connectivityLink', 'budget',
+      'siteHealthSnapshot', 'delegation',
+    ]) {
+      prismaStub[m] = modelStub();
+    }
+    (prismaStub.delegation as { findFirst: jest.Mock }).findFirst = jest.fn()
+      .mockResolvedValue({ id: 'del-target' });
+
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    await expect(
+      (service as never as {
+        applyDataFilesToDb: (
+          tenantId: string,
+          dataFiles: Record<string, unknown[]>,
+          stagedFiles: Map<string, unknown>,
+          userId: string | undefined,
+          options?: { targetDelegationId?: string },
+        ) => Promise<unknown>;
+      }).applyDataFilesToDb('tnt-test', dataFiles, new Map(), 'u-admin'),
+    ).rejects.toThrow(/invariant R1 violation in 'contacts'/);
+  });
+});
+
+// ============================================================================
+// Track D.2 Step 4.5 — Async multipart upload restore (4 cases)
+// ============================================================================
+
+describe('BackupService multipart upload restore (Track D.2 step 4.5)', () => {
+  it('rejects when BOTH backupId AND multipart are provided', async () => {
+    const service = new BackupService(
+      {} as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    await expect(
+      service.restoreFullBackupV2(
+        'tnt-test',
+        'audit-1',
+        {},
+        undefined,
+        'u-admin',
+        { tmpZipPath: '/tmp/foo.zip' },
+      ),
+    ).rejects.toThrow(/backupId OR multipart, not both/);
+  });
+
+  it('rejects when NEITHER backupId NOR multipart is provided', async () => {
+    const service = new BackupService(
+      {} as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    await expect(
+      service.restoreFullBackupV2('tnt-test', null, {}, undefined, 'u-admin'),
+    ).rejects.toThrow(/backupId or multipart tmpZipPath is required/);
+  });
+
+  it('multipart plaintext happy path — reads ZIP from disk, no MinIO download, cleanup on finally', async () => {
+    // Build a real v2 plaintext ZIP fixture at a known tmp path using
+    // the production builder (private method accessed via cast).
+    const stubService = new BackupService(
+      {} as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    const tmpZip = path.join(
+      os.tmpdir(),
+      `v2-mp-${randomBytes(4).toString('hex')}.zip`,
+    );
+    const fixtureMetadata = {
+      version: 2 as const,
+      createdAt: new Date().toISOString(),
+      tenantId: 'tnt-test',
+      type: 'db-only' as const,
+      siteId: null,
+      siteCode: null,
+      appVersion: '2.3.0',
+      buckets: [] as string[],
+      counts: { sites: 1 },
+      files: {},
+    };
+    await (stubService as never as {
+      buildArchiveV2ToTmp: (a: object) => Promise<{ size: number; sha256: string }>;
+    }).buildArchiveV2ToTmp({
+      tmpPath: tmpZip,
+      data: { sites: [{ id: 's1', name: 'Site' }] },
+      buckets: [],
+      metadata: fixtureMetadata,
+    });
+
+    // Build the restore service — prismaStub minimal + minio mock that
+    // explicitly forbids fGetObject (should NOT be called in multipart path).
+    const prismaStub: Record<string, unknown> = {
+      auditLog: { findUnique: jest.fn(), create: jest.fn() },
+      $transaction: jest.fn(
+        async (fn: (tx: Record<string, unknown>) => unknown) => fn(prismaStub),
+      ),
+      $executeRawUnsafe: jest.fn(),
+    };
+    const baseModels = [
+      'contactType', 'contact', 'user', 'site', 'rack', 'asset',
+      'floorPlan', 'pin', 'assetMovement', 'task', 'taskComment',
+      'attachment', 'photo', 'billingEntity', 'expense', 'costAllocation',
+      'connectivityLink', 'budget', 'siteHealthSnapshot', 'delegation',
+    ];
+    for (const m of baseModels) {
+      prismaStub[m] = {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(async ({ data }: { data: unknown }) => data),
+      };
+    }
+    (prismaStub.delegation as { findFirst: jest.Mock }).findFirst = jest.fn()
+      .mockResolvedValue({ id: 'del-default' });
+
+    const fGetObject = jest.fn(); // assert not called
+    const mockClient = {
+      fGetObject,
+      getObject: jest.fn(),
+      bucketExists: jest.fn().mockResolvedValue(true),
+      makeBucket: jest.fn().mockResolvedValue(undefined),
+      fPutObject: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    (service as unknown as { _minioClient: unknown })._minioClient = mockClient;
+
+    try {
+      const result = await service.restoreFullBackupV2(
+        'tnt-test',
+        null,
+        { dryRun: true },
+        undefined,
+        'u-admin',
+        { tmpZipPath: tmpZip },
+      );
+      expect(result.kind).toBe('dry-run');
+      // Sanity: MinIO download was NOT attempted (multipart path).
+      expect(fGetObject).not.toHaveBeenCalled();
+      // Tmp ZIP was cleaned up by the service finally block.
+      await expect(fs.access(tmpZip)).rejects.toBeDefined();
+    } finally {
+      // Just in case the test crashed before cleanup ran.
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('multipart no-sidecar + encrypted-shaped ZIP — rejects with explicit "forgot sidecar" message', async () => {
+    // Create a tmp file whose first 4 bytes are NOT PKZip magic (simulate
+    // a ciphertext stream). The service's pre-pipeline peek should reject.
+    const tmpZip = path.join(
+      os.tmpdir(),
+      `v2-enc-no-sc-${randomBytes(4).toString('hex')}.zip`,
+    );
+    await fs.writeFile(tmpZip, Buffer.from([0xab, 0xcd, 0xef, 0x01, 0x99, 0x99, 0x99, 0x99]));
+    try {
+      const service = new BackupService(
+        {} as never,
+        {} as never,
+        { get: jest.fn() } as never,
+        disabledCrypto,
+      );
+      await expect(
+        service.restoreFullBackupV2(
+          'tnt-test',
+          null,
+          { dryRun: true },
+          undefined,
+          'u-admin',
+          { tmpZipPath: tmpZip },
+        ),
+      ).rejects.toThrow(/forgot to upload the sidecar/);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+});
+
+// ============================================================================
 // Track D.1 Phase 1 step 4 — upsertByNaturalKey + idempotent restore
 // ============================================================================
 
@@ -968,6 +1509,7 @@ describe('BackupService.upsertByNaturalKey (Track D.1 step 4)', () => {
       {} as never,
       {} as never,
       { get: jest.fn() } as never,
+      disabledCrypto,
     );
   }
 
@@ -1137,6 +1679,7 @@ describe('BackupService.applyDataFilesToDb idempotence (Track D.1 step 4)', () =
       prisma as never,
       {} as never,
       { get: jest.fn((k: string, fb?: string) => fb ?? '') } as never,
+      disabledCrypto,
     );
 
     const dataFiles: Record<string, unknown[]> = {
@@ -1192,6 +1735,7 @@ describe('BackupService.applyDataFilesToDb idempotence (Track D.1 step 4)', () =
       prisma as never,
       {} as never,
       { get: jest.fn((k: string, fb?: string) => fb ?? '') } as never,
+      disabledCrypto,
     );
 
     const dataFiles: Record<string, unknown[]> = {
@@ -1245,6 +1789,7 @@ describe('BackupService.applyDataFilesToDb idempotence (Track D.1 step 4)', () =
       {} as never,
       {} as never,
       { get: jest.fn() } as never,
+      disabledCrypto,
     );
     const existing = { id: 'site-X', code: 'SITE-A' };
     const findFirst = jest
@@ -1281,6 +1826,7 @@ describe('BackupService.applyDataFilesToDb idempotence (Track D.1 step 4)', () =
       {} as never,
       {} as never,
       { get: jest.fn() } as never,
+      disabledCrypto,
     );
     const findFirst = jest.fn().mockResolvedValue(null);
     const create = jest.fn();
@@ -1316,6 +1862,7 @@ describe('BackupService.applyDataFilesToDb idempotence (Track D.1 step 4)', () =
       prisma as never,
       {} as never,
       { get: jest.fn((_k: string, fb?: string) => fb ?? '') } as never,
+      disabledCrypto,
     );
 
     const dataFiles: Record<string, unknown[]> = {
@@ -1382,6 +1929,7 @@ describe('BackupService.applyDataFilesToDb idempotence (Track D.1 step 4)', () =
       prisma as never,
       {} as never,
       { get: jest.fn((_k: string, fb?: string) => fb ?? '') } as never,
+      disabledCrypto,
     );
     (service as unknown as { _minioClient: unknown })._minioClient = minioClient;
 
@@ -1424,6 +1972,7 @@ describe('BackupService.applyDataFilesToDb idempotence (Track D.1 step 4)', () =
       prisma as never,
       {} as never,
       { get: jest.fn((_k: string, fb?: string) => fb ?? '') } as never,
+      disabledCrypto,
     );
 
     // Seed an existing row.
@@ -1467,6 +2016,7 @@ describe('BackupService.applyDataFilesToDb idempotence (Track D.1 step 4)', () =
       prisma as never,
       {} as never,
       { get: jest.fn((k: string, fb?: string) => fb ?? '') } as never,
+      disabledCrypto,
     );
 
     const dataFiles: Record<string, unknown[]> = {

@@ -133,3 +133,8 @@ nul
 # SQLite index + embeddings cache for @sdsrs/code-graph (AST + FTS5).
 # Regenerated on demand via `npx @sdsrs/code-graph rebuild-index --confirm`.
 .code-graph/
+
+# Claude Code worktrees — ephemeral per-session checkouts of the repo at
+# .claude/worktrees/<slug>/. Should NEVER be committed to the parent repo
+# (each worktree has its own .git pointer + branch). Added Track D.2 (2026-05-14).
+.claude/worktrees/

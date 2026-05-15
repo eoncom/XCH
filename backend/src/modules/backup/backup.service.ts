@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
@@ -22,6 +28,39 @@ import {
   DryRunReportResponseDto,
   toDryRunReportResponseDto,
 } from './dto/dry-run-report.response.dto';
+import { BACKUP_CATALOG_ACTIONS, BackupAuditAction } from './backup.actions.constants';
+import { CryptoService } from '../../common/crypto/crypto.service';
+import * as Sentry from '@sentry/node';
+
+// ============================================================================
+// Track D.2 Step 2 — Encryption sidecar constants & types
+// ============================================================================
+
+/**
+ * Sidecar suffix appended to encrypted backup filenames in MinIO.
+ * Example: `full-backup-v2-2026-05-14T10-00-00.zip` + `.enc.json`.
+ *
+ * The sidecar holds the IV, auth tag and key version necessary to
+ * decipher the archive — they cannot live inside the ZIP itself
+ * (the ZIP is the ciphertext).
+ */
+const SIDECAR_SUFFIX = '.enc.json';
+
+/**
+ * v1 sidecar JSON shape (Track D.2 Step 2 — see ADR-026 §1).
+ *
+ * The top-level `version: 1` field is the sidecar schema version (NOT
+ * the backup format version). Reserved for future crypto agility
+ * (AES-GCM-SIV, ChaCha20-Poly1305) where a sidecar v2 would carry
+ * different fields. Today: v1 is always AES-256-GCM.
+ */
+interface BackupSidecarV1 {
+  version: 1;
+  algo: 'aes-256-gcm';
+  keyVersion: number;
+  ivBase64: string;
+  authTagBase64: string;
+}
 
 // ============================================================================
 // Pin rendering constants (mirror from frontend FloorPlanViewer.tsx)
@@ -77,6 +116,8 @@ export interface BackupListItem {
   siteCode?: string;
   size: number;
   createdAt: string;
+  /** Track D.2 — true if the archive is AES-256-GCM encrypted (sidecar present). */
+  encrypted?: boolean;
 }
 
 /**
@@ -218,7 +259,43 @@ export class BackupService {
     private prisma: PrismaClient,
     private storageService: StorageService,
     private configService: ConfigService,
+    /**
+     * Track D.2 Step 2 — AES-256-GCM streaming encryption.
+     * Provided globally by `CryptoModule` (@Global). Injectable here without
+     * altering CryptoModule wiring. `crypto.isEnabled()` is the source of
+     * truth for capability discovery (GET /backup/capabilities).
+     */
+    private crypto: CryptoService,
   ) {}
+
+  // ==========================================================================
+  // TRACK D.2 STEP 4 — CROSS-TENANT RESTORE PERMISSION GATE
+  // ==========================================================================
+
+  /**
+   * Track D.2 Step 4 — Permission gate for cross-tenant restore.
+   *
+   * Verifies the target delegation EXISTS and BELONGS to the caller's
+   * tenant. Combined with the controller's `@RequireManage` on the
+   * restore endpoint (source-tenant gate), this gives the double check
+   * specified in plan v3 §Step 4.
+   *
+   * Throws `ForbiddenException` if the delegation is unknown OR belongs
+   * to another tenant. Same generic message either way (no info leak
+   * about cross-tenant existence).
+   */
+  async assertTargetDelegationAccessible(
+    targetDelegationId: string,
+    callerTenantId: string,
+  ): Promise<void> {
+    const target = await this.prisma.delegation.findFirst({
+      where: { id: targetDelegationId, tenantId: callerTenantId },
+      select: { id: true },
+    });
+    if (!target) {
+      throw new ForbiddenException('Target delegation not accessible');
+    }
+  }
 
   // ==========================================================================
   // FULL BACKUP
@@ -1375,7 +1452,7 @@ export class BackupService {
     const logs = await this.prisma.auditLog.findMany({
       where: {
         tenantId,
-        action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] },
+        action: { in: [...BACKUP_CATALOG_ACTIONS] },
       },
       orderBy: { timestamp: 'desc' },
       take: 50,
@@ -1390,6 +1467,10 @@ export class BackupService {
         siteCode: changes.siteCode,
         size: changes.size || 0,
         createdAt: log.timestamp.toISOString(),
+        // Track D.2 Step 2 — `encrypted` is undefined for D.1-era audit
+        // rows (catalog row predates the field); UI treats undefined as
+        // "plaintext / unknown" and skips the lock icon.
+        encrypted: typeof changes.encrypted === 'boolean' ? changes.encrypted : undefined,
       };
     });
   }
@@ -1399,7 +1480,7 @@ export class BackupService {
     backupId: string,
   ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
     const log = await this.prisma.auditLog.findFirst({
-      where: { id: backupId, tenantId, action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] } },
+      where: { id: backupId, tenantId, action: { in: [...BACKUP_CATALOG_ACTIONS] } },
     });
     if (!log) throw new NotFoundException('Backup not found');
 
@@ -1417,7 +1498,7 @@ export class BackupService {
 
   async deleteBackup(tenantId: string, backupId: string): Promise<{ message: string }> {
     const log = await this.prisma.auditLog.findFirst({
-      where: { id: backupId, tenantId, action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] } },
+      where: { id: backupId, tenantId, action: { in: [...BACKUP_CATALOG_ACTIONS] } },
     });
     if (!log) throw new NotFoundException('Backup not found');
 
@@ -1428,6 +1509,9 @@ export class BackupService {
       } catch (err: unknown) {
         this.logger.warn(`Could not delete backup file: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
+      // Track D.2 Step 2 — also remove the sidecar (tolerated NoSuchKey
+      // for plaintext backups produced before D.2 or with encrypt:false).
+      await this.deleteSidecarFromBackupBucket(changes.filename);
     }
 
     // Delete the audit log entry so the backup disappears from the list
@@ -1684,13 +1768,25 @@ export class BackupService {
     buckets: string[];
     metadata: BackupMetadataV2;
     onProgress?: ProgressCallback;
-  }): Promise<{ size: number; sha256: string }> {
-    const { tmpPath, data, buckets, metadata, onProgress } = args;
+    /**
+     * Track D.2 Step 2 — when true, splice an AES-256-GCM cipher
+     * Transform between `archive` and `writeStream`. The `archiveHasher`
+     * stays UPSTREAM of the cipher (it consumes `archive.on('data')`),
+     * so the sha256 in metadata is over the PLAINTEXT archive bytes
+     * — preserves D.1 deterministic-input test invariants regardless
+     * of the `encrypt` toggle.
+     */
+    encrypt?: boolean;
+  }): Promise<{ size: number; sha256: string; encryption?: BackupSidecarV1 }> {
+    const { tmpPath, data, buckets, metadata, onProgress, encrypt } = args;
 
     const archive = archiver('zip', { zlib: { level: 9 } });
     const writeStream = createWriteStream(tmpPath);
 
     // Tee the archive output through a hash for end-to-end integrity.
+    // CRITICAL: this listener taps the archive's readable side BEFORE
+    // any downstream pipe transforms (cipher), so the digest always
+    // reflects the PLAINTEXT archive — deterministic across encrypt on/off.
     const archiveHasher = createHash('sha256');
     archive.on('data', (chunk: Buffer) => archiveHasher.update(chunk));
 
@@ -1698,10 +1794,28 @@ export class BackupService {
       this.logger.warn(`Archiver warning: ${err.message}`);
     });
 
+    // Track D.2 Step 2 — build cipher Transform if requested.
+    // CryptoService.createCipherStream() throws if XCH_MASTER_KEY is
+    // absent ; the controller MUST have rejected the request with HTTP 412
+    // before we reach the queue, so a throw here is an invariant violation
+    // (worker started without restart after env change). Let it bubble up.
+    let cipherCtx: ReturnType<CryptoService['createCipherStream']> | null = null;
+    if (encrypt) {
+      cipherCtx = this.crypto.createCipherStream();
+      this.logger.log(
+        `Backup archive will be encrypted (AES-256-GCM, keyVersion=${cipherCtx.keyVersion})`,
+      );
+    }
+
     // Start the pipeline FIRST so archive can be drained as we append.
     // pipeline() awaits archive 'end' + writeStream 'finish' + cleans up
-    // on error (closes writeStream, propagates the rejection).
-    const pipelinePromise = pipeline(archive, writeStream);
+    // on error (closes downstream streams, propagates the rejection) —
+    // automatic error forwarding between adjacent stages, no manual
+    // .on('error', ...) needed (contrast with the .pipe().pipe() chain
+    // in restoreFullBackupV2 — ADR-025 pattern).
+    const pipelinePromise = cipherCtx
+      ? pipeline(archive, cipherCtx.cipher, writeStream)
+      : pipeline(archive, writeStream);
 
     // 1. Append data/*.json (small JSON payloads, in-memory)
     for (const [table, records] of Object.entries(data)) {
@@ -1723,10 +1837,25 @@ export class BackupService {
     await pipelinePromise;
 
     const stat = await fs.stat(tmpPath);
-    return {
+    const result: { size: number; sha256: string; encryption?: BackupSidecarV1 } = {
       size: stat.size,
       sha256: archiveHasher.digest('hex'),
     };
+
+    // Auth tag is only available after cipher.final() — guaranteed by
+    // the pipeline() await above. getAuthTagB64() throws if the flag
+    // is unset (defensive).
+    if (cipherCtx) {
+      result.encryption = {
+        version: 1,
+        algo: 'aes-256-gcm',
+        keyVersion: cipherCtx.keyVersion,
+        ivBase64: cipherCtx.ivB64,
+        authTagBase64: cipherCtx.getAuthTagB64(),
+      };
+    }
+
+    return result;
   }
 
   /**
@@ -1739,7 +1868,11 @@ export class BackupService {
    *
    * Track D.1 Phase 1 step 2.
    */
-  private async uploadTmpToBackupBucket(tmpPath: string, filename: string): Promise<void> {
+  private async uploadTmpToBackupBucket(
+    tmpPath: string,
+    filename: string,
+    sidecar?: BackupSidecarV1,
+  ): Promise<void> {
     const client = this.getMinioClient();
 
     // Ensure bucket exists (idempotent).
@@ -1765,6 +1898,89 @@ export class BackupService {
     this.logger.log(
       `Backup uploaded (streaming v2) to ${this.BACKUP_BUCKET}/${filename} (${stat.size} bytes)`,
     );
+
+    // Track D.2 Step 2 — atomicity zip-before-sidecar.
+    // The sidecar is uploaded AFTER the zip so a crash mid-process leaves
+    // an orphan zip without a sidecar (detectable as plaintext at restore
+    // time → BadRequestException "Encrypted backup, sidecar missing"
+    // OR — if it really IS plaintext — restore proceeds normally).
+    // Inverting the order would risk an orphan sidecar pointing to
+    // a non-existent or stale zip, which is harder to surface cleanly.
+    if (sidecar) {
+      const sidecarName = `${filename}${SIDECAR_SUFFIX}`;
+      const sidecarBuffer = Buffer.from(JSON.stringify(sidecar), 'utf8');
+      await client.putObject(
+        this.BACKUP_BUCKET,
+        sidecarName,
+        sidecarBuffer,
+        sidecarBuffer.length,
+        { 'Content-Type': 'application/json' },
+      );
+      this.logger.log(
+        `Backup sidecar uploaded to ${this.BACKUP_BUCKET}/${sidecarName} ` +
+          `(keyVersion=${sidecar.keyVersion}, ${sidecarBuffer.length} bytes)`,
+      );
+    }
+  }
+
+  /**
+   * Track D.2 Step 2 — fetch the optional encryption sidecar for a
+   * backup. Returns `null` if the sidecar is absent (plaintext backup,
+   * normal path before D.2 or for unencrypted v2.3.0+ archives).
+   *
+   * NoSuchKey from MinIO is the success-via-absence signal; any other
+   * error bubbles up so the caller (restore) can fail explicitly.
+   */
+  private async fetchSidecar(filename: string): Promise<BackupSidecarV1 | null> {
+    const client = this.getMinioClient();
+    const sidecarName = `${filename}${SIDECAR_SUFFIX}`;
+    try {
+      const stream = await client.getObject(this.BACKUP_BUCKET, sidecarName);
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream as AsyncIterable<Buffer>) {
+        chunks.push(chunk);
+      }
+      const raw = Buffer.concat(chunks).toString('utf8');
+      const parsed = JSON.parse(raw) as BackupSidecarV1;
+      if (parsed.version !== 1) {
+        throw new BadRequestException(
+          `Unsupported backup sidecar version: ${parsed.version}`,
+        );
+      }
+      if (parsed.algo !== 'aes-256-gcm') {
+        throw new BadRequestException(
+          `Unsupported backup sidecar algo: ${parsed.algo}`,
+        );
+      }
+      return parsed;
+    } catch (err: unknown) {
+      // minio-js throws an Error with code 'NoSuchKey' for missing objects.
+      const code = (err as { code?: string })?.code;
+      if (code === 'NoSuchKey' || code === 'NotFound') {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Track D.2 Step 2 — delete the sidecar (if any). Mirror of
+   * {@link deleteFromBackupBucket} for the `.enc.json` partner blob.
+   * NoSuchKey is tolerated (safe to call when no sidecar exists).
+   */
+  private async deleteSidecarFromBackupBucket(filename: string): Promise<void> {
+    const client = this.getMinioClient();
+    const sidecarName = `${filename}${SIDECAR_SUFFIX}`;
+    try {
+      await client.removeObject(this.BACKUP_BUCKET, sidecarName);
+      this.logger.log(`Backup sidecar deleted from ${this.BACKUP_BUCKET}/${sidecarName}`);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'NoSuchKey' || code === 'NotFound') return;
+      this.logger.warn(
+        `Could not delete sidecar ${sidecarName}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
+    }
   }
 
   /**
@@ -1801,10 +2017,25 @@ export class BackupService {
     filename: string;
     size: number;
     sha256: string;
+    encrypted: boolean;
   }> {
     this.logger.log(
-      `Starting full backup v2 for tenant ${tenantId} (dbOnly=${opts.dbOnly ?? false})`,
+      `Starting full backup v2 for tenant ${tenantId} ` +
+        `(dbOnly=${opts.dbOnly ?? false}, encrypt=${opts.encrypt ?? false})`,
     );
+
+    // Track D.2 Step 2 — pre-flight check (worker invariant).
+    // The controller MUST reject with HTTP 412 before enqueue when
+    // encrypt:true is requested with crypto disabled. If we reach here
+    // with encrypt:true and !crypto.isEnabled(), something started the
+    // worker without the env var — fail explicitly instead of writing
+    // a half-encrypted artifact.
+    if (opts.encrypt && !this.crypto.isEnabled()) {
+      throw new Error(
+        'Worker invariant violation: encrypt:true received but XCH_MASTER_KEY unset. ' +
+          'Restart backend-worker after setting the env var.',
+      );
+    }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const filename = `full-backup-v2-${timestamp}.zip`;
@@ -1835,39 +2066,78 @@ export class BackupService {
         files: {},
       };
 
-      // 4. Pipeline archive → tmp file.
+      // 4. Pipeline archive → tmp file (cipher injected if encrypt:true).
+      // Track D.2 Step 3 — wrap in a Sentry span so phase duration is
+      // visible in the GlitchTip Performance trace. `op: 'backup.archive-build'`
+      // makes the tracesSampler in init.ts sample at 100%.
       onProgress?.('archive', 0, 1, 'Building archive…');
-      const archiveResult = await this.buildArchiveV2ToTmp({
-        tmpPath,
-        data,
-        buckets,
-        metadata,
-        onProgress,
-      });
+      const archiveResult = await Sentry.startSpan(
+        {
+          name: 'backup.archive-build',
+          op: 'backup.archive-build',
+          attributes: {
+            tenant_id: tenantId,
+            backup_format_version: 2,
+            encrypted: opts.encrypt ?? false,
+          },
+        },
+        async (span) => {
+          const result = await this.buildArchiveV2ToTmp({
+            tmpPath,
+            data,
+            buckets,
+            metadata,
+            onProgress,
+            encrypt: opts.encrypt,
+          });
+          span?.setAttribute('archive.size_bytes', result.size);
+          span?.setAttribute('archive.file_count', Object.keys(metadata.files).length);
+          return result;
+        },
+      );
 
-      // 5. Stream tmp → xch-backups bucket via fPutObject.
+      // 5. Stream tmp → xch-backups bucket via fPutObject. If the archive
+      // was encrypted, the sidecar uploads AFTER the zip (atomicity
+      // zip-before-sidecar — ADR-026 §1).
       onProgress?.('upload', 0, 1, 'Uploading to xch-backups…');
-      await this.uploadTmpToBackupBucket(tmpPath, filename);
+      await Sentry.startSpan(
+        {
+          name: 'backup.minio-upload',
+          op: 'backup.minio-upload',
+          attributes: {
+            tenant_id: tenantId,
+            'archive.size_bytes': archiveResult.size,
+            encrypted: archiveResult.encryption != null,
+          },
+        },
+        () => this.uploadTmpToBackupBucket(tmpPath, filename, archiveResult.encryption),
+      );
 
       // 6. Audit log row (visible in BACKUP_FULL_V2 catalog).
+      // `encrypted: boolean` surfaces as a lock icon in the UI catalog.
+      const encrypted = archiveResult.encryption != null;
       await this.logBackupAction(tenantId, userId, 'BACKUP_FULL_V2', {
         filename,
         size: archiveResult.size,
         sha256: archiveResult.sha256,
+        encrypted,
       });
 
       onProgress?.('done', 1, 1, 'Backup complete');
       this.logger.log(
         `Full backup v2 completed: ${filename} ` +
           `(${archiveResult.size} bytes, sha256=${archiveResult.sha256.slice(0, 12)}…, ` +
-          `files=${Object.keys(metadata.files).length})`,
+          `files=${Object.keys(metadata.files).length}, encrypted=${encrypted})`,
       );
 
       return {
-        message: 'Backup complet créé avec succès (v2 streaming)',
+        message: encrypted
+          ? 'Backup complet créé avec succès (v2 streaming chiffré AES-256-GCM)'
+          : 'Backup complet créé avec succès (v2 streaming)',
         filename,
         size: archiveResult.size,
         sha256: archiveResult.sha256,
+        encrypted,
       };
     } finally {
       // Always clean up the tmp file, even on exception path.
@@ -2068,19 +2338,38 @@ export class BackupService {
       { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
     >,
     userId?: string,
-    options: { dryRun?: boolean } = {},
+    options: {
+      dryRun?: boolean;
+      /**
+       * Track D.2 Step 4 — cross-tenant restore. When set, every restored
+       * row's `delegationId` is coerced to this id, and Users loop is
+       * skipped (collision avoidance). Pre-validated against caller tenant
+       * by the controller via assertTargetDelegationAccessible.
+       */
+      targetDelegationId?: string;
+    } = {},
   ): Promise<{
     counts: Record<string, number>;
     created: Record<string, number>;
     skipped: Record<string, number>;
     siteIds: string[];
+    /** Track D.2 — count of source User rows skipped (cross-tenant mode only). */
+    skippedCrossTenantUsers?: number;
+    /** Track D.2 — count of ownership FK columns rewritten to caller (cross-tenant only). */
+    rewrittenOwnership?: number;
   }> {
     // Set the dry-run flag for the duration of the call. upsertByNaturalKey
     // reads it on the placeholder branch ; the outer try/finally guarantees
     // reset even on exception.
     this._dryRunMode = options.dryRun === true;
     try {
-      return await this.applyDataFilesToDbInner(tenantId, dataFiles, stagedFiles, userId);
+      return await this.applyDataFilesToDbInner(
+        tenantId,
+        dataFiles,
+        stagedFiles,
+        userId,
+        options.targetDelegationId,
+      );
     } finally {
       this._dryRunMode = false;
     }
@@ -2096,11 +2385,14 @@ export class BackupService {
       { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
     >,
     userId?: string,
+    targetDelegationId?: string,
   ): Promise<{
     counts: Record<string, number>;
     created: Record<string, number>;
     skipped: Record<string, number>;
     siteIds: string[];
+    skippedCrossTenantUsers?: number;
+    rewrittenOwnership?: number;
   }> {
     const dryRun = this._dryRunMode;
     const ids = {
@@ -2126,9 +2418,116 @@ export class BackupService {
     };
 
     // ====================================================================
+    // Track D.2 Step 4 — cross-tenant helpers + pre-remap invariants
+    // ====================================================================
+
+    /** True iff this restore should remap delegationId → targetDelegationId. */
+    const isCrossTenant = !!targetDelegationId;
+
+    /**
+     * remapDelegation — single source of truth applied at every
+     * delegationId write site (Site, Asset, Contact, BillingEntity,
+     * Expense, Budget). Same-tenant restore is the identity function
+     * (preserves source value). Cross-tenant coerces ALL rows to
+     * `targetDelegationId` — all-or-nothing semantic guarantees the
+     * schema invariant R1 (`child.delegationId === site.delegationId`)
+     * is satisfied post-remap regardless of source state.
+     */
+    const remapDelegation = (srcDelId: string | null | undefined): string | null => {
+      if (srcDelId == null) return null;
+      return targetDelegationId ?? srcDelId;
+    };
+
+    /**
+     * rewriteOwnership — for cross-tenant restore, point ownership FK
+     * (Task.createdBy/assignedTo, TaskComment.authorId, Expense.createdBy)
+     * to the caller admin (`userId`). The rewrite is PERMANENT: even if
+     * the caller loses manage rights later, FK historical attribution is
+     * preserved (audit traceability — see ADR-026 §3 validation point V3).
+     *
+     * Returns a tuple `[rewritten, count]` where count is the number of
+     * fields actually overwritten (for audit log aggregation).
+     */
+    const rewriteOwnership = <T extends Record<string, unknown>>(
+      row: T,
+      fields: readonly (keyof T)[],
+    ): { row: T; count: number } => {
+      if (!isCrossTenant || !userId) return { row, count: 0 };
+      const out = { ...row };
+      let count = 0;
+      for (const f of fields) {
+        if (out[f] != null) {
+          (out as Record<keyof T, unknown>)[f] = userId;
+          count++;
+        }
+      }
+      return { row: out, count };
+    };
+
+    /**
+     * validateInvariants — pre-remap fail-fast for the source backup.
+     *
+     * Schema documents (lines 1014, 1297, 1343, 1601) the R1 invariant:
+     * `child.delegationId === site.delegationId` when both fields are
+     * set. Applied to Contact, BillingEntity, Expense, Budget. If the
+     * source backup violates R1 (data corruption upstream), we abort
+     * with an explicit BadRequestException rather than propagate the
+     * bug into the target tenant silently. Plan v3 ajustement #1.
+     *
+     * The check joins in-memory by siteId via dataFiles['sites'].
+     * Cross-tenant remap would mask the bug (all rows end up with
+     * targetDelegationId regardless) — so we run BEFORE any remap.
+     */
+    const validateInvariants = (): void => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sites = (dataFiles['sites'] ?? []) as Array<{ id?: string; delegationId?: string | null }>;
+      const siteDelById = new Map<string, string | null>();
+      for (const s of sites) {
+        if (s.id) siteDelById.set(s.id, s.delegationId ?? null);
+      }
+      const checks: Array<{
+        table: string;
+        invariant: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rows: any[];
+      }> = [
+        { table: 'contacts', invariant: 'R1', rows: dataFiles['contacts'] ?? [] },
+        { table: 'billing-entities', invariant: 'R1', rows: dataFiles['billing-entities'] ?? [] },
+        { table: 'expenses', invariant: 'R1', rows: dataFiles['expenses'] ?? [] },
+        { table: 'budgets', invariant: 'R1', rows: dataFiles['budgets'] ?? [] },
+      ];
+      for (const { table, invariant, rows } of checks) {
+        for (const r of rows) {
+          if (!r?.siteId || !r?.delegationId) continue;
+          const siteDel = siteDelById.get(r.siteId);
+          if (siteDel == null) continue; // site not in this backup OR site.delegationId null
+          if (siteDel !== r.delegationId) {
+            throw new BadRequestException(
+              `Source backup has invariant ${invariant} violation in '${table}' ` +
+                `(row ${r.id ?? '<unknown>'}: delegationId=${r.delegationId} ` +
+                `≠ site.delegationId=${siteDel}), restore aborted, fix source.`,
+            );
+          }
+        }
+      }
+    };
+    validateInvariants();
+
+    /** Aggregate count of ownership FK rewrites — surfaced in audit log. */
+    let rewrittenOwnershipTotal = 0;
+    /** Aggregate count of source User rows skipped in cross-tenant mode. */
+    let skippedCrossTenantUsers = 0;
+
+    // ====================================================================
     // PHASE 1 — Tenant config
     // ====================================================================
-    await this.prisma.$transaction(
+    await Sentry.startSpan(
+      {
+        name: 'backup.restore.phase-1',
+        op: 'backup.prisma-phase',
+        attributes: { tenant_id: tenantId, phase: 1, phase_name: 'Tenant config' },
+      },
+      () => this.prisma.$transaction(
       async (tx) => {
         // ContactType — NK: (tenantId, slug)
         for (const ct of dataFiles['contact-types'] ?? []) {
@@ -2163,6 +2562,10 @@ export class BackupService {
               tenantId,
               name: c.name,
               typeId: typeId,
+              // Track D.2 Step 4 gap fix — Contact.delegationId was
+              // silently dropped in v2 D.1/Track C. Now propagated
+              // (with cross-tenant remap when targetDelegationId set).
+              delegationId: remapDelegation(c.delegationId),
               email: c.email,
               phone: c.phone,
               mobile: c.mobile,
@@ -2177,8 +2580,21 @@ export class BackupService {
         }
 
         // User — NK: (tenantId, email). Restoring users carries credentials
-        // as-is from the source tenant ; same-tenant assumption (cf v1).
-        for (const u of dataFiles['users'] ?? []) {
+        // as-is from the source tenant ; same-tenant assumption.
+        //
+        // Track D.2 Step 4 — cross-tenant mode SKIPS this loop entirely
+        // to avoid email collisions in the target tenant + pollution by
+        // source users. The target tenant's existing users will access
+        // the migrated data via delegation. Documented in ADR-026 §3.
+        if (isCrossTenant) {
+          skippedCrossTenantUsers = (dataFiles['users'] ?? []).length;
+          if (skippedCrossTenantUsers > 0) {
+            this.logger.warn(
+              `RESTORE_CROSS_TENANT: skipped ${skippedCrossTenantUsers} users from source tenant ${tenantId}`,
+            );
+          }
+        }
+        for (const u of (isCrossTenant ? [] : (dataFiles['users'] ?? []))) {
           if (!u.email) continue;
           const r = await this.upsertByNaturalKey<{ id: string }>(
             tx,
@@ -2199,13 +2615,20 @@ export class BackupService {
         }
       },
       { timeout: 60_000 },
+    ),
     );
 
     // ====================================================================
     // PHASE 2 — Sites + structure
     // ====================================================================
     const sitesWithCoords: { id: string; lat: number; lng: number }[] = [];
-    await this.prisma.$transaction(
+    await Sentry.startSpan(
+      {
+        name: 'backup.restore.phase-2',
+        op: 'backup.prisma-phase',
+        attributes: { tenant_id: tenantId, phase: 2, phase_name: 'Sites + structure' },
+      },
+      () => this.prisma.$transaction(
       async (tx) => {
         const defaultDelId = await this.getOrCreateDefaultDelegation(tx, tenantId);
 
@@ -2217,7 +2640,7 @@ export class BackupService {
             { tenantId, code: s.code },
             {
               tenantId,
-              delegationId: s.delegationId || defaultDelId,
+              delegationId: remapDelegation(s.delegationId) || defaultDelId,
               code: s.code,
               name: s.name,
               status: s.status || 'ACTIVE',
@@ -2313,7 +2736,7 @@ export class BackupService {
           const r = await this.upsertByNaturalKey<{ id: string }>(tx, 'asset', where, {
             tenantId,
             siteId,
-            delegationId: a.delegationId || defaultDelId,
+            delegationId: remapDelegation(a.delegationId) || defaultDelId,
             name: a.name,
             type: a.type,
             status: a.status || 'IN_SERVICE',
@@ -2396,12 +2819,19 @@ export class BackupService {
         }
       },
       { timeout: 60_000 },
+    ),
     );
 
     // ====================================================================
     // PHASE 3 — Lifecycle
     // ====================================================================
-    await this.prisma.$transaction(
+    await Sentry.startSpan(
+      {
+        name: 'backup.restore.phase-3',
+        op: 'backup.prisma-phase',
+        attributes: { tenant_id: tenantId, phase: 3, phase_name: 'Lifecycle' },
+      },
+      () => this.prisma.$transaction(
       async (tx) => {
         // AssetMovement — NK: (assetId, timestamp, fromSiteId, toSiteId)
         for (const mov of dataFiles['asset-movements'] ?? []) {
@@ -2452,7 +2882,19 @@ export class BackupService {
               description: t.description,
               status: t.status || 'TODO',
               priority: t.priority || 'MEDIUM',
-              createdBy: userId || t.createdBy,
+              // Track D.2 Step 4 — ownership rewrite. Cross-tenant points
+              // ALL ownership FK to the caller admin. Same-tenant keeps
+              // source value via existing `userId || t.createdBy` fallback.
+              createdBy: isCrossTenant && userId
+                ? (rewrittenOwnershipTotal++, userId)
+                : (userId || t.createdBy),
+              // Track D.2 Step 4 gap fix — Task.assignedTo was silently
+              // dropped in v2 D.1 (`assignedTo` field absent from create
+              // data). Now propagated (with cross-tenant rewrite to
+              // caller admin).
+              assignedTo: isCrossTenant && userId && t.assignedTo
+                ? (rewrittenOwnershipTotal++, userId)
+                : (t.assignedTo ?? null),
               dueDate: t.dueDate ? new Date(t.dueDate) : null,
               ticketRef: t.ticketRef,
               ticketUrl: t.ticketUrl,
@@ -2472,7 +2914,12 @@ export class BackupService {
         for (const com of dataFiles['task-comments'] ?? []) {
           const taskId = ids.task.get(com.taskId);
           if (!taskId) continue;
-          const authorId = userId || com.authorId;
+          // Track D.2 Step 4 — TaskComment.authorId ownership rewrite.
+          // Cross-tenant forces caller admin (rewrittenOwnership++).
+          // Same-tenant keeps the existing fallback semantic.
+          const authorId = isCrossTenant && userId
+            ? (rewrittenOwnershipTotal++, userId)
+            : (userId || com.authorId);
           const createdAt = com.createdAt ? new Date(com.createdAt) : new Date();
           const textPrefix = (com.text ?? '').slice(0, 64);
           const r = await this.upsertByNaturalKey<{ id: string }>(
@@ -2556,12 +3003,19 @@ export class BackupService {
         }
       },
       { timeout: 60_000 },
+    ),
     );
 
     // ====================================================================
     // PHASE 4 — Finance
     // ====================================================================
-    await this.prisma.$transaction(
+    await Sentry.startSpan(
+      {
+        name: 'backup.restore.phase-4',
+        op: 'backup.prisma-phase',
+        attributes: { tenant_id: tenantId, phase: 4, phase_name: 'Finance' },
+      },
+      () => this.prisma.$transaction(
       async (tx) => {
         // BillingEntity — NK: (tenantId, code)
         for (const be of dataFiles['billing-entities'] ?? []) {
@@ -2577,7 +3031,7 @@ export class BackupService {
               type: be.type,
               description: be.description ?? null,
               isActive: be.isActive ?? true,
-              delegationId: be.delegationId ?? null,
+              delegationId: remapDelegation(be.delegationId),
               siteId,
             },
           );
@@ -2629,7 +3083,10 @@ export class BackupService {
             dateStart: exp.dateStart ? new Date(exp.dateStart) : null,
             dateEnd: exp.dateEnd ? new Date(exp.dateEnd) : null,
             bearerId,
-            delegationId: exp.delegationId,
+            // Track D.2 Step 4 — Expense.delegationId is REQUIRED (R1
+            // obligatoire). remapDelegation guarantees non-null in
+            // same-tenant (identity) AND cross-tenant (targetDelegationId).
+            delegationId: remapDelegation(exp.delegationId) ?? exp.delegationId,
             siteId,
             assetId,
             externalRef: exp.externalRef ?? null,
@@ -2637,7 +3094,12 @@ export class BackupService {
             invoiceRef: exp.invoiceRef ?? null,
             poNumber: exp.poNumber ?? null,
             notes: exp.notes ?? null,
-            createdBy: userId || exp.createdBy,
+            // Track D.2 Step 4 — Expense.createdBy ownership rewrite in
+            // cross-tenant mode (caller admin). Same-tenant keeps source
+            // value (`exp.createdBy` fallback when no caller userId).
+            createdBy: isCrossTenant && userId
+              ? (rewrittenOwnershipTotal++, userId)
+              : (userId || exp.createdBy),
           });
           ids.expense.set(exp.id, r.row.id);
           track('expenses', r.wasCreated);
@@ -2711,7 +3173,7 @@ export class BackupService {
               {
                 tenantId,
                 label: b.label,
-                delegationId: b.delegationId ?? null,
+                delegationId: remapDelegation(b.delegationId),
                 siteId,
                 billingEntityId: beId,
                 expenseType: b.expenseType ?? null,
@@ -2759,12 +3221,19 @@ export class BackupService {
         }
       },
       { timeout: 60_000 },
+    ),
     );
 
     // ====================================================================
     // PHASE 5 — Snapshots + audit
     // ====================================================================
-    await this.prisma.$transaction(
+    await Sentry.startSpan(
+      {
+        name: 'backup.restore.phase-5',
+        op: 'backup.prisma-phase',
+        attributes: { tenant_id: tenantId, phase: 5, phase_name: 'Snapshots + audit' },
+      },
+      () => this.prisma.$transaction(
       async (tx) => {
         // SiteHealthSnapshot — schema has @unique(siteId) so prisma.upsert
         // works natively (no need for findFirst + create dance).
@@ -2795,6 +3264,7 @@ export class BackupService {
         // evidence at worst). v1 also never restored AuditLog.
       },
       { timeout: 60_000 },
+    ),
     );
 
     // ====================================================================
@@ -2836,10 +3306,24 @@ export class BackupService {
     this.logger.log(
       `Restore v2 applied${dryRun ? ' (dry-run)' : ''} : ` +
         `created=${counts._created}, skipped=${counts._skipped}, ` +
-        `siteIds=${siteIds.length}`,
+        `siteIds=${siteIds.length}` +
+        (isCrossTenant
+          ? `, crossTenant=true, skippedUsers=${skippedCrossTenantUsers}, rewrittenOwnership=${rewrittenOwnershipTotal}`
+          : ''),
     );
 
-    return { counts, created, skipped, siteIds };
+    return {
+      counts,
+      created,
+      skipped,
+      siteIds,
+      ...(isCrossTenant
+        ? {
+            skippedCrossTenantUsers,
+            rewrittenOwnership: rewrittenOwnershipTotal,
+          }
+        : {}),
+    };
   }
 
   /**
@@ -2881,57 +3365,189 @@ export class BackupService {
    */
   async restoreFullBackupV2(
     tenantId: string,
-    backupId: string,
+    backupId: string | null,
     opts: RestoreOptionsDto = {},
     onProgress?: ProgressCallback,
     userId?: string,
+    /**
+     * Track D.2 Step 4.5 — async multipart upload restore. When set,
+     * the service skips the catalog lookup + MinIO download steps and
+     * reads the ZIP directly from `tmpZipPath`. The (optional) sidecar
+     * comes from `tmpSidecarPath` instead of `fetchSidecar` MinIO call.
+     * The service still owns the cleanup (`fs.rm` in the outer finally).
+     * Mutually exclusive with `backupId` — the caller must pass exactly
+     * one source.
+     */
+    multipart?: { tmpZipPath: string; tmpSidecarPath?: string },
   ): Promise<RestoreFullV2Result> {
-    this.logger.log(
-      `Starting full restore v2 for tenant ${tenantId} from backup ${backupId} ` +
-        `(dryRun=${opts.dryRun ?? false})`,
-    );
-
-    // 1. Resolve backupId → filename from AuditLog catalog.
-    // AuditLog row stores {filename, size, ...} under the `changes` JsonValue
-    // column (cf createFullBackup audit pattern at logBackupAction site).
-    const log = await this.prisma.auditLog.findUnique({ where: { id: backupId } });
-    if (!log) {
-      throw new NotFoundException(`Backup ${backupId} not found in catalog`);
-    }
-    const changes = (log.changes as { filename?: string } | null) ?? {};
-    const filename = changes.filename;
-    if (!filename || typeof filename !== 'string') {
+    const isMultipart = !!multipart;
+    if (isMultipart && backupId) {
       throw new BadRequestException(
-        `Backup catalog entry ${backupId} is missing the 'filename' field in changes`,
+        'restoreFullBackupV2: provide either backupId OR multipart, not both',
       );
     }
+    if (!isMultipart && !backupId) {
+      throw new BadRequestException(
+        'restoreFullBackupV2: backupId or multipart tmpZipPath is required',
+      );
+    }
+    this.logger.log(
+      `Starting full restore v2 for tenant ${tenantId} from ` +
+        (isMultipart ? 'multipart upload' : `backup ${backupId}`) +
+        ` (dryRun=${opts.dryRun ?? false})`,
+    );
 
-    // 2. Prepare tmp paths
+    let filename: string;
+    let tmpZipPath: string;
+    if (isMultipart) {
+      // Multipart path — the uploaded tmp ZIP already exists at the path
+      // produced by the controller. We adopt it (and clean it up in
+      // finally below). Audit log filename is synthetic for traceability.
+      filename = `upload-restore-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.zip`;
+      tmpZipPath = multipart!.tmpZipPath;
+    } else {
+      // Catalog path — resolve backupId → filename from AuditLog row.
+      // AuditLog row stores {filename, size, ...} under the `changes` JsonValue
+      // column (cf createFullBackup audit pattern at logBackupAction site).
+      const log = await this.prisma.auditLog.findUnique({ where: { id: backupId! } });
+      if (!log) {
+        throw new NotFoundException(`Backup ${backupId} not found in catalog`);
+      }
+      const changes = (log.changes as { filename?: string } | null) ?? {};
+      const resolved = changes.filename;
+      if (!resolved || typeof resolved !== 'string') {
+        throw new BadRequestException(
+          `Backup catalog entry ${backupId} is missing the 'filename' field in changes`,
+        );
+      }
+      filename = resolved;
+      const stagingId = randomBytes(4).toString('hex');
+      tmpZipPath = path.join(os.tmpdir(), `xch-restore-${stagingId}.zip`);
+    }
+
+    // 2. Prepare staging dir (always service-managed, distinct from
+    // multipart upload tmp ZIP path).
     const stagingId = randomBytes(4).toString('hex');
-    const tmpZipPath = path.join(os.tmpdir(), `xch-restore-${stagingId}.zip`);
     const stagingDir = path.join(os.tmpdir(), `xch-restore-stage-${stagingId}`);
     await fs.mkdir(stagingDir, { recursive: true });
 
     try {
-      // 3. Download to tmp file (streaming)
-      onProgress?.('download', 0, 1, `Downloading backup ${filename}`);
-      await this.downloadFromBackupBucket(filename, tmpZipPath);
+      // 3. Source the ZIP. Catalog path: streaming download from MinIO.
+      // Multipart path: ZIP is already at `tmpZipPath` (no-op).
+      if (!isMultipart) {
+        onProgress?.('download', 0, 1, `Downloading backup ${filename}`);
+        await Sentry.startSpan(
+          {
+            name: 'backup.minio-download',
+            op: 'backup.minio-download',
+            attributes: { tenant_id: tenantId, filename },
+          },
+          () => this.downloadFromBackupBucket(filename, tmpZipPath),
+        );
+      }
 
-      // 4. Stream-process : magic byte → unzipper → router
+      // 3b. Track D.2 Step 2 — fetch the optional encryption sidecar
+      // BEFORE building the read pipeline. Three possible states:
+      //   (a) sidecar present → encrypted archive, build a decipher
+      //       Transform and insert it BEFORE the MagicByteValidator so
+      //       the validator sees plaintext PKZip bytes (50 4B 03 04).
+      //   (b) sidecar absent + ZIP is plaintext → restore proceeds as
+      //       in D.1 (no decipher in the pipeline).
+      //   (c) sidecar absent + ZIP is actually encrypted → the
+      //       MagicByteValidator fires `BadRequestException` ("not a
+      //       PKZip stream") with the ciphertext's first 4 bytes
+      //       embedded — a clear-enough symptom for the operator.
+      // The reverse case "sidecar present + decipher fails on tampered
+      // bytes" surfaces as an auth tag error at cipher.final() time,
+      // which we forward to `zipStream` so the for-await rejects.
+      //
+      // Track D.2 Step 4.5 — multipart upload reads sidecar from local
+      // file (operator uploaded it alongside the encrypted ZIP). Catalog
+      // path uses the MinIO sidecar fetched via `fetchSidecar(filename)`.
+      let sidecar: BackupSidecarV1 | null;
+      if (isMultipart && multipart!.tmpSidecarPath) {
+        const raw = await fs.readFile(multipart!.tmpSidecarPath, 'utf8');
+        let parsed: BackupSidecarV1;
+        try {
+          parsed = JSON.parse(raw) as BackupSidecarV1;
+        } catch {
+          throw new BadRequestException(
+            'Sidecar JSON is malformed — re-export the sidecar from the catalog',
+          );
+        }
+        if (parsed.version !== 1) {
+          throw new BadRequestException(
+            `Unsupported backup sidecar version: ${parsed.version}`,
+          );
+        }
+        if (parsed.algo !== 'aes-256-gcm') {
+          throw new BadRequestException(
+            `Unsupported backup sidecar algo: ${parsed.algo}`,
+          );
+        }
+        sidecar = parsed;
+      } else if (isMultipart) {
+        // Multipart upload without sidecar — peek the first 4 bytes of
+        // the uploaded ZIP to detect "encrypted-but-no-sidecar" early,
+        // BEFORE the unzipper pipeline reaches MagicByteValidator. This
+        // surfaces a more actionable error message ("forgot to upload
+        // the sidecar") than the generic "not a PKZip stream".
+        const fh = await fs.open(tmpZipPath, 'r');
+        try {
+          const header = Buffer.alloc(4);
+          await fh.read(header, 0, 4, 0);
+          const isPkZip =
+            header[0] === 0x50 && header[1] === 0x4b &&
+            header[2] === 0x03 && header[3] === 0x04;
+          if (!isPkZip) {
+            throw new BadRequestException(
+              'Uploaded archive does not start with the PKZip magic bytes ' +
+                '(0x50 0x4B 0x03 0x04). This usually means the archive is ' +
+                'encrypted and you forgot to upload the sidecar JSON ' +
+                '(`<filename>.enc.json`) alongside it.',
+            );
+          }
+        } finally {
+          await fh.close();
+        }
+        sidecar = null;
+      } else {
+        sidecar = await this.fetchSidecar(filename);
+      }
+      if (sidecar) {
+        this.logger.log(
+          `Backup ${filename} is encrypted (algo=${sidecar.algo}, ` +
+            `keyVersion=${sidecar.keyVersion}) — decipher will run pre-magic-byte`,
+        );
+      }
+
+      // 4. Stream-process : [decipher?] → magic byte → unzipper → router
       onProgress?.('extract', 0, 1, 'Parsing archive…');
       const fileStream = createReadStream(tmpZipPath);
       const validator = new MagicByteValidator();
       const zipStream = unzipper.Parse({ forceStream: true });
-      fileStream.pipe(validator).pipe(zipStream);
-      // Node `.pipe()` chains do NOT propagate errors automatically. Without
-      // explicit forwarding, an error emitted by `validator` (e.g. magic-byte
-      // mismatch via `callback(new BadRequestException(...))`) is never seen
-      // by `zipStream`, and the `for await` consumer hangs forever. The
-      // forwarding below destroys `zipStream` with the upstream error, which
-      // makes the for-await loop reject with that error and lets the outer
-      // catch turn it back into a clean BadRequestException.
-      fileStream.on('error', (err) => validator.destroy(err));
-      validator.on('error', (err) => zipStream.destroy(err));
+
+      // ADR-025 pattern: Node `.pipe().pipe()` does NOT propagate errors
+      // between adjacent stages. Each stage manually destroys the next
+      // one with its error so the for-await consumer terminates.
+      if (sidecar) {
+        // createDecipherStream throws synchronously if the key version
+        // is unknown (XCH_MASTER_KEY_V<n> not registered). Let it bubble
+        // up — caller will surface as 400/500 with the explicit message.
+        const decipher = this.crypto.createDecipherStream({
+          keyVersion: sidecar.keyVersion,
+          ivB64: sidecar.ivBase64,
+          authTagB64: sidecar.authTagBase64,
+        });
+        fileStream.pipe(decipher).pipe(validator).pipe(zipStream);
+        fileStream.on('error', (err) => decipher.destroy(err));
+        decipher.on('error', (err) => validator.destroy(err));
+        validator.on('error', (err) => zipStream.destroy(err));
+      } else {
+        fileStream.pipe(validator).pipe(zipStream);
+        fileStream.on('error', (err) => validator.destroy(err));
+        validator.on('error', (err) => zipStream.destroy(err));
+      }
 
       const dataFiles: Record<string, unknown[]> = {};
       const stagedFiles = new Map<
@@ -3085,12 +3701,22 @@ export class BackupService {
         // takes over when a row is missing (no create() call). FK idMaps
         // resolve to either a real DB id (skip) or a `__dryrun__<table>_N`
         // placeholder (wouldCreate). Returns per-table created/skipped maps.
-        const dry = await this.applyDataFilesToDb(
-          tenantId,
-          dataFiles,
-          stagedFiles,
-          userId,
-          { dryRun: true },
+        const dry = await Sentry.startSpan(
+          {
+            name: 'backup.prisma-import',
+            op: 'backup.prisma-import',
+            attributes: { tenant_id: tenantId, dry_run: true },
+          },
+          () => this.applyDataFilesToDb(
+            tenantId,
+            dataFiles,
+            stagedFiles,
+            userId,
+            {
+              dryRun: true,
+              targetDelegationId: opts.targetDelegationId,
+            },
+          ),
         );
 
         const totalSize = Array.from(stagedFiles.values()).reduce(
@@ -3116,6 +3742,13 @@ export class BackupService {
           invalidChecksums,
           totalSize,
           estimatedDurationSec,
+          // Track D.2 Step 4 — when cross-tenant restore, surface the
+          // count of source Users that would be skipped on a real run.
+          // Allows the UI to display "12 utilisateurs source non importés"
+          // before the operator confirms.
+          ...(opts.targetDelegationId
+            ? { wouldSkipCrossTenant: { User: dry.skippedCrossTenantUsers ?? 0 } }
+            : {}),
         });
         return { kind: 'dry-run', report };
       }
@@ -3130,29 +3763,74 @@ export class BackupService {
       }
 
       // 8. Real run — delegate to step 4 (currently a clear-error stub).
+      // Wrap the prisma-import phase in a parent span so its 5 internal
+      // FK-phase sub-spans appear as children in the GlitchTip trace.
       onProgress?.('apply', 0, 1, 'Applying data to DB…');
-      const applied = await this.applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId);
+      const applied = await Sentry.startSpan(
+        {
+          name: 'backup.prisma-import',
+          op: 'backup.prisma-import',
+          attributes: { tenant_id: tenantId, dry_run: false },
+        },
+        () => this.applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId, {
+          targetDelegationId: opts.targetDelegationId,
+        }),
+      );
       onProgress?.('done', 1, 1, 'Restore complete');
 
       await this.logBackupAction(tenantId, userId, 'RESTORE_FULL_V2', {
         filename,
         counts: applied.counts,
+        // Track D.2 Step 4.5 — surface that this restore came from an
+        // uploaded ZIP (not a catalog entry). Useful for forensic
+        // queries after a DR scenario.
+        source: isMultipart ? 'multipart-upload' : 'catalog',
       });
+
+      // Track D.2 Step 4 — emit a second audit row when this restore was
+      // a cross-tenant migration. Carries the source/target context so
+      // forensic queries can reconstruct the operation later, even if
+      // the caller user loses manage rights post-restore (ADR-026 §3
+      // validation point V3 — ownership rewrite is permanent).
+      if (opts.targetDelegationId) {
+        await this.logBackupAction(tenantId, userId, 'RESTORE_CROSS_TENANT', {
+          filename,
+          sourceTenantId: tenantId,
+          targetTenantId: tenantId, // restore lands in caller's tenant (validated by gate)
+          targetDelegationId: opts.targetDelegationId,
+          skippedUsers: applied.skippedCrossTenantUsers ?? 0,
+          rewrittenOwnership: applied.rewrittenOwnership ?? 0,
+          dryRun: false,
+        });
+      }
 
       return {
         kind: 'applied',
-        message: 'Restore complet v2 appliqué avec succès',
+        message: opts.targetDelegationId
+          ? 'Restore cross-tenant v2 appliqué avec succès'
+          : 'Restore complet v2 appliqué avec succès',
         counts: applied.counts,
         siteIds: applied.siteIds,
       };
     } finally {
       // Always cleanup tmp zip + staging dir, even on exception path.
+      // Track D.2 Step 4.5 — when the caller provided a multipart tmp
+      // path, we own its cleanup too (the controller streamed the upload
+      // into this path and handed ownership to the processor → service).
       await fs.rm(tmpZipPath, { force: true }).catch((err: unknown) => {
         this.logger.warn(
           `Failed to clean up tmp restore zip ${tmpZipPath}: ` +
             `${err instanceof Error ? err.message : 'Unknown error'}`,
         );
       });
+      if (isMultipart && multipart!.tmpSidecarPath) {
+        await fs.rm(multipart!.tmpSidecarPath, { force: true }).catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to clean up tmp sidecar ${multipart!.tmpSidecarPath}: ` +
+              `${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        });
+      }
       await fs.rm(stagingDir, { recursive: true, force: true }).catch((err: unknown) => {
         this.logger.warn(
           `Failed to clean up staging dir ${stagingDir}: ` +
@@ -3600,7 +4278,7 @@ export class BackupService {
   private async logBackupAction(
     tenantId: string,
     userId: string | undefined,
-    action: string,
+    action: BackupAuditAction,
     changes: Record<string, any>,
   ): Promise<void> {
     try {
@@ -3624,7 +4302,7 @@ export class BackupService {
       const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const oldLogs = await this.prisma.auditLog.findMany({
         where: {
-          action: { in: ['BACKUP_FULL', 'BACKUP_FULL_V2', 'BACKUP_SITE', 'BACKUP_SITE_V2'] },
+          action: { in: [...BACKUP_CATALOG_ACTIONS] },
           timestamp: { lt: cutoff },
         },
         take: 20,

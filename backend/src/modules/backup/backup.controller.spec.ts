@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, NotFoundException } from '@nestjs/common';
 import { BackupController } from './backup.controller';
 import {
   JOB_BACKUP_FULL,
@@ -14,6 +14,7 @@ function buildController(): {
   controller: BackupController;
   service: Record<string, jest.Mock>;
   queue: Record<string, jest.Mock>;
+  crypto: { isEnabled: jest.Mock };
 } {
   const service = {
     createFullBackup: jest.fn(),
@@ -21,13 +22,24 @@ function buildController(): {
     restoreFullBackupV2: jest.fn(),
     createSiteBackup: jest.fn(),
     estimateBackupSize: jest.fn(),
+    assertTargetDelegationAccessible: jest.fn().mockResolvedValue(undefined),
   };
   const queue = {
     add: jest.fn(),
     getJob: jest.fn(),
   };
-  const controller = new BackupController(service as never, queue as never);
-  return { controller, service, queue };
+  // Track D.2 Step 2 — controller takes a CryptoService for capability
+  // discovery + encrypt:true 412 gate. Tests that don't exercise encryption
+  // pass a stub that reports disabled.
+  const crypto = {
+    isEnabled: jest.fn(() => false),
+  };
+  const controller = new BackupController(
+    service as never,
+    queue as never,
+    crypto as never,
+  );
+  return { controller, service, queue, crypto };
 }
 
 /** A minimal AuthRequest-shaped object for the controller. */
@@ -55,7 +67,7 @@ describe('BackupController (Track D.1 step 5 — Bull v3 wiring)', () => {
       expect(jobData).toEqual({
         tenantId: 'tnt-test',
         userId: 'u-1',
-        options: { dbOnly: false },
+        options: { dbOnly: false, encrypt: undefined },
       });
       // Sync path NOT taken
       expect(service.createFullBackup).not.toHaveBeenCalled();
@@ -349,6 +361,195 @@ describe('BackupController (Track D.1 step 5 — Bull v3 wiring)', () => {
       await expect(controller.getJobStatus('does-not-exist')).rejects.toThrow(
         /Backup job does-not-exist not found/,
       );
+    });
+  });
+
+  // ==========================================================================
+  // Track D.2 Step 2 — Capability discovery + encrypt:true 412 gate
+  // ==========================================================================
+
+  describe('GET /backup/capabilities (Track D.2)', () => {
+    it('returns encryption:true when crypto.isEnabled() is true', async () => {
+      const { controller, crypto } = buildController();
+      crypto.isEnabled.mockReturnValue(true);
+      const result = await controller.getCapabilities();
+      expect(result.encryption).toBe(true);
+    });
+
+    it('returns encryption:false when crypto.isEnabled() is false', async () => {
+      const { controller, crypto } = buildController();
+      crypto.isEnabled.mockReturnValue(false);
+      const result = await controller.getCapabilities();
+      expect(result.encryption).toBe(false);
+    });
+  });
+
+  describe('POST /backup/full with encrypt:true (Track D.2)', () => {
+    it('rejects with HTTP 412 PreconditionFailed when crypto disabled', async () => {
+      const { controller, crypto } = buildController();
+      crypto.isEnabled.mockReturnValue(false);
+      await expect(
+        controller.createFullBackup(
+          { encrypt: true },
+          undefined,
+          authRequest() as never,
+        ),
+      ).rejects.toThrow(HttpException);
+      await expect(
+        controller.createFullBackup(
+          { encrypt: true },
+          undefined,
+          authRequest() as never,
+        ),
+      ).rejects.toMatchObject({ status: 412 });
+    });
+
+    it('threads encrypt:true into the job data when crypto enabled', async () => {
+      const { controller, queue, crypto } = buildController();
+      crypto.isEnabled.mockReturnValue(true);
+      queue.add.mockResolvedValue({ id: '999' });
+
+      await controller.createFullBackup(
+        { encrypt: true },
+        undefined,
+        authRequest() as never,
+      );
+
+      const [, jobData] = queue.add.mock.calls[0];
+      expect(jobData).toMatchObject({
+        tenantId: 'tnt-test',
+        options: { encrypt: true },
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Track D.2 Step 4 — Cross-tenant restore controller path
+  // ==========================================================================
+
+  describe('POST /backup/full/restore with targetDelegationId (Track D.2 step 4)', () => {
+    it('calls assertTargetDelegationAccessible when targetDelegationId is set', async () => {
+      const { controller, service, queue } = buildController();
+      queue.add.mockResolvedValue({ id: '4-1' });
+
+      await controller.restoreFullBackup(
+        undefined,
+        { backupId: 'b1', targetDelegationId: 'del-target' },
+        undefined,
+        authRequest() as never,
+      );
+
+      expect(service.assertTargetDelegationAccessible).toHaveBeenCalledWith(
+        'del-target',
+        'tnt-test',
+      );
+    });
+
+    it('skips assertTargetDelegationAccessible when same-tenant restore', async () => {
+      const { controller, service, queue } = buildController();
+      queue.add.mockResolvedValue({ id: '4-2' });
+
+      await controller.restoreFullBackup(
+        undefined,
+        { backupId: 'b1' },
+        undefined,
+        authRequest() as never,
+      );
+
+      expect(service.assertTargetDelegationAccessible).not.toHaveBeenCalled();
+    });
+
+    it('threads targetDelegationId into the job data on async path', async () => {
+      const { controller, queue } = buildController();
+      queue.add.mockResolvedValue({ id: '4-3' });
+
+      await controller.restoreFullBackup(
+        undefined,
+        { backupId: 'b1', targetDelegationId: 'del-target', dryRun: true },
+        undefined,
+        authRequest() as never,
+      );
+
+      const [, jobData] = queue.add.mock.calls[0];
+      expect(jobData).toMatchObject({
+        tenantId: 'tnt-test',
+        backupId: 'b1',
+        options: { dryRun: true, targetDelegationId: 'del-target' },
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Track D.2 Step 5 — X-Backup-Sync deprecation warn log
+  // ==========================================================================
+
+  describe('X-Backup-Sync deprecation (Track D.2 step 5)', () => {
+    /**
+     * Helper — spy on Nest's Logger.warn so we can assert the marker
+     * string appears in the emit stream. The Logger instance lives on
+     * the controller via `private readonly logger = new Logger(...)`,
+     * so we hijack the prototype's warn for the duration of the test.
+     */
+    function withLoggerSpy<T>(fn: (warn: jest.SpyInstance) => Promise<T>): Promise<T> {
+      const { Logger } = jest.requireActual('@nestjs/common') as typeof import('@nestjs/common');
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      return fn(warn).finally(() => warn.mockRestore());
+    }
+
+    it('POST /backup/full with X-Backup-Sync: 1 emits the deprecation marker', async () => {
+      const { controller, service } = buildController();
+      service.createFullBackup.mockResolvedValue({
+        message: 'sync',
+        filename: 'sync.zip',
+        size: 10,
+      });
+      await withLoggerSpy(async (warn) => {
+        await controller.createFullBackup(
+          {},
+          '1',
+          authRequest() as never,
+        );
+        const calls = warn.mock.calls.map((c) => String(c[0]));
+        expect(calls.some((m) => /XCH_LOG_MARKER X-Backup-Sync/.test(m))).toBe(true);
+        expect(calls.some((m) => /removed in v2\.4\.0/.test(m))).toBe(true);
+        expect(calls.some((m) => /POST \/backup\/full/.test(m))).toBe(true);
+      });
+    });
+
+    it('async path (no X-Backup-Sync) does NOT emit the deprecation marker', async () => {
+      const { controller, queue } = buildController();
+      queue.add.mockResolvedValue({ id: '5-2' });
+      await withLoggerSpy(async (warn) => {
+        await controller.createFullBackup(
+          {},
+          undefined, // no header
+          authRequest() as never,
+        );
+        const calls = warn.mock.calls.map((c) => String(c[0]));
+        expect(calls.some((m) => /XCH_LOG_MARKER X-Backup-Sync/.test(m))).toBe(false);
+      });
+    });
+
+    it('POST /backup/full/restore JSON sync v2 path emits the marker', async () => {
+      const { controller, service } = buildController();
+      service.restoreFullBackupV2.mockResolvedValue({
+        kind: 'applied',
+        message: 'ok',
+        counts: { _created: 0, _skipped: 0 },
+        siteIds: [],
+      });
+      await withLoggerSpy(async (warn) => {
+        await controller.restoreFullBackup(
+          undefined,
+          { backupId: 'b1' },
+          '1', // X-Backup-Sync
+          authRequest() as never,
+        );
+        const calls = warn.mock.calls.map((c) => String(c[0]));
+        expect(calls.some((m) =>
+          /XCH_LOG_MARKER X-Backup-Sync.*JSON sync v2/.test(m),
+        )).toBe(true);
+      });
     });
   });
 });

@@ -1,10 +1,12 @@
 import { Process, Processor, OnQueueCompleted, OnQueueFailed } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
+import * as Sentry from '@sentry/node';
 import { BackupService } from './backup.service';
 import { WorkerEventLogger } from '../../common/observability/worker-event-logger.service';
 import {
   BACKUP_QUEUE,
+  BACKUP_QUEUE_CONCURRENCY,
   JOB_BACKUP_FULL,
   JOB_BACKUP_SITE,
   JOB_RESTORE_FULL,
@@ -57,21 +59,38 @@ export class BackupProcessor {
   // Backup handlers
   // -------------------------------------------------------------------------
 
-  @Process(JOB_BACKUP_FULL)
+  @Process({ name: JOB_BACKUP_FULL, concurrency: BACKUP_QUEUE_CONCURRENCY })
   async handleBackupFull(job: Job<BackupFullJobData>): Promise<unknown> {
     const { tenantId, userId, options } = job.data;
     this.logger.log(
       `Processing ${JOB_BACKUP_FULL} job ${job.id} for tenant ${tenantId}`,
     );
-    return this.backup.createFullBackupV2(
-      tenantId,
-      userId,
-      options ?? {},
-      this.makeProgressCallback(job),
+    // Track D.2 Step 3 — wrap the handler in a Sentry transaction so the
+    // 5 phase sub-spans emitted inside `createFullBackupV2` become children
+    // of this parent. `op: 'backup'` makes the `tracesSampler` in init.ts
+    // sample at 100%. PII-light tags only (tenant id is a UUID).
+    return Sentry.startSpan(
+      {
+        name: 'backup.full',
+        op: 'backup',
+        attributes: {
+          tenant_id: tenantId,
+          backup_format_version: 2,
+          encrypted: options?.encrypt ?? false,
+          job_id: String(job.id),
+        },
+      },
+      () =>
+        this.backup.createFullBackupV2(
+          tenantId,
+          userId,
+          options ?? {},
+          this.makeProgressCallback(job),
+        ),
     );
   }
 
-  @Process(JOB_BACKUP_SITE)
+  @Process({ name: JOB_BACKUP_SITE, concurrency: BACKUP_QUEUE_CONCURRENCY })
   async handleBackupSite(job: Job<BackupSiteJobData>): Promise<unknown> {
     const { tenantId, siteId, userId } = job.data;
     this.logger.log(
@@ -80,30 +99,65 @@ export class BackupProcessor {
     // V1 path : site-specific streaming v2 is deferred to a future Phase
     // (Track D.1 scope is full-backup v2 ; site-backup gets the async
     // enqueue wrapper but the underlying body stays v1 — coexistence).
-    return this.backup.createSiteBackup(tenantId, siteId, userId);
+    // We still wrap it in a parent transaction so the trace appears in
+    // GlitchTip alongside the full backup ones for ops parity.
+    return Sentry.startSpan(
+      {
+        name: 'backup.site',
+        op: 'backup',
+        attributes: {
+          tenant_id: tenantId,
+          site_id: siteId,
+          job_id: String(job.id),
+        },
+      },
+      () => this.backup.createSiteBackup(tenantId, siteId, userId),
+    );
   }
 
   // -------------------------------------------------------------------------
   // Restore handlers
   // -------------------------------------------------------------------------
 
-  @Process(JOB_RESTORE_FULL)
+  @Process({ name: JOB_RESTORE_FULL, concurrency: BACKUP_QUEUE_CONCURRENCY })
   async handleRestoreFull(job: Job<RestoreFullJobData>): Promise<unknown> {
-    const { tenantId, backupId, userId, options } = job.data;
+    const { tenantId, backupId, userId, options, tmpUploadPath, tmpSidecarPath } = job.data;
+    const isMultipart = !!tmpUploadPath;
     this.logger.log(
       `Processing ${JOB_RESTORE_FULL} job ${job.id} for tenant ${tenantId} ` +
-        `from backup ${backupId} (dryRun=${options?.dryRun ?? false})`,
+        (isMultipart
+          ? `from multipart upload ${tmpUploadPath}`
+          : `from backup ${backupId}`) +
+        ` (dryRun=${options?.dryRun ?? false})`,
     );
-    return this.backup.restoreFullBackupV2(
-      tenantId,
-      backupId,
-      options ?? {},
-      this.makeProgressCallback(job),
-      userId,
+    return Sentry.startSpan(
+      {
+        name: 'backup.restore.full',
+        op: 'backup',
+        attributes: {
+          tenant_id: tenantId,
+          backup_id: backupId ?? '',
+          source: isMultipart ? 'multipart-upload' : 'catalog',
+          dry_run: options?.dryRun ?? false,
+          backup_format_version: 2,
+          job_id: String(job.id),
+        },
+      },
+      () =>
+        this.backup.restoreFullBackupV2(
+          tenantId,
+          backupId ?? null,
+          options ?? {},
+          this.makeProgressCallback(job),
+          userId,
+          isMultipart
+            ? { tmpZipPath: tmpUploadPath!, tmpSidecarPath }
+            : undefined,
+        ),
     );
   }
 
-  @Process(JOB_RESTORE_SITE)
+  @Process({ name: JOB_RESTORE_SITE, concurrency: BACKUP_QUEUE_CONCURRENCY })
   async handleRestoreSite(_job: Job<RestoreSiteJobData>): Promise<never> {
     // Site restore async path is parked — current site-restore endpoint is
     // multipart-only and stays synchronous in step 5 (per scope decision).

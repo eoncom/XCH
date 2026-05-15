@@ -72,8 +72,34 @@
 - 8 modules : assets, sites, tasks, contacts, expenses, racks, users, floor-plans
 - Composant `<Pagination>` frontend avec selecteur taille page
 
-### Sauvegarde / Restauration (v2.2.0 — Track D.1 Backup v2)
-- **Streaming end-to-end** (zero `Buffer.concat`) — backup + restore scale au multi-GB
+### Sauvegarde / Restauration (v2.3.0 — Track D.2 Backup v2 Polish)
+- **Chiffrement AES-256-GCM streaming** (Track D.2 §1) — toggle opt-in
+  « Chiffrer le backup » dans la pré-launch dialog. Server-driven via
+  `GET /backup/capabilities` (gris UI si `XCH_MASTER_KEY` absent).
+  Sidecar JSON `<filename>.enc.json` co-localisé MinIO. Cipher pipeline
+  en aval du HashingStream archive → déterminisme D.1 préservé.
+  Lock icon sur catalog row chiffrée. **Rotation key** : voir
+  [docs/operator/backup-key-rotation.md](docs/operator/backup-key-rotation.md)
+  — perdre `XCH_MASTER_KEY` sans préserver `_V<n>` legacy rend les
+  encrypted backups irrécupérables (AES-GCM par construction).
+- **Restore cross-tenant** (Track D.2 §3) — `targetDelegationId` UUID
+  remappe 6 colonnes `delegationId` (Site, Asset, Contact, BillingEntity,
+  Expense, Budget) vers la délégation cible. Ownership FK rewrite
+  PERMANENT vers caller admin (Task.createdBy/assignedTo, TaskComment.authorId,
+  Expense.createdBy). Skip Users loop + warning UI + audit log
+  `RESTORE_CROSS_TENANT`. Pre-remap invariant R1 validation sur 4 modèles.
+  Permission gate double : manage source ET target appartient au caller tenant.
+- **Async multipart upload restore** (Track D.2 §6) —
+  `POST /backup/full/restore-upload` async via Bull queue. Supplante
+  l'upload sync v1 (déprécié v2.3.0, suppression v2.4.0). Encrypted ZIP
+  nécessite sidecar upload séparé ; peek 4 premiers bytes pré-pipeline
+  pour détecter encrypted-no-sidecar et retourner message actionable.
+- **GlitchTip Performance spans** (Track D.2 §2) — `backup.full` /
+  `backup.restore.full` transactions parentes + 4 child spans par phase
+  (archive-build, minio-upload, minio-download, prisma-import) + 5
+  grand-children par phase prisma FK. Visibles dans GlitchTip Performance
+  tab. Scrubber fail-closed étendu aux transactions (parité ADR-024).
+- **Streaming end-to-end** (D.1) — backup + restore scale au multi-GB
   tenant employeur sans OOM (RSS worker < 1 GB sur backup 5 GB)
 - **Orphan-aware** — full bucket walk MinIO inclus dans le ZIP (blobs non
   référencés DB préservés pour DR)
@@ -82,21 +108,21 @@
 - **Idempotent restore** via `upsertByNaturalKey` skip-if-exists sur 19 tables
   + 5 phases FK ordering. Re-restore = 0 inserts garanti.
 - **Dry-run preview** safe-default (Switch UI checked par défaut) — filet
-  de sécurité critique pour 1er restore sur tenant peuplé. Affiche le
-  diff `wouldCreate / wouldSkip / missingFiles / invalidChecksums`
-  avant commit.
+  de sécurité critique pour 1er restore sur tenant peuplé.
 - **Async Bull v3 jobs** : `POST /backup/full` retourne 202 + jobId,
   frontend `useBackupJob` poll `GET /backup/jobs/:jobId` toutes les 2s.
-  Progress bar live + capture Sentry/GlitchTip gratuite via `WorkerEventLogger`
-  (ADR-024).
+  Concurrency 2 (Track D.2 §6, conditional gate post-soak).
 - **Pre-launch estimate** : `POST /backup/estimate` retourne taille
-  projetée + check disque (`fs.statfs` Node 20). HTTP 507 si insuffisant.
+  projetée + check disque. HTTP 507 si insuffisant.
 - **Compat v1 restore-only** : ZIP v1 existants restaurables via délégation
-  legacy `AdmZip` path (détection automatique par `typeof metadata.version`).
-- **CLI escape hatch** : header `X-Backup-Sync: 1` force le path v1
-  synchrone (fallback urgence si Redis down).
-- Référence : [ADR-025 Backup v2 streaming](docs/decisions/adr-025-backup-v2-streaming.md)
-  + [CHANGELOG v2.2.0](CHANGELOG.md)
+  legacy `AdmZip` path.
+- **`X-Backup-Sync: 1` header DEPRECATED v2.3.0** (Track D.2 §4) — warn
+  log + Swagger badge. **Suppression v2.4.0**. Migration : utiliser le
+  path async par défaut OU `POST /backup/full/restore-upload` pour
+  restore depuis ZIP local.
+- Références : [ADR-026 Backup v2 Polish](docs/decisions/adr-026-backup-v2-polish.md)
+  + [ADR-025 Backup v2 streaming](docs/decisions/adr-025-backup-v2-streaming.md)
+  + [CHANGELOG v2.3.0](CHANGELOG.md)
 
 ### Sauvegarde / Restauration (legacy v1, restore-only depuis v2.2.0)
 - Restauration site individuel + restauration complete (multipart sync)

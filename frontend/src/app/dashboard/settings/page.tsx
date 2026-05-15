@@ -27,7 +27,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton, CardSkeleton } from '@/components/ui/skeleton';
-import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network, X, Bell, Zap } from 'lucide-react';
+import { User, Building2, Plug, Save, Sun, Moon, Monitor, Palette, Database, AlertTriangle, RefreshCw, Info, ExternalLink, Key, Image, PaintBucket, ShieldAlert, Plus, Trash2, ToggleLeft, Blocks, Tags, RotateCcw, Check, ShieldCheck, Copy, Loader2, HardDrive, Download, Upload, Archive, FileArchive, Network, X, Bell, Zap, Lock } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { apiClient } from '@/lib/api-client';
@@ -2020,6 +2020,10 @@ export default function SettingsPage() {
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restoreFullFile, setRestoreFullFile] = useState<File | null>(null);
   const [isRestoringFull, setIsRestoringFull] = useState(false);
+  // Track D.2 Step 4.5 — async multipart upload restore (replaces the
+  // legacy sync v1 path once X-Backup-Sync is removed in v2.4.0).
+  const [uploadBackupFile, setUploadBackupFile] = useState<File | null>(null);
+  const [uploadSidecarFile, setUploadSidecarFile] = useState<File | null>(null);
   const [isCleaningStorage, setIsCleaningStorage] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [availableSites, setAvailableSites] = useState<{ id: string; name: string; code: string }[]>([]);
@@ -2032,6 +2036,14 @@ export default function SettingsPage() {
   const [isFetchingEstimate, setIsFetchingEstimate] = useState(false);
   /** Backup options toggled in the pre-launch dialog. */
   const [backupDbOnly, setBackupDbOnly] = useState(false);
+  /** Track D.2 — encrypt the backup ZIP (AES-256-GCM streaming). */
+  const [backupEncrypt, setBackupEncrypt] = useState(false);
+  /** Track D.2 — server-driven capability flags (loaded once on mount). */
+  const [backupCapabilities, setBackupCapabilities] = useState<{ encryption: boolean } | null>(null);
+  /** Track D.2 Step 4 — cross-tenant restore: target delegation id in caller tenant. */
+  const [restoreTargetDelegationId, setRestoreTargetDelegationId] = useState<string>('');
+  const [restoreCrossTenant, setRestoreCrossTenant] = useState(false);
+  const [availableDelegations, setAvailableDelegations] = useState<{ id: string; label: string }[]>([]);
   /** Selected catalog backup for async restore + dry-run preview. */
   const [selectedRestoreBackupId, setSelectedRestoreBackupId] = useState<string | null>(null);
   const [restoreDryRun, setRestoreDryRun] = useState(true); // safe default
@@ -2057,6 +2069,8 @@ export default function SettingsPage() {
     },
     estimateInsufficient: 'Espace disque insuffisant pour le backup (besoin × 1.2 + 512 MB).',
     dbOnlyToggle: 'Base de données seule (skip MinIO)',
+    encryptToggle: 'Chiffrer le backup (AES-256-GCM)',
+    encryptDisabled: 'Chiffrement indisponible (clé maître non configurée serveur)',
     launchBackup: 'Lancer la sauvegarde',
     backupInProgress: 'Sauvegarde en cours…',
     backupCompleted: 'Sauvegarde terminée',
@@ -2167,7 +2181,10 @@ export default function SettingsPage() {
   const handleCreateFullBackup = async () => {
     setIsCreatingFullBackup(true);
     try {
-      const enqueued = await backupApi.createFullAsync({ dbOnly: backupDbOnly });
+      const enqueued = await backupApi.createFullAsync({
+        dbOnly: backupDbOnly,
+        encrypt: backupEncrypt,
+      });
       setCurrentBackupJobId(enqueued.jobId);
       setDryRunReport(null); // clear any previous dry-run report
       toast.success(`Sauvegarde lancée (job ${enqueued.jobId})`);
@@ -2186,7 +2203,16 @@ export default function SettingsPage() {
   const handleRestoreFullAsync = async (backupId: string, dryRun: boolean) => {
     setIsRestoringFull(true);
     try {
-      const enqueued = await backupApi.restoreFullAsync({ backupId, dryRun });
+      // Track D.2 Step 4 — pass targetDelegationId for cross-tenant
+      // restore mode. Empty string = same-tenant restore (default).
+      const targetDelegationId = restoreCrossTenant && restoreTargetDelegationId
+        ? restoreTargetDelegationId
+        : undefined;
+      const enqueued = await backupApi.restoreFullAsync({
+        backupId,
+        dryRun,
+        targetDelegationId,
+      });
       setCurrentBackupJobId(enqueued.jobId);
       setDryRunReport(null);
       toast.success(
@@ -2268,6 +2294,45 @@ export default function SettingsPage() {
       setRestoreFullFile(null);
     } catch (error: any) {
       toast.error(error.message || 'Erreur lors de la restauration complète');
+    } finally {
+      setIsRestoringFull(false);
+    }
+  };
+
+  /**
+   * Track D.2 Step 4.5 — async multipart upload restore. Streams the
+   * ZIP (+ optional sidecar) to the backend tmp dir, enqueues a Bull
+   * `restore-full` job, and hands off to the same `useBackupJob` poll
+   * machinery as the catalog-restore path. Cross-tenant + dry-run
+   * options are honored.
+   */
+  const handleRestoreFromUpload = async () => {
+    if (!uploadBackupFile) {
+      toast.error('Veuillez sélectionner un fichier .zip à restaurer');
+      return;
+    }
+    setIsRestoringFull(true);
+    try {
+      const targetDelegationId = restoreCrossTenant && restoreTargetDelegationId
+        ? restoreTargetDelegationId
+        : undefined;
+      const enqueued = await backupApi.restoreFullFromUpload(
+        uploadBackupFile,
+        uploadSidecarFile,
+        { dryRun: restoreDryRun, targetDelegationId },
+      );
+      setCurrentBackupJobId(enqueued.jobId);
+      setDryRunReport(null);
+      toast.success(
+        restoreDryRun
+          ? `Aperçu (dry-run) lancé depuis l'upload (job ${enqueued.jobId})`
+          : `Restauration lancée depuis l'upload (job ${enqueued.jobId})`,
+      );
+      // Reset file inputs — the user can re-select if needed after the job.
+      setUploadBackupFile(null);
+      setUploadSidecarFile(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors du restore depuis upload');
     } finally {
       setIsRestoringFull(false);
     }
@@ -2464,7 +2529,31 @@ export default function SettingsPage() {
         value={activeTab}
         onValueChange={(val) => {
           setActiveTab(val);
-          if (val === 'backup') { loadBackups(); loadSitesForBackup(); }
+          if (val === 'backup') {
+            loadBackups();
+            loadSitesForBackup();
+            // Track D.2 — fetch server capabilities once per tab open.
+            // Cheaper than a useEffect (only loads when user navigates to
+            // the backup tab) and keeps the toggle state honest after a
+            // restart (e.g. XCH_MASTER_KEY added without a page refresh).
+            backupApi.capabilities()
+              .then(setBackupCapabilities)
+              .catch(() => setBackupCapabilities({ encryption: false }));
+            // Track D.2 Step 4 — load delegations for cross-tenant
+            // restore target picker. Backend enforces "must belong to
+            // caller's tenant" — endpoint already scopes by tenantId.
+            apiClient.get<{ data: Array<{ id: string; name?: string; label?: string; slug?: string }> }>(
+              '/api/delegations',
+            )
+              .then((res) => {
+                const list = (res?.data ?? []).map((d) => ({
+                  id: d.id,
+                  label: d.name ?? d.label ?? d.slug ?? d.id,
+                }));
+                setAvailableDelegations(list);
+              })
+              .catch(() => setAvailableDelegations([]));
+          }
         }}
         className="w-full"
       >
@@ -3256,6 +3345,7 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Track D.1 step 7 — pre-launch estimate + dbOnly toggle */}
+                  {/* Track D.2 step 2 — encrypt toggle (server-driven via capabilities) */}
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
                       <Switch
@@ -3270,6 +3360,31 @@ export default function SettingsPage() {
                       <Label htmlFor="backup-db-only" className="text-sm">
                         {T.dbOnlyToggle}
                       </Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="backup-encrypt"
+                        checked={backupEncrypt}
+                        onCheckedChange={setBackupEncrypt}
+                        disabled={
+                          !!currentBackupJobId ||
+                          // Greyed out until capabilities have loaded OR
+                          // when the server reports encryption unavailable
+                          // (XCH_MASTER_KEY unset). The backend rejects with
+                          // 412 either way ; greying out is the friendly UX.
+                          backupCapabilities === null ||
+                          backupCapabilities.encryption === false
+                        }
+                      />
+                      <Label htmlFor="backup-encrypt" className="text-sm flex items-center gap-1">
+                        <Lock className="h-3 w-3" />
+                        {T.encryptToggle}
+                      </Label>
+                      {backupCapabilities?.encryption === false && (
+                        <span className="text-xs text-muted-foreground italic">
+                          ({T.encryptDisabled})
+                        </span>
+                      )}
                     </div>
                     <Button
                       variant="outline"
@@ -3524,6 +3639,14 @@ export default function SettingsPage() {
                           <tr key={backup.id} className="hover:bg-muted/30">
                             <td className="p-3">
                               <span className="font-mono text-xs">{backup.filename}</span>
+                              {backup.encrypted && (
+                                <span
+                                  className="ml-2 inline-flex items-center"
+                                  title="Backup chiffré (AES-256-GCM)"
+                                >
+                                  <Lock className="h-3 w-3 text-muted-foreground" />
+                                </span>
+                              )}
                             </td>
                             <td className="p-3">
                               <Badge variant={backup.type === 'full' ? 'default' : 'secondary'}>
@@ -3698,6 +3821,51 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground italic">{T.dryRunInfo}</p>
+
+                  {/* Track D.2 Step 4 — cross-tenant restore (delegationId remap) */}
+                  <div className="space-y-2 border-t pt-3">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="restore-cross-tenant"
+                        checked={restoreCrossTenant}
+                        onCheckedChange={(v) => {
+                          setRestoreCrossTenant(v);
+                          if (!v) setRestoreTargetDelegationId('');
+                        }}
+                        disabled={isRestoringFull || !!currentBackupJobId}
+                      />
+                      <Label htmlFor="restore-cross-tenant" className="text-sm">
+                        Restore cross-tenant (remap delegationId)
+                      </Label>
+                    </div>
+                    {restoreCrossTenant && (
+                      <div className="space-y-2 pl-8">
+                        <Select
+                          value={restoreTargetDelegationId || undefined}
+                          onValueChange={setRestoreTargetDelegationId}
+                        >
+                          <SelectTrigger className="w-full max-w-md">
+                            <SelectValue placeholder="Sélectionner la délégation cible…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableDelegations.map((d) => (
+                              <SelectItem key={d.id} value={d.id}>
+                                {d.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground italic max-w-md">
+                          Les utilisateurs du tenant source ne sont pas importés.
+                          Les utilisateurs du tenant cible auront accès aux
+                          données migrées via la délégation choisie. La
+                          propriété (createdBy, assignedTo, authorId) est
+                          réécrite vers l&apos;admin qui lance le restore — la trace
+                          audit est préservée même si vos droits évoluent.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex justify-end">
                     <Button
                       onClick={() => {
@@ -3723,42 +3891,123 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* Legacy multipart sync path — kept for external ZIP imports */}
-                <div className="space-y-3">
+                {/* Track D.2 Step 4.5 — async multipart upload restore.
+                    Replaces the legacy sync v1 path; the sync path (with
+                    `X-Backup-Sync: 1` header) is deprecated in v2.3.0 and
+                    will be removed in v2.4.0. Encrypted backups MUST
+                    upload BOTH the .zip AND its sidecar JSON. */}
+                <div className="space-y-3 p-3 border rounded-lg bg-muted/10">
                   <h4 className="font-medium text-sm flex items-center gap-2">
                     <Upload className="h-4 w-4" />
-                    Depuis un fichier ZIP externe (sync v1)
+                    Depuis un fichier ZIP local (async, recommandé)
                   </h4>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <Label htmlFor="restore-full-file" className="sr-only">Fichier ZIP de backup complet</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="upload-backup-file" className="text-xs">
+                        Archive .zip (obligatoire)
+                      </Label>
                       <Input
-                        id="restore-full-file"
+                        id="upload-backup-file"
                         type="file"
                         accept=".zip"
-                        onChange={(e) => setRestoreFullFile(e.target.files?.[0] || null)}
-                        className="cursor-pointer"
+                        onChange={(e) => setUploadBackupFile(e.target.files?.[0] || null)}
+                        className="cursor-pointer mt-1"
+                        disabled={isRestoringFull || !!currentBackupJobId}
                       />
                     </div>
+                    <div>
+                      <Label htmlFor="upload-sidecar-file" className="text-xs flex items-center gap-1">
+                        <Lock className="h-3 w-3" />
+                        Sidecar .enc.json (si chiffré)
+                      </Label>
+                      <Input
+                        id="upload-sidecar-file"
+                        type="file"
+                        accept=".json"
+                        onChange={(e) => setUploadSidecarFile(e.target.files?.[0] || null)}
+                        className="cursor-pointer mt-1"
+                        disabled={isRestoringFull || !!currentBackupJobId}
+                      />
+                    </div>
+                  </div>
+                  {uploadBackupFile && (
+                    <p className="text-xs text-muted-foreground">
+                      Backup : <span className="font-mono">{uploadBackupFile.name}</span> ({formatFileSize(uploadBackupFile.size)})
+                      {uploadSidecarFile && (
+                        <>
+                          {' · '}Sidecar : <span className="font-mono">{uploadSidecarFile.name}</span>
+                        </>
+                      )}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground italic">
+                    L&apos;upload utilise le toggle dry-run et la section
+                    cross-tenant ci-dessus. Pour un backup chiffré (AES-256-GCM),
+                    joignez aussi son sidecar JSON — sans, le serveur retournera
+                    une erreur explicite.
+                  </p>
+                  <div className="flex justify-end">
                     <Button
-                      onClick={handleRestoreFull}
-                      disabled={isRestoringFull || !restoreFullFile}
-                      variant="outline"
+                      onClick={handleRestoreFromUpload}
+                      disabled={
+                        isRestoringFull ||
+                        !!currentBackupJobId ||
+                        !uploadBackupFile
+                      }
                     >
                       {isRestoringFull ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
                         <Upload className="mr-2 h-4 w-4" />
                       )}
-                      {isRestoringFull ? 'Restauration...' : 'Restaurer (sync)'}
+                      {isRestoringFull
+                        ? 'Upload en cours…'
+                        : restoreDryRun
+                        ? "Lancer le dry-run (upload)"
+                        : 'Lancer la restauration (upload)'}
                     </Button>
                   </div>
-                  {restoreFullFile && (
-                    <p className="text-xs text-muted-foreground">
-                      Fichier sélectionné : <span className="font-mono">{restoreFullFile.name}</span> ({formatFileSize(restoreFullFile.size)})
-                    </p>
-                  )}
                 </div>
+
+                {/* Legacy sync v1 path — preserved for the X-Backup-Sync
+                    deprecation window. Will be removed in v2.4.0. */}
+                <details className="space-y-3 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">
+                    Chemin legacy sync v1 (déprécié, retrait v2.4.0)
+                  </summary>
+                  <div className="space-y-2 pt-2 pl-4 border-l">
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <Label htmlFor="restore-full-file" className="sr-only">Fichier ZIP de backup complet</Label>
+                        <Input
+                          id="restore-full-file"
+                          type="file"
+                          accept=".zip"
+                          onChange={(e) => setRestoreFullFile(e.target.files?.[0] || null)}
+                          className="cursor-pointer"
+                        />
+                      </div>
+                      <Button
+                        onClick={handleRestoreFull}
+                        disabled={isRestoringFull || !restoreFullFile}
+                        variant="outline"
+                        size="sm"
+                      >
+                        {isRestoringFull ? (
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        ) : (
+                          <Upload className="mr-2 h-3 w-3" />
+                        )}
+                        Restaurer (sync v1)
+                      </Button>
+                    </div>
+                    {restoreFullFile && (
+                      <p>
+                        Fichier sélectionné : <span className="font-mono">{restoreFullFile.name}</span> ({formatFileSize(restoreFullFile.size)})
+                      </p>
+                    )}
+                  </div>
+                </details>
 
                 <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
                   <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />

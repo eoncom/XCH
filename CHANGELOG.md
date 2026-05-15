@@ -7,6 +7,184 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.3.0] - 2026-05-XX — Track D.2 Backup v2 Polish (chiffrement + cross-tenant + multipart + observabilité)
+
+Track D.2 Backup v2 Polish — 7 améliorations add-only sur la base
+D.1 v2.2.0, sans toucher au format v2 ni à la couche streaming/
+idempotence existante. Scope figé MCP `XCH_TRACK_D2_BACKUP_V2_2026_05_14`,
+détails ADR-026.
+
+**Soak gate strict** : merge ≥ 2026-05-21 (1 semaine post-deploy v2.2.0).
+**Tests cumulés** : 197 jest unit (+16 vs D.1 baseline 181). Type-check
+backend + frontend clean. 0 régression D.1.
+
+### Added
+
+- **Chiffrement backup AES-256-GCM streaming** (Step 1+2 — ADR-026 §1).
+  Toggle opt-in « Chiffrer le backup » dans la pré-launch dialog,
+  server-driven via `GET /backup/capabilities` (gris UI si
+  `XCH_MASTER_KEY` absent). Sidecar JSON `<filename>.enc.json` co-localisé
+  MinIO `xch-backups` avec shape `{version:1, algo, keyVersion, ivBase64,
+  authTagBase64}`. Pipeline cipher en aval de `HashingStream` archive
+  (déterminisme D.1 préservé). Atomicité zip-before-sidecar. Decipher
+  restore via `crypto.createDecipherStream(...)` inséré AVANT
+  `MagicByteValidator`. Réutilise `XCH_MASTER_KEY` (ADR-019) + format
+  `v<n>:` rotation. HTTP 412 PreconditionFailed côté server si
+  `encrypt: true && !crypto.isEnabled()`. Lock icon sur catalog row
+  `encrypted: true`.
+
+- **GET /backup/capabilities** endpoint (Step 2). Server-driven feature
+  flags (`{ encryption: boolean }`) consommé par la dialog frontend
+  au tab navigation pour griser les toggles dont les pré-requis backend
+  ne sont pas satisfaits.
+
+- **Observabilité GlitchTip approfondie** : 2 transactions parentes
+  (`backup.full`, `backup.restore.full`) + 4 sub-spans de phase
+  (`backup.archive-build`, `backup.minio-upload`, `backup.minio-download`,
+  `backup.prisma-import`) + 5 grand-children spans pour les phases
+  prisma FK (`backup.restore.phase-1` à `phase-5`). Visibles dans
+  GlitchTip Performance tab. Tags PII-light : `tenant_id` (UUID),
+  `backup_format_version: 2`, `encrypted`, `job_id`, `source:
+  'multipart-upload' | 'catalog'`. `tracesSampler` op-prefix filtre
+  pour ne pas flood l'ingestion avec des transactions HTTP non-backup.
+  (Step 3 — ADR-026 §2).
+
+- **Restore cross-tenant** via `targetDelegationId` (Step 4 — ADR-026 §3).
+  Remap `delegationId` all-or-nothing sur 6 colonnes : Site, Asset,
+  Contact, BillingEntity, Expense, Budget. Ownership FK rewrite
+  PERMANENT vers caller admin : Task.createdBy, Task.assignedTo,
+  TaskComment.authorId, Expense.createdBy. Skip Users loop +
+  warning UI + audit log row `RESTORE_CROSS_TENANT` avec metadata
+  complète (sourceTenantId, targetTenantId, targetDelegationId,
+  skippedUsers, rewrittenOwnership, dryRun). Pre-remap invariant R1
+  validation sur 4 modèles (Contact, BillingEntity, Expense, Budget)
+  — source corruption détectée → BadRequestException, abort propre
+  AVANT toute écriture target. Permission gate double : caller doit
+  avoir manage sur tenant source ET target delegation appartient
+  à callerTenantId.
+
+- **POST /backup/full/restore-upload** async multipart endpoint
+  (Step 4.5 — ADR-026 §6). Restore depuis ZIP local + sidecar
+  optionnel via `FileFieldsInterceptor` + multer `diskStorage` 50 GB
+  limit. Pré-condition v2.4.0 hard delete `X-Backup-Sync`. Disk check
+  pré-enqueue (HTTP 507 si insufficient storage). Edge case
+  encrypted-no-sidecar : peek 4 premiers bytes vs PKZip magic →
+  message actionable "forgot to upload the sidecar". Frontend section
+  "Depuis un fichier ZIP local (async, recommandé)" remplace la
+  voie sync v1 dans la UI principale.
+
+- **BACKUP_AUDIT_ACTIONS / BACKUP_CATALOG_ACTIONS** constants
+  centralisées (Step 0.5 — ADR-026 §5). 9 actions emit + 4 catalog
+  subset + `BackupAuditAction` type narrowing. Résout la dette v2.2.1
+  (4 call sites filter hardcodés) — prévient régression catalog si
+  bump format v3 future.
+
+- **CryptoService.createCipherStream() / createDecipherStream()**
+  factories Transform AES-256-GCM réutilisant `XCH_MASTER_KEY`
+  (Step 1). `isEnabled()` capability getter pour UI grey discovery.
+  Auth tag closure throws si appelée pré-pipeline-completion.
+
+### Changed
+
+- **`Sentry.init` tracesSampleRate 0 → tracesSampler ciblé backup**
+  (Step 3). Honor parent sampling. `beforeSendTransaction: () => null`
+  → `beforeSendTransaction: scrubEvent` (parité ADR-024 fail-closed
+  étendue aux transactions — bundle `SECRET_REGEX_BUNDLE` scanne
+  maintenant `span.description`, `span.attributes`, `transaction.tags`).
+  `tracesSampleRate: 0` conservé en fallback (sampler wins quand défini).
+
+- **`@Process` decorators bumped à concurrency 2** (Step 6 —
+  CONDITIONAL au merge). Bull v3 per-handler concurrency 1 → 2 via
+  nouvelle constante `BACKUP_QUEUE_CONCURRENCY`. Mitigations correctness
+  pré-existantes : per-job tmp paths uniques + NK upserts idempotents
+  + staging dirs isolés. Worst-case parallelism 8 in-flight (4 handlers
+  × 2). Smoke gate au merge : RSS p95 < 50% mem_limit, 0 OOM, 0 audit
+  failed sur 7j post-v2.2.0 — sinon revert `b41f042` AVANT tag v2.3.0.
+
+- **`@ApiHeader X-Backup-Sync` marquées `deprecated: true`** sur les
+  3 endpoints (POST /backup/full, /backup/full/restore, /backup/site/:id).
+  Swagger UI badge automatique + description prefix
+  "**DEPRECATED — removed in v2.4.0.**" (Step 5 — ADR-026 §4).
+
+- **`AuditLog.changes`** sur `BACKUP_FULL_V2` row gain field
+  `encrypted: boolean` (Step 2) + `source: 'multipart-upload' | 'catalog'`
+  (Step 4.5).
+
+### Deprecated
+
+- **`X-Backup-Sync: 1` header** (Step 5 — ADR-026 §4). Toujours
+  fonctionnel en v2.3.0 mais marqué `deprecated: true` Swagger +
+  émet warn log à chaque hit avec grep marker `XCH_LOG_MARKER
+  X-Backup-Sync header used on <endpoint> — DEPRECATED, will be
+  removed in v2.4.0 (tenant=… user=…)`. **Suppression code path
+  prévue v2.4.0** une fois le grep prod confirme 0 callers sur
+  7j soak post-v2.3.0. Migration côté client :
+  - Backup full sync → enlever le header, le path async par défaut
+    est plus rapide et observable via `useBackupJob` polling.
+  - Restore multipart sync v1 → utiliser le nouveau
+    `POST /backup/full/restore-upload` async (Step 4.5).
+  - Site backup inline ZIP stream → utiliser le path async + télécharger
+    depuis le catalog une fois le job terminé.
+
+### Fixed
+
+- **Contact.delegationId silent loss D.1** (Step 4, gap fix opportuniste).
+  Le restore v2 D.1/Track C omettait silencieusement `delegationId` sur
+  Contact create (field absent du data object) — préservait l'identifiant
+  source ni le remap cross-tenant. Maintenant propagé via
+  `remapDelegation(c.delegationId)`. Bénéfice même en same-tenant
+  (préserve l'association source).
+
+- **Task.assignedTo silent loss D.1** (Step 4, gap fix opportuniste).
+  Même pattern : `assignedTo` absent du data object create v2 D.1 →
+  perdu silencieusement au restore. Maintenant propagé + cross-tenant
+  rewrite vers caller admin si applicable.
+
+### Performance
+
+- **Bull v3 concurrency 1 → 2** (Step 6 — CONDITIONAL au merge,
+  voir Changed ci-dessus). Throughput backup ×2 sur même worker
+  sans modification correctness.
+
+### Security
+
+- **scrubEvent fail-closed étendu transactions** (Step 3). Bundle
+  `SECRET_REGEX_BUNDLE` scanne `span.description`, `span.attributes`
+  (value AND key), `transaction.tags`. 1 emplacement leak → drop event
+  entier. Test fail-closed strict 7 cases (`scrubber.spec.ts`).
+
+- **Permission gate cross-tenant** côté service
+  (`assertTargetDelegationAccessible`) : double-check manage source
+  + target appartient à callerTenantId. 403 generic = pas d'info leak
+  cross-tenant.
+
+- **HTTP 412 + worker invariant check** pour encrypt:true sans
+  XCH_MASTER_KEY : UI grey + controller 412 + worker throw. Aucun
+  artifact half-encrypted possible.
+
+### Migration / Operator notes
+
+- **Encrypted backups dependent on `XCH_MASTER_KEY`** : perdre la
+  clé sans backup du `_V<n>` legacy = backups encrypted irrécupérables.
+  Procédure rotation détaillée : [docs/operator/backup-key-rotation.md](docs/operator/backup-key-rotation.md).
+
+- **`tracesSampleRate: 1.0` ciblé backup** augmente le volume
+  d'ingestion GlitchTip pour les ops backup uniquement. Negligible
+  côté GlitchTip self-hosted (quelques transactions/jour/tenant).
+
+- **Cross-tenant restore** : audit log row `RESTORE_CROSS_TENANT`
+  porte le contexte forensic complet — utiliser pour reconstruire
+  l'historique migration même si caller perd manage rights ensuite.
+
+### [BREAKING - planned v2.4.0]
+
+- **`X-Backup-Sync: 1` header retiré** : 1 cycle deprecation v2.3.0
+  → suppression v2.4.0 (cf Deprecated ci-dessus). Critère de bascule :
+  grep prod logs `XCH_LOG_MARKER X-Backup-Sync` sur 7j post-v2.3.0
+  = 0 hits.
+
+---
+
 ## [2.2.0] - 2026-05-14 — Track D.1 Backup v2 (streaming + idempotent restore + dry-run + async Bull v3)
 
 Track D.1 Backup v2 Core — refonte complète du backup-restore pour

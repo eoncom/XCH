@@ -18,4 +18,17 @@ export class BackupOptionsDto {
   @IsBoolean()
   @IsOptional()
   dbOnly?: boolean;
+
+  @ApiProperty({
+    required: false,
+    default: false,
+    description:
+      'When true, encrypt the backup ZIP with AES-256-GCM streaming (Track D.2). ' +
+      'A sidecar `<filename>.enc.json` is co-located in xch-backups with the IV, ' +
+      'auth tag and key version (sidecar versionning `version: 1` for future crypto agility). ' +
+      'Requires XCH_MASTER_KEY (ADR-019). Verify via `GET /backup/capabilities`.',
+  })
+  @IsBoolean()
+  @IsOptional()
+  encrypt?: boolean;
 }

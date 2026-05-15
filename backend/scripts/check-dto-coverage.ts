@@ -43,7 +43,12 @@ const MODULES_ROOT = path.join(REPO_ROOT, 'backend', 'src', 'modules');
 const BASELINE_PATH = path.join(__dirname, 'dto-coverage-baseline.json');
 
 const HTTP_DECORATOR_RE = /^\s*@(Get|Post|Put|Patch|Delete)\s*\(/;
-const RESPONSE_DECORATOR_RE = /@(ApiResponse|ApiOkResponse|ApiCreatedResponse)\s*\(/;
+// Recognized Swagger response decorators. Track D.2 Step 4.5 added
+// `ApiAcceptedResponse` to cover async-202 endpoints (POST /backup/full/
+// restore-upload — the FileFieldsInterceptor stack pushes the function
+// declaration past 20 lines, so the legitimate `@ApiAcceptedResponse`
+// must satisfy the rule on its own).
+const RESPONSE_DECORATOR_RE = /@(ApiResponse|ApiOkResponse|ApiCreatedResponse|ApiAcceptedResponse|ApiNoContentResponse)\s*\(/;
 const TYPE_PROP_RE = /\btype\s*:/;
 const RES_PARAM_RE = /@Res\s*\(/;
 // Window large enough to cover an `@Post` followed by a multi-line

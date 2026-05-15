@@ -11,6 +11,8 @@ export interface BackupMetadata {
   siteName?: string;
   siteCode?: string;
   recordCounts?: Record<string, number>;
+  /** Track D.2 — true if the archive is AES-256-GCM encrypted (sidecar present). */
+  encrypted?: boolean;
 }
 
 export interface BackupListResponse {
@@ -119,12 +121,32 @@ function triggerBlobDownload(blob: Blob, response: Response, fallbackName: strin
 /** Request body for POST /backup/estimate and POST /backup/full (v2 async). */
 export interface BackupOptions {
   dbOnly?: boolean;
+  /**
+   * Track D.2 — when true, encrypt the backup ZIP with AES-256-GCM
+   * streaming. Requires server-side `XCH_MASTER_KEY` (ADR-019). Verify
+   * via `backupApi.capabilities()` before enabling the toggle in the
+   * pre-launch dialog.
+   */
+  encrypt?: boolean;
+}
+
+/** Track D.2 — GET /backup/capabilities response. */
+export interface BackupCapabilities {
+  encryption: boolean;
 }
 
 /** Request body for POST /backup/full/restore JSON-mode (async). */
 export interface RestoreOptions {
   backupId?: string;
   dryRun?: boolean;
+  /**
+   * Track D.2 Step 4 — Cross-tenant restore. When set, the source
+   * delegation is remapped to this target delegation. The target MUST
+   * belong to the caller's tenant (server-side gate, 403 otherwise).
+   * Source users are NOT imported in this mode (collision avoidance).
+   * See `wouldSkipCrossTenant.User` in dry-run report.
+   */
+  targetDelegationId?: string;
 }
 
 /** POST /backup/estimate response. */
@@ -161,6 +183,8 @@ export interface DryRunReport {
   invalidChecksums: string[];
   totalSize: number;
   estimatedDurationSec: number;
+  /** Track D.2 — cross-tenant only. Count of source Users that would be skipped. */
+  wouldSkipCrossTenant?: { User: number };
 }
 
 /** Discriminated result returned by `result` of a completed restore job. */
@@ -179,6 +203,14 @@ export interface BackupJobStatus {
 
 export const backupApi = {
   // -------- Track D.1 step 7 — async endpoints --------
+
+  /**
+   * Track D.2 — server-driven capability discovery. Called at dialog
+   * mount to grey out toggles whose backend prerequisites are missing
+   * (e.g. encryption requires `XCH_MASTER_KEY` per ADR-019).
+   */
+  capabilities: () =>
+    apiClient.get<BackupCapabilities>('/api/backup/capabilities'),
 
   /**
    * Pre-flight size estimate for a backup run.
@@ -209,6 +241,42 @@ export const backupApi = {
    */
   restoreFullAsync: (options: RestoreOptions) =>
     apiClient.post<BackupJobEnqueued>('/api/backup/full/restore', options),
+
+  /**
+   * Track D.2 Step 4.5 — Restore from a local ZIP upload (multipart),
+   * async via Bull v3. Pre-requisite for v2.4.0's `X-Backup-Sync: 1`
+   * removal (sync legacy path retired). Encrypted ZIPs MUST be paired
+   * with their sidecar `<filename>.enc.json` for the server to decipher.
+   *
+   * The server streams the upload to a tmp file, then enqueues the
+   * restore job. Returns 202 + jobId — poll via {@link backupApi.getJobStatus}.
+   */
+  restoreFullFromUpload: async (
+    backupFile: File,
+    sidecarFile: File | null,
+    options: { dryRun?: boolean; targetDelegationId?: string } = {},
+  ): Promise<BackupJobEnqueued> => {
+    const fd = new FormData();
+    fd.append('backup', backupFile);
+    if (sidecarFile) fd.append('sidecar', sidecarFile);
+    if (options.dryRun !== undefined) fd.append('dryRun', String(options.dryRun));
+    if (options.targetDelegationId) fd.append('targetDelegationId', options.targetDelegationId);
+    const res = await fetch(`${API_URL}/api/backup/full/restore-upload`, {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    });
+    if (!res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      let message = res.statusText;
+      if (ct.includes('application/json')) {
+        const body = await res.json().catch(() => ({}));
+        message = (body as { message?: string })?.message || message;
+      }
+      throw new Error(message || `Erreur ${res.status}`);
+    }
+    return res.json() as Promise<BackupJobEnqueued>;
+  },
 
   /**
    * Poll the status of a previously enqueued backup-jobs job.

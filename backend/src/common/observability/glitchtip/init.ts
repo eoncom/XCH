@@ -29,10 +29,24 @@ Sentry.init({
   environment,
   release,
 
-  // Pas de tracing (events seulement). Réduit drastiquement le volume
-  // d'ingestion côté GlitchTip + évite un coupling supplémentaire avec
-  // l'instrumentation HTTP/DB.
+  // Default sampling rate is 0 — but `tracesSampler` below overrides per
+  // transaction. Track D.2 Step 3 selectively samples ONLY backup-module
+  // ops (op starts with 'backup' OR transaction name starts with 'backup.')
+  // at 100% to avoid flooding GlitchTip with default `Http` integration
+  // auto-instrumented HTTP transactions (which would land in v7 if we
+  // bumped tracesSampleRate globally — verified via grep in MCP
+  // `XCH_TRACK_D2_BACKUP_V2_2026_05_14` Step 3 pre-flight).
   tracesSampleRate: 0,
+  tracesSampler: ({ transactionContext, parentSampled }) => {
+    // Honor parent sampling decision for nested spans / child transactions.
+    if (typeof parentSampled === 'boolean') return parentSampled ? 1 : 0;
+    const op = transactionContext?.op ?? '';
+    const name = transactionContext?.name ?? '';
+    if (op === 'backup' || op.startsWith('backup.') || name.startsWith('backup.')) {
+      return 1;
+    }
+    return 0;
+  },
 
   // Les profiles sont disabled de toute façon sans le profiling integration ;
   // explicite pour qu'un futur dev ne réactive pas par accident.
@@ -41,8 +55,12 @@ Sentry.init({
   // Filet anti-leak runtime — voir `scrubber.ts` pour la rationale.
   beforeSend: scrubEvent,
 
-  // Pas de capture des transactions / spans non plus.
-  beforeSendTransaction: () => null,
+  // Track D.2 Step 3 — parité ADR-024 fail-closed étendue aux transactions.
+  // `scrubEvent` accepte `Event` qui est le type partagé entre error events
+  // ET transactions ; le bundle SECRET_REGEX scanne donc aussi span.description,
+  // span.attributes, transaction.tags, etc. Test multi-emplacement dans
+  // scrubber.spec.ts (Track D.2 ajustement #2).
+  beforeSendTransaction: scrubEvent,
 
   // Désactive l'attachStacktrace sur les message events — on capture
   // explicitement via `Sentry.captureException(err)` dans le filter, où
