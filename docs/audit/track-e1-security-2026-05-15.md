@@ -248,6 +248,7 @@ ADRs lus : 002 (RLS), 004 (RBAC Casbin), 009 (Delegation-First), 017–026 réce
 | `README.md` | 2026-04-23 v1.4.0 | ✅ Multi-tenant + RBAC | ❌ Air-gap deployment non mentionné |
 | `CONTRIBUTING.md` | inexistant | N/A | ⚠️ Pattern enforcement non documenté (à créer Track E.4 ?) |
 | `docs/status/PROJECT_STATUS.md` | 2026-05-15 (auto-update) affiche v1.9.0 | **STALE** | 🔴 Affiche v1.9.0 alors que tag git = v2.3.2 ; G1 du plan Track E v2.1 confirmé |
+| `DEVELOPMENT_LOG.md` | 8181 lignes, dernières 4 auto-update 2026-05-15 | **STALE (timestamp-recent / content-shallow)** | 🔴 Auto-update timestamps OK mais entrées génériques (`Backend files modified: X`). Aucune narrative Track A (2026-05-10), Track C (2026-05-10), Track D.1 (2026-05-14), Track D.2 (2026-05-15), Track E.1 (2026-05-15). Dernière vraie session manuelle = ~2026-04 era (Sessions 16-17 v1.2.0). **G2 du plan Track E v2.1 confirmé.** Recommandation : consolidation Track E.4 (synthèse Track A→E + ADR refs) avec MAJ auto-update plus riche (post-mortem 1-paragraphe par session significative). |
 
 ### 10.4 Mapping table 4-niveaux (synthèse)
 
@@ -295,3 +296,4 @@ Effort cumulé Track E.1 total : **~3h50** (vs ~9h15 nominal avec Pass 9 ajouté
 | `@SkipDelegation` JSDoc backfill 23 endpoints | OUVERT | Mini-PR docs Track E.4 (~1h, 0 risque code) — référencer catégorie ADR-028 |
 | CI lint ts-morph "findOne sans CallerCtx" (ADR-021 forward dep §194) | OUVERT | Track E.4 (renforcement défense BOLA latente) |
 | `PROJECT_STATUS.md` refresh v1.9.0 → v2.3.2 | OUVERT | Track E.4 (refresh + aligner avec git tag automatique) |
+| `DEVELOPMENT_LOG.md` consolidation Track A→E narrative | OUVERT | Track E.4 (synthèse + script auto-update plus riche) |
