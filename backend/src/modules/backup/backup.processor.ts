@@ -6,6 +6,7 @@ import { BackupService } from './backup.service';
 import { WorkerEventLogger } from '../../common/observability/worker-event-logger.service';
 import {
   BACKUP_QUEUE,
+  BACKUP_QUEUE_CONCURRENCY,
   JOB_BACKUP_FULL,
   JOB_BACKUP_SITE,
   JOB_RESTORE_FULL,
@@ -58,7 +59,7 @@ export class BackupProcessor {
   // Backup handlers
   // -------------------------------------------------------------------------
 
-  @Process(JOB_BACKUP_FULL)
+  @Process({ name: JOB_BACKUP_FULL, concurrency: BACKUP_QUEUE_CONCURRENCY })
   async handleBackupFull(job: Job<BackupFullJobData>): Promise<unknown> {
     const { tenantId, userId, options } = job.data;
     this.logger.log(
@@ -89,7 +90,7 @@ export class BackupProcessor {
     );
   }
 
-  @Process(JOB_BACKUP_SITE)
+  @Process({ name: JOB_BACKUP_SITE, concurrency: BACKUP_QUEUE_CONCURRENCY })
   async handleBackupSite(job: Job<BackupSiteJobData>): Promise<unknown> {
     const { tenantId, siteId, userId } = job.data;
     this.logger.log(
@@ -118,7 +119,7 @@ export class BackupProcessor {
   // Restore handlers
   // -------------------------------------------------------------------------
 
-  @Process(JOB_RESTORE_FULL)
+  @Process({ name: JOB_RESTORE_FULL, concurrency: BACKUP_QUEUE_CONCURRENCY })
   async handleRestoreFull(job: Job<RestoreFullJobData>): Promise<unknown> {
     const { tenantId, backupId, userId, options, tmpUploadPath, tmpSidecarPath } = job.data;
     const isMultipart = !!tmpUploadPath;
@@ -156,7 +157,7 @@ export class BackupProcessor {
     );
   }
 
-  @Process(JOB_RESTORE_SITE)
+  @Process({ name: JOB_RESTORE_SITE, concurrency: BACKUP_QUEUE_CONCURRENCY })
   async handleRestoreSite(_job: Job<RestoreSiteJobData>): Promise<never> {
     // Site restore async path is parked — current site-restore endpoint is
     // multipart-only and stays synchronous in step 5 (per scope decision).

@@ -8137,3 +8137,24 @@ feat(backup): cross-tenant restore with delegationId remap + ownership rewrite
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-15
+
+**Date:** 2026-05-15 09:02:19
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 3
+- Frontend files modified: 0
+
+**Commit message:**
+```
+chore(backup): deprecate X-Backup-Sync header (warn log + Swagger, removal v2.4.0)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

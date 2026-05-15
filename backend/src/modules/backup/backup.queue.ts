@@ -13,6 +13,28 @@ export const JOB_RESTORE_FULL = 'restore-full';
 export const JOB_RESTORE_SITE = 'restore-site';
 
 /**
+ * Per-handler concurrency on the backup-jobs queue (Bull v3 `@Process({ concurrency })`).
+ *
+ * D.1 shipped with the default `1` — single-threaded. Track D.2 Step 6
+ * bumps to `2` based on the measured worker RSS (< 1 GB on a 5 GB
+ * backup during D.1 round-trip integration tests, leaving comfortable
+ * headroom for two concurrent jobs in the typical 4 GB container).
+ *
+ * **CONDITIONAL** at merge time: the bump only ships if the post-deploy
+ * soak (≥ 2026-05-21, 1 week after v2.2.0) confirms RSS p95 < 50% of the
+ * container limit AND zero OOM kills on `backend-worker`. If the gate
+ * fails, revert the commit that introduced this constant before tagging
+ * v2.3.0 — backing it down to `1` is sufficient.
+ *
+ * Note: per-handler concurrency × handlers = worst-case parallelism.
+ * With 4 handlers (full backup, site backup, full restore, site
+ * restore — though site-restore is currently a stub) all set to 2,
+ * the worker may host up to 8 jobs simultaneously. The bottleneck
+ * is RSS, not file descriptors or CPU.
+ */
+export const BACKUP_QUEUE_CONCURRENCY = 2;
+
+/**
  * Standard Bull v3 add() options applied to every backup-jobs job by the
  * controller (no retry, 2h timeout, no removal of completed/failed for
  * audit visibility).

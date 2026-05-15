@@ -234,4 +234,21 @@ describe('BackupProcessor (Track D.1 step 5)', () => {
       expect(events.jobFailed).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ==========================================================================
+  // Track D.2 Step 6 — Bull v3 per-handler concurrency
+  // ==========================================================================
+
+  describe('@Process concurrency (Track D.2 step 6)', () => {
+    it('BACKUP_QUEUE_CONCURRENCY constant is bumped to 2 in v2.3.0', () => {
+      // The constant lives in backup.queue.ts (single source of truth).
+      // Test documents the post-D.1 value so a future revert (gate failure
+      // at merge) flips it back to 1 visibly. Bumped from 1 → 2 conditional
+      // on the post-soak metrics (RSS p95 < 50%, 0 OOM kills).
+      const { BACKUP_QUEUE_CONCURRENCY } = jest.requireActual(
+        './backup.queue',
+      ) as { BACKUP_QUEUE_CONCURRENCY: number };
+      expect(BACKUP_QUEUE_CONCURRENCY).toBe(2);
+    });
+  });
 });
