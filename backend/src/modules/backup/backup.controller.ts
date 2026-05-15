@@ -92,12 +92,40 @@ export class BackupController {
   ) {}
 
   /**
-   * Header that forces the legacy synchronous path on `/backup/full` (and
-   * the JSON-mode `/backup/full/restore`). Useful when Redis is down or
-   * for one-shot ops debugging. Sent by clients as `X-Backup-Sync: 1`.
-   * Slated for removal in D.2 once async path is validated in prod.
+   * Header that forces the legacy synchronous path on `/backup/full`,
+   * `/backup/full/restore` JSON mode, and `/backup/site/:id`. Originally
+   * added as an emergency escape hatch when Redis/Bull is unavailable.
+   *
+   * **DEPRECATED — Track D.2 Step 5 (v2.3.0)**. The async paths cover
+   * every use case after Step 4.5 shipped (multipart upload restore
+   * replaces the sync v1 multipart). Every request that still carries
+   * `X-Backup-Sync: 1` is logged via {@link logSyncDeprecationWarn}
+   * with the tenant + user context so we can grep prod logs to confirm
+   * zero callers before the hard removal in **v2.4.0**.
+   *
+   * See ADR-026 §4.
    */
   private static readonly SYNC_HEADER = 'x-backup-sync';
+
+  /**
+   * Track D.2 Step 5 — single warn-log emit point for every sync-path
+   * hit. Grep marker `XCH_LOG_MARKER X-Backup-Sync` allows ops to count
+   * occurrences over a soak window before hard delete in v2.4.0.
+   *
+   * Format kept stable across the 3 endpoints so log aggregators can
+   * group by it.
+   */
+  private logSyncDeprecationWarn(
+    endpoint: string,
+    tenantId: string,
+    userId?: string,
+  ): void {
+    this.logger.warn(
+      `XCH_LOG_MARKER X-Backup-Sync header used on ${endpoint} ` +
+        `— DEPRECATED, will be removed in v2.4.0 ` +
+        `(tenant=${tenantId} user=${userId ?? 'unknown'})`,
+    );
+  }
 
   // ===== Capability discovery (Track D.2) =====
 
@@ -150,12 +178,18 @@ export class BackupController {
     summary: '[ADMIN] Create full backup (async via Bull v3 by default)',
     description:
       'Default: 202 + jobId — caller polls GET /backup/jobs/:jobId. ' +
-      'Header X-Backup-Sync: 1 forces the legacy synchronous path (returns 201 + filename).',
+      'Header X-Backup-Sync: 1 forces the legacy synchronous path — ' +
+      '**DEPRECATED, will be removed in v2.4.0**.',
   })
   @ApiHeader({
     name: 'X-Backup-Sync',
-    description: 'Set to "1" to force the legacy synchronous path.',
+    description:
+      '**DEPRECATED — removed in v2.4.0.** Set to "1" to force the legacy ' +
+      'synchronous path. The async path (default) is the only supported flow ' +
+      'post-v2.3.0; this escape hatch will hard-fail once v2.4.0 ships. ' +
+      'See ADR-026 §4.',
     required: false,
+    deprecated: true,
   })
   @ApiAcceptedResponse({ type: BackupJobEnqueuedResponseDto })
   @ApiCreatedResponse({ type: BackupResultResponseDto, description: 'Sync mode only' })
@@ -178,6 +212,11 @@ export class BackupController {
     }
 
     if (syncHeader === '1') {
+      // Track D.2 Step 5 — deprecation warn log. Every sync-path hit is
+      // logged so ops can grep prod logs for the marker before the v2.4.0
+      // hard removal. Zero hits over 1 week = green to delete.
+      this.logSyncDeprecationWarn('POST /backup/full', req.user.tenantId, req.user.id);
+
       // Legacy sync path — v1 createFullBackup body, kept for fallback.
       // v1 does NOT honor encryption (encryption is a v2 feature). If
       // encrypt:true was set and we still reach the sync path, the
@@ -271,10 +310,25 @@ export class BackupController {
   @Post('full/restore')
   @RequireWrite()
   @SkipThrottle()
-  @ApiOperation({ summary: '[ADMIN] Restore full backup — multipart sync OR JSON async + dry-run' })
+  @ApiOperation({
+    summary:
+      '[ADMIN] Restore full backup — JSON async + dry-run (multipart sync v1 DEPRECATED, retrait v2.4.0)',
+    description:
+      'JSON `{ backupId, dryRun? }` enqueues an async restore from a catalog ' +
+      'entry. The multipart `file` field is the legacy sync v1 path — ' +
+      '**DEPRECATED, will be removed in v2.4.0**. Use `POST /backup/full/' +
+      'restore-upload` (Track D.2 Step 4.5) for async restore from a local ZIP.',
+  })
   @ApiOkResponse({ type: RestoreFullResultResponseDto })
   @ApiAcceptedResponse({ type: BackupJobEnqueuedResponseDto })
-  @ApiHeader({ name: 'X-Backup-Sync', required: false })
+  @ApiHeader({
+    name: 'X-Backup-Sync',
+    description:
+      '**DEPRECATED — removed in v2.4.0.** Forces the legacy sync path on ' +
+      'the JSON-mode restore. See ADR-026 §4.',
+    required: false,
+    deprecated: true,
+  })
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -288,9 +342,17 @@ export class BackupController {
     @Headers(BackupController.SYNC_HEADER) syncHeader: string | undefined,
     @Request() req: AuthRequest,
   ): Promise<RestoreFullResultResponseDto | BackupJobEnqueuedResponseDto> {
-    // Multipart upload → sync v1 path (kept as-is for step 5 scope ;
-    // async multipart upload via tmp staging is deferred to D.2).
+    // Multipart upload → legacy sync v1 path. Track D.2 Step 5 emits a
+    // deprecation warn log so ops can confirm zero callers before the
+    // v2.4.0 hard delete. Async multipart upload via the new
+    // `/backup/full/restore-upload` endpoint (Step 4.5) is the supported
+    // replacement.
     if (file?.buffer) {
+      this.logSyncDeprecationWarn(
+        'POST /backup/full/restore (multipart file)',
+        req.user.tenantId,
+        req.user.id,
+      );
       const result = await this.backupService.restoreFullBackup(
         req.user.tenantId,
         file.buffer,
@@ -319,6 +381,15 @@ export class BackupController {
     }
 
     if (syncHeader === '1') {
+      // Track D.2 Step 5 — deprecation warn log on the JSON sync v2 path
+      // (Redis-unhealthy escape hatch). Sentry telemetry via the global
+      // request handler will pick this up too if needed.
+      this.logSyncDeprecationWarn(
+        'POST /backup/full/restore (JSON sync v2)',
+        req.user.tenantId,
+        req.user.id,
+      );
+
       // Sync v2 fallback — bypass the queue, run in-process. Useful when
       // Redis is unhealthy.
       const result = await this.backupService.restoreFullBackupV2(
@@ -573,15 +644,19 @@ export class BackupController {
   @SkipThrottle()
   @ApiOperation({
     summary:
-      '[ADMIN] Create site-specific backup — async (default) OR streamed ZIP (X-Backup-Sync: 1)',
+      '[ADMIN] Create site-specific backup — async (default); X-Backup-Sync streamed ZIP DEPRECATED v2.4.0',
     description:
       'Default: 202 + jobId, the archive is uploaded to xch-backups by the worker. ' +
-      'Header X-Backup-Sync: 1 keeps the legacy synchronous behaviour (streams ZIP inline).',
+      'Header X-Backup-Sync: 1 keeps the legacy synchronous behaviour (streams ZIP ' +
+      'inline) — **DEPRECATED, will be removed in v2.4.0**.',
   })
   @ApiHeader({
     name: 'X-Backup-Sync',
-    description: 'Set to "1" to stream the ZIP back inline (legacy v1 path).',
+    description:
+      '**DEPRECATED — removed in v2.4.0.** Set to "1" to stream the ZIP back ' +
+      'inline (legacy v1 path). See ADR-026 §4.',
     required: false,
+    deprecated: true,
   })
   @ApiAcceptedResponse({ type: BackupJobEnqueuedResponseDto })
   @ApiOkResponse({ description: 'Sync only — binary ZIP stream (application/zip)' })
@@ -592,6 +667,15 @@ export class BackupController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<BackupJobEnqueuedResponseDto | void> {
     if (syncHeader === '1') {
+      // Track D.2 Step 5 — deprecation warn log on the site-backup
+      // inline-stream path. v2.4.0 will hard-remove this branch; until
+      // then the marker is the trace ops use to confirm zero callers.
+      this.logSyncDeprecationWarn(
+        `POST /backup/site/${siteId}`,
+        req.user.tenantId,
+        req.user.id,
+      );
+
       // Legacy sync path — stream the binary ZIP inline.
       const { buffer, filename } = await this.backupService.createSiteBackup(
         req.user.tenantId,

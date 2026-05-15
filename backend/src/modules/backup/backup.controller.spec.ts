@@ -478,4 +478,78 @@ describe('BackupController (Track D.1 step 5 — Bull v3 wiring)', () => {
       });
     });
   });
+
+  // ==========================================================================
+  // Track D.2 Step 5 — X-Backup-Sync deprecation warn log
+  // ==========================================================================
+
+  describe('X-Backup-Sync deprecation (Track D.2 step 5)', () => {
+    /**
+     * Helper — spy on Nest's Logger.warn so we can assert the marker
+     * string appears in the emit stream. The Logger instance lives on
+     * the controller via `private readonly logger = new Logger(...)`,
+     * so we hijack the prototype's warn for the duration of the test.
+     */
+    function withLoggerSpy<T>(fn: (warn: jest.SpyInstance) => Promise<T>): Promise<T> {
+      const { Logger } = jest.requireActual('@nestjs/common') as typeof import('@nestjs/common');
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      return fn(warn).finally(() => warn.mockRestore());
+    }
+
+    it('POST /backup/full with X-Backup-Sync: 1 emits the deprecation marker', async () => {
+      const { controller, service } = buildController();
+      service.createFullBackup.mockResolvedValue({
+        message: 'sync',
+        filename: 'sync.zip',
+        size: 10,
+      });
+      await withLoggerSpy(async (warn) => {
+        await controller.createFullBackup(
+          {},
+          '1',
+          authRequest() as never,
+        );
+        const calls = warn.mock.calls.map((c) => String(c[0]));
+        expect(calls.some((m) => /XCH_LOG_MARKER X-Backup-Sync/.test(m))).toBe(true);
+        expect(calls.some((m) => /removed in v2\.4\.0/.test(m))).toBe(true);
+        expect(calls.some((m) => /POST \/backup\/full/.test(m))).toBe(true);
+      });
+    });
+
+    it('async path (no X-Backup-Sync) does NOT emit the deprecation marker', async () => {
+      const { controller, queue } = buildController();
+      queue.add.mockResolvedValue({ id: '5-2' });
+      await withLoggerSpy(async (warn) => {
+        await controller.createFullBackup(
+          {},
+          undefined, // no header
+          authRequest() as never,
+        );
+        const calls = warn.mock.calls.map((c) => String(c[0]));
+        expect(calls.some((m) => /XCH_LOG_MARKER X-Backup-Sync/.test(m))).toBe(false);
+      });
+    });
+
+    it('POST /backup/full/restore JSON sync v2 path emits the marker', async () => {
+      const { controller, service } = buildController();
+      service.restoreFullBackupV2.mockResolvedValue({
+        kind: 'applied',
+        message: 'ok',
+        counts: { _created: 0, _skipped: 0 },
+        siteIds: [],
+      });
+      await withLoggerSpy(async (warn) => {
+        await controller.restoreFullBackup(
+          undefined,
+          { backupId: 'b1' },
+          '1', // X-Backup-Sync
+          authRequest() as never,
+        );
+        const calls = warn.mock.calls.map((c) => String(c[0]));
+        expect(calls.some((m) =>
+          /XCH_LOG_MARKER X-Backup-Sync.*JSON sync v2/.test(m),
+        )).toBe(true);
+      });
+    });
+  });
 });
