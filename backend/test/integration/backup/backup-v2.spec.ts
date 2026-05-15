@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, createHash } from 'crypto';
 import { BackupService } from '../../../src/modules/backup/backup.service';
+import { CryptoService } from '../../../src/common/crypto/crypto.service';
 import { StorageService } from '../../../src/common/services/storage.service';
 
 /**
@@ -271,7 +272,12 @@ describeIfEnabled('Backup v2 round-trip (Track D.1 step 8 — integration)', () 
     await prisma.$connect();
     configService = buildConfigService();
     storage = new StorageService(configService);
-    service = new BackupService(prisma, storage, configService);
+    // Track D.2 Step 1 — CryptoService is now an injected dep of BackupService.
+    // Integration tests don't exercise encryption (no XCH_MASTER_KEY in the CI
+    // env), so the service reports disabled and createCipherStream throws if
+    // ever called — which is fine because these tests don't pass encrypt:true.
+    const crypto = new CryptoService(configService);
+    service = new BackupService(prisma, storage, configService, crypto);
   });
 
   afterAll(async () => {

@@ -3860,7 +3860,7 @@ export default function SettingsPage() {
                           Les utilisateurs du tenant cible auront accès aux
                           données migrées via la délégation choisie. La
                           propriété (createdBy, assignedTo, authorId) est
-                          réécrite vers l'admin qui lance le restore — la trace
+                          réécrite vers l&apos;admin qui lance le restore — la trace
                           audit est préservée même si vos droits évoluent.
                         </p>
                       </div>
@@ -3941,7 +3941,7 @@ export default function SettingsPage() {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground italic">
-                    L'upload utilise le toggle dry-run et la section
+                    L&apos;upload utilise le toggle dry-run et la section
                     cross-tenant ci-dessus. Pour un backup chiffré (AES-256-GCM),
                     joignez aussi son sidecar JSON — sans, le serveur retournera
                     une erreur explicite.
