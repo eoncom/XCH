@@ -644,7 +644,11 @@ describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
       .fn()
       .mockResolvedValue({ id: 'del-default' });
     prismaStub.auditLog = {
-      findUnique: jest.fn().mockResolvedValue(auditLog),
+      // v2.3.1 BOLA fix — service now uses findFirst (tenant-scoped)
+      // instead of findUnique. Stub returns the row when both the id and
+      // tenantId clauses are present (cf XCH_BOLA_PATTERN_CHECK).
+      findFirst: jest.fn().mockResolvedValue(auditLog),
+      findUnique: jest.fn().mockResolvedValue(auditLog), // legacy compat for v1 path
       create: jest.fn(),
     };
     prismaStub.$transaction = jest.fn(
@@ -1075,7 +1079,9 @@ describe('BackupService encryption round-trip (Track D.2 step 2)', () => {
     };
     const prismaStub: Record<string, unknown> = {
       auditLog: {
-        findUnique: jest.fn().mockResolvedValue(auditLog),
+        // v2.3.1 BOLA fix — see comment at the other auditLog stub above.
+        findFirst: jest.fn().mockResolvedValue(auditLog),
+        findUnique: jest.fn().mockResolvedValue(auditLog), // legacy compat
         create: jest.fn(),
       },
       $transaction: jest.fn(
@@ -1341,6 +1347,62 @@ describe('BackupService cross-tenant restore (Track D.2 step 4)', () => {
 // ============================================================================
 // Track D.2 Step 4.5 — Async multipart upload restore (4 cases)
 // ============================================================================
+
+// ============================================================================
+// v2.3.1 — BOLA fix: restoreFullBackupV2 backupId tenantId scoping
+// ============================================================================
+
+describe('BackupService.restoreFullBackupV2 backupId tenant scoping (v2.3.1 BOLA fix)', () => {
+  /**
+   * BOLA regression guard. Before v2.3.1, `restoreFullBackupV2` resolved
+   * the catalog row via `findUnique({ where: { id: backupId } })` with no
+   * tenant scope — a caller from tenantA who knew tenantB's backupId could
+   * trigger a cross-tenant restore. v2.3.1 scopes the lookup by
+   * `tenantId + BACKUP_CATALOG_ACTIONS`, mirroring downloadBackup /
+   * deleteBackup, and returns NotFoundException (NOT 403) to avoid
+   * enumeration leak.
+   *
+   * See XCH_BOLA_PATTERN_CHECK + XCH_TRACK_D2_BACKUP_V2_2026_05_14.
+   */
+  it('throws NotFoundException with generic message when backupId belongs to another tenant (no info leak)', async () => {
+    // Prisma stub: simulate findFirst returning null because the row exists
+    // but with a different tenantId (the where: { id, tenantId } clause
+    // filters it out, identical behavior to a row that doesn't exist).
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const prismaStub: Record<string, unknown> = {
+      auditLog: { findFirst, findUnique: jest.fn(), create: jest.fn() },
+    };
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+
+    await expect(
+      service.restoreFullBackupV2(
+        'tnt-caller',
+        'audit-foreign-tenant',
+        { dryRun: true },
+        undefined,
+        'u-admin',
+      ),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: expect.stringMatching(/Backup audit-foreign-tenant not found in catalog/),
+    });
+
+    // Sanity: the lookup MUST go through findFirst (scoped) and NEVER
+    // through findUnique (which would expose the BOLA).
+    expect(findFirst).toHaveBeenCalledTimes(1);
+    const [args] = findFirst.mock.calls[0];
+    expect(args.where).toMatchObject({
+      id: 'audit-foreign-tenant',
+      tenantId: 'tnt-caller',
+    });
+    expect(args.where.action).toBeDefined(); // BACKUP_CATALOG_ACTIONS filter
+  });
+});
 
 describe('BackupService multipart upload restore (Track D.2 step 4.5)', () => {
   it('rejects when BOTH backupId AND multipart are provided', async () => {

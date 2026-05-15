@@ -3409,7 +3409,20 @@ export class BackupService {
       // Catalog path — resolve backupId → filename from AuditLog row.
       // AuditLog row stores {filename, size, ...} under the `changes` JsonValue
       // column (cf createFullBackup audit pattern at logBackupAction site).
-      const log = await this.prisma.auditLog.findUnique({ where: { id: backupId! } });
+      //
+      // v2.3.1 — scope the lookup by tenantId + BACKUP_CATALOG_ACTIONS to
+      // prevent a caller from one tenant restoring a backup belonging to
+      // another tenant if they happen to know the backupId (BOLA pattern,
+      // cf XCH_BOLA_PATTERN_CHECK). Mirrors `downloadBackup` /
+      // `deleteBackup` scoping. Generic NotFoundException avoids leaking
+      // existence of the row in a different tenant.
+      const log = await this.prisma.auditLog.findFirst({
+        where: {
+          id: backupId!,
+          tenantId,
+          action: { in: [...BACKUP_CATALOG_ACTIONS] },
+        },
+      });
       if (!log) {
         throw new NotFoundException(`Backup ${backupId} not found in catalog`);
       }

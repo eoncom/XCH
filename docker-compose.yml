@@ -106,6 +106,12 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    volumes:
+      # v2.3.1 — shared multipart upload staging (cf docker-compose.yml
+      # volumes: section + XCH_INTER_CONTAINER_ASSUMPTIONS). Multer
+      # writes uploaded ZIP + sidecar here, backend-worker reads from
+      # the same mount via the Bull `restore-full` job.
+      - xch-upload-staging:/tmp/xch-uploads
     networks:
       - xch-network
     restart: unless-stopped
@@ -134,6 +140,13 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
+    volumes:
+      # v2.3.1 — shared multipart upload staging (cf docker-compose.yml
+      # volumes: section + XCH_INTER_CONTAINER_ASSUMPTIONS). Worker
+      # reads the ZIP uploaded by backend's multer here. Same mount
+      # path as `backend` service — critical so tmpUploadPath stays
+      # valid across the Bull job hop.
+      - xch-upload-staging:/tmp/xch-uploads
     cap_add:
       # Required for raw ICMP sockets. Falls back to TCP:80 if absent — see
       # IcmpProbe self-test at boot.
@@ -213,6 +226,15 @@ volumes:
   redis_data:
     driver: local
   minio_data:
+    driver: local
+  # v2.3.1 (XCH_INTER_CONTAINER_ASSUMPTIONS pattern) — shared staging
+  # directory between `backend` and `backend-worker` for the multipart
+  # upload restore flow (Track D.2 Step 4.5). Backend writes the
+  # uploaded ZIP + optional sidecar here, worker reads from the same
+  # mount, both clean up via try/finally. Disk-backed (host-bounded),
+  # unlike postgres/redis/minio it has no persistence requirement —
+  # files are short-lived (single restore lifecycle).
+  xch-upload-staging:
     driver: local
 
 networks:
