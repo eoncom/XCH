@@ -7,7 +7,51 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [2.3.0] - 2026-05-XX — Track D.2 Backup v2 Polish (chiffrement + cross-tenant + multipart + observabilité)
+## [2.3.1] - 2026-05-15 — Hotfix post-D.2 (multipart shared volume + restore tenant scope)
+
+Hotfix immédiat post-v2.3.0 — deux fixes groupés découverts pendant le
+smoke E2E et l'audit défensif :
+
+### Fixed
+
+- **Multipart upload restore** (`POST /backup/full/restore-upload`,
+  Track D.2 Step 4.5) ne fonctionnait pas en production : multer
+  écrivait le ZIP uploadé dans le `/tmp` local du container backend,
+  puis le worker tentait de lire ce fichier qu'il ne voyait pas
+  (filesystems isolés par défaut entre containers). Smoke v2.3.0
+  retournait `ENOENT`. Fix : Docker named volume `xch-upload-staging`
+  partagé entre `backend` et `backend-worker` à `/tmp/xch-uploads` ;
+  multer écrit là, worker lit depuis le même mount. Pattern documenté
+  dans MCP `XCH_INTER_CONTAINER_ASSUMPTIONS` pour éviter le même
+  oubli sur les futures features backend→worker.
+
+- **Restore depuis catalog n'était pas scopé par tenantId.**
+  `restoreFullBackupV2` résolvait le `backupId` via `findUnique`
+  global, sans filtrer par tenant du caller — un opérateur connaissant
+  l'id d'un backup d'un autre tenant pouvait théoriquement déclencher
+  un restore cross-tenant non autorisé. Régression remontant à D.1
+  Phase 1 step 3, restée latente jusqu'à l'audit défensif post-D.2.
+  Fix : `findFirst({ where: { id, tenantId, action: { in:
+  [...BACKUP_CATALOG_ACTIONS] } } })` — même pattern que
+  `downloadBackup` / `deleteBackup`. Réponse `NotFoundException`
+  (pas `ForbiddenException`) pour ne pas leak l'existence du backup
+  dans un autre tenant.
+
+### Notes opérateur
+
+- **Worker rebuild caveat préservé** : `docker compose build backend
+  backend-worker frontend && docker compose up -d backend
+  backend-worker frontend`. Le nouveau volume `xch-upload-staging`
+  est créé automatiquement par `docker compose up`.
+- **Migration zero-downtime** : aucun changement de schéma DB, aucun
+  changement d'env var, aucun breaking. Les uploads en cours au moment
+  du redéploiement sont perdus (le tmp file vit dans le volume mais
+  le job Bull est en mémoire Redis qui survit aussi — re-soumission
+  user requise pour les uploads in-flight).
+
+---
+
+## [2.3.0] - 2026-05-15 — Track D.2 Backup v2 Polish (chiffrement + cross-tenant + multipart + observabilité)
 
 Track D.2 Backup v2 Polish — 7 améliorations add-only sur la base
 D.1 v2.2.0, sans toucher au format v2 ni à la couche streaming/
