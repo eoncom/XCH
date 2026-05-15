@@ -378,8 +378,13 @@ export class SitesService {
     if (callerCtx) {
       await this.perm.assertCanWriteSite(callerCtx, id);
     }
-    // Get current state for diff
-    const before = await this.prisma.site.findUnique({ where: { id } });
+    // Track E.1 BOLA fix — scope by tenantId so super-admin bypass cannot
+    // cross-tenant mutate via known site id (NotFound, not Forbidden, mirrors
+    // v2.3.1 restoreFullBackupV2 pattern; cf XCH_BOLA_PATTERN_CHECK).
+    const before = await this.prisma.site.findFirst({ where: { id, tenantId } });
+    if (!before) {
+      throw new NotFoundException();
+    }
 
     const { latitude, longitude, ...siteData } = updateSiteDto;
 
@@ -415,25 +420,23 @@ export class SitesService {
     });
 
     // Audit log with diff — only include lat/lng if coordinates actually changed
-    if (before) {
-      const changes = this.auditLogService.diffChanges(
-        before as Record<string, any>,
-        { ...siteData, ...(coordinatesChanged ? { latitude, longitude } : {}) },
-      );
-      if (changes) {
-        await this.auditLogService.log({
-          tenantId,
-          userId,
-          action: 'UPDATE',
-          entityType: 'site',
-          entityId: id,
-          changes,
-        });
-      }
+    const changes = this.auditLogService.diffChanges(
+      before as Record<string, any>,
+      { ...siteData, ...(coordinatesChanged ? { latitude, longitude } : {}) },
+    );
+    if (changes) {
+      await this.auditLogService.log({
+        tenantId,
+        userId,
+        action: 'UPDATE',
+        entityType: 'site',
+        entityId: id,
+        changes,
+      });
     }
 
     // Notification: site status changed
-    if (before && updateSiteDto.status && updateSiteDto.status !== before.status) {
+    if (updateSiteDto.status && updateSiteDto.status !== before.status) {
       const actor = userId ? await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true } }) : undefined;
       this.notificationEmitter.siteStatusChanged({
         tenantId,
@@ -447,7 +450,7 @@ export class SitesService {
     // ADR-016 — auto-disable monitor checks when the site moves to CLOSED
     // (cascade through siteId direct + asset.siteId + link.siteId).
     let disabledMonitorCount = 0;
-    if (before && updateSiteDto.status && updateSiteDto.status !== before.status) {
+    if (updateSiteDto.status && updateSiteDto.status !== before.status) {
       const r = await this.monitorReactions
         .onSiteStatusChange(tenantId, id, before.status, updateSiteDto.status, userId)
         .catch((e) => {

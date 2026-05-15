@@ -7,6 +7,38 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.3.2] - 2026-05-15 — Hotfix Track E.1 (sites.update BOLA tenant scoping)
+
+Hotfix Track E.1 (security audit + BOLA scan global) — un finding CRITICAL
+remonté pendant la Pass 1 du sub-track E.1.
+
+### Fixed
+
+- **`sites.service.ts:update()` n'était pas scopé par tenantId.** La pré-image
+  fetchée avant la mutation utilisait `findUnique({ where: { id } })` sans
+  filtrer par tenant du caller. Le guard `assertCanWriteSite` (ADR-021) a
+  un bypass super-admin : un super-admin de tenantA connaissant l'id d'un
+  site de tenantB pouvait déclencher une mutation cross-tenant, et l'audit
+  log était écrit sous le tenantId du caller (attribution incorrecte).
+  Fix : `findFirst({ where: { id, tenantId } })` + `NotFoundException`
+  (pas `ForbiddenException`) pour ne pas leak l'existence cross-tenant,
+  mirror du pattern v2.3.1 `restoreFullBackupV2` (cf. MCP
+  `XCH_BOLA_PATTERN_CHECK`). Régression guard ajoutée dans
+  `sites.service.spec.ts`.
+
+### Notes opérateur
+
+- **Migration zero-downtime** : aucun changement de schéma DB, aucun
+  changement d'env var, aucun breaking pour les callers HTTP non-super-admin
+  (qui étaient déjà bloqués par le pattern AccessOverride). Seuls les
+  super-admins voient un changement comportemental : tentative cross-tenant
+  → 404 (auparavant : mutation silencieuse).
+- **Worker rebuild caveat préservé** : `docker compose build backend
+  backend-worker frontend && docker compose up -d backend backend-worker
+  frontend` (image SHA partagée backend/worker).
+
+---
+
 ## [2.3.1] - 2026-05-15 — Hotfix post-D.2 (multipart shared volume + restore tenant scope)
 
 Hotfix immédiat post-v2.3.0 — deux fixes groupés découverts pendant le
