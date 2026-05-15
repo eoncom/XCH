@@ -644,7 +644,11 @@ describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
       .fn()
       .mockResolvedValue({ id: 'del-default' });
     prismaStub.auditLog = {
-      findUnique: jest.fn().mockResolvedValue(auditLog),
+      // v2.3.1 BOLA fix — service now uses findFirst (tenant-scoped)
+      // instead of findUnique. Stub returns the row when both the id and
+      // tenantId clauses are present (cf XCH_BOLA_PATTERN_CHECK).
+      findFirst: jest.fn().mockResolvedValue(auditLog),
+      findUnique: jest.fn().mockResolvedValue(auditLog), // legacy compat for v1 path
       create: jest.fn(),
     };
     prismaStub.$transaction = jest.fn(
@@ -1075,7 +1079,9 @@ describe('BackupService encryption round-trip (Track D.2 step 2)', () => {
     };
     const prismaStub: Record<string, unknown> = {
       auditLog: {
-        findUnique: jest.fn().mockResolvedValue(auditLog),
+        // v2.3.1 BOLA fix — see comment at the other auditLog stub above.
+        findFirst: jest.fn().mockResolvedValue(auditLog),
+        findUnique: jest.fn().mockResolvedValue(auditLog), // legacy compat
         create: jest.fn(),
       },
       $transaction: jest.fn(

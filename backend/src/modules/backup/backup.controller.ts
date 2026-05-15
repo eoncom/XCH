@@ -478,7 +478,15 @@ export class BackupController {
       ],
       {
         storage: diskStorage({
-          destination: os.tmpdir(),
+          // v2.3.1 — shared volume mount between backend + backend-worker
+          // (`xch-upload-staging` in docker-compose.yml). Multer writes
+          // here, the BullMQ `restore-full` job reads from the same
+          // path. Falls back to os.tmpdir() if the directory doesn't
+          // exist (local dev outside docker compose). Cf
+          // XCH_INTER_CONTAINER_ASSUMPTIONS.
+          destination: fsSync.existsSync('/tmp/xch-uploads')
+            ? '/tmp/xch-uploads'
+            : os.tmpdir(),
           filename: (_req, file, cb) => {
             // xch-restore-upload-<uuid>-<field>.<ext>
             const uuid = randomBytes(8).toString('hex');
@@ -549,8 +557,13 @@ export class BackupController {
       // for the restore pipeline (tmp staging + Prisma logs + os jitter).
       // Mirrors the pattern from D.1 step 1 estimateBackupSize.
       const uploadedSize = backupFile.size;
+      // v2.3.1 — disk check on the SAME path where multer wrote
+      // (`/tmp/xch-uploads` shared volume) rather than os.tmpdir(). The
+      // shared volume is on the host disk via Docker named volume, with
+      // capacity distinct from the container's own ephemeral /tmp.
+      const checkPath = backupFile.destination || os.tmpdir();
       try {
-        const stat = await fs.statfs(os.tmpdir());
+        const stat = await fs.statfs(checkPath);
         const freeBytes = Number(stat.bavail) * Number(stat.bsize);
         const needed = uploadedSize * 1.2 + 512 * 1024 * 1024;
         if (freeBytes < needed) {
@@ -558,7 +571,7 @@ export class BackupController {
           // HttpStatus enum, literal 507 (same pattern as D.1 step 1).
           throw new HttpException(
             `Insufficient disk space for restore: need ~${Math.ceil(needed / 1024 / 1024)} MB, ` +
-              `${Math.floor(freeBytes / 1024 / 1024)} MB free in ${os.tmpdir()}`,
+              `${Math.floor(freeBytes / 1024 / 1024)} MB free in ${checkPath}`,
             507,
           );
         }
