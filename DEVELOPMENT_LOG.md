@@ -8116,3 +8116,24 @@ feat(observability): per-phase Sentry spans for backup v2 + scrubEvent on transa
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-15
+
+**Date:** 2026-05-15 08:08:42
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 5
+- Frontend files modified: 2
+
+**Commit message:**
+```
+feat(backup): cross-tenant restore with delegationId remap + ownership rewrite
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

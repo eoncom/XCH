@@ -1339,6 +1339,167 @@ describe('BackupService cross-tenant restore (Track D.2 step 4)', () => {
 });
 
 // ============================================================================
+// Track D.2 Step 4.5 — Async multipart upload restore (4 cases)
+// ============================================================================
+
+describe('BackupService multipart upload restore (Track D.2 step 4.5)', () => {
+  it('rejects when BOTH backupId AND multipart are provided', async () => {
+    const service = new BackupService(
+      {} as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    await expect(
+      service.restoreFullBackupV2(
+        'tnt-test',
+        'audit-1',
+        {},
+        undefined,
+        'u-admin',
+        { tmpZipPath: '/tmp/foo.zip' },
+      ),
+    ).rejects.toThrow(/backupId OR multipart, not both/);
+  });
+
+  it('rejects when NEITHER backupId NOR multipart is provided', async () => {
+    const service = new BackupService(
+      {} as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    await expect(
+      service.restoreFullBackupV2('tnt-test', null, {}, undefined, 'u-admin'),
+    ).rejects.toThrow(/backupId or multipart tmpZipPath is required/);
+  });
+
+  it('multipart plaintext happy path — reads ZIP from disk, no MinIO download, cleanup on finally', async () => {
+    // Build a real v2 plaintext ZIP fixture at a known tmp path using
+    // the production builder (private method accessed via cast).
+    const stubService = new BackupService(
+      {} as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    const tmpZip = path.join(
+      os.tmpdir(),
+      `v2-mp-${randomBytes(4).toString('hex')}.zip`,
+    );
+    const fixtureMetadata = {
+      version: 2 as const,
+      createdAt: new Date().toISOString(),
+      tenantId: 'tnt-test',
+      type: 'db-only' as const,
+      siteId: null,
+      siteCode: null,
+      appVersion: '2.3.0',
+      buckets: [] as string[],
+      counts: { sites: 1 },
+      files: {},
+    };
+    await (stubService as never as {
+      buildArchiveV2ToTmp: (a: object) => Promise<{ size: number; sha256: string }>;
+    }).buildArchiveV2ToTmp({
+      tmpPath: tmpZip,
+      data: { sites: [{ id: 's1', name: 'Site' }] },
+      buckets: [],
+      metadata: fixtureMetadata,
+    });
+
+    // Build the restore service — prismaStub minimal + minio mock that
+    // explicitly forbids fGetObject (should NOT be called in multipart path).
+    const prismaStub: Record<string, unknown> = {
+      auditLog: { findUnique: jest.fn(), create: jest.fn() },
+      $transaction: jest.fn(
+        async (fn: (tx: Record<string, unknown>) => unknown) => fn(prismaStub),
+      ),
+      $executeRawUnsafe: jest.fn(),
+    };
+    const baseModels = [
+      'contactType', 'contact', 'user', 'site', 'rack', 'asset',
+      'floorPlan', 'pin', 'assetMovement', 'task', 'taskComment',
+      'attachment', 'photo', 'billingEntity', 'expense', 'costAllocation',
+      'connectivityLink', 'budget', 'siteHealthSnapshot', 'delegation',
+    ];
+    for (const m of baseModels) {
+      prismaStub[m] = {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(async ({ data }: { data: unknown }) => data),
+      };
+    }
+    (prismaStub.delegation as { findFirst: jest.Mock }).findFirst = jest.fn()
+      .mockResolvedValue({ id: 'del-default' });
+
+    const fGetObject = jest.fn(); // assert not called
+    const mockClient = {
+      fGetObject,
+      getObject: jest.fn(),
+      bucketExists: jest.fn().mockResolvedValue(true),
+      makeBucket: jest.fn().mockResolvedValue(undefined),
+      fPutObject: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    (service as unknown as { _minioClient: unknown })._minioClient = mockClient;
+
+    try {
+      const result = await service.restoreFullBackupV2(
+        'tnt-test',
+        null,
+        { dryRun: true },
+        undefined,
+        'u-admin',
+        { tmpZipPath: tmpZip },
+      );
+      expect(result.kind).toBe('dry-run');
+      // Sanity: MinIO download was NOT attempted (multipart path).
+      expect(fGetObject).not.toHaveBeenCalled();
+      // Tmp ZIP was cleaned up by the service finally block.
+      await expect(fs.access(tmpZip)).rejects.toBeDefined();
+    } finally {
+      // Just in case the test crashed before cleanup ran.
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+
+  it('multipart no-sidecar + encrypted-shaped ZIP — rejects with explicit "forgot sidecar" message', async () => {
+    // Create a tmp file whose first 4 bytes are NOT PKZip magic (simulate
+    // a ciphertext stream). The service's pre-pipeline peek should reject.
+    const tmpZip = path.join(
+      os.tmpdir(),
+      `v2-enc-no-sc-${randomBytes(4).toString('hex')}.zip`,
+    );
+    await fs.writeFile(tmpZip, Buffer.from([0xab, 0xcd, 0xef, 0x01, 0x99, 0x99, 0x99, 0x99]));
+    try {
+      const service = new BackupService(
+        {} as never,
+        {} as never,
+        { get: jest.fn() } as never,
+        disabledCrypto,
+      );
+      await expect(
+        service.restoreFullBackupV2(
+          'tnt-test',
+          null,
+          { dryRun: true },
+          undefined,
+          'u-admin',
+          { tmpZipPath: tmpZip },
+        ),
+      ).rejects.toThrow(/forgot to upload the sidecar/);
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
+});
+
+// ============================================================================
 // Track D.1 Phase 1 step 4 — upsertByNaturalKey + idempotent restore
 // ============================================================================
 

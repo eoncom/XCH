@@ -51,8 +51,29 @@ export interface BackupSiteJobData {
 
 export interface RestoreFullJobData {
   tenantId: string;
-  backupId: string;
+  /**
+   * Backup catalog row id. EITHER `backupId` (D.1+ JSON path, downloads
+   * from xch-backups) OR `tmpUploadPath` (Track D.2 Step 4.5 multipart
+   * upload, processor reads the local tmp ZIP). Mutually exclusive —
+   * controller enforces exactly one is set.
+   */
+  backupId?: string;
   userId?: string;
+  /**
+   * Track D.2 Step 4.5 — local tmp ZIP path produced by the multipart
+   * upload endpoint. The processor reads from this path instead of
+   * downloading from MinIO via `backupId`. Cleaned up via try/finally
+   * in the processor after the restore completes (or fails).
+   * Mutually exclusive with `backupId`.
+   */
+  tmpUploadPath?: string;
+  /**
+   * Track D.2 Step 4.5 — optional sidecar JSON path for encrypted ZIP
+   * uploads. Required when the uploaded ZIP is encrypted; the
+   * restoreFullBackupV2 reads it instead of `fetchSidecar` from MinIO.
+   * Cleaned up alongside `tmpUploadPath`.
+   */
+  tmpSidecarPath?: string;
   options: {
     dryRun?: boolean;
     /**

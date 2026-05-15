@@ -243,6 +243,42 @@ export const backupApi = {
     apiClient.post<BackupJobEnqueued>('/api/backup/full/restore', options),
 
   /**
+   * Track D.2 Step 4.5 — Restore from a local ZIP upload (multipart),
+   * async via Bull v3. Pre-requisite for v2.4.0's `X-Backup-Sync: 1`
+   * removal (sync legacy path retired). Encrypted ZIPs MUST be paired
+   * with their sidecar `<filename>.enc.json` for the server to decipher.
+   *
+   * The server streams the upload to a tmp file, then enqueues the
+   * restore job. Returns 202 + jobId — poll via {@link backupApi.getJobStatus}.
+   */
+  restoreFullFromUpload: async (
+    backupFile: File,
+    sidecarFile: File | null,
+    options: { dryRun?: boolean; targetDelegationId?: string } = {},
+  ): Promise<BackupJobEnqueued> => {
+    const fd = new FormData();
+    fd.append('backup', backupFile);
+    if (sidecarFile) fd.append('sidecar', sidecarFile);
+    if (options.dryRun !== undefined) fd.append('dryRun', String(options.dryRun));
+    if (options.targetDelegationId) fd.append('targetDelegationId', options.targetDelegationId);
+    const res = await fetch(`${API_URL}/api/backup/full/restore-upload`, {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    });
+    if (!res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      let message = res.statusText;
+      if (ct.includes('application/json')) {
+        const body = await res.json().catch(() => ({}));
+        message = (body as { message?: string })?.message || message;
+      }
+      throw new Error(message || `Erreur ${res.status}`);
+    }
+    return res.json() as Promise<BackupJobEnqueued>;
+  },
+
+  /**
    * Poll the status of a previously enqueued backup-jobs job.
    * Returns `{state, progress, result?, error?}`.
    * 404 NotFoundException if the jobId is unknown to Bull.

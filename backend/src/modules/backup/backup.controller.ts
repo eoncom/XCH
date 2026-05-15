@@ -15,12 +15,18 @@ import {
   Request,
   Res,
   UploadedFile,
+  UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-import { memoryStorage } from 'multer';
+import { diskStorage, memoryStorage } from 'multer';
+import * as fsSync from 'fs';
+import * as fs from 'fs/promises';
+import * as os from 'os';
+import * as path from 'path';
+import { randomBytes } from 'crypto';
 import {
   ApiTags,
   ApiOperation,
@@ -358,6 +364,180 @@ export class BackupController {
       enqueued: true,
       jobId: String(job.id),
     });
+  }
+
+  // ===== Async multipart upload restore (Track D.2 Step 4.5) =====
+
+  /**
+   * Restore a backup from a locally-uploaded ZIP file (no catalog entry
+   * required). The ZIP streams to disk in `os.tmpdir()` via multer's
+   * diskStorage, the controller enqueues a `restore-full` Bull job that
+   * reads from the tmp path, and the processor cleans up via try/finally.
+   *
+   * Pre-requisite for v2.4.0's hard removal of `X-Backup-Sync: 1`: the
+   * legacy sync path was the only way to restore from a local ZIP. After
+   * Step 4.5 ships, async multipart upload becomes the only supported
+   * DR path for "restore from local backup".
+   *
+   * Encrypted backups: the operator MUST upload BOTH the `.zip` AND its
+   * sidecar `<filename>.enc.json`. Server pre-checks the ZIP's first 4
+   * bytes and surfaces an explicit error if the sidecar is missing.
+   *
+   * Track D.2 Step 4.5 — see ADR-026 §6.
+   */
+  @Post('full/restore-upload')
+  @RequireWrite()
+  @SkipThrottle()
+  @ApiOperation({
+    summary:
+      '[ADMIN] Restore full backup from multipart upload (async, no catalog entry)',
+    description:
+      'Upload a backup ZIP (`backup` field) + optional sidecar JSON ' +
+      '(`sidecar` field) for encrypted archives. Server streams the upload ' +
+      'to a tmp file, returns 202 + jobId, and the worker performs the ' +
+      'restore asynchronously. Replaces the legacy sync v1 multipart path ' +
+      'as `X-Backup-Sync` is deprecated.',
+  })
+  @ApiAcceptedResponse({ type: BackupJobEnqueuedResponseDto })
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'backup', maxCount: 1 },
+        { name: 'sidecar', maxCount: 1 },
+      ],
+      {
+        storage: diskStorage({
+          destination: os.tmpdir(),
+          filename: (_req, file, cb) => {
+            // xch-restore-upload-<uuid>-<field>.<ext>
+            const uuid = randomBytes(8).toString('hex');
+            const ext = file.fieldname === 'sidecar' ? '.enc.json' : '.zip';
+            cb(null, `xch-restore-upload-${uuid}-${file.fieldname}${ext}`);
+          },
+        }),
+        limits: { fileSize: 50 * 1024 * 1024 * 1024 }, // 50 GB
+        fileFilter: (_req, file, cb) => {
+          if (file.fieldname === 'backup') {
+            // Only validate the backup file's mimetype loosely (operator may
+            // upload a renamed .zip — we re-validate via MagicByteValidator
+            // in the service pipeline anyway).
+            const ok = file.mimetype === 'application/zip' ||
+              file.mimetype === 'application/octet-stream' ||
+              file.originalname.toLowerCase().endsWith('.zip');
+            cb(ok ? null : new BadRequestException('backup field must be a .zip file'), ok);
+          } else if (file.fieldname === 'sidecar') {
+            const ok = file.mimetype === 'application/json' ||
+              file.originalname.toLowerCase().endsWith('.json');
+            cb(ok ? null : new BadRequestException('sidecar field must be a .json file'), ok);
+          } else {
+            cb(new BadRequestException(`Unknown field: ${file.fieldname}`), false);
+          }
+        },
+      },
+    ),
+  )
+  async restoreFullBackupFromUpload(
+    @UploadedFiles()
+    files: { backup?: Express.Multer.File[]; sidecar?: Express.Multer.File[] },
+    @Body() body: RestoreOptionsDto | undefined,
+    @Request() req: AuthRequest,
+  ): Promise<BackupJobEnqueuedResponseDto> {
+    const backupFile = files?.backup?.[0];
+    if (!backupFile) {
+      throw new BadRequestException(
+        'Missing `backup` multipart field — upload a ZIP file under field name `backup`',
+      );
+    }
+    const sidecarFile = files?.sidecar?.[0];
+
+    // Defensive: if anything below throws BEFORE we hand ownership to the
+    // worker queue, we MUST clean up the tmp files multer wrote to disk.
+    // After enqueue succeeds, the worker's try/finally takes over.
+    let enqueued = false;
+    try {
+      // Permission gate (Track D.2 Step 4 — cross-tenant restore). Identical
+      // to the catalog path: if the operator targets another delegation,
+      // it must belong to their tenant.
+      if (body?.targetDelegationId) {
+        await this.backupService.assertTargetDelegationAccessible(
+          body.targetDelegationId,
+          req.user.tenantId,
+        );
+      }
+
+      // Parse boolean form fields. Multipart form values arrive as strings —
+      // class-validator + class-transformer would do this for us if the
+      // controller used a DTO directly, but body comes from multer raw.
+      const dryRun = body?.dryRun === true ||
+        (body?.dryRun as unknown as string) === 'true' ||
+        (body?.dryRun as unknown as string) === '1';
+
+      // Track D.2 Step 4.5 — basic disk-check pre-enqueue. The upload
+      // already landed on disk (multer streamed it), so we can size it
+      // here. We check that there's still ~1.2 × file size + 512 MB free
+      // for the restore pipeline (tmp staging + Prisma logs + os jitter).
+      // Mirrors the pattern from D.1 step 1 estimateBackupSize.
+      const uploadedSize = backupFile.size;
+      try {
+        const stat = await fs.statfs(os.tmpdir());
+        const freeBytes = Number(stat.bavail) * Number(stat.bsize);
+        const needed = uploadedSize * 1.2 + 512 * 1024 * 1024;
+        if (freeBytes < needed) {
+          // RFC 4918 §11.5 (507 Insufficient Storage) — absent from
+          // HttpStatus enum, literal 507 (same pattern as D.1 step 1).
+          throw new HttpException(
+            `Insufficient disk space for restore: need ~${Math.ceil(needed / 1024 / 1024)} MB, ` +
+              `${Math.floor(freeBytes / 1024 / 1024)} MB free in ${os.tmpdir()}`,
+            507,
+          );
+        }
+      } catch (err: unknown) {
+        // `fs.statfs` may not be available on every Node build (it's
+        // Node 18.15+ stable). If the call itself fails, log and proceed —
+        // the worker will still surface ENOSPC if disk truly runs out
+        // mid-restore. Don't fail the request on the check itself failing.
+        if (err instanceof HttpException) throw err;
+        this.logger.warn(
+          `Disk check skipped on tmpdir (${err instanceof Error ? err.message : 'unknown'})`,
+        );
+      }
+
+      // Async path : enqueue + return 202 with jobId. The processor takes
+      // ownership of the tmp paths via the try/finally in restoreFullBackupV2.
+      const jobData: RestoreFullJobData = {
+        tenantId: req.user.tenantId,
+        userId: req.user.id,
+        tmpUploadPath: backupFile.path,
+        tmpSidecarPath: sidecarFile?.path,
+        options: {
+          dryRun,
+          targetDelegationId: body?.targetDelegationId,
+        },
+      };
+      const job = await this.backupQueue.add(JOB_RESTORE_FULL, jobData, BACKUP_JOB_OPTIONS);
+      enqueued = true;
+      this.logger.log(
+        `Upload-restore enqueued for tenant ${req.user.tenantId}: job ${job.id}, ` +
+          `backup=${backupFile.path} (${backupFile.size} bytes), ` +
+          `sidecar=${sidecarFile?.path ?? 'none'}, dryRun=${dryRun}`,
+      );
+      return toResponse(BackupJobEnqueuedResponseDto, {
+        enqueued: true,
+        jobId: String(job.id),
+      });
+    } finally {
+      if (!enqueued) {
+        // Synchronous failure (permission gate, disk check, queue down) —
+        // the worker never picked up the job, so we own the cleanup here.
+        // Use sync rm to ensure files are gone before the response flushes.
+        if (backupFile.path) {
+          try { fsSync.rmSync(backupFile.path, { force: true }); } catch { /* ignore */ }
+        }
+        if (sidecarFile?.path) {
+          try { fsSync.rmSync(sidecarFile.path, { force: true }); } catch { /* ignore */ }
+        }
+      }
+    }
   }
 
   // ===== Site Restore (MUST be before :siteId to avoid route conflict) =====

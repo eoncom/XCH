@@ -3365,49 +3365,86 @@ export class BackupService {
    */
   async restoreFullBackupV2(
     tenantId: string,
-    backupId: string,
+    backupId: string | null,
     opts: RestoreOptionsDto = {},
     onProgress?: ProgressCallback,
     userId?: string,
+    /**
+     * Track D.2 Step 4.5 — async multipart upload restore. When set,
+     * the service skips the catalog lookup + MinIO download steps and
+     * reads the ZIP directly from `tmpZipPath`. The (optional) sidecar
+     * comes from `tmpSidecarPath` instead of `fetchSidecar` MinIO call.
+     * The service still owns the cleanup (`fs.rm` in the outer finally).
+     * Mutually exclusive with `backupId` — the caller must pass exactly
+     * one source.
+     */
+    multipart?: { tmpZipPath: string; tmpSidecarPath?: string },
   ): Promise<RestoreFullV2Result> {
-    this.logger.log(
-      `Starting full restore v2 for tenant ${tenantId} from backup ${backupId} ` +
-        `(dryRun=${opts.dryRun ?? false})`,
-    );
-
-    // 1. Resolve backupId → filename from AuditLog catalog.
-    // AuditLog row stores {filename, size, ...} under the `changes` JsonValue
-    // column (cf createFullBackup audit pattern at logBackupAction site).
-    const log = await this.prisma.auditLog.findUnique({ where: { id: backupId } });
-    if (!log) {
-      throw new NotFoundException(`Backup ${backupId} not found in catalog`);
-    }
-    const changes = (log.changes as { filename?: string } | null) ?? {};
-    const filename = changes.filename;
-    if (!filename || typeof filename !== 'string') {
+    const isMultipart = !!multipart;
+    if (isMultipart && backupId) {
       throw new BadRequestException(
-        `Backup catalog entry ${backupId} is missing the 'filename' field in changes`,
+        'restoreFullBackupV2: provide either backupId OR multipart, not both',
       );
     }
+    if (!isMultipart && !backupId) {
+      throw new BadRequestException(
+        'restoreFullBackupV2: backupId or multipart tmpZipPath is required',
+      );
+    }
+    this.logger.log(
+      `Starting full restore v2 for tenant ${tenantId} from ` +
+        (isMultipart ? 'multipart upload' : `backup ${backupId}`) +
+        ` (dryRun=${opts.dryRun ?? false})`,
+    );
 
-    // 2. Prepare tmp paths
+    let filename: string;
+    let tmpZipPath: string;
+    if (isMultipart) {
+      // Multipart path — the uploaded tmp ZIP already exists at the path
+      // produced by the controller. We adopt it (and clean it up in
+      // finally below). Audit log filename is synthetic for traceability.
+      filename = `upload-restore-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.zip`;
+      tmpZipPath = multipart!.tmpZipPath;
+    } else {
+      // Catalog path — resolve backupId → filename from AuditLog row.
+      // AuditLog row stores {filename, size, ...} under the `changes` JsonValue
+      // column (cf createFullBackup audit pattern at logBackupAction site).
+      const log = await this.prisma.auditLog.findUnique({ where: { id: backupId! } });
+      if (!log) {
+        throw new NotFoundException(`Backup ${backupId} not found in catalog`);
+      }
+      const changes = (log.changes as { filename?: string } | null) ?? {};
+      const resolved = changes.filename;
+      if (!resolved || typeof resolved !== 'string') {
+        throw new BadRequestException(
+          `Backup catalog entry ${backupId} is missing the 'filename' field in changes`,
+        );
+      }
+      filename = resolved;
+      const stagingId = randomBytes(4).toString('hex');
+      tmpZipPath = path.join(os.tmpdir(), `xch-restore-${stagingId}.zip`);
+    }
+
+    // 2. Prepare staging dir (always service-managed, distinct from
+    // multipart upload tmp ZIP path).
     const stagingId = randomBytes(4).toString('hex');
-    const tmpZipPath = path.join(os.tmpdir(), `xch-restore-${stagingId}.zip`);
     const stagingDir = path.join(os.tmpdir(), `xch-restore-stage-${stagingId}`);
     await fs.mkdir(stagingDir, { recursive: true });
 
     try {
-      // 3. Download to tmp file (streaming) — wrap in span for GlitchTip
-      // duration visibility (Track D.2 Step 3).
-      onProgress?.('download', 0, 1, `Downloading backup ${filename}`);
-      await Sentry.startSpan(
-        {
-          name: 'backup.minio-download',
-          op: 'backup.minio-download',
-          attributes: { tenant_id: tenantId, filename },
-        },
-        () => this.downloadFromBackupBucket(filename, tmpZipPath),
-      );
+      // 3. Source the ZIP. Catalog path: streaming download from MinIO.
+      // Multipart path: ZIP is already at `tmpZipPath` (no-op).
+      if (!isMultipart) {
+        onProgress?.('download', 0, 1, `Downloading backup ${filename}`);
+        await Sentry.startSpan(
+          {
+            name: 'backup.minio-download',
+            op: 'backup.minio-download',
+            attributes: { tenant_id: tenantId, filename },
+          },
+          () => this.downloadFromBackupBucket(filename, tmpZipPath),
+        );
+      }
 
       // 3b. Track D.2 Step 2 — fetch the optional encryption sidecar
       // BEFORE building the read pipeline. Three possible states:
@@ -3423,7 +3460,60 @@ export class BackupService {
       // The reverse case "sidecar present + decipher fails on tampered
       // bytes" surfaces as an auth tag error at cipher.final() time,
       // which we forward to `zipStream` so the for-await rejects.
-      const sidecar = await this.fetchSidecar(filename);
+      //
+      // Track D.2 Step 4.5 — multipart upload reads sidecar from local
+      // file (operator uploaded it alongside the encrypted ZIP). Catalog
+      // path uses the MinIO sidecar fetched via `fetchSidecar(filename)`.
+      let sidecar: BackupSidecarV1 | null;
+      if (isMultipart && multipart!.tmpSidecarPath) {
+        const raw = await fs.readFile(multipart!.tmpSidecarPath, 'utf8');
+        let parsed: BackupSidecarV1;
+        try {
+          parsed = JSON.parse(raw) as BackupSidecarV1;
+        } catch {
+          throw new BadRequestException(
+            'Sidecar JSON is malformed — re-export the sidecar from the catalog',
+          );
+        }
+        if (parsed.version !== 1) {
+          throw new BadRequestException(
+            `Unsupported backup sidecar version: ${parsed.version}`,
+          );
+        }
+        if (parsed.algo !== 'aes-256-gcm') {
+          throw new BadRequestException(
+            `Unsupported backup sidecar algo: ${parsed.algo}`,
+          );
+        }
+        sidecar = parsed;
+      } else if (isMultipart) {
+        // Multipart upload without sidecar — peek the first 4 bytes of
+        // the uploaded ZIP to detect "encrypted-but-no-sidecar" early,
+        // BEFORE the unzipper pipeline reaches MagicByteValidator. This
+        // surfaces a more actionable error message ("forgot to upload
+        // the sidecar") than the generic "not a PKZip stream".
+        const fh = await fs.open(tmpZipPath, 'r');
+        try {
+          const header = Buffer.alloc(4);
+          await fh.read(header, 0, 4, 0);
+          const isPkZip =
+            header[0] === 0x50 && header[1] === 0x4b &&
+            header[2] === 0x03 && header[3] === 0x04;
+          if (!isPkZip) {
+            throw new BadRequestException(
+              'Uploaded archive does not start with the PKZip magic bytes ' +
+                '(0x50 0x4B 0x03 0x04). This usually means the archive is ' +
+                'encrypted and you forgot to upload the sidecar JSON ' +
+                '(`<filename>.enc.json`) alongside it.',
+            );
+          }
+        } finally {
+          await fh.close();
+        }
+        sidecar = null;
+      } else {
+        sidecar = await this.fetchSidecar(filename);
+      }
       if (sidecar) {
         this.logger.log(
           `Backup ${filename} is encrypted (algo=${sidecar.algo}, ` +
@@ -3691,6 +3781,10 @@ export class BackupService {
       await this.logBackupAction(tenantId, userId, 'RESTORE_FULL_V2', {
         filename,
         counts: applied.counts,
+        // Track D.2 Step 4.5 — surface that this restore came from an
+        // uploaded ZIP (not a catalog entry). Useful for forensic
+        // queries after a DR scenario.
+        source: isMultipart ? 'multipart-upload' : 'catalog',
       });
 
       // Track D.2 Step 4 — emit a second audit row when this restore was
@@ -3720,12 +3814,23 @@ export class BackupService {
       };
     } finally {
       // Always cleanup tmp zip + staging dir, even on exception path.
+      // Track D.2 Step 4.5 — when the caller provided a multipart tmp
+      // path, we own its cleanup too (the controller streamed the upload
+      // into this path and handed ownership to the processor → service).
       await fs.rm(tmpZipPath, { force: true }).catch((err: unknown) => {
         this.logger.warn(
           `Failed to clean up tmp restore zip ${tmpZipPath}: ` +
             `${err instanceof Error ? err.message : 'Unknown error'}`,
         );
       });
+      if (isMultipart && multipart!.tmpSidecarPath) {
+        await fs.rm(multipart!.tmpSidecarPath, { force: true }).catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to clean up tmp sidecar ${multipart!.tmpSidecarPath}: ` +
+              `${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        });
+      }
       await fs.rm(stagingDir, { recursive: true, force: true }).catch((err: unknown) => {
         this.logger.warn(
           `Failed to clean up staging dir ${stagingDir}: ` +

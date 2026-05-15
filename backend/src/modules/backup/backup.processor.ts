@@ -120,10 +120,14 @@ export class BackupProcessor {
 
   @Process(JOB_RESTORE_FULL)
   async handleRestoreFull(job: Job<RestoreFullJobData>): Promise<unknown> {
-    const { tenantId, backupId, userId, options } = job.data;
+    const { tenantId, backupId, userId, options, tmpUploadPath, tmpSidecarPath } = job.data;
+    const isMultipart = !!tmpUploadPath;
     this.logger.log(
       `Processing ${JOB_RESTORE_FULL} job ${job.id} for tenant ${tenantId} ` +
-        `from backup ${backupId} (dryRun=${options?.dryRun ?? false})`,
+        (isMultipart
+          ? `from multipart upload ${tmpUploadPath}`
+          : `from backup ${backupId}`) +
+        ` (dryRun=${options?.dryRun ?? false})`,
     );
     return Sentry.startSpan(
       {
@@ -131,7 +135,8 @@ export class BackupProcessor {
         op: 'backup',
         attributes: {
           tenant_id: tenantId,
-          backup_id: backupId,
+          backup_id: backupId ?? '',
+          source: isMultipart ? 'multipart-upload' : 'catalog',
           dry_run: options?.dryRun ?? false,
           backup_format_version: 2,
           job_id: String(job.id),
@@ -140,10 +145,13 @@ export class BackupProcessor {
       () =>
         this.backup.restoreFullBackupV2(
           tenantId,
-          backupId,
+          backupId ?? null,
           options ?? {},
           this.makeProgressCallback(job),
           userId,
+          isMultipart
+            ? { tmpZipPath: tmpUploadPath!, tmpSidecarPath }
+            : undefined,
         ),
     );
   }
