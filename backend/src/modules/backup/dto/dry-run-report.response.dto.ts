@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
 import { ResponseMappingCtx } from '../../../common/utils/to-response.util';
 
@@ -75,6 +75,17 @@ export class DryRunReportResponseDto {
   })
   @Expose()
   estimatedDurationSec!: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Track D.2 — when restore runs in cross-tenant mode (targetDelegationId ' +
+      'set), the Users table from the source backup is NOT imported to avoid ' +
+      'email collisions in the target tenant. This counter surfaces how many ' +
+      'Users would be skipped on a real run.',
+    example: { User: 12 },
+  })
+  @Expose()
+  wouldSkipCrossTenant?: { User: number };
 }
 
 export function toDryRunReportResponseDto(
@@ -86,6 +97,7 @@ export function toDryRunReportResponseDto(
     invalidChecksums: string[];
     totalSize: number;
     estimatedDurationSec: number;
+    wouldSkipCrossTenant?: { User: number };
   },
   _ctx?: ResponseMappingCtx,
 ): DryRunReportResponseDto {
@@ -97,5 +109,8 @@ export function toDryRunReportResponseDto(
     invalidChecksums: [...input.invalidChecksums],
     totalSize: input.totalSize,
     estimatedDurationSec: input.estimatedDurationSec,
+    ...(input.wouldSkipCrossTenant
+      ? { wouldSkipCrossTenant: { ...input.wouldSkipCrossTenant } }
+      : {}),
   };
 }

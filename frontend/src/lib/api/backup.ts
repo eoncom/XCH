@@ -139,6 +139,14 @@ export interface BackupCapabilities {
 export interface RestoreOptions {
   backupId?: string;
   dryRun?: boolean;
+  /**
+   * Track D.2 Step 4 — Cross-tenant restore. When set, the source
+   * delegation is remapped to this target delegation. The target MUST
+   * belong to the caller's tenant (server-side gate, 403 otherwise).
+   * Source users are NOT imported in this mode (collision avoidance).
+   * See `wouldSkipCrossTenant.User` in dry-run report.
+   */
+  targetDelegationId?: string;
 }
 
 /** POST /backup/estimate response. */
@@ -175,6 +183,8 @@ export interface DryRunReport {
   invalidChecksums: string[];
   totalSize: number;
   estimatedDurationSec: number;
+  /** Track D.2 — cross-tenant only. Count of source Users that would be skipped. */
+  wouldSkipCrossTenant?: { User: number };
 }
 
 /** Discriminated result returned by `result` of a completed restore job. */

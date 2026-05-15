@@ -55,6 +55,14 @@ export interface RestoreFullJobData {
   userId?: string;
   options: {
     dryRun?: boolean;
+    /**
+     * Track D.2 Step 4 — cross-tenant restore. When set, the source
+     * delegation is remapped to this target delegation in the live DB.
+     * Permission-gated server-side: the target must belong to the caller's
+     * tenantId (controller verifies via prisma.delegation.findFirst).
+     * Users from the source are NOT imported in this mode.
+     */
+    targetDelegationId?: string;
   };
 }
 

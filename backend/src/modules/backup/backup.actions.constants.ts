@@ -18,6 +18,13 @@ export const BACKUP_AUDIT_ACTIONS = [
   'RESTORE_FULL',
   'RESTORE_FULL_V2',
   'RESTORE_SITE',
+  // Track D.2 Step 4 — cross-tenant restore (delegationId remap from
+  // sourceTenant.delegationA → callerTenant.delegationB). Emitted only
+  // when `restoreFullBackupV2(opts.targetDelegationId)` is set. Carries
+  // `{sourceTenantId, targetTenantId, targetDelegationId, skippedUsers,
+  // rewrittenOwnership, dryRun}` in audit `changes` JSON. No Prisma
+  // migration: AuditLog.action is `String` typed, not a Postgres enum.
+  'RESTORE_CROSS_TENANT',
   // STORAGE_CLEANUP is emitted by the backup module's cleanupOrphanedStorage
   // cron, but operates on the `xch-storage` bucket (user assets — floor plans,
   // attachments), NOT on `xch-backups`. Included here because the action is

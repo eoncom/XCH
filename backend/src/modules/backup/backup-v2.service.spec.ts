@@ -1186,6 +1186,159 @@ describe('BackupService encryption round-trip (Track D.2 step 2)', () => {
 });
 
 // ============================================================================
+// Track D.2 Step 4 — Cross-tenant restore (4 unit cases)
+// ============================================================================
+
+describe('BackupService cross-tenant restore (Track D.2 step 4)', () => {
+  /**
+   * Permission gate — assertTargetDelegationAccessible delegates a Prisma
+   * findFirst, scoped by both id AND callerTenantId. We mock the call.
+   */
+  it('assertTargetDelegationAccessible — accepts target in caller tenant', async () => {
+    const findFirst = jest.fn().mockResolvedValue({ id: 'del-target' });
+    const prismaStub = { delegation: { findFirst } };
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    await expect(
+      service.assertTargetDelegationAccessible('del-target', 'tnt-caller'),
+    ).resolves.toBeUndefined();
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { id: 'del-target', tenantId: 'tnt-caller' },
+      select: { id: true },
+    });
+  });
+
+  it('assertTargetDelegationAccessible — refuses target outside caller tenant (403)', async () => {
+    const findFirst = jest.fn().mockResolvedValue(null); // not found in caller's tenant
+    const prismaStub = { delegation: { findFirst } };
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    await expect(
+      service.assertTargetDelegationAccessible('del-foreign', 'tnt-caller'),
+    ).rejects.toMatchObject({
+      status: 403,
+      message: 'Target delegation not accessible',
+    });
+  });
+
+  it('skips users loop in cross-tenant mode + counts skippedCrossTenantUsers', async () => {
+    // Build a small dataFiles payload with 2 users and 0 other rows.
+    const dataFiles = {
+      users: [
+        { id: 'u1', email: 'a@source', firstName: 'A', lastName: 'X' },
+        { id: 'u2', email: 'b@source', firstName: 'B', lastName: 'Y' },
+      ],
+    } as unknown as Record<string, unknown[]>;
+
+    // Prisma stub: collect tx.user.create calls.
+    const userCreate = jest.fn();
+    const prismaStub: Record<string, unknown> = {
+      $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prismaStub)),
+      $executeRawUnsafe: jest.fn(),
+    };
+    const modelStub = () => ({
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn(async ({ data }: { data: unknown }) => data),
+    });
+    for (const m of [
+      'contactType', 'contact', 'site', 'rack', 'asset', 'floorPlan', 'pin',
+      'assetMovement', 'task', 'taskComment', 'attachment', 'photo',
+      'billingEntity', 'expense', 'costAllocation', 'connectivityLink', 'budget',
+      'siteHealthSnapshot', 'delegation',
+    ]) {
+      prismaStub[m] = modelStub();
+    }
+    prismaStub.user = { findFirst: jest.fn(), create: userCreate };
+    (prismaStub.delegation as { findFirst: jest.Mock }).findFirst = jest.fn()
+      .mockResolvedValue({ id: 'del-target' });
+
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    const result = await (
+      service as never as {
+        applyDataFilesToDb: (
+          tenantId: string,
+          dataFiles: Record<string, unknown[]>,
+          stagedFiles: Map<string, unknown>,
+          userId: string | undefined,
+          options: { targetDelegationId: string },
+        ) => Promise<{ skippedCrossTenantUsers?: number; rewrittenOwnership?: number }>;
+      }
+    ).applyDataFilesToDb(
+      'tnt-target',
+      dataFiles,
+      new Map(),
+      'u-admin',
+      { targetDelegationId: 'del-target' },
+    );
+
+    expect(userCreate).not.toHaveBeenCalled(); // users loop skipped
+    expect(result.skippedCrossTenantUsers).toBe(2);
+    expect(result.rewrittenOwnership).toBe(0); // no rows with ownership FK in this fixture
+  });
+
+  it('pre-remap invariant R1 violation aborts restore with explicit message', async () => {
+    // Build dataFiles with a Contact whose delegationId disagrees with its
+    // owning Site's delegationId. Both fields set → R1 violation.
+    const dataFiles = {
+      sites: [{ id: 's-1', delegationId: 'del-A' }],
+      contacts: [
+        { id: 'c-1', name: 'Bad', siteId: 's-1', delegationId: 'del-B' /* mismatch */ },
+      ],
+    } as unknown as Record<string, unknown[]>;
+
+    const prismaStub: Record<string, unknown> = {
+      $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prismaStub)),
+      $executeRawUnsafe: jest.fn(),
+    };
+    const modelStub = () => ({
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn(async ({ data }: { data: unknown }) => data),
+    });
+    for (const m of [
+      'contactType', 'contact', 'user', 'site', 'rack', 'asset', 'floorPlan', 'pin',
+      'assetMovement', 'task', 'taskComment', 'attachment', 'photo',
+      'billingEntity', 'expense', 'costAllocation', 'connectivityLink', 'budget',
+      'siteHealthSnapshot', 'delegation',
+    ]) {
+      prismaStub[m] = modelStub();
+    }
+    (prismaStub.delegation as { findFirst: jest.Mock }).findFirst = jest.fn()
+      .mockResolvedValue({ id: 'del-target' });
+
+    const service = new BackupService(
+      prismaStub as never,
+      {} as never,
+      { get: jest.fn() } as never,
+      disabledCrypto,
+    );
+    await expect(
+      (service as never as {
+        applyDataFilesToDb: (
+          tenantId: string,
+          dataFiles: Record<string, unknown[]>,
+          stagedFiles: Map<string, unknown>,
+          userId: string | undefined,
+          options?: { targetDelegationId?: string },
+        ) => Promise<unknown>;
+      }).applyDataFilesToDb('tnt-test', dataFiles, new Map(), 'u-admin'),
+    ).rejects.toThrow(/invariant R1 violation in 'contacts'/);
+  });
+});
+
+// ============================================================================
 // Track D.1 Phase 1 step 4 — upsertByNaturalKey + idempotent restore
 // ============================================================================
 

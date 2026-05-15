@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
@@ -261,6 +267,35 @@ export class BackupService {
      */
     private crypto: CryptoService,
   ) {}
+
+  // ==========================================================================
+  // TRACK D.2 STEP 4 — CROSS-TENANT RESTORE PERMISSION GATE
+  // ==========================================================================
+
+  /**
+   * Track D.2 Step 4 — Permission gate for cross-tenant restore.
+   *
+   * Verifies the target delegation EXISTS and BELONGS to the caller's
+   * tenant. Combined with the controller's `@RequireManage` on the
+   * restore endpoint (source-tenant gate), this gives the double check
+   * specified in plan v3 §Step 4.
+   *
+   * Throws `ForbiddenException` if the delegation is unknown OR belongs
+   * to another tenant. Same generic message either way (no info leak
+   * about cross-tenant existence).
+   */
+  async assertTargetDelegationAccessible(
+    targetDelegationId: string,
+    callerTenantId: string,
+  ): Promise<void> {
+    const target = await this.prisma.delegation.findFirst({
+      where: { id: targetDelegationId, tenantId: callerTenantId },
+      select: { id: true },
+    });
+    if (!target) {
+      throw new ForbiddenException('Target delegation not accessible');
+    }
+  }
 
   // ==========================================================================
   // FULL BACKUP
@@ -2303,19 +2338,38 @@ export class BackupService {
       { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
     >,
     userId?: string,
-    options: { dryRun?: boolean } = {},
+    options: {
+      dryRun?: boolean;
+      /**
+       * Track D.2 Step 4 — cross-tenant restore. When set, every restored
+       * row's `delegationId` is coerced to this id, and Users loop is
+       * skipped (collision avoidance). Pre-validated against caller tenant
+       * by the controller via assertTargetDelegationAccessible.
+       */
+      targetDelegationId?: string;
+    } = {},
   ): Promise<{
     counts: Record<string, number>;
     created: Record<string, number>;
     skipped: Record<string, number>;
     siteIds: string[];
+    /** Track D.2 — count of source User rows skipped (cross-tenant mode only). */
+    skippedCrossTenantUsers?: number;
+    /** Track D.2 — count of ownership FK columns rewritten to caller (cross-tenant only). */
+    rewrittenOwnership?: number;
   }> {
     // Set the dry-run flag for the duration of the call. upsertByNaturalKey
     // reads it on the placeholder branch ; the outer try/finally guarantees
     // reset even on exception.
     this._dryRunMode = options.dryRun === true;
     try {
-      return await this.applyDataFilesToDbInner(tenantId, dataFiles, stagedFiles, userId);
+      return await this.applyDataFilesToDbInner(
+        tenantId,
+        dataFiles,
+        stagedFiles,
+        userId,
+        options.targetDelegationId,
+      );
     } finally {
       this._dryRunMode = false;
     }
@@ -2331,11 +2385,14 @@ export class BackupService {
       { tmpPath: string; sha256: string; size: number; bucket: string; key: string }
     >,
     userId?: string,
+    targetDelegationId?: string,
   ): Promise<{
     counts: Record<string, number>;
     created: Record<string, number>;
     skipped: Record<string, number>;
     siteIds: string[];
+    skippedCrossTenantUsers?: number;
+    rewrittenOwnership?: number;
   }> {
     const dryRun = this._dryRunMode;
     const ids = {
@@ -2359,6 +2416,107 @@ export class BackupService {
       if (wasCreated) created[table] = (created[table] ?? 0) + 1;
       else skipped[table] = (skipped[table] ?? 0) + 1;
     };
+
+    // ====================================================================
+    // Track D.2 Step 4 — cross-tenant helpers + pre-remap invariants
+    // ====================================================================
+
+    /** True iff this restore should remap delegationId → targetDelegationId. */
+    const isCrossTenant = !!targetDelegationId;
+
+    /**
+     * remapDelegation — single source of truth applied at every
+     * delegationId write site (Site, Asset, Contact, BillingEntity,
+     * Expense, Budget). Same-tenant restore is the identity function
+     * (preserves source value). Cross-tenant coerces ALL rows to
+     * `targetDelegationId` — all-or-nothing semantic guarantees the
+     * schema invariant R1 (`child.delegationId === site.delegationId`)
+     * is satisfied post-remap regardless of source state.
+     */
+    const remapDelegation = (srcDelId: string | null | undefined): string | null => {
+      if (srcDelId == null) return null;
+      return targetDelegationId ?? srcDelId;
+    };
+
+    /**
+     * rewriteOwnership — for cross-tenant restore, point ownership FK
+     * (Task.createdBy/assignedTo, TaskComment.authorId, Expense.createdBy)
+     * to the caller admin (`userId`). The rewrite is PERMANENT: even if
+     * the caller loses manage rights later, FK historical attribution is
+     * preserved (audit traceability — see ADR-026 §3 validation point V3).
+     *
+     * Returns a tuple `[rewritten, count]` where count is the number of
+     * fields actually overwritten (for audit log aggregation).
+     */
+    const rewriteOwnership = <T extends Record<string, unknown>>(
+      row: T,
+      fields: readonly (keyof T)[],
+    ): { row: T; count: number } => {
+      if (!isCrossTenant || !userId) return { row, count: 0 };
+      const out = { ...row };
+      let count = 0;
+      for (const f of fields) {
+        if (out[f] != null) {
+          (out as Record<keyof T, unknown>)[f] = userId;
+          count++;
+        }
+      }
+      return { row: out, count };
+    };
+
+    /**
+     * validateInvariants — pre-remap fail-fast for the source backup.
+     *
+     * Schema documents (lines 1014, 1297, 1343, 1601) the R1 invariant:
+     * `child.delegationId === site.delegationId` when both fields are
+     * set. Applied to Contact, BillingEntity, Expense, Budget. If the
+     * source backup violates R1 (data corruption upstream), we abort
+     * with an explicit BadRequestException rather than propagate the
+     * bug into the target tenant silently. Plan v3 ajustement #1.
+     *
+     * The check joins in-memory by siteId via dataFiles['sites'].
+     * Cross-tenant remap would mask the bug (all rows end up with
+     * targetDelegationId regardless) — so we run BEFORE any remap.
+     */
+    const validateInvariants = (): void => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sites = (dataFiles['sites'] ?? []) as Array<{ id?: string; delegationId?: string | null }>;
+      const siteDelById = new Map<string, string | null>();
+      for (const s of sites) {
+        if (s.id) siteDelById.set(s.id, s.delegationId ?? null);
+      }
+      const checks: Array<{
+        table: string;
+        invariant: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rows: any[];
+      }> = [
+        { table: 'contacts', invariant: 'R1', rows: dataFiles['contacts'] ?? [] },
+        { table: 'billing-entities', invariant: 'R1', rows: dataFiles['billing-entities'] ?? [] },
+        { table: 'expenses', invariant: 'R1', rows: dataFiles['expenses'] ?? [] },
+        { table: 'budgets', invariant: 'R1', rows: dataFiles['budgets'] ?? [] },
+      ];
+      for (const { table, invariant, rows } of checks) {
+        for (const r of rows) {
+          if (!r?.siteId || !r?.delegationId) continue;
+          const siteDel = siteDelById.get(r.siteId);
+          if (siteDel == null) continue; // site not in this backup OR site.delegationId null
+          if (siteDel !== r.delegationId) {
+            throw new BadRequestException(
+              `Source backup has invariant ${invariant} violation in '${table}' ` +
+                `(row ${r.id ?? '<unknown>'}: delegationId=${r.delegationId} ` +
+                `≠ site.delegationId=${siteDel}), restore aborted, fix source.`,
+            );
+          }
+        }
+      }
+    };
+    validateInvariants();
+
+    /** Aggregate count of ownership FK rewrites — surfaced in audit log. */
+    let rewrittenOwnershipTotal = 0;
+    /** Aggregate count of source User rows skipped in cross-tenant mode. */
+    let skippedCrossTenantUsers = 0;
 
     // ====================================================================
     // PHASE 1 — Tenant config
@@ -2404,6 +2562,10 @@ export class BackupService {
               tenantId,
               name: c.name,
               typeId: typeId,
+              // Track D.2 Step 4 gap fix — Contact.delegationId was
+              // silently dropped in v2 D.1/Track C. Now propagated
+              // (with cross-tenant remap when targetDelegationId set).
+              delegationId: remapDelegation(c.delegationId),
               email: c.email,
               phone: c.phone,
               mobile: c.mobile,
@@ -2418,8 +2580,21 @@ export class BackupService {
         }
 
         // User — NK: (tenantId, email). Restoring users carries credentials
-        // as-is from the source tenant ; same-tenant assumption (cf v1).
-        for (const u of dataFiles['users'] ?? []) {
+        // as-is from the source tenant ; same-tenant assumption.
+        //
+        // Track D.2 Step 4 — cross-tenant mode SKIPS this loop entirely
+        // to avoid email collisions in the target tenant + pollution by
+        // source users. The target tenant's existing users will access
+        // the migrated data via delegation. Documented in ADR-026 §3.
+        if (isCrossTenant) {
+          skippedCrossTenantUsers = (dataFiles['users'] ?? []).length;
+          if (skippedCrossTenantUsers > 0) {
+            this.logger.warn(
+              `RESTORE_CROSS_TENANT: skipped ${skippedCrossTenantUsers} users from source tenant ${tenantId}`,
+            );
+          }
+        }
+        for (const u of (isCrossTenant ? [] : (dataFiles['users'] ?? []))) {
           if (!u.email) continue;
           const r = await this.upsertByNaturalKey<{ id: string }>(
             tx,
@@ -2465,7 +2640,7 @@ export class BackupService {
             { tenantId, code: s.code },
             {
               tenantId,
-              delegationId: s.delegationId || defaultDelId,
+              delegationId: remapDelegation(s.delegationId) || defaultDelId,
               code: s.code,
               name: s.name,
               status: s.status || 'ACTIVE',
@@ -2561,7 +2736,7 @@ export class BackupService {
           const r = await this.upsertByNaturalKey<{ id: string }>(tx, 'asset', where, {
             tenantId,
             siteId,
-            delegationId: a.delegationId || defaultDelId,
+            delegationId: remapDelegation(a.delegationId) || defaultDelId,
             name: a.name,
             type: a.type,
             status: a.status || 'IN_SERVICE',
@@ -2707,7 +2882,19 @@ export class BackupService {
               description: t.description,
               status: t.status || 'TODO',
               priority: t.priority || 'MEDIUM',
-              createdBy: userId || t.createdBy,
+              // Track D.2 Step 4 — ownership rewrite. Cross-tenant points
+              // ALL ownership FK to the caller admin. Same-tenant keeps
+              // source value via existing `userId || t.createdBy` fallback.
+              createdBy: isCrossTenant && userId
+                ? (rewrittenOwnershipTotal++, userId)
+                : (userId || t.createdBy),
+              // Track D.2 Step 4 gap fix — Task.assignedTo was silently
+              // dropped in v2 D.1 (`assignedTo` field absent from create
+              // data). Now propagated (with cross-tenant rewrite to
+              // caller admin).
+              assignedTo: isCrossTenant && userId && t.assignedTo
+                ? (rewrittenOwnershipTotal++, userId)
+                : (t.assignedTo ?? null),
               dueDate: t.dueDate ? new Date(t.dueDate) : null,
               ticketRef: t.ticketRef,
               ticketUrl: t.ticketUrl,
@@ -2727,7 +2914,12 @@ export class BackupService {
         for (const com of dataFiles['task-comments'] ?? []) {
           const taskId = ids.task.get(com.taskId);
           if (!taskId) continue;
-          const authorId = userId || com.authorId;
+          // Track D.2 Step 4 — TaskComment.authorId ownership rewrite.
+          // Cross-tenant forces caller admin (rewrittenOwnership++).
+          // Same-tenant keeps the existing fallback semantic.
+          const authorId = isCrossTenant && userId
+            ? (rewrittenOwnershipTotal++, userId)
+            : (userId || com.authorId);
           const createdAt = com.createdAt ? new Date(com.createdAt) : new Date();
           const textPrefix = (com.text ?? '').slice(0, 64);
           const r = await this.upsertByNaturalKey<{ id: string }>(
@@ -2839,7 +3031,7 @@ export class BackupService {
               type: be.type,
               description: be.description ?? null,
               isActive: be.isActive ?? true,
-              delegationId: be.delegationId ?? null,
+              delegationId: remapDelegation(be.delegationId),
               siteId,
             },
           );
@@ -2891,7 +3083,10 @@ export class BackupService {
             dateStart: exp.dateStart ? new Date(exp.dateStart) : null,
             dateEnd: exp.dateEnd ? new Date(exp.dateEnd) : null,
             bearerId,
-            delegationId: exp.delegationId,
+            // Track D.2 Step 4 — Expense.delegationId is REQUIRED (R1
+            // obligatoire). remapDelegation guarantees non-null in
+            // same-tenant (identity) AND cross-tenant (targetDelegationId).
+            delegationId: remapDelegation(exp.delegationId) ?? exp.delegationId,
             siteId,
             assetId,
             externalRef: exp.externalRef ?? null,
@@ -2899,7 +3094,12 @@ export class BackupService {
             invoiceRef: exp.invoiceRef ?? null,
             poNumber: exp.poNumber ?? null,
             notes: exp.notes ?? null,
-            createdBy: userId || exp.createdBy,
+            // Track D.2 Step 4 — Expense.createdBy ownership rewrite in
+            // cross-tenant mode (caller admin). Same-tenant keeps source
+            // value (`exp.createdBy` fallback when no caller userId).
+            createdBy: isCrossTenant && userId
+              ? (rewrittenOwnershipTotal++, userId)
+              : (userId || exp.createdBy),
           });
           ids.expense.set(exp.id, r.row.id);
           track('expenses', r.wasCreated);
@@ -2973,7 +3173,7 @@ export class BackupService {
               {
                 tenantId,
                 label: b.label,
-                delegationId: b.delegationId ?? null,
+                delegationId: remapDelegation(b.delegationId),
                 siteId,
                 billingEntityId: beId,
                 expenseType: b.expenseType ?? null,
@@ -3106,10 +3306,24 @@ export class BackupService {
     this.logger.log(
       `Restore v2 applied${dryRun ? ' (dry-run)' : ''} : ` +
         `created=${counts._created}, skipped=${counts._skipped}, ` +
-        `siteIds=${siteIds.length}`,
+        `siteIds=${siteIds.length}` +
+        (isCrossTenant
+          ? `, crossTenant=true, skippedUsers=${skippedCrossTenantUsers}, rewrittenOwnership=${rewrittenOwnershipTotal}`
+          : ''),
     );
 
-    return { counts, created, skipped, siteIds };
+    return {
+      counts,
+      created,
+      skipped,
+      siteIds,
+      ...(isCrossTenant
+        ? {
+            skippedCrossTenantUsers,
+            rewrittenOwnership: rewrittenOwnershipTotal,
+          }
+        : {}),
+    };
   }
 
   /**
@@ -3408,7 +3622,10 @@ export class BackupService {
             dataFiles,
             stagedFiles,
             userId,
-            { dryRun: true },
+            {
+              dryRun: true,
+              targetDelegationId: opts.targetDelegationId,
+            },
           ),
         );
 
@@ -3435,6 +3652,13 @@ export class BackupService {
           invalidChecksums,
           totalSize,
           estimatedDurationSec,
+          // Track D.2 Step 4 — when cross-tenant restore, surface the
+          // count of source Users that would be skipped on a real run.
+          // Allows the UI to display "12 utilisateurs source non importés"
+          // before the operator confirms.
+          ...(opts.targetDelegationId
+            ? { wouldSkipCrossTenant: { User: dry.skippedCrossTenantUsers ?? 0 } }
+            : {}),
         });
         return { kind: 'dry-run', report };
       }
@@ -3458,7 +3682,9 @@ export class BackupService {
           op: 'backup.prisma-import',
           attributes: { tenant_id: tenantId, dry_run: false },
         },
-        () => this.applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId),
+        () => this.applyDataFilesToDb(tenantId, dataFiles, stagedFiles, userId, {
+          targetDelegationId: opts.targetDelegationId,
+        }),
       );
       onProgress?.('done', 1, 1, 'Restore complete');
 
@@ -3467,9 +3693,28 @@ export class BackupService {
         counts: applied.counts,
       });
 
+      // Track D.2 Step 4 — emit a second audit row when this restore was
+      // a cross-tenant migration. Carries the source/target context so
+      // forensic queries can reconstruct the operation later, even if
+      // the caller user loses manage rights post-restore (ADR-026 §3
+      // validation point V3 — ownership rewrite is permanent).
+      if (opts.targetDelegationId) {
+        await this.logBackupAction(tenantId, userId, 'RESTORE_CROSS_TENANT', {
+          filename,
+          sourceTenantId: tenantId,
+          targetTenantId: tenantId, // restore lands in caller's tenant (validated by gate)
+          targetDelegationId: opts.targetDelegationId,
+          skippedUsers: applied.skippedCrossTenantUsers ?? 0,
+          rewrittenOwnership: applied.rewrittenOwnership ?? 0,
+          dryRun: false,
+        });
+      }
+
       return {
         kind: 'applied',
-        message: 'Restore complet v2 appliqué avec succès',
+        message: opts.targetDelegationId
+          ? 'Restore cross-tenant v2 appliqué avec succès'
+          : 'Restore complet v2 appliqué avec succès',
         counts: applied.counts,
         siteIds: applied.siteIds,
       };

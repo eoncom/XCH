@@ -301,13 +301,27 @@ export class BackupController {
       );
     }
 
+    // Track D.2 Step 4 — cross-tenant permission gate. The target delegation
+    // MUST belong to the caller's tenant; the @RequireManage decorator above
+    // already enforces manage on the SOURCE tenant. Together they form the
+    // double-check specified in plan v3.
+    if (restoreOptions?.targetDelegationId) {
+      await this.backupService.assertTargetDelegationAccessible(
+        restoreOptions.targetDelegationId,
+        req.user.tenantId,
+      );
+    }
+
     if (syncHeader === '1') {
       // Sync v2 fallback — bypass the queue, run in-process. Useful when
       // Redis is unhealthy.
       const result = await this.backupService.restoreFullBackupV2(
         req.user.tenantId,
         backupId,
-        { dryRun: restoreOptions?.dryRun },
+        {
+          dryRun: restoreOptions?.dryRun,
+          targetDelegationId: restoreOptions?.targetDelegationId,
+        },
         undefined,
         req.user.id,
       );
@@ -334,7 +348,10 @@ export class BackupController {
       tenantId: req.user.tenantId,
       backupId,
       userId: req.user.id,
-      options: { dryRun: restoreOptions?.dryRun },
+      options: {
+        dryRun: restoreOptions?.dryRun,
+        targetDelegationId: restoreOptions?.targetDelegationId,
+      },
     };
     const job = await this.backupQueue.add(JOB_RESTORE_FULL, jobData, BACKUP_JOB_OPTIONS);
     return toResponse(BackupJobEnqueuedResponseDto, {

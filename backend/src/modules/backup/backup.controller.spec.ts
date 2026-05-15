@@ -22,6 +22,7 @@ function buildController(): {
     restoreFullBackupV2: jest.fn(),
     createSiteBackup: jest.fn(),
     estimateBackupSize: jest.fn(),
+    assertTargetDelegationAccessible: jest.fn().mockResolvedValue(undefined),
   };
   const queue = {
     add: jest.fn(),
@@ -418,6 +419,62 @@ describe('BackupController (Track D.1 step 5 — Bull v3 wiring)', () => {
       expect(jobData).toMatchObject({
         tenantId: 'tnt-test',
         options: { encrypt: true },
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Track D.2 Step 4 — Cross-tenant restore controller path
+  // ==========================================================================
+
+  describe('POST /backup/full/restore with targetDelegationId (Track D.2 step 4)', () => {
+    it('calls assertTargetDelegationAccessible when targetDelegationId is set', async () => {
+      const { controller, service, queue } = buildController();
+      queue.add.mockResolvedValue({ id: '4-1' });
+
+      await controller.restoreFullBackup(
+        undefined,
+        { backupId: 'b1', targetDelegationId: 'del-target' },
+        undefined,
+        authRequest() as never,
+      );
+
+      expect(service.assertTargetDelegationAccessible).toHaveBeenCalledWith(
+        'del-target',
+        'tnt-test',
+      );
+    });
+
+    it('skips assertTargetDelegationAccessible when same-tenant restore', async () => {
+      const { controller, service, queue } = buildController();
+      queue.add.mockResolvedValue({ id: '4-2' });
+
+      await controller.restoreFullBackup(
+        undefined,
+        { backupId: 'b1' },
+        undefined,
+        authRequest() as never,
+      );
+
+      expect(service.assertTargetDelegationAccessible).not.toHaveBeenCalled();
+    });
+
+    it('threads targetDelegationId into the job data on async path', async () => {
+      const { controller, queue } = buildController();
+      queue.add.mockResolvedValue({ id: '4-3' });
+
+      await controller.restoreFullBackup(
+        undefined,
+        { backupId: 'b1', targetDelegationId: 'del-target', dryRun: true },
+        undefined,
+        authRequest() as never,
+      );
+
+      const [, jobData] = queue.add.mock.calls[0];
+      expect(jobData).toMatchObject({
+        tenantId: 'tnt-test',
+        backupId: 'b1',
+        options: { dryRun: true, targetDelegationId: 'del-target' },
       });
     });
   });

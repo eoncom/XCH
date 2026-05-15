@@ -28,6 +28,15 @@ describe('BACKUP_AUDIT_ACTIONS / BACKUP_CATALOG_ACTIONS', () => {
     expect(BACKUP_AUDIT_ACTIONS).toContain('STORAGE_CLEANUP');
   });
 
+  it('Track D.2 — RESTORE_CROSS_TENANT registered as a backup audit action', () => {
+    expect(BACKUP_AUDIT_ACTIONS).toContain('RESTORE_CROSS_TENANT');
+    // Not part of the catalog subset — cross-tenant restore consumes a
+    // backup, does not produce a new listable catalog row.
+    expect(BACKUP_CATALOG_ACTIONS as readonly string[]).not.toContain(
+      'RESTORE_CROSS_TENANT',
+    );
+  });
+
   it('type-level narrowing rejects unknown action strings at compile time', () => {
     const valid: BackupAuditAction = 'BACKUP_FULL_V2';
     expect(valid).toBe('BACKUP_FULL_V2');

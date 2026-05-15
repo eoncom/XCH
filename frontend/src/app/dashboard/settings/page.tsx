@@ -2036,6 +2036,10 @@ export default function SettingsPage() {
   const [backupEncrypt, setBackupEncrypt] = useState(false);
   /** Track D.2 — server-driven capability flags (loaded once on mount). */
   const [backupCapabilities, setBackupCapabilities] = useState<{ encryption: boolean } | null>(null);
+  /** Track D.2 Step 4 — cross-tenant restore: target delegation id in caller tenant. */
+  const [restoreTargetDelegationId, setRestoreTargetDelegationId] = useState<string>('');
+  const [restoreCrossTenant, setRestoreCrossTenant] = useState(false);
+  const [availableDelegations, setAvailableDelegations] = useState<{ id: string; label: string }[]>([]);
   /** Selected catalog backup for async restore + dry-run preview. */
   const [selectedRestoreBackupId, setSelectedRestoreBackupId] = useState<string | null>(null);
   const [restoreDryRun, setRestoreDryRun] = useState(true); // safe default
@@ -2195,7 +2199,16 @@ export default function SettingsPage() {
   const handleRestoreFullAsync = async (backupId: string, dryRun: boolean) => {
     setIsRestoringFull(true);
     try {
-      const enqueued = await backupApi.restoreFullAsync({ backupId, dryRun });
+      // Track D.2 Step 4 — pass targetDelegationId for cross-tenant
+      // restore mode. Empty string = same-tenant restore (default).
+      const targetDelegationId = restoreCrossTenant && restoreTargetDelegationId
+        ? restoreTargetDelegationId
+        : undefined;
+      const enqueued = await backupApi.restoreFullAsync({
+        backupId,
+        dryRun,
+        targetDelegationId,
+      });
       setCurrentBackupJobId(enqueued.jobId);
       setDryRunReport(null);
       toast.success(
@@ -2483,6 +2496,20 @@ export default function SettingsPage() {
             backupApi.capabilities()
               .then(setBackupCapabilities)
               .catch(() => setBackupCapabilities({ encryption: false }));
+            // Track D.2 Step 4 — load delegations for cross-tenant
+            // restore target picker. Backend enforces "must belong to
+            // caller's tenant" — endpoint already scopes by tenantId.
+            apiClient.get<{ data: Array<{ id: string; name?: string; label?: string; slug?: string }> }>(
+              '/api/delegations',
+            )
+              .then((res) => {
+                const list = (res?.data ?? []).map((d) => ({
+                  id: d.id,
+                  label: d.name ?? d.label ?? d.slug ?? d.id,
+                }));
+                setAvailableDelegations(list);
+              })
+              .catch(() => setAvailableDelegations([]));
           }
         }}
         className="w-full"
@@ -3751,6 +3778,51 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground italic">{T.dryRunInfo}</p>
+
+                  {/* Track D.2 Step 4 — cross-tenant restore (delegationId remap) */}
+                  <div className="space-y-2 border-t pt-3">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="restore-cross-tenant"
+                        checked={restoreCrossTenant}
+                        onCheckedChange={(v) => {
+                          setRestoreCrossTenant(v);
+                          if (!v) setRestoreTargetDelegationId('');
+                        }}
+                        disabled={isRestoringFull || !!currentBackupJobId}
+                      />
+                      <Label htmlFor="restore-cross-tenant" className="text-sm">
+                        Restore cross-tenant (remap delegationId)
+                      </Label>
+                    </div>
+                    {restoreCrossTenant && (
+                      <div className="space-y-2 pl-8">
+                        <Select
+                          value={restoreTargetDelegationId || undefined}
+                          onValueChange={setRestoreTargetDelegationId}
+                        >
+                          <SelectTrigger className="w-full max-w-md">
+                            <SelectValue placeholder="Sélectionner la délégation cible…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableDelegations.map((d) => (
+                              <SelectItem key={d.id} value={d.id}>
+                                {d.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground italic max-w-md">
+                          Les utilisateurs du tenant source ne sont pas importés.
+                          Les utilisateurs du tenant cible auront accès aux
+                          données migrées via la délégation choisie. La
+                          propriété (createdBy, assignedTo, authorId) est
+                          réécrite vers l'admin qui lance le restore — la trace
+                          audit est préservée même si vos droits évoluent.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex justify-end">
                     <Button
                       onClick={() => {

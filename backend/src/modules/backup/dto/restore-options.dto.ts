@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 /**
@@ -35,4 +35,22 @@ export class RestoreOptionsDto {
   @IsBoolean()
   @IsOptional()
   dryRun?: boolean;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Track D.2 — Cross-tenant restore. When set, the source delegation ' +
+      'is remapped to this target delegation: every restored row that holds ' +
+      'a delegationId (Site, Asset, Contact, BillingEntity, Expense, Budget) ' +
+      'is coerced to the target. Ownership FK (Task.createdBy/assignedTo, ' +
+      'TaskComment.authorId, Expense.createdBy) is rewritten to the caller ' +
+      "user id — preserves audit traceability even if the caller's manage " +
+      'rights are revoked later. Users from the source backup are NOT ' +
+      'imported (collision avoidance). Permission gate: caller must have ' +
+      'manage on the target delegation, AND it must belong to the caller ' +
+      'tenant. See ADR-026 §3.',
+  })
+  @IsUUID()
+  @IsOptional()
+  targetDelegationId?: string;
 }
