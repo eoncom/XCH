@@ -19,9 +19,9 @@ export class NotificationEventMetaResponseDto {
   @Expose()
   defaultChannels!: NotificationChannelKind[];
 
-  @ApiProperty({ enum: ['tasks', 'sites', 'assets', 'monitoring', 'auth'] })
+  @ApiProperty({ enum: ['tasks', 'sites', 'assets', 'monitoring', 'auth', 'backup'] })
   @Expose()
-  category!: 'tasks' | 'sites' | 'assets' | 'monitoring' | 'auth';
+  category!: 'tasks' | 'sites' | 'assets' | 'monitoring' | 'auth' | 'backup';
 }
 
 /**

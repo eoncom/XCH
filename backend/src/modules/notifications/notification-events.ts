@@ -17,7 +17,7 @@ export interface NotificationEventMeta {
   label: string;
   description: string;
   defaultChannels: NotificationChannelKind[];
-  category: 'tasks' | 'sites' | 'assets' | 'monitoring' | 'auth';
+  category: 'tasks' | 'sites' | 'assets' | 'monitoring' | 'auth' | 'backup';
 }
 
 export const NOTIFICATION_EVENTS_META: Record<NotificationEventType, NotificationEventMeta> = {
@@ -68,6 +68,12 @@ export const NOTIFICATION_EVENTS_META: Record<NotificationEventType, Notificatio
     description: 'Email de réinitialisation de mot de passe',
     defaultChannels: [NotificationChannelKind.EMAIL],
     category: 'auth',
+  },
+  BACKUP_COMPLETED: {
+    label: 'Backup terminé',
+    description: "Notification quand un job backup full ou site se termine avec succès (Track E.4 Pass 9, wired via BackupProcessor.@OnQueueCompleted)",
+    defaultChannels: [NotificationChannelKind.EMAIL],
+    category: 'backup',
   },
 };
 

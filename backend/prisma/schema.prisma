@@ -1604,6 +1604,10 @@ enum NotificationEventType {
   MONITOR_UP
   USER_INVITED
   PASSWORD_RESET
+  /// Track E.4 Pass 9 — émis par BackupProcessor.@OnQueueCompleted après
+  /// un job JOB_BACKUP_FULL ou JOB_BACKUP_SITE terminé avec succès.
+  /// Charge utile : tenantId + jobId + duration_ms + size_bytes optionnel.
+  BACKUP_COMPLETED
 }
 
 /// Notification channels (ADR-020) — typed split of the former

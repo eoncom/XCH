@@ -4,6 +4,7 @@ import { Job } from 'bull';
 import * as Sentry from '@sentry/node';
 import { BackupService } from './backup.service';
 import { WorkerEventLogger } from '../../common/observability/worker-event-logger.service';
+import { NotificationEmitter } from '../notifications/notification-emitter';
 import {
   BACKUP_QUEUE,
   BACKUP_QUEUE_CONCURRENCY,
@@ -53,6 +54,8 @@ export class BackupProcessor {
   constructor(
     private readonly backup: BackupService,
     private readonly events: WorkerEventLogger,
+    // Track E.4 Pass 9 — wire BACKUP_COMPLETED NotificationEvent émise post-success.
+    private readonly notificationEmitter: NotificationEmitter,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -184,6 +187,44 @@ export class BackupProcessor {
       job.attemptsMade + 1,
       { tenant_id: job.data?.tenantId },
     );
+
+    // Track E.4 Pass 9 — émet BACKUP_COMPLETED notification post-success pour
+    // jobs backup (pas restore). Restore jobs sont opérationnels et n'ont pas
+    // besoin de notif user-facing par défaut.
+    if (job.name === JOB_BACKUP_FULL || job.name === JOB_BACKUP_SITE) {
+      const tenantId = job.data?.tenantId;
+      // Defensive : guard against incomplete mock injection in unit tests
+      // (specs may pass `{}` for the emitter) — production DI always provides
+      // a real NotificationEmitter via NotificationsModule import.
+      if (tenantId && typeof this.notificationEmitter?.backupCompleted === 'function') {
+        const jobKind = job.name === JOB_BACKUP_FULL ? 'full' : 'site';
+        try {
+          // Best-effort fire-and-forget : pas de catch silencieux fatal, juste
+          // log warn si la notif échoue (cohérent pattern audit log dans racks).
+          const result = this.notificationEmitter.backupCompleted({
+            tenantId,
+            jobId: String(job.id),
+            jobKind,
+            durationMs: duration_ms,
+            // sizeBytes : extension Track F si BackupService.returnvalue contient
+            // le size — pour MVP Pass 9 on omet (pas dans le résultat actuel).
+          });
+          if (result && typeof result.catch === 'function') {
+            result.catch((err: unknown) => {
+              this.logger.warn(
+                `Failed to emit BACKUP_COMPLETED notification for job ${job.id}: ` +
+                  `${err instanceof Error ? err.message : 'Unknown error'}`,
+              );
+            });
+          }
+        } catch (err: unknown) {
+          this.logger.warn(
+            `Failed to enqueue BACKUP_COMPLETED notification for job ${job.id}: ` +
+              `${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        }
+      }
+    }
   }
 
   @OnQueueFailed()

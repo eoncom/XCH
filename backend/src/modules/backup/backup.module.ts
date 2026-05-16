@@ -5,6 +5,7 @@ import { BackupService } from './backup.service';
 import { BackupProcessor } from './backup.processor';
 import { StorageService } from '../../common/services/storage.service';
 import { ObservabilityModule } from '../../common/observability/observability.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { BACKUP_QUEUE } from './backup.queue';
 
 /**
@@ -25,6 +26,10 @@ import { BACKUP_QUEUE } from './backup.queue';
   imports: [
     BullModule.registerQueue({ name: BACKUP_QUEUE }),
     ObservabilityModule,
+    // Track E.4 Pass 9 — wire BACKUP_COMPLETED notification émise par
+    // BackupProcessor.@OnQueueCompleted(). NotificationsModule fournit
+    // NotificationEmitter + NotificationService (consumed par BackupProcessor).
+    NotificationsModule,
   ],
   controllers: [BackupController],
   providers: [BackupService, BackupProcessor, StorageService],
