@@ -45,6 +45,21 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # Track E.4 PR1 Pass 2 — npm audit non-bloquant niveau high (fallback
+      # critical si baseline non-clean). Promotion bloquant Track F après
+      # triage transitive deps.
+      - name: npm audit (high level)
+        working-directory: frontend
+        continue-on-error: true
+        run: |
+          set +e
+          npm audit --audit-level=high --omit=dev 2>&1 | tee /tmp/audit-frontend.log
+          EXIT=${PIPESTATUS[0]}
+          if [[ "$EXIT" -ne 0 ]]; then
+            echo "::warning::Frontend npm audit found vulnerabilities (high level). Triage Track F backlog."
+          fi
+          exit 0
+
       - name: Typecheck
         id: typecheck
         working-directory: frontend

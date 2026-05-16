@@ -1,0 +1,53 @@
+name: BOLA check (Track E.4 Pass 2 — warn mode)
+
+# Track E.4 PR1 Pass 2 — check-bola.ts en mode warning baseline.
+#
+# Détecte les patterns suspects `findUnique`/`findFirst`/`findOne` sans
+# `tenantId` adjacent dans le where (candidats BOLA OWASP API1, per
+# `XCH_BOLA_PATTERN_CHECK`).
+#
+# Mode WARN actuel (Track E.4 Pass 2) : exit 0 toujours, juste log
+# baseline pour mesure. Promotion à mode STRICT (--strict, exit 1)
+# en Track F si baseline = 0 (règle "mesurer avant d'enforcer"
+# `XCH_ENGINEERING_PRINCIPLES`).
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  bola-check:
+    name: BOLA pattern check (warn mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install backend deps (deferred ts-node)
+        working-directory: backend
+        run: npm ci --no-audit --no-fund
+
+      - name: Run check-bola.ts (warn mode)
+        working-directory: backend
+        run: npx ts-node scripts/check-bola.ts
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## BOLA check (Track E.4 Pass 2 — warn mode)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Mode: WARN baseline (exit 0 toujours). Voir logs pour findings actuels." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Promotion bloquant (\`--strict\`) Track F si baseline = 0 (règle 'mesurer avant d'enforcer'." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Pattern figé MCP \`XCH_BOLA_PATTERN_CHECK\` — toute lookup par ID externe DOIT scoper par \`tenantId\`." >> $GITHUB_STEP_SUMMARY

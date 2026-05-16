@@ -1,0 +1,90 @@
+name: Lockfile integrity (Track E.4 Pass 2)
+
+# Track E.4 PR1 Pass 2 — anti-drift package-lock.json.
+#
+# Pattern figé MCP `engineering_lockfile_drift_pattern` (2 incidents historiques
+# S5 PR0 backend + S7 PR0 frontend) : un `npm install` accidentel qui désynchronise
+# package.json vs package-lock.json passe inaperçu en review mais casse les
+# builds reproductibles (CI/CD, deploy prod, dev onboarding).
+#
+# Ce check exécute `npm ci --dry-run` qui FAIL si package-lock.json est
+# inconsistant avec package.json (deps manquantes, versions incompatibles, etc.).
+# Le check NE installe RIEN — c'est purement une validation cohérence.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  backend-lockfile:
+    name: Backend package-lock.json integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify backend lockfile sync
+        working-directory: backend
+        run: |
+          set -e
+          # --dry-run : Prisma + autres ne tournent pas, seul l'install
+          # cohérence est vérifié. Exit code != 0 si désync.
+          if ! npm ci --dry-run --no-audit --no-fund 2>&1; then
+            echo "::error::Backend package-lock.json out of sync with package.json"
+            echo ""
+            echo "Fix: re-run 'npm install' locally to regenerate the lockfile,"
+            echo "then commit the updated package-lock.json."
+            exit 1
+          fi
+          echo "✓ Backend lockfile in sync."
+
+  frontend-lockfile:
+    name: Frontend package-lock.json integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify frontend lockfile sync
+        working-directory: frontend
+        run: |
+          set -e
+          if ! npm ci --dry-run --no-audit --no-fund 2>&1; then
+            echo "::error::Frontend package-lock.json out of sync with package.json"
+            echo ""
+            echo "Fix: re-run 'npm install' locally to regenerate the lockfile,"
+            echo "then commit the updated package-lock.json."
+            exit 1
+          fi
+          echo "✓ Frontend lockfile in sync."
+
+  summary:
+    name: Summary
+    needs: [backend-lockfile, frontend-lockfile]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "## Lockfile integrity (Track E.4 Pass 2)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Backend: ${{ needs.backend-lockfile.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "Frontend: ${{ needs.frontend-lockfile.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Anti-drift package-lock.json — pattern MCP \`engineering_lockfile_drift_pattern\` (2 incidents historiques S5 PR0 + S7 PR0)." >> $GITHUB_STEP_SUMMARY
