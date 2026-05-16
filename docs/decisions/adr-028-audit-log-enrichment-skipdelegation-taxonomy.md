@@ -155,7 +155,51 @@ Pour les catégories 3 (self-scoped : préférences notif, user-notification, us
 
 **Recommandation RSI Track E.4** : **Option A** car threat model air-gap insider = priorité traçabilité maximale, et le coût est nul (juste passer `ctx.activeDelegationId` qui est déjà populé). Option A documente que `null` sur Cat 3/4 signifie "user sans délégation active à ce moment", pas "endpoint sans contexte délégation".
 
-**Arbitrage final** : ouvert au stakeholder. Track E.4 sub-pass 1.B.-1 acte la recommandation RSI mais l'implémentation Pass 1 partie B est paramétrée par cette décision (1 ligne diff dans propagation Cat 3/4).
+**Arbitrage acté (2026-05-16, ping intermédiaire sub-pass 1.B.-1)** : **Option A retenue**. Justifications stakeholder convergentes :
+- Coût zéro (champ déjà disponible dans CallerCtx)
+- Traçabilité forensique max (threat model insider/supply-chain air-gap)
+- Préservation sémantique distincte de `null` post-Option A : "user sans délégation active" vs (avec Option B) "endpoint self-scoped par convention" (ambigu cross Cat 1/2/3)
+- Anti-Option B subtil : Option B rendrait `audit_log.delegationId IS NULL` ambigu sur 3 catégories distinctes (super-admin / pre-delegation / self-scoped) — distinction sémantique perdue
+- Aligne discipline méta XCH cumulée Track E (BOLA Track E.1 + capture IP/UA Track E.4 + audit log enrichment ADR-028) = "audit forensique exploitable long terme"
+
+##### B.0.3 — Test asserts integration pattern (Option A appliqué)
+
+Pattern de test pour distinguer les 3 régimes Option A figés :
+
+```ts
+// 1) Endpoints délégation-scoped (6 services ADR-021 §1) : delegationId NON-NULL obligatoire
+it('PATCH /sites/:id should write audit_log with delegationId NOT NULL', async () => {
+  await request(app).patch(`/sites/${siteId}`)
+    .set('X-Delegation-Id', delegationId)
+    .send({ name: 'new' });
+  const log = await prisma.auditLog.findFirst({ where: { entityType: 'site', entityId: siteId }, orderBy: { timestamp: 'desc' } });
+  expect(log.delegationId).toBe(delegationId);  // NOT NULL obligatoire
+});
+
+// 2) Endpoints Cat 1/2/5/SYSTEM_CTX : delegationId NULL légitime
+it('POST /users (super-admin) should write audit_log with delegationId IS NULL', async () => {
+  await request(app).post('/users').send({ ... });
+  const log = await prisma.auditLog.findFirst({ where: { entityType: 'user', action: 'CREATE' }, orderBy: { timestamp: 'desc' } });
+  expect(log.delegationId).toBeNull();
+});
+
+// 3) Endpoints Cat 3 self-scoped + Cat 4 catalog (Option A) : delegationId = ctx.activeDelegationId (match capture)
+it('PATCH /user-notifications/me with active delegation should capture activeDelegationId', async () => {
+  await request(app).patch('/user-notifications/me')
+    .set('X-Delegation-Id', delegationId)
+    .send({ ... });
+  const log = await prisma.auditLog.findFirst({ where: { entityType: 'user-notification' }, orderBy: { timestamp: 'desc' } });
+  expect(log.delegationId).toBe(delegationId);  // match capture Option A
+});
+
+it('PATCH /user-notifications/me without active delegation should write delegationId IS NULL', async () => {
+  await request(app).patch('/user-notifications/me').send({ ... });  // pas de X-Delegation-Id
+  const log = await prisma.auditLog.findFirst({ where: { entityType: 'user-notification' }, orderBy: { timestamp: 'desc' } });
+  expect(log.delegationId).toBeNull();  // legitimate null Option A
+});
+```
+
+**Observabilité bug détectable (per B.0.1)** : alerte GlitchTip si `audit_log.delegationId IS NULL AND entityType IN ('site', 'asset', 'rack', 'task', 'contact', 'expense', 'floor-plan', 'monitoring-target', ...)` (entités délégation-scoped). Wire post-cutover (Track F si volume justifie).
 
 #### B.1 — Capture systémique `ipAddress` + `userAgent` via interceptor global
 

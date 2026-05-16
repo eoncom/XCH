@@ -22,6 +22,10 @@ export class AuditController {
   // - MANAGE users should consult the per-entity audit stream (see `entity/:type/:id`)
   //   for the resources they have visibility on.
   @Get()
+  /**
+   * @SkipDelegation — Catégorie 1 (tenant-wide super-admin) :
+   * vue audit globale du tenant, super-admin only. Cf. ADR-028.
+   */
   @SkipDelegation()
   @RequireManage()
   // Vue super-admin lourde (pagination + 7 sub-fetches enrichLabels). 60/min

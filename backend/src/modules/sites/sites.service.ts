@@ -6,7 +6,7 @@ import { FilterSiteDto } from './dto/filter-site.dto';
 import { PaginatedResponse, buildPaginatedResponse } from '../../common/interfaces/paginated.interface';
 import { StorageService } from '../../common/services/storage.service';
 import { validateMagicBytesForMimetype } from '../../common/utils/upload-security';
-import { AuditLogService } from '../../common/services/audit-log.service';
+import { AuditLogService, auditCtxFrom } from '../../common/services/audit-log.service';
 import { NotificationEmitter } from '../notifications/notification-emitter';
 import { MonitorReactionsService } from '../monitoring/monitor-reactions.service';
 import { PermissionService } from '../../common/services/permission.service';
@@ -27,7 +27,7 @@ export class SitesService {
     private perm: PermissionService,
   ) {}
 
-  async create(tenantId: string, createSiteDto: CreateSiteDto, userId?: string) {
+  async create(tenantId: string, createSiteDto: CreateSiteDto, userId?: string, ctx?: CallerCtx) {
     const existing = await this.prisma.site.findFirst({
       where: {
         tenantId,
@@ -62,7 +62,7 @@ export class SitesService {
 
     const site = await this.findOne(result[0].id, tenantId);
 
-    // Audit log
+    // Audit log — ADR-028 §B.3 propagation tier-1 (POC Track E.4 Pass 1)
     await this.auditLogService.log({
       tenantId,
       userId,
@@ -70,6 +70,7 @@ export class SitesService {
       entityType: 'site',
       entityId: site.id,
       changes: { after: { code: site.code, name: site.name, status: site.status, address: site.address, city: site.city } },
+      ...(ctx ? auditCtxFrom(ctx) : {}),
     });
 
     return site;

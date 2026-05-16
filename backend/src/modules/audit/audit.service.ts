@@ -5,6 +5,8 @@ export interface AuditQuery {
   entity?: string;
   entityId?: string;
   userId?: string;
+  /** ADR-028 §B.2 — filtre par délégation (super-admin only audit view). */
+  delegationId?: string;
   action?: 'CREATE' | 'UPDATE' | 'DELETE';
   from?: string; // ISO
   to?: string; // ISO
@@ -25,6 +27,7 @@ export class AuditService {
     if (q.entity) where.entityType = q.entity;
     if (q.entityId) where.entityId = q.entityId;
     if (q.userId) where.userId = q.userId;
+    if (q.delegationId) where.delegationId = q.delegationId;
     if (q.action) where.action = q.action;
     if (q.from || q.to) {
       where.timestamp = {};
@@ -38,6 +41,8 @@ export class AuditService {
         where,
         include: {
           user: { select: { id: true, name: true, email: true } },
+          // ADR-028 §B.3 — expose delegation label pour UI super-admin audit view.
+          delegation: { select: { id: true, name: true, code: true } },
         },
         orderBy: { timestamp: 'desc' },
         skip,

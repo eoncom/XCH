@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { CallerCtx } from '../types/caller-ctx.interface';
 
 export interface AuditLogEntry {
   tenantId: string;
@@ -11,8 +12,42 @@ export interface AuditLogEntry {
     before?: Record<string, any>;
     after?: Record<string, any>;
   };
-  ipAddress?: string;
-  userAgent?: string;
+  /**
+   * ADR-028 §B.0 nullability taxonomy figée :
+   * - null légitime pour Cat 1 super-admin / Cat 2 pre-delegation / Cat 5 dev-test / SYSTEM_CTX
+   * - capture `ctx.activeDelegationId` Option A pour Cat 3 self-scoped + Cat 4 catalog
+   * - non-null obligatoire pour endpoints délégation-scoped (6 services ADR-021 §1)
+   */
+  delegationId?: string | null;
+  /** ADR-028 §B.1 — capture systémique via @CallerCtxParam() (normalisé IPv4-mapped IPv6). */
+  ipAddress?: string | null;
+  /** ADR-028 §B.1 — capture systémique via @CallerCtxParam(). */
+  userAgent?: string | null;
+}
+
+/**
+ * Helper pour construire un `Partial<AuditLogEntry>` à partir d'un `CallerCtx`.
+ * Pattern recommandé Track E.4 Pass 1 partie B.3 propagation :
+ *
+ * ```ts
+ * await this.auditLogService.log({
+ *   tenantId, userId, action: 'CREATE', entityType: 'site', entityId: site.id,
+ *   changes: { after: ... },
+ *   ...auditCtxFrom(ctx),  // delegationId + ipAddress + userAgent
+ * });
+ * ```
+ *
+ * Pour SYSTEM_CTX, le helper retourne `{ delegationId: null, ipAddress: null, userAgent: null }`
+ * (cohérent ADR-028 §B.0 mapping SYSTEM_CTX → null légitime).
+ */
+export function auditCtxFrom(
+  ctx: Pick<CallerCtx, 'activeDelegationId' | 'ipAddress' | 'userAgent'>,
+): Pick<AuditLogEntry, 'delegationId' | 'ipAddress' | 'userAgent'> {
+  return {
+    delegationId: ctx.activeDelegationId,
+    ipAddress: ctx.ipAddress ?? null,
+    userAgent: ctx.userAgent ?? null,
+  };
 }
 
 @Injectable()
@@ -24,6 +59,7 @@ export class AuditLogService {
       data: {
         tenantId: entry.tenantId,
         userId: entry.userId || null,
+        delegationId: entry.delegationId ?? null,
         action: entry.action,
         entityType: entry.entityType,
         entityId: entry.entityId || null,
