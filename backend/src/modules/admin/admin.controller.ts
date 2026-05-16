@@ -29,6 +29,11 @@ import { SkipDelegation } from '../../common/decorators/skip-delegation.decorato
 @ApiTags('admin')
 @ApiBearerAuth()
 @Controller('admin')
+/**
+ * @SkipDelegation — Catégorie 1 (tenant-wide super-admin) :
+ * gestion enum labels = scope organisation, pas une délégation spécifique.
+ * Cf. ADR-028.
+ */
 @SkipDelegation()
 @RequireManage()
 export class AdminController {

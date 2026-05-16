@@ -51,6 +51,11 @@ import { PermissionService } from '../../common/services/permission.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 
 @ApiTags('auth')
+/**
+ * @SkipDelegation — Catégorie 2 (pre-delegation flows) :
+ * login/refresh/profile self-scoped avant le choix de délégation active.
+ * Le user n'a pas encore sélectionné de X-Delegation-Id. Cf. ADR-028.
+ */
 @SkipDelegation()
 @Controller('auth')
 export class AuthController {

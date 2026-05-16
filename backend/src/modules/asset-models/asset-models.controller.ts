@@ -31,6 +31,12 @@ import {
 @ApiTags('asset-models')
 @Controller('asset-models')
 @UseGuards(JwtAuthGuard)
+/**
+ * @SkipDelegation — Catégorie 4 (reference data / catalog) :
+ * catalogue vendor models (Cisco/Fortinet/etc.) partagé tenant-wide,
+ * délégation orthogonale. ADR-028 §B.0 Cat 4 → Option A capture
+ * `ctx.activeDelegationId` pour traçabilité forensique.
+ */
 @SkipDelegation()
 @ApiBearerAuth()
 export class AssetModelsController {

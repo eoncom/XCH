@@ -23,6 +23,11 @@ import { TenantAppearanceResponseDto } from './dto/tenant-appearance.response.dt
 
 @ApiTags('tenants')
 @Controller('tenants')
+/**
+ * @SkipDelegation — Catégorie 1 (tenant-wide super-admin) :
+ * configuration tenant (electricity, appearance, SSO, branding) = scope
+ * organisation, pas une délégation spécifique. Cf. ADR-028.
+ */
 @SkipDelegation()
 @RequireManage()
 @ApiBearerAuth()

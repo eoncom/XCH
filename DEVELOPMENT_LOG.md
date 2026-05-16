@@ -8221,3 +8221,24 @@ feat(audit): extend CallerCtx with ipAddress/userAgent (ADR-028 B.1)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-05-16
+
+**Date:** 2026-05-16 19:09:25
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 13
+- Frontend files modified: 0
+
+**Commit message:**
+```
+feat(audit): AuditLogEntry/Service + DTO enrichment + propagation tier-1 + Option A acted (ADR-028 B.3 + B.0.2/B.0.3)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

@@ -26,6 +26,11 @@ const RESET_DOMAINS: readonly ResetDomain[] = [
 @ApiTags('seed')
 @ApiBearerAuth()
 @Controller('seed')
+/**
+ * @SkipDelegation — Catégorie 5 (dev/test only) :
+ * dev seed data, gated par env flag (NODE_ENV !== 'production').
+ * Cf. ADR-028.
+ */
 @SkipDelegation()
 @RequireManage()
 export class SeedController {

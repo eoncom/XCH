@@ -64,6 +64,11 @@ export class UserDelegationsController {
    * Get current user's accessible delegations (for delegation switcher).
    */
   @Get('mine')
+  /**
+   * @SkipDelegation — Catégorie 3 (self-scoped operations) :
+   * liste des délégations DU caller (delegation switcher UI), délégation
+   * orthogonale. ADR-028 §B.0 Cat 3 → Option A capture délégation active.
+   */
   @SkipDelegation()
   @ApiOperation({ summary: "Get the current user's accessible delegations (for delegation switcher)" })
   @ApiOkResponse({ type: [UserDelegationResponseDto] })

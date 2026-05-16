@@ -28,6 +28,11 @@ export class OrganizationController {
   // ============================================================================
 
   @Post('delegations')
+  /**
+   * @SkipDelegation — Catégorie 1 (tenant-wide super-admin) :
+   * création délégation = structure organisationnelle tenant-wide, pas
+   * scope d'une délégation existante. Cf. ADR-028.
+   */
   @SkipDelegation()
   @RequireManage()
   @ApiOperation({ summary: 'Create a delegation (super admin only — tenant-wide organization structure)' })
@@ -76,6 +81,11 @@ export class OrganizationController {
   }
 
   @Delete('delegations/:id')
+  /**
+   * @SkipDelegation — Catégorie 1 (tenant-wide super-admin) :
+   * suppression délégation = structure organisationnelle tenant-wide,
+   * super-admin only. Cf. ADR-028.
+   */
   @SkipDelegation()
   @RequireManage()
   @ApiOperation({ summary: 'Delete a delegation (super admin only — must have no sites)' })

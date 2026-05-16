@@ -58,6 +58,11 @@ export class TestErrorController {
    * exactement de provoquer un unhandled).
    */
   @Get('backend')
+  /**
+   * @SkipDelegation — Catégorie 5 (dev/test only) :
+   * test error injection GlitchTip, gated par env flag
+   * (ENABLE_TEST_ERROR_ENDPOINTS=true). Cf. ADR-028.
+   */
   @SkipDelegation()
   @RequireManage()
   @ApiOperation({ summary: 'Synthèse erreur unhandled backend (super-admin + flag)' })
@@ -90,6 +95,11 @@ export class TestErrorController {
    * Réponse : 202 Accepted + jobId. Le job se déclenche async côté worker.
    */
   @Post('worker')
+  /**
+   * @SkipDelegation — Catégorie 5 (dev/test only) :
+   * enqueue test-error worker job pour GlitchTip, gated par env flag.
+   * Cf. ADR-028.
+   */
   @SkipDelegation()
   @RequireManage()
   @HttpCode(HttpStatus.ACCEPTED)
