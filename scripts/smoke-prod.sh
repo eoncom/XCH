@@ -11,12 +11,13 @@
 #   bash scripts/smoke-prod.sh https://other.host
 #   bash scripts/smoke-prod.sh --timeout 10
 #
-# 5 endpoints (pattern 307/200/401/401/200) :
+# 6 endpoints (pattern 307/200/401/401/200/200) :
 #   GET /                         → 307  (redirect login ou dashboard)
 #   GET /login                    → 200  (page login renderée)
 #   GET /api/auth/session         → 401  (session check sans cookie)
 #   GET /api/auth/profile         → 401  (auth-required sans cookie)
 #   GET /api/setup/status         → 200  (public, pas d'auth — sert aussi de health)
+#   GET /api/health               → 200  (Track E.2 — readiness probe DB+Redis+MinIO, 503 si degraded)
 #
 # Rationale du choix des paths :
 # - 2 frontend (`/`, `/login`) : prouve que Next.js sert les pages, le
@@ -50,6 +51,7 @@ CHECKS=(
   "/api/auth/session:401:auth required (sans cookie)"
   "/api/auth/profile:401:auth required (sans cookie)"
   "/api/setup/status:200:setup status public"
+  "/api/health:200:readiness probe (Track E.2 Pass 2)"
 )
 
 FAIL=0

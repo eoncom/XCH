@@ -41,6 +41,7 @@ import { SearchModule } from './modules/search/search.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { MonitorsApiModule } from './modules/monitoring/monitors-api.module';
 import { TestErrorModule } from './modules/test-error/test-error.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -117,6 +118,8 @@ import { TestErrorModule } from './modules/test-error/test-error.module';
     // S8 / item 6 — endpoints synthèses GlitchTip (gated env flag + super-admin).
     // Voir TestErrorModule pour la doc gating.
     TestErrorModule,
+    // Track E.2 Pass 2 — /api/health readiness probe (DB+Redis+MinIO).
+    HealthModule,
   ],
   providers: [
     {
