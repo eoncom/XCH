@@ -344,6 +344,7 @@ model Delegation {
   notificationChannels NotificationChannel[]
   notificationRules    NotificationRule[]
   budgets             Budget[]
+  auditLogs           AuditLog[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1172,14 +1173,21 @@ model AuditLog {
   tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userId     String?
   user       User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action     String // CREATE, UPDATE, DELETE
-  entityType String
-  entityId   String?
+  /// ADR-028 §B.0 nullability taxonomy (Option A actée Cat 3/4 self-scoped/catalog) :
+  /// - Cat 1 super-admin / Cat 2 pre-delegation / Cat 5 dev-test / SYSTEM_CTX → null légitime
+  /// - Cat 3 self-scoped / Cat 4 catalog → capture `ctx.activeDelegationId` (null si user sans délégation active)
+  /// - Endpoints délégation-scoped (6 services ADR-021 §1) → non-null obligatoire (test integration §B.0.3)
+  /// onDelete: SetNull préserve audit trail si délégation supprimée.
+  delegationId String?
+  delegation   Delegation? @relation(fields: [delegationId], references: [id], onDelete: SetNull)
+  action       String      // CREATE, UPDATE, DELETE
+  entityType   String
+  entityId     String?
 
   // Changes (JSON)
   changes Json? @db.JsonB // {before: {...}, after: {...}}
 
-  // Context
+  // Context — ADR-028 §B.1 capture systémique via @CallerCtxParam()
   ipAddress String?
   userAgent String?
 
@@ -1189,6 +1197,8 @@ model AuditLog {
   @@index([tenantId, timestamp])
   @@index([tenantId, userId])
   @@index([tenantId, entityType, entityId])
+  /// ADR-028 §B.2 — index composite pour query `GET /audit?delegationId=…` filtré
+  @@index([tenantId, delegationId, timestamp])
   @@map("audit_logs")
 }
 
