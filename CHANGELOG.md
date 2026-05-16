@@ -7,6 +7,128 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.3.4] - 2026-05-16 — Track E.3 (Bootstrap air-gap + cutover + 4-mode matrix)
+
+Closure du sub-track E.3 de Track E preprod-readiness. Stratégie v2.2 actée :
+utiliser **xch-deploy comme banc de test bootstrap répétable** (au lieu d'attendre
+une VM jetable IT employeur, économie ~3-7j wall-clock). Pattern wipe strict
+**XCH-only** capitalisé MCP `XCH_CO_HOSTED_DOCKER_PROJECTS_DISCIPLINE_2026_05_16`
+post-catastrophe partielle Pass 1 (5 containers GlitchTip + 2 volumes wiped
+malgré whitelist v1 — root cause `docker compose down --remove-orphans` sur
+project name partagé). Script v2 surgical + pollution check + recovery
+GlitchTip avec project name isolé `xch-glitchtip` figé pattern.
+
+### Added
+
+- **`scripts/teardown-xch-stack.sh`** (greenfield, ~400 LOC) — wipe XCH stack
+  uniquement avec :
+  - Whitelist explicite : 8 containers + 4 volumes + 1 network XCH
+  - Pollution check pre-wipe : ABORT si glitchtip-* présents dans project `xch`
+    (force isolation via `-p xch-glitchtip`)
+  - Surgical `docker stop` + `docker rm` + `docker volume rm` (jamais
+    `compose down --volumes --remove-orphans`)
+  - Pre-wipe backup automatique via `POST /api/backup/full` + **download du ZIP
+    vers host filesystem BEFORE MinIO wipe** (Pass 6 fix — gap identifié Pass 2)
+  - Validation post-wipe obligatoire : 4/4 GlitchTip sentinels running + Grafana
+    host:3000 alive
+  - Flags `--dry-run`, `--preserve-secrets`, `--skip-backup`, `--yes`
+
+- **`docs/operator/bootstrap-runbook.md`** — procédure pas-à-pas wipe + bootstrap
+  end-to-end (validé empiriquement par 2 cycles successifs Pass 1+2 sur
+  xch-deploy avec 0 écart résiduel cycle 2). Documente le gotcha NPM proxy DNS
+  cache (`docker exec nginx-proxy-manager-app-1 nginx -s reload` obligatoire
+  post-bootstrap).
+
+- **`docs/operator/deployment-modes.md`** — matrix 4 modes (cloud public /
+  cloud privé / **air-gap référence** / VPS basique) avec tableau croisé
+  pré-requis, livrables, risques. Air-gap seul mode validé empiriquement,
+  3 autres = templates dry-run.
+
+- **`docs/operator/cutover-prod-airgap.md`** — checklist cutover air-gap
+  pilote employeur (synthèse Pass 1-7 Track E.3 + V3 + V4 + GlitchTip
+  activation + offsite USB). Bloqueur cutover V4 NTP documenté
+  (seuil drift > 5min refuse cutover).
+
+- **`docs/operator/cutover-templates/`** — 3 templates dry-run :
+  `cutover-cloud-public.md`, `cutover-cloud-prive.md`, `cutover-vps-basique.md`
+  (validation réelle laissée Track G future).
+
+- **`docs/operator/rollback.md`** — procédure rollback git tag précédent +
+  restore backup si data corruption.
+
+- **`docs/operator/cert-management.md`** — self-signed local + CA interne +
+  Let's Encrypt selon mode + troubleshooting NPM cert chain.
+
+- **`docs/operator/offline-updates.md`** — patches OS air-gap : mirror APT
+  interne / snapshots VM IT employeur / import .deb manuel USB. Docker images
+  rebuild depuis tarball.
+
+- **`docs/operator/onboarding-user.md`** — création tenant + délégation +
+  invite user (UI + API). Pattern J1 mono-tenant + N+1 tenant Track G future.
+
+- **`docs/operator/server-hardening.md`** — UFW (réutilise `scripts/ufw-enforce.sh`
+  Track E.2 Pass 8) + SSH key only + fail2ban + journald + sudo NOPASSWD
+  limité aux scripts XCH.
+
+- **`docs/operator/secrets-rotation.md`** — usage `scripts/rotate-secrets.sh`
+  phases A/B/C + procédure manuelle POSTGRES_PASSWORD + key escrow patterns
+  ANSSI (sealed envelope / Shamir / vault).
+
+- **`docs/decisions/adr-029-sso-ldap-migration.md`** (Proposed) — décision
+  arbitrage stakeholder pour SSO LDAP J+1mois. Options A (LDAP direct, ~4-6h),
+  B (OIDC bridge Keycloak, ~1h + 1-2j IT employeur), C (local-only durable
+  parking M3). Recommandation RSI : C par défaut J1 avec re-évaluation
+  mensuelle M1/M2/M3.
+
+- **`docs/audit/track-e3-pass1-catastrophe-2026-05-16.md`** — forensic
+  catastrophe partielle Pass 1 (GlitchTip wiped malgré whitelist v1) + root
+  cause + recovery + pattern figé MCP `XCH_CO_HOSTED_DOCKER_PROJECTS_DISCIPLINE`.
+
+### Measured (Track E.3 Pass 1+2 — empirique sur xch-deploy)
+
+- **2 cycles wipe + bootstrap successifs réussis** avec 0 écart résiduel cycle 2.
+- **Bootstrap from scratch** : ~5min (download + secrets + compose up + healthcheck + NPM reload + smoke + setup wizard via API).
+- **Recovery GlitchTip** : isolated project `xch-glitchtip` + 3 nouveaux DSNs via `gen-dsn.sh` (~30sec).
+- **Pre-wipe backup** : pipeline validé (cycle 2 capture `full-backup-v2-2026-05-16T14-22-52.zip` automatique).
+- **NPM proxy DNS cache** : gotcha déclenché post-bootstrap cycle 1 → patch dans runbook (NPM reload mandatory).
+
+### Findings + patches Track E.3
+
+| # | Finding | Patch |
+|---|---|---|
+| 1 | `docker compose down --volumes --remove-orphans` sur compose project partagé tue GlitchTip co-hosted | Script v2 surgical + pollution check + MCP `XCH_CO_HOSTED_DOCKER_PROJECTS_DISCIPLINE_2026_05_16` |
+| 2 | Pre-wipe backup créé dans MinIO mais wiped avec MinIO volume | Patch script v2 : download ZIP via `GET /api/backup/:id/download` vers host filesystem AVANT wipe |
+| 3 | NPM proxy DNS cache (502 Bad Gateway post-bootstrap) | Runbook §5 : `docker exec <NPM> nginx -s reload` obligatoire |
+| 4 | `install-airgap.sh` requires `images/*.tar` directory (absent xch-deploy) | Runbook §2 documente le pattern manuel openssl secret generation pour banc de test ; `images/` requis pour cutover prod employeur (cf. `scripts/package-release.sh`) |
+| 5 | NTP V4 fail-fast : XCH dépend du host time, pas de fail-fast code | Runbook `cutover-prod-airgap.md §V4` : chrony interne mandatory + seuil drift > 5min bloqueur cutover |
+| 6 | SSO LDAP V3 : 0 module LDAP dans le codebase | ADR-029 Proposed avec 3 options arbitrage J1 / M1-M3 |
+
+### Out of scope (deferred Track E.4 + Track F)
+
+- **Pass 3 restore-full.sh v2 end-to-end** : deferred rate-limit ThrottlerGuard
+  pendant la session, pipeline déjà validé Track E.2 Pass 5 (mêmes APIs).
+  À re-confirmer Track E.4 ou next cycle.
+- ADR-029 implementation (Track F si Option A ou B retenue M2).
+- Test offsite LUKS exercise full (loopback fait Track E.2 Pass 7, vraie clé
+  USB physique différée cutover prod employeur).
+- Promotion CI `audit-egress.sh --strict` bloquant (surrogate target air-gap
+  nécessaire).
+- BackupJob model avec `startedAt/finishedAt/duration_ms` columns persistées.
+- `BACKUP_COMPLETED` `NotificationEventType` câblé sur BackupProcessor.
+- Refresh plan v3 candidat post-Track E.4 (`XCH_PLAN_V3_POST_V2_2026_05_XX`).
+
+### Notes opérateur
+
+- Worker rebuild caveat préservé : `docker compose build backend backend-worker
+  && docker compose up -d --force-recreate backend backend-worker`.
+- Si GlitchTip a été démarré sans `-p xch-glitchtip` historiquement (cas
+  xch-deploy avant Track E.3), opérateur DOIT le redémarrer avec project
+  isolé AVANT premier wipe XCH : `docker compose -f docker-compose.glitchtip.yml -p xch-glitchtip --env-file glitchtip/.env up -d --force-recreate`. La pollution check du script v2 refusera sinon.
+- Pas de breaking — runbooks + script greenfield ; v2.3.4 reste cohérent
+  avec v2.3.3 sur le plan code applicatif.
+
+---
+
 ## [2.3.3] - 2026-05-16 — Track E.2 (DR drill + monitoring + alerting + offsite)
 
 Closure du sub-track E.2 de Track E preprod-readiness. Décisions opérationnelles
