@@ -68,6 +68,11 @@ export class NotificationController {
 
   /** Static event/channel metadata for UI rendering. */
   @Get('meta')
+  /**
+   * @SkipDelegation — Catégorie 4 (reference data / tenant catalog) :
+   * metadata statique events/channels pour rendering UI, partagé tous users
+   * du tenant. ADR-028 §B.0 Cat 4 → Option A capture délégation active.
+   */
   @SkipDelegation()
   @RequireRead()
   @ApiOperation({ summary: 'Get notification event types and channels metadata' })
@@ -174,6 +179,11 @@ export class NotificationController {
 
   /** Tenant-wide overview (super-admin). */
   @Get('configs')
+  /**
+   * @SkipDelegation — Catégorie 1 (tenant-wide super-admin) :
+   * vue overview toutes notification settings du tenant, super-admin only.
+   * Cf. ADR-028.
+   */
   @SkipDelegation()
   @RequireManage()
   @ApiOperation({ summary: 'List all notification settings rows for the tenant (super admin)' })

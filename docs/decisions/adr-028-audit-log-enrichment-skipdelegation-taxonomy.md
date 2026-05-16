@@ -95,6 +95,112 @@ export class UsersController { ... }
 
 ### Partie B — AuditLog enrichment
 
+#### B.0 — Nullability taxonomy figée pour `audit_log.delegationId`
+
+**Ajout 2026-05-16 (sub-pass 1.B.-1 Track E.4)** : application explicite de la discipline nullability `delegationId` au cas spécifique `audit_log.delegationId`, dérivée de la combinaison ADRs existants. **Pas de contradictions inter-ADRs**, mais cartographie 5 cat @SkipDelegation ↔ nullability `audit_log.delegationId` non explicite avant cette section.
+
+**Verdict audit ADR 5-niveaux (sub-pass 1.B.-1)** : la discipline générale est figée implicitement par 4 sources convergentes — `audit_log.delegationId` hérite donc directement de cette discipline, formalisée ici pour le cas audit log.
+
+##### Sources de la discipline figée (lecture inter-ADRs)
+
+| Source | Contribution |
+|---|---|
+| [ADR-009](adr-009-delegation-first-model.md) "Rattachement par entité" | Pattern général : `delegationId` nullable ⇔ "global super-admin only" sur entités métier (Contact / BillingEntity / NotificationConfig). Règle cohérence : si `delegationId=null` alors action super-admin. |
+| [ADR-021 §6](adr-021-rbac-universal-data-filtering.md) catégorie D "Pas un scope d'autz" | Fige explicitement `audit_log.userId` nullable (actions système cron). **Extension cohérente à `audit_log.delegationId`** : nullable légitime pour actions tenant-wide / système, pas un scope d'autz row-level. |
+| [`caller-ctx.interface.ts:21`](../../backend/src/common/types/caller-ctx.interface.ts:21) | Pattern figé : `activeDelegationId: string \| null` avec commentaire "null on @SkipDelegation routes". Source canonique de la propagation. |
+| [`SYSTEM_CTX`](../../backend/src/common/types/caller-ctx.interface.ts:45) (cron/BullMQ/seed) | Force `activeDelegationId: null` systématiquement (forcé par construction). Aligne avec ADR-021 §6 cat D. |
+| [`AuditLogEntry` actuel](../../backend/src/common/services/audit-log.service.ts:4) | Pattern existant `userId?` / `ipAddress?` / `userAgent?` — nullable systématique. Extension `delegationId?` cohérente. |
+
+##### Cartographie 1:1 catégorie `@SkipDelegation` ↔ nullability `audit_log.delegationId`
+
+Application de la partie A (5 catégories `@SkipDelegation`) à la nullability `audit_log.delegationId` :
+
+| Cat | Endpoints type | `activeDelegationId` request-time | `audit_log.delegationId` attendu |
+|---|---|---|---|
+| **Cat 1 — Tenant-wide super-admin** (`admin`, `audit`, `backup`, `tenants`, `users` super-admin, `organization` CRUD délégations) | `X-Delegation-Id` absent OU ignoré, super-admin opère tenant-wide | `null` | **`null` LÉGITIME** (action tenant-wide, pas de scope délégation) |
+| **Cat 2 — Pre-delegation** (`auth`, `setup`) | Pré-authent, pas de header délégation | `null` | **`null` LÉGITIME** (avant choix délégation) |
+| **Cat 3 — Self-scoped** (`notification` me/*, `user-notification`, `user-delegations` me) | Header `X-Delegation-Id` **peut être présent** (UI a sélectionné une délégation active même si l'endpoint ne l'utilise pas pour scope) | **null OU non-null** selon arbitrage Option A/B (voir §B.0.2) | **arbitrage Option A capture / Option B null par convention** |
+| **Cat 4 — Reference data / catalog** (`asset-models`) | Header `X-Delegation-Id` peut être présent | **null OU non-null** selon arbitrage Option A/B (voir §B.0.2) | **arbitrage Option A capture / Option B null par convention** |
+| **Cat 5 — Dev/test only** (`seed`, `test-error`, gated `NODE_ENV !== 'production'`) | Gated env, contexte dev | `null` typique | **`null` LÉGITIME** (jamais en prod) |
+| **SYSTEM_CTX** (cron / BullMQ / seed scripts) | Forcé par construction | `null` toujours | **`null` LÉGITIME** (per ADR-021 §6 cat D + `caller-ctx.interface.ts:55`) |
+| **Endpoints délégation-scoped** (`sites`, `assets`, `racks`, `tasks`, `contacts`, `expenses`, `floor-plans`, `monitoring`, etc. — couverts par ADR-021 §1 pattern `@CallerCtx`) | Header `X-Delegation-Id` **obligatoire** (`DelegationGuard` rejette si absent) | **non-null obligatoire** | **non-null OBLIGATOIRE** (un audit log émanant d'une action délégation-scoped sans `delegationId` = bug détectable) |
+
+##### B.0.1 — Mapping bug détectable vs null légitime
+
+Distinction binaire pour tests integration + observabilité audit forensique :
+
+- **`audit_log.delegationId IS NULL` LÉGITIME** : action issue d'un endpoint listé ci-dessus en Cat 1/2/3-OptionB/4-OptionB/5/SYSTEM_CTX. Aucun bug.
+- **`audit_log.delegationId IS NULL` BUG** : action issue d'un endpoint délégation-scoped (Cat ADR-021 §1) qui aurait dû propager `ctx.activeDelegationId` non-null. Détectable via :
+  - Test integration : assert qu'un PATCH sur `/sites/:id` (délégation-scoped) produit un `audit_log` avec `delegationId IS NOT NULL`
+  - Observabilité : alerte GlitchTip si `audit_log.delegationId IS NULL` AND `entityType IN ('site', 'asset', 'rack', 'task', 'contact', 'expense', 'floor-plan', 'monitoring-target', ...)` (entités délégation-scoped)
+
+**Pas de CHECK constraint Postgres** retenu (entityType n'est pas un enum strict, évolution future = friction migration) — test integration + observabilité suffisent.
+
+##### B.0.2 — Sub-décision Cat 3 + Cat 4 (self-scoped + catalog) : Option A vs Option B
+
+Pour les catégories 3 (self-scoped : préférences notif, user-notification, user-delegations me) et 4 (catalog : asset-models), le header `X-Delegation-Id` peut être présent dans la requête (UI a une délégation active sélectionnée même si l'endpoint ne l'utilise pas pour scope les data). Deux options sémantiquement défendables :
+
+**Option A — Capture délégation active (RECOMMANDÉE pilote air-gap)** :
+- `audit_log.delegationId = ctx.activeDelegationId` (peut être null si user n'a aucune délégation active)
+- **Pro** : traçabilité forensique maximale (sait quel contexte UI l'user avait au moment de l'action self-scoped) — aligne avec threat model insider air-gap pilote
+- **Pro** : coût zero (passer `ctx.activeDelegationId` au audit log même si null)
+- **Pro** : null reste sémantique distinct ("user n'avait pas de délégation active" vs "endpoint hors contexte délégation")
+- **Con** : ambiguïté sémantique mineure — la délégation n'a aucune influence sur l'action self-scoped
+
+**Option B — Null par convention** :
+- `audit_log.delegationId = null` systématique sur Cat 3 + Cat 4
+- **Pro** : sémantique pure — null = "self-scoped, pas de délégation impliquée par construction"
+- **Pro** : aligne avec commentaire `caller-ctx.interface.ts:21` ("null on @SkipDelegation routes" — interprétation stricte)
+- **Con** : perte info forensique sur contexte UI au moment de l'action
+
+**Recommandation RSI Track E.4** : **Option A** car threat model air-gap insider = priorité traçabilité maximale, et le coût est nul (juste passer `ctx.activeDelegationId` qui est déjà populé). Option A documente que `null` sur Cat 3/4 signifie "user sans délégation active à ce moment", pas "endpoint sans contexte délégation".
+
+**Arbitrage acté (2026-05-16, ping intermédiaire sub-pass 1.B.-1)** : **Option A retenue**. Justifications stakeholder convergentes :
+- Coût zéro (champ déjà disponible dans CallerCtx)
+- Traçabilité forensique max (threat model insider/supply-chain air-gap)
+- Préservation sémantique distincte de `null` post-Option A : "user sans délégation active" vs (avec Option B) "endpoint self-scoped par convention" (ambigu cross Cat 1/2/3)
+- Anti-Option B subtil : Option B rendrait `audit_log.delegationId IS NULL` ambigu sur 3 catégories distinctes (super-admin / pre-delegation / self-scoped) — distinction sémantique perdue
+- Aligne discipline méta XCH cumulée Track E (BOLA Track E.1 + capture IP/UA Track E.4 + audit log enrichment ADR-028) = "audit forensique exploitable long terme"
+
+##### B.0.3 — Test asserts integration pattern (Option A appliqué)
+
+Pattern de test pour distinguer les 3 régimes Option A figés :
+
+```ts
+// 1) Endpoints délégation-scoped (6 services ADR-021 §1) : delegationId NON-NULL obligatoire
+it('PATCH /sites/:id should write audit_log with delegationId NOT NULL', async () => {
+  await request(app).patch(`/sites/${siteId}`)
+    .set('X-Delegation-Id', delegationId)
+    .send({ name: 'new' });
+  const log = await prisma.auditLog.findFirst({ where: { entityType: 'site', entityId: siteId }, orderBy: { timestamp: 'desc' } });
+  expect(log.delegationId).toBe(delegationId);  // NOT NULL obligatoire
+});
+
+// 2) Endpoints Cat 1/2/5/SYSTEM_CTX : delegationId NULL légitime
+it('POST /users (super-admin) should write audit_log with delegationId IS NULL', async () => {
+  await request(app).post('/users').send({ ... });
+  const log = await prisma.auditLog.findFirst({ where: { entityType: 'user', action: 'CREATE' }, orderBy: { timestamp: 'desc' } });
+  expect(log.delegationId).toBeNull();
+});
+
+// 3) Endpoints Cat 3 self-scoped + Cat 4 catalog (Option A) : delegationId = ctx.activeDelegationId (match capture)
+it('PATCH /user-notifications/me with active delegation should capture activeDelegationId', async () => {
+  await request(app).patch('/user-notifications/me')
+    .set('X-Delegation-Id', delegationId)
+    .send({ ... });
+  const log = await prisma.auditLog.findFirst({ where: { entityType: 'user-notification' }, orderBy: { timestamp: 'desc' } });
+  expect(log.delegationId).toBe(delegationId);  // match capture Option A
+});
+
+it('PATCH /user-notifications/me without active delegation should write delegationId IS NULL', async () => {
+  await request(app).patch('/user-notifications/me').send({ ... });  // pas de X-Delegation-Id
+  const log = await prisma.auditLog.findFirst({ where: { entityType: 'user-notification' }, orderBy: { timestamp: 'desc' } });
+  expect(log.delegationId).toBeNull();  // legitimate null Option A
+});
+```
+
+**Observabilité bug détectable (per B.0.1)** : alerte GlitchTip si `audit_log.delegationId IS NULL AND entityType IN ('site', 'asset', 'rack', 'task', 'contact', 'expense', 'floor-plan', 'monitoring-target', ...)` (entités délégation-scoped). Wire post-cutover (Track F si volume justifie).
+
 #### B.1 — Capture systémique `ipAddress` + `userAgent` via interceptor global
 
 Créer `AuditLogContextInterceptor` (NestJS interceptor) qui attache `req.ip` + `req.headers['user-agent']` au `CallerCtx` pour propagation jusqu'aux callers `auditLogService.log()`.

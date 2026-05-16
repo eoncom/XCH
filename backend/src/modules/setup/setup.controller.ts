@@ -25,6 +25,11 @@ import { Public } from '../../common/decorators/public.decorator';
  */
 @ApiTags('setup')
 @Public()
+/**
+ * @SkipDelegation — Catégorie 2 (pre-delegation flows) :
+ * wizard installation initiale, accessible avant tout user / délégation.
+ * Cf. ADR-028.
+ */
 @SkipDelegation()
 @Controller('setup')
 export class SetupController {

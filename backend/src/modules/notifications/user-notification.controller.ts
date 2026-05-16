@@ -30,6 +30,12 @@ import { CountResponseDto } from '../../common/dto/response';
 @ApiTags('User Notifications')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+/**
+ * @SkipDelegation — Catégorie 3 (self-scoped operations) :
+ * préférences notifications du caller (inbox `me/*`), délégation
+ * orthogonale. ADR-028 §B.0 Cat 3 → Option A capture
+ * `ctx.activeDelegationId` (null si user sans délégation active).
+ */
 @SkipDelegation()
 @Controller('notifications/inbox')
 export class UserNotificationController {

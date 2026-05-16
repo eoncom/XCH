@@ -44,7 +44,7 @@ describe('BackupProcessor (Track D.1 step 5)', () => {
       });
       const backup = { createFullBackupV2 } as never;
       const events = { jobCompleted: jest.fn(), jobFailed: jest.fn() } as never;
-      const processor = new BackupProcessor(backup, events);
+      const processor = new BackupProcessor(backup, events, {} as never);
 
       const job = mockJob({
         name: JOB_BACKUP_FULL,
@@ -80,7 +80,7 @@ describe('BackupProcessor (Track D.1 step 5)', () => {
       const createFullBackupV2 = jest.fn().mockResolvedValue({});
       const backup = { createFullBackupV2 } as never;
       const events = {} as never;
-      const processor = new BackupProcessor(backup, events);
+      const processor = new BackupProcessor(backup, events, {} as never);
 
       const job = mockJob({ data: { tenantId: 'tnt-test', userId: 'u-1', options: {} } });
       await processor.handleBackupFull(job as never);
@@ -110,7 +110,7 @@ describe('BackupProcessor (Track D.1 step 5)', () => {
       });
       const backup = { restoreFullBackupV2 } as never;
       const events = {} as never;
-      const processor = new BackupProcessor(backup, events);
+      const processor = new BackupProcessor(backup, events, {} as never);
 
       const job = mockJob({
         name: JOB_RESTORE_FULL,
@@ -143,7 +143,7 @@ describe('BackupProcessor (Track D.1 step 5)', () => {
       });
       const backup = { createSiteBackup } as never;
       const events = {} as never;
-      const processor = new BackupProcessor(backup, events);
+      const processor = new BackupProcessor(backup, events, {} as never);
 
       const job = mockJob({
         name: JOB_BACKUP_SITE,
@@ -158,7 +158,7 @@ describe('BackupProcessor (Track D.1 step 5)', () => {
 
   describe('handleRestoreSite', () => {
     it('explicitly throws (parked — site restore async path deferred to D.2)', async () => {
-      const processor = new BackupProcessor({} as never, {} as never);
+      const processor = new BackupProcessor({} as never, {} as never, {} as never);
       const job = mockJob({
         name: JOB_RESTORE_SITE,
         data: { tenantId: 'tnt-test', backupId: 'audit-1' },
@@ -173,7 +173,7 @@ describe('BackupProcessor (Track D.1 step 5)', () => {
   describe('queue lifecycle hooks', () => {
     it('onCompleted emits structured jobCompleted event with duration + tenant_id', () => {
       const events = { jobCompleted: jest.fn(), jobFailed: jest.fn() };
-      const processor = new BackupProcessor({} as never, events as never);
+      const processor = new BackupProcessor({} as never, events as never, {} as never);
       const job = mockJob({
         name: JOB_BACKUP_FULL,
         data: { tenantId: 'tnt-test' },
@@ -197,7 +197,7 @@ describe('BackupProcessor (Track D.1 step 5)', () => {
 
     it('onFailed emits ONLY after retries exhausted (matches MonitorProcessor pattern)', () => {
       const events = { jobCompleted: jest.fn(), jobFailed: jest.fn() };
-      const processor = new BackupProcessor({} as never, events as never);
+      const processor = new BackupProcessor({} as never, events as never, {} as never);
 
       // Job that has more retries to try — onFailed must be a no-op.
       const earlyJob = mockJob({
@@ -228,7 +228,7 @@ describe('BackupProcessor (Track D.1 step 5)', () => {
       // With attempts:1 and attemptsMade:1, the condition
       // `attemptsMade < attempts` is false → emit immediately.
       const events = { jobCompleted: jest.fn(), jobFailed: jest.fn() };
-      const processor = new BackupProcessor({} as never, events as never);
+      const processor = new BackupProcessor({} as never, events as never, {} as never);
       const job = mockJob({ attemptsMade: 1, opts: { attempts: 1 } });
       processor.onFailed(job as never, new Error('immediate'));
       expect(events.jobFailed).toHaveBeenCalledTimes(1);

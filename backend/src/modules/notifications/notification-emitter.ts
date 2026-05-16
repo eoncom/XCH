@@ -146,4 +146,48 @@ export class NotificationEmitter {
       actor: params.actor,
     });
   }
+
+  // ──────────────── Backup events (Track E.4 Pass 9) ────────────────
+
+  /**
+   * Émis par `BackupProcessor.@OnQueueCompleted()` après JOB_BACKUP_FULL ou
+   * JOB_BACKUP_SITE. Pattern figé ADR-020 + Track E.4 plan v0.1 Pass 9 wiring.
+   *
+   * NotificationEventType.BACKUP_COMPLETED (migration 7a_notification_event_backup_completed).
+   * Le système de notification existant route ensuite vers les NotificationChannel
+   * actifs pour le tenant (EMAIL / TEAMS) selon les NotificationRule configurées.
+   */
+  async backupCompleted(params: {
+    tenantId: string;
+    jobId: string;
+    jobKind: 'full' | 'site';
+    durationMs: number;
+    sizeBytes?: number;
+    actor?: { id: string; name: string; email: string };
+  }) {
+    const sizeLabel = params.sizeBytes
+      ? ` (${(params.sizeBytes / (1024 * 1024)).toFixed(2)} MB)`
+      : '';
+    const durationLabel = `${(params.durationMs / 1000).toFixed(2)}s`;
+    const kindLabel = params.jobKind === 'full' ? 'complet' : 'site';
+
+    await this.notificationService.queueDispatch({
+      tenantId: params.tenantId,
+      eventType: NotificationEventType.BACKUP_COMPLETED,
+      entity: { type: 'backup', id: params.jobId, name: `Backup ${kindLabel} ${params.jobId}` },
+      title: `✅ Backup ${kindLabel} terminé`,
+      bodyHtml: `<p>Le backup ${kindLabel} <code>${params.jobId}</code> s'est terminé avec succès en <strong>${durationLabel}</strong>${sizeLabel}.</p>`,
+      bodyText: `Backup ${kindLabel} ${params.jobId} terminé en ${durationLabel}${sizeLabel}.`,
+      actionUrl: `/dashboard/settings#backup-history`,
+      actor: params.actor,
+      metadata: {
+        details: {
+          'Type': kindLabel,
+          'Job ID': params.jobId,
+          'Durée': durationLabel,
+          ...(params.sizeBytes ? { 'Taille': `${(params.sizeBytes / (1024 * 1024)).toFixed(2)} MB` } : {}),
+        },
+      },
+    });
+  }
 }

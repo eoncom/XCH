@@ -79,6 +79,11 @@ import {
 @ApiTags('backup')
 @ApiBearerAuth()
 @Controller('backup')
+/**
+ * @SkipDelegation — Catégorie 1 (tenant-wide super-admin) :
+ * backup/restore opèrent tenant-wide (toutes délégations), pas une
+ * délégation spécifique. Cf. ADR-028.
+ */
 @SkipDelegation()
 @RequireManage()
 export class BackupController {

@@ -129,6 +129,11 @@ export class UsersController {
   }
 
   @Post(':id/toggle-super-admin')
+  /**
+   * @SkipDelegation — Catégorie 1 (tenant-wide super-admin) :
+   * gestion super-admin flag = scope organisation, pas une délégation
+   * spécifique. Cf. ADR-028.
+   */
   @SkipDelegation()
   @RequireManage()
   @ApiOperation({ summary: 'Promote or demote a user as super admin' })
@@ -144,6 +149,11 @@ export class UsersController {
 
   // Settings endpoints - accessible to all authenticated users (no delegation required)
   @Get('me/profile')
+  /**
+   * @SkipDelegation — Catégorie 3 (self-scoped operations) :
+   * profil du caller, délégation orthogonale. ADR-028 §B.0 Cat 3 →
+   * Option A capture `ctx.activeDelegationId` (null si user sans délégation active).
+   */
   @SkipDelegation()
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiOkResponse({ type: UserProfileResponseDto })
@@ -153,6 +163,10 @@ export class UsersController {
   }
 
   @Put('me/profile')
+  /**
+   * @SkipDelegation — Catégorie 3 (self-scoped operations) :
+   * update profil du caller, délégation orthogonale. ADR-028 §B.0 Cat 3 → Option A.
+   */
   @SkipDelegation()
   @ApiOperation({ summary: 'Update current user profile' })
   @ApiOkResponse({ type: UserProfileResponseDto })
@@ -165,6 +179,10 @@ export class UsersController {
   }
 
   @Post('me/change-password')
+  /**
+   * @SkipDelegation — Catégorie 3 (self-scoped operations) :
+   * change password du caller, délégation orthogonale. ADR-028 §B.0 Cat 3 → Option A.
+   */
   @SkipDelegation()
   @ApiOperation({ summary: 'Change current user password' })
   @ApiOkResponse({ type: UserPasswordChangedResultResponseDto })
@@ -180,6 +198,10 @@ export class UsersController {
   // ============================================================================
 
   @Get('me/appearance')
+  /**
+   * @SkipDelegation — Catégorie 3 (self-scoped operations) :
+   * apparence du caller (ADR-010), délégation orthogonale. ADR-028 §B.0 Cat 3 → Option A.
+   */
   @SkipDelegation()
   @ApiOperation({ summary: 'Get current user raw appearance preference (inherit or custom)' })
   @ApiOkResponse({ type: UserAppearanceResponseDto })
@@ -189,6 +211,10 @@ export class UsersController {
   }
 
   @Patch('me/appearance')
+  /**
+   * @SkipDelegation — Catégorie 3 (self-scoped operations) :
+   * update apparence du caller (ADR-010), délégation orthogonale. ADR-028 §B.0 Cat 3 → Option A.
+   */
   @SkipDelegation()
   @ApiOperation({ summary: 'Update current user appearance preference' })
   @ApiOkResponse({ type: UserEffectiveAppearanceResponseDto })
@@ -201,6 +227,11 @@ export class UsersController {
   }
 
   @Get('me/effective-appearance')
+  /**
+   * @SkipDelegation — Catégorie 3 (self-scoped operations) :
+   * apparence effective (tenant defaults + user override, ADR-010),
+   * délégation orthogonale. ADR-028 §B.0 Cat 3 → Option A.
+   */
   @SkipDelegation()
   @ApiOperation({ summary: 'Get effective appearance (tenant defaults merged with user override)' })
   @ApiOkResponse({ type: UserEffectiveAppearanceResponseDto })

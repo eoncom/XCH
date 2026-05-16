@@ -50,8 +50,9 @@ export class SitesController {
   async create(
     @Body() createSiteDto: CreateSiteDto,
     @Request() req: AuthRequest,
+    @CallerCtxParam() ctx: CallerCtx,
   ): Promise<SiteResponseDto> {
-    const site = await this.sitesService.create(req.user.tenantId, createSiteDto, req.user.userId);
+    const site = await this.sitesService.create(req.user.tenantId, createSiteDto, req.user.userId, ctx);
     return toResponse(SiteResponseDto, site);
   }
 

@@ -27,6 +27,21 @@ export interface CallerCtx {
    * cron / BullMQ / seed bypass.
    */
   systemReason?: string;
+  /**
+   * Source IP captured from `req.ip` (IPv4-mapped IPv6 like `::ffff:1.2.3.4`
+   * is normalized to `1.2.3.4`). Populated by `@CallerCtxParam()` for HTTP
+   * requests, `null` for `SYSTEM_CTX` (cron/BullMQ/seed).
+   *
+   * ADR-028 §B.1 — capture systémique pour audit forensique air-gap.
+   */
+  ipAddress?: string | null;
+  /**
+   * Source User-Agent captured from `req.headers['user-agent']`. Populated by
+   * `@CallerCtxParam()` for HTTP requests, `null` for `SYSTEM_CTX`.
+   *
+   * ADR-028 §B.1.
+   */
+  userAgent?: string | null;
 }
 
 /**
@@ -55,5 +70,9 @@ export function SYSTEM_CTX(reason: string, tenantId: string): CallerCtx {
     activeDelegationId: null,
     activeRight: 'MANAGE',
     systemReason: reason,
+    // ADR-028 §B.0 — SYSTEM_CTX forces null per Nullability taxonomy
+    // (cron/BullMQ/seed = legitimate null on audit_log.delegationId)
+    ipAddress: null,
+    userAgent: null,
   };
 }

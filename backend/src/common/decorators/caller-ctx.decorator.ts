@@ -19,6 +19,17 @@ import { CallerCtx } from '../types/caller-ctx.interface';
 // Renamed `CallerCtxParam` (vs `CallerCtx`) to avoid TS2395 merged-
 // declaration conflict with the imported `CallerCtx` interface.
 // Controllers import { CallerCtxParam } @CallerCtxParam() ctx: CallerCtx.
+/**
+ * Normalize IPv4-mapped IPv6 addresses (`::ffff:1.2.3.4` → `1.2.3.4`) for
+ * cleaner audit log output. Express sets `req.ip` to the IPv6-mapped form
+ * by default when `trust proxy` is enabled and the upstream is IPv4.
+ * ADR-028 §B.1.
+ */
+function normalizeIp(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  return raw.replace(/^::ffff:/i, '');
+}
+
 export const CallerCtxParam = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): CallerCtx => {
     const request = ctx.switchToHttp().getRequest();
@@ -34,6 +45,14 @@ export const CallerCtxParam = createParamDecorator(
       tenantId: user.tenantId,
       activeDelegationId: request.delegationId ?? null,
       activeRight: (request.localRole as CallerCtx['activeRight']) ?? null,
+      // ADR-028 §B.1 — capture systémique IP/UA pour audit forensique air-gap.
+      // Option A actée §B.0.2 : delegationId déjà capturé via activeDelegationId
+      // ci-dessus, le service AuditLog le propage tel quel.
+      ipAddress: normalizeIp(request.ip),
+      userAgent:
+        typeof request.headers?.['user-agent'] === 'string'
+          ? request.headers['user-agent']
+          : null,
     };
   },
 );

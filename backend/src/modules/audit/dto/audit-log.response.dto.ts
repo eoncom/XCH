@@ -20,6 +20,24 @@ export class AuditLogUserRefResponseDto {
 }
 
 /**
+ * Compact delegation reference embedded in AuditLog rows. ADR-028 §B.3.
+ * Mirrors the `select` declared in audit.service.query (id + name + code).
+ */
+export class AuditLogDelegationRefResponseDto {
+  @ApiProperty()
+  @Expose()
+  id!: string;
+
+  @ApiProperty()
+  @Expose()
+  name!: string;
+
+  @ApiProperty()
+  @Expose()
+  code!: string;
+}
+
+/**
  * Single AuditLog row exposed by `GET /audit` and `GET /audit/entity/:type/:id`.
  *
  * Cas C — Prisma scalars + optional user ref + the synthetic
@@ -76,6 +94,22 @@ export class AuditLogResponseDto {
   @Expose()
   @Type(() => AuditLogUserRefResponseDto)
   user?: AuditLogUserRefResponseDto | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      'ADR-028 §B.0 — active delegation captured from `ctx.activeDelegationId`. ' +
+      'null légitime pour Cat 1/2/5/SYSTEM_CTX, null Option A pour Cat 3/4 sans délégation active, ' +
+      'non-null obligatoire pour endpoints délégation-scoped (test integration §B.0.3).',
+  })
+  @Expose()
+  delegationId?: string | null;
+
+  @ApiPropertyOptional({ type: () => AuditLogDelegationRefResponseDto, nullable: true })
+  @Expose()
+  @Type(() => AuditLogDelegationRefResponseDto)
+  delegation?: AuditLogDelegationRefResponseDto | null;
 
   @ApiPropertyOptional({
     type: String,
