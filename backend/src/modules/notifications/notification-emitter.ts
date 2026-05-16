@@ -153,7 +153,7 @@ export class NotificationEmitter {
    * Émis par `BackupProcessor.@OnQueueCompleted()` après JOB_BACKUP_FULL ou
    * JOB_BACKUP_SITE. Pattern figé ADR-020 + Track E.4 plan v0.1 Pass 9 wiring.
    *
-   * NotificationEventType.BACKUP_COMPLETED (migration 13_notification_event_backup_completed).
+   * NotificationEventType.BACKUP_COMPLETED (migration 7a_notification_event_backup_completed).
    * Le système de notification existant route ensuite vers les NotificationChannel
    * actifs pour le tenant (EMAIL / TEAMS) selon les NotificationRule configurées.
    */

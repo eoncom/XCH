@@ -1,10 +1,16 @@
 -- =============================================================================
--- 13_notification_event_backup_completed — Notification wiring backup success
+-- 7a_notification_event_backup_completed — Notification wiring backup success
 --
 -- Track E.4 PR1 Pass 9 — ajout valeur enum `BACKUP_COMPLETED` au type
 -- `NotificationEventType`. Permet à BackupProcessor.@OnQueueCompleted()
 -- d'émettre une notification post-succès via le NotificationEmitter
 -- existant (pattern ADR-020).
+--
+-- Renommé de `13_*` à `7a_*` (fix CI 2026-05-16) pour respecter l'ordre
+-- lexicographique Prisma : la migration doit être appliquée APRÈS
+-- `6_notifications_split` qui crée le type `NotificationEventType`.
+-- Naming `7a_*` place la migration entre `7_notif_unique_nulls_not_distinct`
+-- et `8_fk_ondelete_and_checks` lexico (char 1 `a` (0x61) > `_` (0x5F)).
 --
 -- Pas de breaking — ALTER TYPE ADD VALUE est additive et ne touche pas
 -- les rows existantes.
