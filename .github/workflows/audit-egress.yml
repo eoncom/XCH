@@ -1,0 +1,69 @@
+name: Audit egress (Track E.2 Pass 8 — non-blocking)
+
+# Track E.2 Pass 8 — promotion non-bloquante de scripts/audit-egress.sh en CI.
+# Le check va FAIL sur GitHub runners car :
+#   - Assertion 1 (sentry.io unreachable) — runners ont internet ouvert → 200
+#   - Assertion 2 (sentry.io NXDOMAIN) — DNS public résout → succès
+#   - Assertion 3 (glitchtip-web:8000 reachable) — pas de stack GlitchTip sur runner → ERR
+#   - Assertion 4 (no 'sentry.io' hardcoded in code) — RUNNER COMPATIBLE → PASS attendu
+#
+# Cette workflow est volontairement non-bloquante (`continue-on-error: true`)
+# jusqu'à Track E.3 (surrogate target air-gap). Elle permet néanmoins de
+# détecter une régression sur Assertion 4 (anti-pattern : hardcode sentry.io)
+# même depuis un runner cloud.
+#
+# Pour exécuter le check complet (4/4 strict), opérer SSH sur le serveur
+# pilote air-gap : `bash scripts/audit-egress.sh --strict`.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  audit-egress:
+    name: Audit egress (Assertion 4 code grep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    continue-on-error: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Assertion 4 only (code-level grep)
+        run: |
+          set +e
+          # Reproduit l'assertion 4 du script sans le wrapper container/réseau
+          MATCHES=$(grep -RIn --include='*.ts' --include='*.tsx' --include='*.js' \
+            -E "['\"]https?://[a-zA-Z0-9.-]*sentry\.io" backend/src frontend/src 2>/dev/null \
+            | wc -l)
+          echo "Hardcoded 'sentry.io' references in backend/src + frontend/src : $MATCHES"
+          if [[ "$MATCHES" -gt 0 ]]; then
+            echo ""
+            echo "::error::Assertion 4 FAIL — found $MATCHES hardcoded 'sentry.io' reference(s) — air-gap violation."
+            echo ""
+            echo "Detail :"
+            grep -RIn --include='*.ts' --include='*.tsx' --include='*.js' \
+              -E "['\"]https?://[a-zA-Z0-9.-]*sentry\.io" backend/src frontend/src 2>/dev/null
+            exit 1
+          fi
+          echo "✓ Assertion 4 PASS — 0 hardcoded sentry.io reference."
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Audit egress (Track E.2 Pass 8)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Non-blocking** : assertions 1-3 (network/DNS) require an air-gap runner ; only Assertion 4 (code-level grep for hardcoded \`sentry.io\`) is executed here." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Full strict run : SSH to the air-gap pilot and execute \`bash scripts/audit-egress.sh --strict\` — voir docs/audit/track-e2-glitchtip-state.md (Pass 1 verdict)." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Track E.3 cutover : promotion à blocking quand un surrogate target air-gap est disponible." >> $GITHUB_STEP_SUMMARY

@@ -7,6 +7,66 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.3.3] - 2026-05-16 — Track E.2 (DR drill + monitoring + alerting + offsite)
+
+Closure du sub-track E.2 de Track E preprod-readiness. Décisions opérationnelles
+RSI D2.1-D2.4 figées : SMTP Postfix relay (D2.1), Prometheus+Grafana self-hosted
+réutilisé (D2.2), USB chiffré LUKS rotation hebdo (D2.3), syslog local pas de
+SIEM J1 (D2.4). Vigilance V1 (canal sortant GlitchTip) résolue par audit empirique.
+
+### Added
+
+- **`GET /api/health` readiness probe** ([backend/src/modules/health/](backend/src/modules/health/)) — réponse 200 `{status:ok,db,redis,minio,uptime_s,version}` ou 503 `degraded`. Fail-soft 3s par dépendance (DB raw `SELECT 1`, Redis TCP ping, MinIO `/minio/health/live`). Marquée `@Public()` + `@SkipDelegation()` per ADR-028 catégorie 1 (sonde infra, pas de scope tenant). Jest 4/4. Patch additif, pas de breaking.
+
+- **`scripts/restore-full.sh` réécrit pour backup v2 ZIP** — le script legacy v1 (tar.gz + db.dump + minio/) était silencieusement cassé en prod. Deux modes : `--mode=api` (défaut — multipart vers `/api/backup/full/restore-upload`, idempotent Bull job, support sidecar `.enc.json` chiffré) + `--mode=cli` (fallback backend-down, stub partiel — backlog Track E.4). `--dry-run` flag.
+
+- **`scripts/offsite-backup-luks.sh`** — D2.3 rotation hebdo offsite. Pattern `cryptsetup luksOpen` → mount → rsync (ZIP + sidecars only) → retention `RETENTION_DAYS` → umount → luksClose. Warning si backup > 36h (RPO drift). Mode batch via `LUKS_PASSPHRASE_FILE` ou interactif. Loopback équivalent acceptable pour drill ; vraie clé USB pour pilote employeur.
+
+- **`scripts/ufw-enforce.sh`** — promotion du template UFW de `INSTALL_PROD.md` en script idempotent. Default deny in/out + allow SSH/HTTP/HTTPS/DNS/NTP + allow optionnel SMTP_RELAY/NTP_SOURCE. `--dry-run` + `--reset` flags.
+
+- **`.github/workflows/audit-egress.yml`** — CI step non-bloquant exécutant l'assertion 4 (grep `sentry.io` dans le code) du script `audit-egress.sh`. Promotion à blocking différée Track E.3 (surrogate target air-gap nécessaire pour assertions 1-3).
+
+- **5 runbooks operator** sous `docs/operator/` : `dr-drill.md` (RTO/RPO mesurés), `alerting.md` (D2.1+D2.2+D2.4), `recovery-runbook.md` (5 scénarios service-down), `incident-response.md` (Detect/Assess/Contain/Recover/Post-mortem + drill trimestriel D4.4), `offsite-backup.md` (procédure USB LUKS + key escrow patterns).
+
+- **`docs/audit/track-e2-glitchtip-state.md`** — audit empirique V1 vigilance : verdict GlitchTip self-hosted ACTIVE depuis v2.1.0 (7 jours), 7 événements historiques persistés (S8 + D.2 + E.1), DSNs `glitchtip-web:8000` internes confirmés, frontend DSN via NPM `glitch.<DEPLOY_DOMAIN>` → 192.168.0.13 (privée), zéro hardcoded `sentry.io` dans le code, zéro fuite Sentry SaaS.
+
+### Measured (DR drill Pass 5 — tenant demo xch-deploy)
+
+- **Backup duration (encrypted AES-256-GCM, 724 KB)** : 474 ms (Bull `duration_ms`)
+- **Restore RTO** : 1 095 ms (1.1 s) — `_created: 12` + `_skipped: 189` prouve l'idempotence des natural keys (ADR-025 §D)
+- **Recovery validée** : contact supprimé restauré via NK match (nouveau ID, mêmes champs name+email)
+- **Smoke 6/6** (incluant `/api/health`) — extrapolation prod employeur tenant ≤ 1 GB → RTO opérateur ~30 min cible
+- **Scénario B (Redis restart) exercé live** : recovery propre, `setup/status` retourne services ok < 30s
+
+### Validated (Pass 4 — D2.1)
+
+- **SMTP pipeline end-to-end via Mailpit mock** : `POST /api/notifications/test {kind:EMAIL}` → email capturé Mailpit UI (`xch-deploy:8025`) avec subject + body intacts. Real-SMTP vers `<SMTP_RELAY>` employeur différé Track E.3 cutover.
+
+### Documentation
+
+- `scripts/smoke-prod.sh` étendu de 5/5 à 6/6 endpoints (ajout `/api/health:200`)
+- DEVELOPMENT_LOG.md auto-update via pre-commit hook
+- `CHANGELOG.md` (cette entrée)
+
+### Out of scope (différé Track E.4)
+
+- BackupJob model avec colonnes `startedAt`/`finishedAt`/`duration_ms` persistées (Bull metadata + Sentry suffisent E.2)
+- Stack Prometheus exporter complet (D2.2 reuse-Grafana suffisant pilote)
+- `--mode=cli` v2 importer complet (stub actuel — opérateur utilise `--mode=api`)
+- Audit NK strict sur `expenses` (drift mineur observé en DR drill)
+- `BACKUP_COMPLETED` `NotificationEventType` câblé sur BackupProcessor
+- Promotion CI `audit-egress` bloquant (surrogate air-gap target E.3)
+- Activation GlitchTip DSN pilote employeur (procédure à intégrer `install-airgap.sh` Track E.3)
+- Test failure pré-existant `expenses/dto-shape.spec.ts:92` byType serialization — filed separately, indépendant E.2
+
+### Notes opérateur
+
+- Aucun breaking — `/api/health` est additif, `scripts/restore-full.sh` v2 OBSOLE le script v1 silencieusement cassé (aucun call connu en prod).
+- Worker rebuild caveat préservé : `docker compose build backend backend-worker && docker compose up -d backend backend-worker` (image SHA partagée).
+- Mailpit container temporaire sera teardown après merge + déploiement (cf. checklist `alerting.md §4.2`).
+
+---
+
 ## [2.3.2] - 2026-05-15 — Hotfix Track E.1 (sites.update BOLA tenant scoping)
 
 Hotfix Track E.1 (security audit + BOLA scan global) — un finding CRITICAL
