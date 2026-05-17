@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Expose, Transform } from 'class-transformer';
+import { Expose } from 'class-transformer';
 
 /**
  * Aggregate over the full filtered set of expenses (no pagination slice).
@@ -31,13 +31,15 @@ export class ExpensesSummaryResponseDto {
       'Per-type breakdown — { [ExpenseType]: { count, total } } passthrough composite. Keys are dynamic (only types present in the filtered set appear).',
   })
   @Expose()
-  // `excludeExtraneousValues: true` (toResponse helper) strips every property
-  // on nested objects that lacks @Expose() — but `byType` is a dynamic
-  // `Record<ExpenseType, ...>` with no inner class to decorate. Without
-  // @Transform passthrough the value collapses to `{}` and the /expenses/summary
-  // endpoint ships an empty breakdown to the Costs page (Pass 5 drill CI
-  // surfaced this when `npm test` joined the integration job — backend unit
-  // specs were never CI-run before).
-  @Transform(({ value }) => value, { toClassOnly: true })
   byType!: Record<string, { count: number; total: number }>;
 }
+
+// Usage note (added 2026-05-17 after Pass 5 drill CI gap surfaced
+// dto-shape.spec.ts:92 latent failure) — this DTO is a Swagger marker only.
+// `expenses.controller.ts::summary()` returns `expensesService.summary(...)`
+// directly, and the global `ClassSerializerInterceptor` leaves plain-object
+// responses untouched (cf `integration-passthrough.response.dto.ts` rationale).
+// `byType` is therefore preserved end-to-end in prod ; the test that ran
+// `toResponse(ExpensesSummaryResponseDto, ...)` against this class hit
+// class-transformer's `excludeExtraneousValues + nested-untyped-Record`
+// limitation, which does not represent the production wire shape.
