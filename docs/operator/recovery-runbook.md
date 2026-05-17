@@ -303,3 +303,56 @@ Après n'importe quel scénario :
 - Alerting + monitoring : [alerting.md](alerting.md)
 - Incident response (post-mortem template) : [incident-response.md](incident-response.md)
 - ADR backup v2 : [adr-025](../decisions/adr-025-backup-v2-streaming.md) + [adr-026](../decisions/adr-026-backup-v2-polish.md)
+
+---
+
+## 9. Migration v2.4.0 — timing attendu (Track E.4 PR2 Pass 5)
+
+Track E.4 PR1 a introduit 2 migrations Prisma qui se rejouent automatiquement à
+chaque `prisma migrate deploy` (boot backend container) et donc à chaque restore
+ZIP v2 :
+
+| Migration | Opération | Coût attendu | Sensibilité volume |
+|---|---|---|---|
+| `12_audit_log_delegation_id` | `ALTER TABLE audit_logs ADD COLUMN delegationId TEXT NULL` + FK + index composite `(tenantId, delegationId, timestamp)` | ~120ms sur 10k AuditLog (mesuré seed Pass 3) | **Linéaire** sur volume `audit_logs` — extrapoler à `~1.2ms / 1k rows` pour pilote (1M AuditLog ≈ ~1.2s acceptable) |
+| `7a_notification_event_backup_completed` | `ALTER TYPE NotificationEventType ADD VALUE 'BACKUP_COMPLETED'` | ~30ms | Constant (DDL enum) |
+
+**Total migration cost post-restore** : ~150ms typique stack dev local, jamais
+bloquant.
+
+**Vigilance R5.1** : si `audit_logs` volume > 1M rows et migration > 5s
+observée → backlog Track G (analyse `EXPLAIN ANALYZE` pour le CREATE INDEX, peut
+nécessiter `CREATE INDEX CONCURRENTLY` en deploy prod live — non-applicable au
+contexte restore puisque la base est vide au moment du replay).
+
+### 9.1 Validation schéma post-restore
+
+Après tout `restore-full.sh`, vérifier que les 2 migrations sont en place :
+
+```bash
+# Diff prisma schema (devrait être vide)
+cd backend
+npx prisma db pull --schema=/tmp/pulled.prisma
+diff prisma/schema.prisma /tmp/pulled.prisma | grep -E 'delegationId|@@index.*delegationId|BACKUP_COMPLETED'
+# Attendu : aucune sortie (les 3 patterns sont présents identiques)
+
+# OU via psql direct
+docker exec xch-postgres psql -U xch_user -d xch_dev -c \
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name='audit_logs' AND column_name='delegationId';"
+# Attendu : 1 ligne (delegationId)
+
+docker exec xch-postgres psql -U xch_user -d xch_dev -c \
+  "SELECT unnest(enum_range(NULL::\"NotificationEventType\"))::text
+   WHERE unnest(enum_range(NULL::\"NotificationEventType\"))::text = 'BACKUP_COMPLETED';"
+# Attendu : 1 ligne (BACKUP_COMPLETED)
+
+docker exec xch-postgres psql -U xch_user -d xch_dev -c \
+  "SELECT indexname FROM pg_indexes
+   WHERE tablename='audit_logs' AND indexname LIKE '%delegationId%';"
+# Attendu : audit_logs_tenantId_delegationId_timestamp_idx
+```
+
+Si l'une de ces 3 assertions échoue post-restore → **CRITICAL** : la migration
+n'a pas été rejouée, audit log enrichment ADR-028 ne fonctionne plus, hotfix
+restore script obligatoire (R5.5 vigilance Track E.4 PR2).

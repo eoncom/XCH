@@ -87,6 +87,10 @@ services:
       PORT: 3000
       NEXT_PUBLIC_APP_URL: http://localhost:8080
       BACKEND_URL: http://localhost:3000
+      # Allow per-workflow override (a11y.yml runs 10 sequential logins).
+      # Default 5/min stays for the existing e2e-tests.yml smoke (single login).
+      THROTTLE_AUTH_LIMIT: ${THROTTLE_AUTH_LIMIT:-5}
+      THROTTLE_AUTH_TTL: ${THROTTLE_AUTH_TTL:-60}
     depends_on:
       postgres:
         condition: service_healthy

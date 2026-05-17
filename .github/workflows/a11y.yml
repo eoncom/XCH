@@ -1,0 +1,150 @@
+name: A11y baseline (axe-core + Lighthouse CI)
+
+# Track E.4 PR2 Pass 4.3 — first a11y baseline workflow.
+#
+# Stratégie : réutilise docker-compose.ci.yml single-origin (cf
+# e2e-tests.yml) qui boote nginx + frontend + backend + postgres + redis
+# + minio sur localhost:8080. Init app via /api/setup/initialize avec
+# demo data + admin@demo.fr/Demo1234, puis run Playwright axe-core spec
+# (8 pages strictes + 2 Konva soft) et Lighthouse CI sur 10 URLs.
+#
+# Konva pages (floor-plans, monitoring) → assertions Lighthouse warn-only
+# + axe non-blocking (D7). Pages standard → accessibility >=0.70 + 0
+# violation critical/serious.
+#
+# Vigilance V2 : si Lighthouse < 50 page critique → CRITICAL hotfix PR2.
+# Si < 70 sur >= 3 pages → V2 fallback Track F (créer
+# docs/perf/a11y-followup-track-f.md), PAS blocking E.4.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/a11y.yml'
+  workflow_dispatch:
+
+jobs:
+  a11y:
+    name: a11y baseline (axe + LHCI on 10 pages)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+
+      - name: Install frontend deps (host — Playwright runs here)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Build + start CI stack (nginx + frontend + backend + postgres + redis + minio)
+        env:
+          # 10 sequential a11y tests × loginAsAdmin → exceeds default
+          # THROTTLE_AUTH_LIMIT=5/min (auth.controller.ts:2). Override forwarded
+          # to backend service via docker compose env interpolation.
+          THROTTLE_AUTH_LIMIT: '99999'
+          THROTTLE_AUTH_TTL: '60'
+        run: |
+          docker compose -f docker-compose.ci.yml up -d --build
+          docker compose -f docker-compose.ci.yml ps
+
+      - name: Wait nginx ready
+        run: |
+          npx wait-on http://localhost:8080/health -t 90000 \
+            || (echo "nginx not ready"; docker compose -f docker-compose.ci.yml logs; exit 1)
+
+      - name: Wait backend ready (via nginx /api)
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sS -o /dev/null -w "%{http_code}" http://localhost:8080/api/setup/status | grep -q "200\|404"; then
+              echo "backend ready (iter $i)"
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Initialize app + load demo seed
+        run: |
+          curl -X POST http://localhost:8080/api/setup/initialize \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "organizationName": "XCH a11y CI",
+              "subdomain": "xch-a11y",
+              "adminName": "Admin a11y",
+              "adminEmail": "admin@demo.fr",
+              "adminPassword": "Demo1234",
+              "loadDemoData": true
+            }' \
+            --fail-with-body --max-time 120 \
+            -w "\nHTTP %{http_code} (%{time_total}s)\n" \
+            || (docker compose -f docker-compose.ci.yml logs backend; exit 1)
+
+      - name: Run axe-core spec (10 pages)
+        working-directory: frontend
+        # Soft per V2 fallback policy (plan §7) — baseline run captures
+        # findings, doesn't block merge. Spec assertions remain semantically
+        # correct (every "serious"/"critical" surfaces as test failure +
+        # JSON log). V2 verdict ≥3 pages <0.70 → Track F follow-up via
+        # docs/perf/a11y-followup-track-f.md, not blocking E.4 closure.
+        continue-on-error: true
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:8080
+          PLAYWRIGHT_API_URL: http://localhost:8080
+          CI: 'true'
+        run: npm run test:a11y -- --reporter=html,junit,list
+
+      - name: Run Lighthouse CI (10 URLs)
+        working-directory: frontend
+        env:
+          LHCI_BASE_URL: http://localhost:8080
+        run: |
+          npm run lhci:autorun || EXIT=$?
+          if [ "${EXIT:-0}" -ne 0 ]; then
+            echo "::warning::Lighthouse CI assertions failed — see uploaded report. V2 fallback Track F may apply."
+          fi
+          exit 0
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          echo "=== backend logs ===" && docker compose -f docker-compose.ci.yml logs backend | tail -150 || true
+          echo "=== frontend logs ===" && docker compose -f docker-compose.ci.yml logs frontend | tail -100 || true
+          echo "=== nginx logs ===" && docker compose -f docker-compose.ci.yml logs nginx | tail -80 || true
+
+      - name: Upload Playwright a11y report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-playwright-report
+          path: frontend/playwright-report/
+          retention-days: 14
+
+      - name: Upload LHCI reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lhci-report
+          path: |
+            frontend/.lighthouseci/
+            frontend/lhci-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Stop CI stack
+        if: always()
+        run: docker compose -f docker-compose.ci.yml down -v
