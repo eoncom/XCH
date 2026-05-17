@@ -1,648 +1,127 @@
-# Roadmap Développement XCH
+# XCH — Roadmap (timeline réelle livrée)
 
-Date : 2025-12-31
-Version : 1.0
-
-## Vue d'ensemble
-
-Développement organisé en **7 phases** avec agents spécialisés travaillant en parallèle quand possible.
-
-**Durée estimée MVP** : 8-10 semaines (dépend parallélisation agents)
+> **Source de vérité** : `git tag --sort=-creatordate` et les entités MCP `XCH_TRACK_*_*`.
+> **Date** : 2026-05-17 — Track E.4 PR3 (rewrite complet : ancien modèle Phase 1-7 agents archivé dans `docs/archive/roadmap-v1.0-2025-12-31.md`).
+> **Version courante** : v2.4.0 (en cours de release).
+> **Modèle** : sessions S0–S11 (plan v2) + Tracks A/B/C/D/E (post-pilote) + Tracks F/G/D.3 (backlog).
 
 ---
 
-## Phase 1 : Fondations (Semaine 1-2)
+## Timeline livrée (v1.0 → v2.4.0)
 
-### Objectif
-Infrastructure de base fonctionnelle : DB, auth, RBAC, structure projet
+### Phase amorce — v1.0 → v1.4 (mars-avril 2026)
+- **v1.0.0-rc1** (2026-03-15) — MVP complet : 10 modules backend, 7 modules frontend, 100+ endpoints
+- **v1.0.3** (2026-01-18) — corrections post-livraison initiale
+- **v1.1.x → v1.4.0** (avril 2026) — audit phases 1-4 + RBAC + Apparence + delegation-first
 
-### Agents
+### Phase plan v2 (audit phase 5 + finalisation) — v1.5 → v2.0 (avril-mai 2026)
 
-#### Agent-01 : Infrastructure & DevOps
-**Mission** : Setup complet infrastructure développement et déploiement
+| Session | Livrable | Tag | Date |
+|---|---|---|---|
+| S0 + bump version | 1.5.0 + script parité | — | — |
+| S1 | Sécurité hardening (rotation secrets, Redis auth, Multer, magic-bytes) — ADR-015 | — | — |
+| S4 | Tests Jest critical paths (80 tests) | — | — |
+| S2 | Monitoring natif (ADR-014/016) | — | — |
+| S5 | Migrations Prisma versionnées (ADR-017) | — | 2026-04-27 |
+| S6/S7 | Refacto JSON résiduel (ADR-018) | **v1.6.0** | 2026-04-28 |
+| S1 finalization | Quick wins post-v1.6 | v1.6.1 | 2026-04-29 |
+| S2 finalization | Chiffrement secrets at-rest (ADR-019) | v1.6.2 | 2026-04-29 |
+| S3 finalization | NotificationConfig + Worker BullMQ (ADR-020) | v1.7.0 | 2026-04-29 |
+| S4 finalization | RBAC universel + tests intrusion (ADR-021) | v1.8.0 | 2026-04-30 |
+| S5 finalization | Performance & intégrité DB | v1.8.1 | 2026-05-01 |
+| S6 finalization | UX dark canvas + erreurs réseau | v1.8.2 | 2026-05-01 |
+| S7 finalization | E2E Playwright scaffolding (~210 tests) | (intermédiaire) | 2026-05-02 |
+| S7.5 | Validation E2E réelle + smoke @full-user-journey 10/10 | **v1.9.0** | 2026-05-03 |
+| S9 hardening | CSP nonce dynamique + 100% DTO coverage (30+ endpoints) + cascade vague A+B | v1.10.0 / v1.11.0 / **v2.0.0** | 2026-05-04 / 2026-05-06 |
+| S8 GlitchTip | Sentry → GlitchTip self-hosted air-gap (ADR-024) | **v2.1.0** | 2026-05-08 |
+| S5b | Heavy SQL refactors (GENERATE_SERIES + group-by) | v2.1.1 | 2026-05-09 |
 
-**Livrables** :
-- [ ] Docker Compose complet (PostgreSQL + PostGIS, Redis, MinIO, Traefik)
-- [ ] Configuration environnements (dev, staging, prod)
-- [ ] Scripts backup/restore DB
-- [ ] CI/CD GitLab + GitHub Actions
-- [ ] Documentation déploiement
+**Plan v2 CLOSED** à v2.0.0 — toutes sessions S0-S11 livrées. v2.1.x = patches post-pilote.
 
-**Statut** : Non démarré
+### Phase Tracks post-pilote (test global 2026-05-09 → preprod readiness) — v2.1.2 → v2.4.0
 
-#### Agent-02 : Database & Prisma
-**Mission** : Schéma DB complet, migrations, seed initial
+| Track | Description | PR / Tag | Date |
+|---|---|---|---|
+| **A** | Bugs prod-bloquants (B1+B2+B4+B6+B7+B9 — pagination, theme persist, fetch loop, budgets banner) | PRs #62 #63 #64 + #66 release | 2026-05-10 |
+| **B** | UI/UX professionnalisation (U1+U2+U3+U4+U5+U7+B8 — Import CSV, Contacts, Monitoring, avatars, Settings, Budgets) | PR #65 | 2026-05-10 |
+| **A+B release** | Bundle CHANGELOG | **v2.1.2** | 2026-05-10 |
+| **C** | Bugs secondaires (B3 floor-plans DTO root cause + B10 backup completeness 9 tables + ts-nocheck cleanup) | PRs #67 #68 | **v2.1.3** 2026-05-10 |
+| **chore v2.1.4** | Nettoyage Gatus vestigial + retrait `docker-compose.prod.yml` legacy | PR #69 | **v2.1.4** 2026-05-12 |
+| **D.1** | Backup v2 (streaming + idempotent restore + dry-run + async Bull v3) — ADR-025 | PR #70 + #71 hotfix listBackups | **v2.2.0 + v2.2.1** 2026-05-14 |
+| **D.2** | Backup v2 Polish (chiffrement AES-256-GCM + cross-tenant + multipart + observabilité GlitchTip + concurrency Bull) | PR #72 + #73 hotfix (multipart shared volume + BOLA restore tenant scope) | **v2.3.0 + v2.3.1** 2026-05-15 |
+| **E.1** | Security audit + BOLA scan global + egress audit air-gap | PR #74 hotfix C-E1-1 (sites.update BOLA tenant scoping) | **v2.3.2** 2026-05-15 |
+| **E.2** | DR drill + monitoring self-hosted (Grafana réutilisé) + alerting SMTP + offsite LUKS rotation hebdo + readiness probe `/api/health` | — | **v2.3.3** 2026-05-16 |
+| **E.3** | Air-gap bootstrap (`teardown-xch-stack.sh` + `bootstrap-runbook.md`) + cutover templates 4-mode + Track E.3 catastrophe forensic + ADR-029 Proposed | — | **v2.3.4** 2026-05-16 |
+| **E.4 PR1** | ADR-028 audit log enrichment + 4 CI workflows + BACKUP_COMPLETED notification + cron purge audit log + ADR-025b Proposed | PR #80 | déployé 2026-05-16 |
+| **E.4 PR2** | Testing harness k6 load + Lighthouse/axe a11y + DR drill runbook §10 + recovery-runbook §9 migration timing | PRs #81 #82 #83 #84 #85 (suivi follow-ups) | mergé 2026-05-16 |
+| **E.4 PR3** | Docs closure : RGPD multi-mode + handoff 2e admin + changelog-users + PROJECT_STATUS refresh + DEVELOPMENT_LOG Sessions 13-17 + placeholder audit Tier A/B/C + plan v3 MCP + auto-update-docs append | (cette release) | **v2.4.0 cible** 2026-05-17 |
 
-**Livrables** :
-- [ ] Fichier `prisma/schema.prisma` complet
-- [ ] Migrations initiales
-- [ ] Seeds (tenant par défaut, admin user, policies Casbin)
-- [ ] Scripts RLS PostgreSQL
-- [ ] Documentation schéma DB
-
-**Statut** : Non démarré
-
-#### Agent-03 : Auth & RBAC
-**Mission** : Système auth (local + OIDC) + permissions Casbin
-
-**Livrables** :
-- [ ] Module auth NestJS (Passport local + OIDC)
-- [ ] JWT tokens (access + refresh)
-- [ ] Guards (JwtAuthGuard, CasbinGuard)
-- [ ] CRUD auth providers (config OIDC)
-- [ ] Policies Casbin initiales (4 rôles)
-- [ ] Tests auth complets
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-02 (DB schema User, AuthProvider)
-
----
-
-## Phase 2 : Core Business (Semaine 3-4)
-
-### Objectif
-Fonctionnalités métier fondamentales : Sites, Assets, Racks
-
-### Agents
-
-#### Agent-04 : Sites (Chantiers)
-**Mission** : CRUD sites complet avec géolocalisation
-
-**Livrables** :
-- [ ] Module Sites NestJS (controllers, services, DTOs)
-- [ ] CRUD sites (create, read, update, delete)
-- [ ] Validation inputs (Zod schemas)
-- [ ] Recherche full-text (nom, code, adresse)
-- [ ] Filtres (statut, santé, localisation)
-- [ ] Gestion contacts chantier (JSON ou table)
-- [ ] Tests unitaires + intégration
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-02 (DB), Agent-03 (Auth/RBAC)
-
-#### Agent-05 : Assets (Équipements)
-**Mission** : Inventaire assets complet avec types multiples
-
-**Livrables** :
-- [ ] Module Assets NestJS
-- [ ] CRUD assets (tous types : imprimantes, iPads, réseau, visio...)
-- [ ] Validation serial numbers (obligatoire selon type)
-- [ ] Recherche (modèle, S/N, fabricant)
-- [ ] Filtres (type, statut, chantier, sans S/N, sans localisation)
-- [ ] Actions groupées (export CSV/Excel, changement statut masse)
-- [ ] Tests
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-02, Agent-03, Agent-04 (Sites)
-
-#### Agent-06 : Racks (Baies)
-**Mission** : Gestion baies avec montage équipements
-
-**Livrables** :
-- [ ] Module Racks NestJS
-- [ ] CRUD racks (création, édition, suppression)
-- [ ] Montage/démontage équipements (position U, hauteur U)
-- [ ] Vérification chevauchements positions U
-- [ ] Calcul occupation (U utilisés / U total)
-- [ ] Recherche espace libre (pour équipement N U)
-- [ ] Réservation emplacements
-- [ ] Historique modifications baie
-- [ ] Tests (logique positions U critique)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-02, Agent-03, Agent-04, Agent-05
+**Tracks A-E CLOSED** à v2.4.0 — preprod-readiness atteinte.
 
 ---
 
-## Phase 3 : Frontend Core (Semaine 4-5)
+## Backlog post-v2.4.0 (Track F / G / D.3)
 
-### Objectif
-Interface utilisateur fondamentale : layout, auth, dashboards, listes
+> **Détails complets** : MCP entité `XCH_PLAN_V3_POST_V2_2026_05_17` (consolidation Pass 10 Track E.4 PR3).
 
-### Agents
+### Track F — Compliance + a11y suite + sécurité externe
 
-#### Agent-07 : Frontend Setup & Layout
-**Mission** : Setup Next.js + UI library + layout app
+- **F.1** — a11y suite V2 fallback : 13 violations color-contrast déférées (`docs/perf/a11y-followup-track-f.md`)
+- **F.2** — RBAC GET investigation (TODO bookmark Track E.3)
+- **F.3** — POST `/api/assets` unique race condition (test scénario)
+- **F.4** — `npm audit` triage vulnerabilities en attente
+- **F.5** — DPA formel signé client (template fournis dans `docs/operator/rgpd-multi-mode.md` Annex)
+- **F.6** — Pen test externe (post-cutover prod stabilisé)
+- **F.7** — Automatisation droits RGPD utilisateur final (export self-service, anonymisation audit)
+- **ADR-029** — SSO/LDAP arbitrage M0 cutover (stakeholder ouvert, défer M+1-3 selon besoin)
 
-**Livrables** :
-- [ ] Configuration Next.js 14 + TypeScript
-- [ ] Setup shadcn/ui + Tailwind CSS
-- [ ] Configuration PWA
-- [ ] Layout principal (header, sidebar, footer)
-- [ ] Navigation responsive + mobile
-- [ ] Thème clair/sombre
-- [ ] Branding dynamique (logo, couleurs tenant)
-- [ ] Documentation composants
+### Track G — Performance consolidée
 
-**Statut** : Non démarré
+- **G.1** — Tuning index Prisma post-load réel (réeval baseline run #4)
+- **G.2** — N+1 fix éventuel (sites avec > 100 assets si remonté production)
+- **G.3** — BullMQ tuning si jobs backup > 10s soutenu
+- **G.4** — Cache Redis tier ajouté si p95 > 300ms (seuil ADR à formaliser)
+- **G.5** — Audit NK strict expenses (drift mineur observé en DR drill — déféré ADR-025b)
 
-**Dépendances** : Agent-01 (infra)
+### Track D.3 — Validation cutover réel non-air-gap
 
-#### Agent-08 : Auth Frontend
-**Mission** : Pages login, gestion session, OIDC flow
-
-**Livrables** :
-- [ ] Pages login (local + OIDC)
-- [ ] Flow OIDC complet (redirect, callback)
-- [ ] Gestion tokens (storage, refresh auto)
-- [ ] Protected routes (middleware)
-- [ ] Page profil utilisateur
-- [ ] Logout
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-03 (Auth backend), Agent-07 (Layout)
-
-#### Agent-09 : Dashboard & Home
-**Mission** : Dashboard principal avec indicateurs clés
-
-**Livrables** :
-- [ ] Page Dashboard (/)
-- [ ] Indicateurs clés (chantiers actifs, assets total, tâches ouvertes)
-- [ ] Timeline activité récente
-- [ ] "Mes tâches" (assignées à moi)
-- [ ] Charts simples (Chart.js ou Recharts)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-07, Agent-08
-
-#### Agent-10 : Sites Frontend
-**Mission** : Pages liste sites, fiche site, recherche/filtres
-
-**Livrables** :
-- [ ] Page liste sites (table + filtres)
-- [ ] Page fiche site (tabs : résumé, contacts, connectivité, inventaire, plans, tâches, intégrations)
-- [ ] Recherche instantanée (as-you-type)
-- [ ] Filtres (statut, santé, localisation)
-- [ ] Formulaires création/édition site
-- [ ] Validation frontend (React Hook Form + Zod)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-04 (Sites backend), Agent-07, Agent-08
-
-#### Agent-11 : Assets Frontend
-**Mission** : Pages liste assets, fiche asset, actions groupées
-
-**Livrables** :
-- [ ] Page liste assets (table + vignettes)
-- [ ] Page fiche asset
-- [ ] Recherche (modèle, S/N)
-- [ ] Filtres (type, statut, chantier)
-- [ ] Formulaires création/édition asset
-- [ ] Actions groupées (sélection multiple, export, QR batch)
-- [ ] Vue mobile optimisée (scan QR)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-05 (Assets backend), Agent-07, Agent-08
+- **D.3.1** — Validation cutover Mode A (cloud public) sur 2e client réel
+- **D.3.2** — Validation cutover Mode B (cloud privé) sur 2e client réel
+- **D.3.3** — Validation cutover Mode D (VPS basique) sur 2e client réel
+- **D.3.4** — Drill restore prod réel (vs drill dev Pass 5 actuel)
+- **D.3.5** — Bootstrap fresh server < 10 min KPI tenu en conditions réelles
 
 ---
 
-## Phase 4 : Features Avancées Backend (Semaine 5-6)
+## Décisions architecturales notables
 
-### Objectif
-Tasks, Plans, Intégrations externes
-
-### Agents
-
-#### Agent-12 : Tasks (Tâches)
-**Mission** : CRUD tâches avec checklist, TicketLink, assignation
-
-**Livrables** :
-- [ ] Module Tasks NestJS
-- [ ] CRUD tâches
-- [ ] Gestion checklist (JSON array)
-- [ ] TicketLink (référence ticket externe)
-- [ ] Assignation utilisateurs
-- [ ] Filtres (statut, priorité, assigné, chantier, en retard)
-- [ ] Notifications (nouvelle tâche, échéance proche)
-- [ ] Tests
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-02, Agent-03, Agent-04
-
-#### Agent-13 : Plans & Pins
-**Mission** : Upload plans, visionneuse, éditeur pins
-
-**Livrables** :
-- [ ] Module FloorPlans NestJS
-- [ ] Upload fichiers (S3/MinIO) avec validation (PDF, PNG, JPG, 10MB max)
-- [ ] Versioning plans
-- [ ] CRUD pins (création, déplacement, association asset/rack)
-- [ ] Coordonnées normalisées (0-1)
-- [ ] Validation pins (doit pointer vers asset existant)
-- [ ] Tests
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-02, Agent-03, Agent-04, Agent-05, Agent-06
-
-#### Agent-14 : Intégrations (NetBox, Monitoring)
-**Mission** : Connecteurs optionnels READ-ONLY
-
-**Livrables** :
-- [ ] Module Integrations NestJS
-- [ ] Connecteur NetBox (READ-ONLY)
-  - Mapping Site ↔ NetBox site
-  - Récupération devices
-  - Mapping assisté Asset ↔ Device (S/N)
-  - Enrichissement données (IP, rack)
-- [ ] Connecteur Uptime Kuma
-  - Récupération statut monitors
-  - Mise à jour health_status sites
-- [ ] Configuration UI providers (enable/disable, credentials, test connexion)
-- [ ] Cache résultats (Redis, 15min)
-- [ ] Tests mocks API externes
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-02, Agent-03, Agent-04, Agent-05
-
-#### Agent-15 : Photos & Pièces jointes
-**Mission** : Upload photos, galerie, compression
-
-**Livrables** :
-- [ ] Module Photos NestJS
-- [ ] Upload fichiers (images + PDF, 5MB max)
-- [ ] Compression images automatique
-- [ ] Association polymorphique (Sites, Assets, Tasks)
-- [ ] Metadata EXIF (date, GPS)
-- [ ] API download/delete
-- [ ] Tests
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-01 (MinIO), Agent-02, Agent-03
+| ADR | Sujet | Statut |
+|---|---|---|
+| ADR-014/016 | Monitoring natif | Accepté |
+| ADR-015 | S1 Security hardening | Accepté |
+| ADR-017 | Prisma versioned migrations | Accepté |
+| ADR-018 | JSON debt cleanup (Asset/Tenant/Site) | Accepté |
+| ADR-019 | Chiffrement secrets at-rest | Accepté |
+| ADR-020 | NotificationConfig + Worker BullMQ | Accepté |
+| ADR-021 | RBAC universel | Accepté |
+| ADR-024 | GlitchTip self-hosted air-gap | Accepté |
+| **ADR-025** | Backup v2 streaming + idempotent restore | Accepté |
+| ADR-025b | NK expenses arbitrage (intentional `delegationId` exclusion) | Proposed |
+| **ADR-028** | Audit log enrichment + taxonomy `@SkipDelegation` | Accepté |
+| ADR-029 | SSO LDAP migration path (Options A/B/C) | Proposed |
 
 ---
 
-## Phase 5 : Features Avancées Frontend (Semaine 6-7)
+## Cross-références
 
-### Objectif
-Tasks UI, Plans interactifs, Carte chantiers, QR codes
-
-### Agents
-
-#### Agent-16 : Tasks Frontend
-**Mission** : Pages tâches (liste, kanban, calendrier), création/édition
-
-**Livrables** :
-- [ ] Page liste tâches (table + filtres)
-- [ ] Vue Kanban (drag & drop colonnes statut)
-- [ ] Vue Calendrier (par date échéance)
-- [ ] Page fiche tâche (détails, checklist, commentaires)
-- [ ] Formulaires création/édition tâche
-- [ ] Gestion checklist interactive
-- [ ] TicketLink UI (badge cliquable)
-- [ ] Workflow mobile (scan QR → tâche)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-12 (Tasks backend), Agent-07, Agent-08
-
-#### Agent-17 : Plans & Visionneuse
-**Mission** : Visionneuse plans interactive + éditeur pins
-
-**Livrables** :
-- [ ] Composant visionneuse plans (Konva.js)
-- [ ] Zoom/pan fluides
-- [ ] Affichage pins existants (icônes typées, couleurs)
-- [ ] Mode édition (admin/tech)
-  - Ajout pins (click)
-  - Déplacement pins (drag & drop)
-  - Édition pin (association asset, label)
-  - Suppression pins
-- [ ] Export plan annoté (PNG, PDF)
-- [ ] Mobile friendly (pinch zoom)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-13 (Plans backend), Agent-07, Agent-08, Agent-11 (Assets frontend)
-
-#### Agent-18 : Carte Multi-chantiers
-**Mission** : Carte interactive tous chantiers avec clustering
-
-**Livrables** :
-- [ ] Composant carte (Leaflet)
-- [ ] Affichage tous chantiers (markers GPS)
-- [ ] Clustering automatique (Supercluster)
-- [ ] Markers couleur par santé (vert/orange/rouge/gris)
-- [ ] Popups markers (code, nom, statut, bouton ouvrir fiche)
-- [ ] Filtres synchronisés liste ↔ carte
-- [ ] Recherche adresse/ville
-- [ ] Zone selection (dessiner rectangle pour filtrer)
-- [ ] Export CSV chantiers filtrés
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-04 (Sites backend), Agent-10 (Sites frontend)
-
-#### Agent-19 : QR Codes & Scan
-**Mission** : Génération QR, étiquettes imprimables, scan mobile
-
-**Livrables** :
-- [ ] Backend : Génération QR codes (qrcode library)
-- [ ] Endpoints QR sécurisés (tokens non-devinables)
-- [ ] Frontend : Génération batch QR (sélection assets)
-- [ ] Génération étiquettes PDF imprimables (formats Avery)
-- [ ] Scan QR mobile (html5-qrcode)
-- [ ] Workflow scan → auth → redirection fiche asset
-- [ ] Rate limiting anti-spam
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-05 (Assets backend), Agent-11 (Assets frontend)
+- [PROJECT_STATUS.md](PROJECT_STATUS.md) — état projet courant détaillé
+- [`docs/decisions/`](../decisions/) — tous les ADRs
+- [`docs/operator/`](../operator/) — runbooks opérateur (handoff, DR, RGPD, cutover, etc.)
+- [`docs/business/CAHIER_DES_CHARGES.md`](../business/CAHIER_DES_CHARGES.md) — spécifications fonctionnelles
+- [`CHANGELOG.md`](../../CHANGELOG.md) — détail technique par version
+- [`docs/user/changelog-users.md`](../user/changelog-users.md) — journal utilisateur non-jargon
+- MCP knowledge graph — entités `XCH_TRACK_*_*`, `XCH_RELEASE_*`, `XCH_PLAN_*`
 
 ---
 
-## Phase 6 : Baies Frontend & Exports (Semaine 7-8)
-
-### Objectif
-Visualisation baies, exports PDF/Excel, recherche globale
-
-### Agents
-
-#### Agent-20 : Racks Frontend
-**Mission** : Visualisation baies, montage équipements, schémas
-
-**Livrables** :
-- [ ] Page liste baies (par chantier, globale)
-- [ ] Page fiche baie :
-  - Vue schématique verticale (SVG)
-  - Graduation U (1 à heightU)
-  - Équipements positionnés
-  - Espaces libres visuels
-  - Indicateurs (occupation %, espace libre max)
-- [ ] Formulaires montage/démontage équipements
-- [ ] Recherche espace libre (équipement N U)
-- [ ] Réservation emplacements
-- [ ] Drag & drop réorganisation (optionnel MVP)
-- [ ] Export schéma baie (PDF)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-06 (Racks backend), Agent-07, Agent-08, Agent-11
-
-#### Agent-21 : Exports & Rapports
-**Mission** : Génération PDF/Excel (rapports, inventaires)
-
-**Livrables** :
-- [ ] Backend : Service génération PDF (Puppeteer)
-- [ ] Templates PDF brandés (logo, couleurs tenant)
-- [ ] Rapport synthèse chantier (PDF complet)
-- [ ] Schéma baie (PDF)
-- [ ] Étiquettes QR (PDF imprimable)
-- [ ] Exports CSV/Excel (sites, assets, tâches)
-- [ ] Queue jobs (BullMQ) pour générations longues
-- [ ] Dashboard jobs (monitoring exports)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-01 (Redis/BullMQ), agents métier (Sites, Assets, Racks, Tasks)
-
-#### Agent-22 : Recherche Globale
-**Mission** : Barre recherche omniprésente, résultats multi-types
-
-**Livrables** :
-- [ ] Backend : Endpoint search global (full-text PostgreSQL)
-- [ ] Frontend : Composant barre recherche (header)
-- [ ] Raccourci clavier (Ctrl+K)
-- [ ] Recherche as-you-type
-- [ ] Résultats groupés (sites, assets, baies, tâches, contacts)
-- [ ] Navigation clavier (flèches + Enter)
-- [ ] Sauvegarde recherches fréquentes
-
-**Statut** : Non démarré
-
-**Dépendances** : Tous agents métier (Sites, Assets, Racks, Tasks)
-
----
-
-## Phase 7 : Admin, Config, Polish (Semaine 8-9)
-
-### Objectif
-Gestion users, config tenant, audit, optimisations, tests E2E
-
-### Agents
-
-#### Agent-23 : Admin Users & Permissions
-**Mission** : CRUD users, gestion rôles, UI permissions Casbin
-
-**Livrables** :
-- [ ] Backend : Module Users (CRUD)
-- [ ] Frontend : Page gestion utilisateurs
-  - Liste users (table + filtres)
-  - Création user (invitation email)
-  - Édition profil, changement rôle
-  - Désactivation/suppression compte
-  - Réinitialisation password
-- [ ] Page gestion permissions
-  - Matrice rôles × ressources × actions
-  - Édition policies Casbin (admin)
-  - Assignation rôles users
-- [ ] Tests permissions (vérifier isolation RBAC)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-03 (Auth/RBAC), Agent-07, Agent-08
-
-#### Agent-24 : Configuration Tenant
-**Mission** : Paramètres délégation (branding, intégrations)
-
-**Livrables** :
-- [ ] Backend : Endpoints config tenant
-- [ ] Frontend : Page "Paramètres"
-  - Infos générales (nom, logo, couleur)
-  - Upload logo
-  - Configuration auth providers (OIDC)
-  - Configuration intégrations (NetBox, monitoring)
-  - Test connexions
-  - Préférences utilisateur (format dates, notifications)
-- [ ] Branding dynamique (logo/couleurs injectés app)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-02, Agent-03, Agent-07, Agent-14
-
-#### Agent-25 : Audit Logs & Monitoring
-**Mission** : Logs audit complet, UI consultation logs
-
-**Livrables** :
-- [ ] Backend : Service audit logging (interceptor NestJS)
-- [ ] Traçage actions (create, update, delete sur entités critiques)
-- [ ] Capture context (userId, IP, user agent, before/after)
-- [ ] Frontend : Page "Audit" (admin)
-  - Table événements
-  - Filtres (user, action, ressource, période)
-  - Recherche logs
-  - Export logs CSV
-- [ ] Monitoring app (Sentry setup)
-
-**Statut** : Non démarré
-
-**Dépendances** : Agent-02, Agent-03, Agent-07
-
-#### Agent-26 : Tests E2E & Optimisations
-**Mission** : Tests bout en bout, optimisations performance
-
-**Livrables** :
-- [ ] Tests E2E Playwright :
-  - Scénario auth (login local + OIDC)
-  - Scénario CRUD chantier
-  - Scénario montage équipement en baie
-  - Scénario scan QR mobile
-  - Scénario création tâche
-- [ ] Optimisations :
-  - Lazy loading images
-  - Pagination (sites, assets > 50)
-  - Cache Redis (recherches, intégrations)
-  - Indexes DB vérifiés
-  - Bundle size frontend (code splitting)
-- [ ] Lighthouse audit (performance, SEO, accessibility)
-
-**Statut** : Non démarré
-
-**Dépendances** : Tous agents (application complète)
-
----
-
-## Phase 8 : Documentation & Livraison (Semaine 9-10)
-
-### Objectif
-Documentation complète, package déploiement, recette
-
-### Agents
-
-#### Agent-27 : Documentation Finale
-**Mission** : Documentation utilisateur et admin complète
-
-**Livrables** :
-- [ ] README.md (présentation, features, installation rapide)
-- [ ] INSTALLATION.md (déploiement détaillé on-premise + cloud)
-- [ ] USER_GUIDE.md (guide utilisateur par rôle)
-- [ ] ADMIN_GUIDE.md (configuration, maintenance, backup/restore)
-- [ ] API_DOCS.md (endpoints si API exposée future)
-- [ ] CONTRIBUTING.md (si open-source)
-- [ ] CHANGELOG.md (versions, évolutions)
-- [ ] Architecture diagrams (schémas C4, ERD)
-
-**Statut** : Non démarré
-
-**Dépendances** : Application complète
-
-#### Agent-28 : Package Déploiement
-**Mission** : Package all-in-one déploiement production
-
-**Livrables** :
-- [ ] Docker Compose production optimisé
-- [ ] Scripts déploiement (deploy.sh, backup.sh, restore.sh)
-- [ ] Configuration environnements (templates .env)
-- [ ] Healthchecks tous services
-- [ ] Logs centralisés (Loki ou équivalent)
-- [ ] Monitoring stack (Prometheus + Grafana - optionnel)
-- [ ] Guide troubleshooting
-
-**Statut** : Non démarré
-
-**Dépendances** : Application complète, Agent-01 (infra)
-
----
-
-## Parallélisation & Dépendances
-
-### Vague 1 (Semaine 1-2) - Parallèle
-- Agent-01 : Infrastructure ✓
-- Agent-02 : Database ✓ (parallèle Agent-01)
-
-### Vague 2 (Semaine 2) - Séquentiel
-- Agent-03 : Auth/RBAC (attend Agent-02)
-
-### Vague 3 (Semaine 3-4) - Parallèle
-- Agent-04 : Sites ✓ (attend Agent-02, 03)
-- Agent-05 : Assets ✓ (attend Agent-02, 03, 04)
-- Agent-06 : Racks ✓ (attend Agent-02, 03, 04, 05)
-- Agent-07 : Frontend Setup ✓ (attend Agent-01)
-
-### Vague 4 (Semaine 4-5) - Parallèle
-- Agent-08 : Auth Frontend (attend Agent-03, 07)
-- Agent-09 : Dashboard (attend Agent-07, 08)
-- Agent-10 : Sites Frontend (attend Agent-04, 07, 08)
-- Agent-11 : Assets Frontend (attend Agent-05, 07, 08)
-
-### Vague 5 (Semaine 5-6) - Parallèle
-- Agent-12 : Tasks (attend Agent-02, 03, 04)
-- Agent-13 : Plans (attend Agent-02, 03, 04, 05, 06)
-- Agent-14 : Intégrations (attend Agent-02, 03, 04, 05)
-- Agent-15 : Photos (attend Agent-01, 02, 03)
-
-### Vague 6 (Semaine 6-7) - Parallèle
-- Agent-16 : Tasks Frontend (attend Agent-12, 07, 08)
-- Agent-17 : Plans Frontend (attend Agent-13, 07, 08, 11)
-- Agent-18 : Carte (attend Agent-04, 10)
-- Agent-19 : QR Codes (attend Agent-05, 11)
-
-### Vague 7 (Semaine 7-8) - Parallèle
-- Agent-20 : Racks Frontend (attend Agent-06, 07, 08, 11)
-- Agent-21 : Exports (attend agents métier)
-- Agent-22 : Recherche Globale (attend agents métier)
-
-### Vague 8 (Semaine 8-9) - Parallèle
-- Agent-23 : Admin Users (attend Agent-03, 07, 08)
-- Agent-24 : Config Tenant (attend Agent-02, 03, 07, 14)
-- Agent-25 : Audit Logs (attend Agent-02, 03, 07)
-- Agent-26 : Tests E2E (attend application complète)
-
-### Vague 9 (Semaine 9-10) - Séquentiel
-- Agent-27 : Documentation (attend application complète)
-- Agent-28 : Package Déploiement (attend application complète)
-
----
-
-## Métriques de succès MVP
-
-### Fonctionnel
-- [ ] 30 chantiers gérables avec infos complètes
-- [ ] 150 équipements inventoriés
-- [ ] 10 baies avec 50 équipements montés
-- [ ] Scan QR → fiche asset < 2s
-- [ ] Export rapport chantier 1 clic
-- [ ] Plans avec pins localisation < 30s
-- [ ] Schémas baies visualisation instantanée
-- [ ] 100 tâches suivies sans confusion
-- [ ] Carte santé instantanée tous chantiers
-
-### Technique
-- [ ] Application responsive desktop + mobile
-- [ ] PWA installable smartphones
-- [ ] Temps chargement pages < 3s
-- [ ] Actions < 1s
-- [ ] Recherche < 500ms
-- [ ] Stabilité (pas de crash usage normal)
-- [ ] Sécurité (auth, HTTPS, RBAC, audit)
-- [ ] Coverage tests > 80%
-
-### Adoption
-- [ ] RSI pilote utilise quotidiennement après 1 mois
-- [ ] Techs préfèrent XCH vs Excel
-- [ ] Temps recherche info -50%
-- [ ] Zéro régression workflows
-
----
-
-## Prochaines étapes
-
-1. ✅ Roadmap validée
-2. ⏳ Créer fiches tous agents (/docs/agents/)
-3. ⏳ Générer prompts instanciation agents
-4. ⏳ Démarrer Vague 1 (Agent-01 + Agent-02)
-
----
-
-**Dernière mise à jour** : 2025-12-31 par Architecte Lead
+**Roadmap maintenue par le lead technique (architecte XCH). Updates à chaque tag stable.**

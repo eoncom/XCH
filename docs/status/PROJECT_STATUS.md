@@ -1,8 +1,10 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-05-17 14:38:52 (Auto-update)
-**Version actuelle :** 1.9.0 (taguée 2026-05-02)
-**Statut global :** ✅ MVP Production-Ready (100%) + plan v2 cible v1.6 livré + **Sessions 1-7 finalization v2 livrées** + 10/10 critical paths E2E couverts + smoke @full-user-journey régression bloquante automatisée
+**Dernière mise à jour :** 2026-05-17 — Track E.4 PR3 docs closure
+**Version actuelle :** **v2.4.0** (en cours de release — tag pending Pass 5 PASS sync)
+**Versions tag stables récentes :** v2.3.4 (Track E.3 air-gap bootstrap, 2026-05-16), v2.3.3 (Track E.2 DR + monitoring), v2.3.2 (hotfix BOLA sites.update), v2.3.1 (hotfix multipart shared volume + BOLA restore), v2.3.0 (Track D.2 polish), v2.2.0/v2.2.1 (Track D.1 Backup v2), v2.1.0-v2.1.4 (S8 GlitchTip + Tracks A/B/C + chore), v2.0.0 (S9 hardening tail), v1.9.0 (plan v2 finalization S7+S7.5).
+**Statut global :** ✅ **MVP Production-Ready + Plan v2 CLOSED + Track A/B/C/D.1/D.2/E.1/E.2/E.3/E.4 CLOSED** — preprod-readiness atteinte, cutover pilote air-gap RSI ready post-tag v2.4.0
+**Prochaine action :** coordination IT employeur cutover prod pilote air-gap (référence Mode C dans `docs/operator/deployment-modes.md`), post-tag v2.4.0 et Pass 5 drill PASS.
 
 ## 🚦 Plan v2 vers v1.6 (sessions S0 → S11)
 
@@ -41,6 +43,28 @@
 
 Rationale : S2/S3/S4 indépendantes, S5 dépend de S2+S3 (drift doc), S7 dépendait de tout (E2E sur app stable, livrée). S9 avant S8 (Sentry rouge à chaque déploiement S9 sinon impossible distinguer vrai bug de régression refactor). S5b en dernier (refactors gain marginal validés mieux avec Sentry posé). Détail dans l'entité MCP `XCH_PLAN_V2_FINALIZATION`.
 
+## 🚦 Plan post-v1.9 → v2.4.0 (Tracks A/B/C/D/E)
+
+Suite à la livraison plan v2 finalization, le projet est entré en phase Tracks pour adresser : (1) bugs prod-bloquants découverts post-pilote test global du 9 mai 2026, (2) sauvegarde v2 streaming chiffré, (3) préparation pré-prod readiness pour cutover pilote air-gap RSI.
+
+| Track | Description | Versions | Statut |
+|---|---|---|---|
+| **A** | Bugs prod-bloquants (B1+B2+B4+B6+B7+B9 + B5 résolu indirectement) | v2.1.2 (bundle) | ✅ **CLOSED** 2026-05-10 |
+| **B** | UI/UX professionnalisation post-test global (U1+U2+U3+U4+U5+U7+B8) | v2.1.2 (bundle) | ✅ **CLOSED** 2026-05-10 |
+| **C** | Bugs secondaires (B3 floor-plans DTO + B10 backup completeness + ts-nocheck cleanup) | v2.1.3 | ✅ **CLOSED** 2026-05-10 |
+| **D.1** | Backup v2 (streaming + idempotent restore + dry-run + async Bull v3) | v2.2.0 / v2.2.1 | ✅ **CLOSED** 2026-05-14 — ADR-025 |
+| **D.2** | Backup v2 Polish (chiffrement AES-256-GCM + cross-tenant + multipart + observabilité GlitchTip + concurrency) | v2.3.0 / v2.3.1 | ✅ **CLOSED** 2026-05-15 |
+| **E.1** | Security audit + BOLA scan + egress audit air-gap | v2.3.2 (hotfix) | ✅ **CLOSED** 2026-05-15 |
+| **E.2** | DR drill + monitoring self-hosted + alerting + offsite backup LUKS | v2.3.3 | ✅ **CLOSED** 2026-05-16 |
+| **E.3** | Air-gap bootstrap + cutover templates 4-mode | v2.3.4 | ✅ **CLOSED** 2026-05-16 |
+| **E.4** | Preprod readiness PR1 (foundation) + PR2 (testing + perf) + PR3 (docs + closure) | v2.4.0 | ⏳ **PR3 in flight** (HOLD sync Pass 5 PASS) |
+
+**Coordination MCP** : entités `XCH_TRACK_*_*` figées dans le knowledge graph + pointeurs file memory `project_track_*_*.md`.
+
+**Releases ADR associées** : ADR-025 (Backup v2), ADR-025b (NK expenses arbitrage Proposed), ADR-028 (audit log enrichment + taxonomy `@SkipDelegation`), ADR-029 (SSO/LDAP Proposed défer M+1-3).
+
+**Backlog post-v2.4.0** : voir [`roadmap.md`](roadmap.md) — Tracks F (compliance + a11y suite + pen test), G (perf consolidée + N+1 + Redis cache), D.3 (validation cutover réel 3 templates non-air-gap). Détails MCP `XCH_PLAN_V3_POST_V2_2026_05_17`.
+
 ## 🆕 v1.4.0 (2026-04-18) — Post audit + Apparence
 
 - **Audit phase 4 couvert** (cf. `reports/phase4-audit-correctifs.md`) : 3 critiques,
@@ -69,16 +93,18 @@ Rationale : S2/S3/S4 indépendantes, S5 dépend de S2+S3 (drift doc), S7 dépend
 _Métriques mesurées le 2026-04-29 (v1.6.0+) — voir section « Métriques réelles » plus bas pour le détail._
 
 ```
-Backend      ████████████████████ 100% (29 modules NestJS, 273 endpoints REST)
-Frontend     ████████████████████ 100% (18 sections dashboard, 53 pages, 57 composants)
-DB schema    ████████████████████ 100% (48 modèles Prisma + 22 enums, 5 migrations versionnées)
-Docs         ████████████████████ 100% (18 ADRs, AUTH_MODEL v2, INSTALL dev + prod)
-Tests        ██████░░░░░░░░░░░░░░  30% (80+ tests Jest backend, ~210 E2E Playwright sur 19 fichiers spec actifs, 10/10 critical paths, smoke @full-user-journey régression bloquante CI, baseline non-régression frontend stable)
-CI/CD        ██████████░░░░░░░░░░  50% (GitHub Actions workflow, pas de quality gates)
-Deploy       ████████████████████ 100% (Docker Compose prod, nginx, MinIO)
+Backend       ████████████████████ 100% (~30 modules NestJS, ~290+ endpoints REST, ADR-028 audit enrichment)
+Frontend      ████████████████████ 100% (~18 sections dashboard, ~55+ pages, GlitchTip wired)
+DB schema     ████████████████████ 100% (~48+ modèles Prisma, ~13 migrations versionnées incl. delegationId + BACKUP_COMPLETED)
+Docs          ████████████████████ 100% (~29 ADRs, RGPD multi-mode, handoff 2e admin, 16+ runbooks operator)
+Tests         ████████████░░░░░░░░  60% (Jest backend + ~210 E2E Playwright + load k6 + a11y Lighthouse/axe + DR drill)
+CI/CD         ████████████████████ 100% (12 workflows GitHub Actions : a11y, audit-egress, auto-doc, backend-integration, bola-check, dto-coverage, e2e-tests, frontend-checks, load-test, lockfile-integrity, smoke-prod-scheduled, tests-e2e)
+Deploy        ████████████████████ 100% (Docker Compose prod + air-gap + 4-mode matrix + bootstrap automatisé)
 
-MVP TOTAL    ████████████████████ 100% (PRODUCTION READY)
-POST-MVP v1.6 ████████████████████ 100% (Delegation-first + Apparence + Sécurité S1 + Monitoring natif + Migrations Prisma + Refacto JSON)
+MVP TOTAL     ████████████████████ 100% (PRODUCTION READY)
+PLAN v2       ████████████████████ 100% CLOSED (v2.0.0)
+TRACKS A-E    ████████████████████ 100% CLOSED (v2.4.0 cible — preprod-readiness atteinte)
+PILOTE READY  ████████████████████ 100% (handoff doc + RGPD + cutover air-gap + drill restore + offsite LUKS)
 ```
 
 ### 📐 Métriques réelles mesurées le 2026-04-29 (v1.6.0+, post-ADR-018)
@@ -908,37 +934,34 @@ bash scripts/check-secrets.sh --install
 
 ---
 
-## ✅ STATUT FINAL
+## ✅ STATUT FINAL (v2.4.0 preprod-readiness)
 
-**✅ MVP 100% Production Déployée**
+**✅ MVP 100% Production Déployée + Tracks A-E CLOSED**
 
-- Backend : 100% complet ✅
-- Frontend : 100% complet ✅
-- Documentation : 100% complète ✅
-- Infrastructure : Docker Compose ready ✅
-- Déploiement : Serveur Ubuntu 24.04 ✅
-- Base de données : Seed data chargées ✅
-- Sécurité : Complète (auth, RBAC, firewall, SSL/TLS) ✅
+- Backend : 100% complet + ADR-028 audit enrichment ✅
+- Frontend : 100% complet + GlitchTip wired ✅
+- Documentation : 100% complète (RGPD multi-mode + handoff 2e admin + 16 runbooks operator) ✅
+- Infrastructure : Docker Compose air-gap + 4-mode matrix ✅
+- Déploiement : Bootstrap empirique 2 cycles validés xch-deploy ✅
+- Base de données : Seed démo + DR drill PASS ✅
+- Sécurité : Auth + RBAC + BOLA scan + egress audit + CSP strict ✅
+- DR : drill restore ≤ 1h RTO mesuré + offsite LUKS hebdo ✅
+- Observabilité : GlitchTip self-hosted air-gap (zéro forward externe) + Grafana ✅
 
-**🚀 Production déployée et opérationnelle**
+**🚀 Pré-prod readiness atteinte — cutover pilote air-gap RSI ready**
 
-**Accès :**
-- Frontend : http://192.168.0.13:3001
-- Backend API : http://192.168.0.13:3002/api
-- Credentials demo :
-  - Admin: admin@xch.demo / admin123
-  - Manager: manager@xch.demo / manager123
-  - Technicien: tech@xch.demo / tech123
-  - Technicien2: tech2@xch.demo / tech123
-  - Viewer: viewer@xch.demo / viewer123
+**Accès banc de test xch-deploy** (cf MCP `XCH_DEPLOY_ENVIRONMENT_NATURE`) :
+- URL démo : `https://<DEPLOY_DOMAIN>` (placeholder Option C, cf `cutover-prod-airgap.md`)
+- Frontend container : Port 3001
+- Backend container : Port host:3002 → 3000 (Grafana monopolise host:3000 — cf MCP `XCH_PROD_PORTS`)
+- Credentials démo (banc de test seulement, **PAS en prod**) — voir `docs/operator/handoff.md` Section 1.4
 
-**Infrastructure production :**
-- Backend : Port 3002 (conteneur xch-backend)
-- Frontend : Port 3001 (conteneur xch-frontend)
-- PostgreSQL 15 + PostGIS : Port 5433
-- Redis 7 : Port 6380
-- MinIO S3 : Ports 9000-9001
-- Réseau Docker : xch-network
+**Infrastructure cible production (Mode C air-gap)** :
+- VM interne employeur (8 vCPU / 32 GB / 500 GB SSD min)
+- Réseau air-gap strict ou whitelist UDP/TCP minimum
+- Self-signed local ou CA interne employeur
+- DNS interne `.lan` / `.local`
+- USB chiffré LUKS rotation hebdo (cf `offsite-backup.md`)
 
 **Dernières corrections (2026-01-10) :**
 - ✅ Fix FloorPlans API (relation Prisma tenantId)

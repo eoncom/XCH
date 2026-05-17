@@ -17,6 +17,159 @@ Ce fichier track toutes les sessions de développement.
 
 ---
 
+## 2026-05-17 — Sessions 13-17 narrative (Tracks A/B/C/D/E + S5b + S8 + S9)
+
+> Append manuel Track E.4 PR3 Pass 7 — narration des sessions post-v1.9.0 sourcée depuis MCP `XCH_TRACK_*_*` (pas reconstruction git log). Couvre les ~5 sessions thématiques entre v1.9.0 (2026-05-03) et v2.4.0 cible (2026-05-17).
+
+### Session 13 — S5b heavy SQL refactors (2026-05-09) → v2.1.1
+
+**Source MCP** : `XCH_PLAN_V2_FINALIZATION` + CHANGELOG `[2.1.1]`.
+
+- 2 cibles livrées : (1) `GENERATE_SERIES` projection sur `reportByMonth`, (2) group-by `reportByBearer` / `reportByTarget`
+- Cible 3 (audit reportByCategory) reportée S6 perf vague 2 — pas de vrai N+1, déjà batché par type
+- Tag `v2.1.1` posé 2026-05-09 — fin du plan v2 finalisation
+
+### Session 14 — Test global pilote + Tracks A+B+C → v2.1.2 / v2.1.3 (2026-05-09 → 2026-05-10)
+
+**Sources MCP** : `XCH_PROD_TEST_REPORT_2026_05_09`, `XCH_TRACK_AB_COORDINATION`, `XCH_BUGS_PROD_BLOCKERS`, `XCH_UIUX_FINDINGS`, `XCH_TRACK_C_BUGS_SECONDARY_2026_05_10`, `XCH_RELEASE_v2_1_2`, `XCH_RELEASE_v2_1_3`.
+
+**Test global 2026-05-09** : 10 bugs fonctionnels + 8 UI/UX issues remontés sur prod pilote v2.1.1.
+
+**Track A** (bugs prod-bloquants, branche `claude/track-a-bugs-prod-blockers-2026-05-10`) :
+- PR #62 : B6 theme persist via `/me/appearance` + B7 29-fetch loop kill via `useRef setTheme` — merge `18ede77`
+- PR #63 : B9 `overBudgetCount` sur `rootBudgets` + banner 2 lignes autonomes sans soustraction — merge `7ca1581`
+- PR #64 : B1+B2+B4 (`getAllPaginated meta.total` dashboard + 4 `useInfiniteQuery` Kanban + `GET /api/expenses/summary` backend) — re-testé 5/5 critères PASS
+- B5 résolu indirectement par PR #62 (29-fetch loop = JS thread blocker, pas SQL lent)
+- **Pattern Phase-1-cheap-first capitalisé** : éviter 1 PR + 1 migration Prisma index inutiles (mot-clé "renderer Chrome bloqué" = JS CPU-bound, indice frontend)
+
+**Track B** (UI/UX professionnalisation, parallèle Track A, branche `claude/interesting-mestorf-73d433`) :
+- PR #65 : 7 findings (U1 Import CSV + U2 Contacts + U3 Monitoring + U4 Avatars + U5 Settings + U7 Budgets + B8) — merge `8cec58e` + fixup CI `d55fba0`
+- Nouveau composant partagé `<UserAvatar size=sm/md/lg>` + util `getInitials` dans `frontend/src/lib/`
+- Sweep Settings : 10 skeleton loading states cohérents (remplace `<p>Chargement...</p>`)
+- 0 collision avec Track A grâce à coordination MCP (locks par fichier + signals merge)
+
+**Release v2.1.2** (2026-05-10, tag `5b75e2c` PR #66) : bundle Track A + Track B en patch UI-only, pas de breaking.
+
+**Track C** (bugs secondaires post-test global, branche `claude/track-c-bugs-secondary-2026-05-10`) :
+- B3 root cause = DTO broken (exposait `name`/`floor`/`building` qui n'existent pas dans `floor_plans`, droppait `title`/`site`/`planGroupId`)
+- B10 fix = export + restore des 9 tables manquantes (Photo, AssetMovement, TaskComment, ConnectivityLink, SiteHealthSnapshot, BillingEntity, Expense, CostAllocation, Budget) — ZIP backup 101 KB → 164 KB
+- ts-nocheck cleanup (reports/page.tsx)
+- PR #67 merged `a497675`
+
+**Release v2.1.3** (2026-05-10, PR #68 CHANGELOG-only pattern v2.1.2).
+
+### Session 15 — S8 GlitchTip + S9 hardening tail (2026-05-08 → 2026-05-12)
+
+**Sources MCP** : `XCH_S8_GLITCHTIP_HANDOFF`, CHANGELOG `[2.0.0]`, `[2.1.0]`, `[2.1.4]`.
+
+**S9 hardening tail** (v2.0.0 du 2026-05-06, livrée AVANT S8 selon arbitrage ordre plan v2) :
+- CSP nonce dynamique + 100% DTO coverage sur 30+ endpoints + cascade vague A+B (12 modules)
+- v1.11.0 + v2.0.0 séquence — fin du plan v2 strict
+
+**S8 GlitchTip** (v2.1.0 du 2026-05-08, après S9 pour ne pas brouiller Sentry pendant refactors) :
+- Décision : **GlitchTip self-hosted** (pas Sentry SaaS) — air-gap compatible, zéro forwarding externe
+- Option B compose dédié (pas extension docker-compose.yml principal)
+- Drop `user.email` entièrement dans Sentry context (UUID seulement)
+- Rétention 90j via `GLITCHTIP_MAX_EVENT_LIFE_DAYS=90`
+- Admin GlitchTip auto-seedé via service idempotent dans le compose
+- ADR-024
+- **Gotcha capitalisé** : nom réseau Docker external (`XCH_NETWORK_NAME`) dépend du worktree/dossier — adapter par environnement
+
+**Chore v2.1.4** (2026-05-12, PR #69) : nettoyage Gatus vestigial + retrait `docker-compose.prod.yml` legacy. 1-PR squash (pattern divergence chore justifiée). Capitalisation MCP `XCH_DOCKER_IMAGE_DISCIPLINE`.
+
+### Session 16 — Track D Backup v2 (2026-05-14 → 2026-05-15) → v2.2.x + v2.3.x
+
+**Sources MCP** : `XCH_TRACK_D1_BACKUP_V2_2026_05_10`, `XCH_TRACK_D2_BACKUP_V2_2026_05_14`, `XCH_RELEASE_v2_2_0`, `XCH_RELEASE_v2_2_1`, `XCH_RELEASE_v2_3_0`, `XCH_RELEASE_v2_3_1`, ADR-025.
+
+**Track D.1 Backup v2 Core** (2026-05-14, branche `claude/track-d1-backup-v2`, ~14.5h vs 6.75j budgetés = 21%) :
+- v1 backup OOM sur multi-GB tenant + restore in-memory AdmZip + fichiers MinIO référencés DB seulement (orphelins perdus) → non DR-ready
+- Streaming end-to-end (zero Buffer.concat) avec format v2 (metadata.json + data/*.json + minio/* mirror + plans/rendered/*)
+- Idempotence per natural-key matching sur 19 tables × 5 FK phases ; skip-if-exists semantic
+- Dry-run safe-default avec `DryRunReportResponseDto` (wouldCreate/wouldSkip counts, sha256 verify, estimatedDurationSec)
+- Async Bull v3 avec polling progress (202 + jobId, GET /backup/jobs/:jobId every 2s)
+- Compat v1 restore-only via détection automatique
+- 77 unit tests Jest + 3 integration round-trip xch-deploy + 3 Playwright E2E `@backup-v2`
+- ADR-025, tag `v2.2.0` PR #70 squash `c8ab91e`
+- **Hotfix v2.2.1 même session** (PR #71 squash `6d9ead9`) : `listBackups` filtre exact cachait v2 backups, étendu aux 4 actions
+- Smoke prod 6/6 PASS
+
+**Track D.2 Backup v2 Polish** (2026-05-15, ~14h47 vs 26h budget) :
+- Chiffrement AES-256-GCM streaming
+- Cross-tenant remap (restaurer backup d'un tenant dans un autre — support / migration)
+- Multipart upload restore async
+- Observabilité GlitchTip spans approfondie
+- Deprecation X-Backup-Sync header (legacy)
+- Concurrency Bull tuning
+- Gap fixes opportunistes D.1 silent loss : `Contact.delegationId`, `Task.assignedTo`
+- BACKUP_ACTIONS constant (factorisation des filtres post-leçon D.1)
+- 198/198 jest verts
+- Tag `v2.3.0` PR #72 squash `1513b99`
+- **Hotfix v2.3.1 immédiat post-smoke** (PR #73 squash `f5c622d`) : multipart shared volume backend↔worker + BOLA restore tenant scope (pre-existing D.1 révélée par audit défensif)
+- **4 nouveaux patterns MCP capturés** : `XCH_INTER_CONTAINER_ASSUMPTIONS` (shared volume), `XCH_BOLA_PATTERN_CHECK` (findFirst + tenantId scope), `XCH_MCP_SEARCH_BEHAVIOR` (queries 1-2 keywords ciblés), `XCH_DEPLOY_ENVIRONMENT_NATURE` (xch-deploy = banc de test dev/pré-prod)
+
+### Session 17 — Track E preprod readiness (2026-05-15 → 2026-05-17) → v2.3.2 / v2.3.3 / v2.3.4 / v2.4.0
+
+**Sources MCP** : `XCH_TRACK_E_PREPROD_READINESS_2026_05_15`, `XCH_TRACK_E1_SECURITY_AUDIT_2026_05_15`, `XCH_TRACK_E1_FINDINGS_PRIORITY_LIST_2026_05_15`, `XCH_TRACK_E2_DR_MONITORING_2026_05_16`, `XCH_TRACK_E3_AIRGAP_BOOTSTRAP_2026_05_16`, `XCH_TRACK_E4_PR2_2026_05_16`, ADR-028, ADR-029.
+
+**Track E.1 Security audit** (2026-05-15, ~3h vs ~8h nominal = 37% sous-nominal) :
+- BOLA scan global : 25+ `update/delete({where:{id}})` safe via `findOne(id,tenantId)` upstream
+- RBAC 100% coverage vérifié
+- 23 `@SkipDelegation` justifiés (5 catégories figées par ADR-028 §A)
+- Forbidden/NotFound discipline correcte
+- Backend 0 SaaS egress hardcodé
+- **2 CRITICAL + 10 IMPORTANT + 5 RECOMMENDED = 17 findings** prioritisés
+- **Hotfix v2.3.2** : C-E1-1 `sites.update` BOLA tenant scoping (PR #74 squash `463a648` + tag) — fix immédiat autonomous (pattern v2.3.1)
+- **Option A arbitrée C-E1-2** : Frontend CSP externals → self-host fonts/tiles/icons + MinIO bucket `xch-map-tiles` → livrable Track E.3 cutover
+
+**Track E.2 DR + monitoring + alerting + offsite** (2026-05-16, v2.3.3) :
+- Décisions opérationnelles RSI figées : D2.1 Postfix relay, D2.2 Grafana SQL panels réutilisé, D2.3 USB chiffré LUKS rotation hebdo, D2.4 syslog local pas de SIEM J1
+- `GET /api/health` readiness probe (200 ok / 503 degraded, fail-soft 3s par dépendance) — `@Public` + `@SkipDelegation` per ADR-028 catégorie 1
+- `scripts/restore-full.sh` réécrit pour backup v2 ZIP (modes `--mode=api` + `--mode=cli` fallback)
+- `scripts/offsite-backup-luks.sh` (D2.3 rotation hebdo) + `scripts/ufw-enforce.sh` (promotion script idempotent)
+- `.github/workflows/audit-egress.yml` (CI non-bloquant assertion 4 grep `sentry.io`)
+- 5 runbooks operator : `dr-drill.md`, `alerting.md`, `recovery-runbook.md`, `incident-response.md`, `offsite-backup.md`
+- **DR drill mesuré tenant demo xch-deploy** : backup chiffré 724 KB = 474 ms, restore 1095 ms (_created:12 + _skipped:189 prouve idempotence NK), smoke 6/6
+- Vigilance V1 résolue : audit empirique confirme zéro fuite Sentry SaaS
+
+**Track E.3 Air-gap bootstrap + cutover 4-mode** (2026-05-16, v2.3.4) :
+- Stratégie v2.2 actée : utiliser **xch-deploy comme banc de test bootstrap répétable** (économie ~3-7j wall-clock vs attendre VM jetable IT employeur)
+- **Catastrophe partielle Pass 1** : 5 containers GlitchTip + 2 volumes wiped malgré whitelist v1 → root cause `docker compose down --remove-orphans` sur project name partagé → forensic report `track-e3-pass1-catastrophe-2026-05-16.md`
+- `scripts/teardown-xch-stack.sh` v2 surgical (~400 LOC) : whitelist explicite 8 containers + 4 volumes + 1 network + pollution check pre-wipe + surgical `docker stop/rm/volume rm` + pre-wipe backup download AVANT MinIO wipe
+- Pattern figé MCP `XCH_CO_HOSTED_DOCKER_PROJECTS_DISCIPLINE_2026_05_16` (project name isolé `xch-glitchtip`)
+- 9 runbooks/docs : `bootstrap-runbook.md` (2 cycles validés), `deployment-modes.md` (matrice 4-mode), `cutover-prod-airgap.md` (pilote employeur référence), `cutover-templates/` (3 templates dry-run), `rollback.md`, `cert-management.md`, `offline-updates.md`, `onboarding-user.md`, `server-hardening.md`, `secrets-rotation.md`
+- ADR-029 Proposed (SSO LDAP : Options A LDAP direct ~4-6h / B OIDC Keycloak ~1h + 1-2j IT employeur / **C local-only durable parking M3** = recommandation J1)
+- Bootstrap from scratch mesuré ~5 min ; recovery GlitchTip isolé ~30 sec
+
+**Track E.4 Preprod readiness** (2026-05-16 → 2026-05-17, v2.4.0 cible) :
+- **PR1 #80** (mergée 2026-05-16, déployée xch-deploy) : foundation
+  - ADR-028 audit log enrichment (`delegationId` + `ipAddress` + `userAgent` + taxonomy `@SkipDelegation` 5 catégories)
+  - Migrations `12_audit_log_delegation_id` + `7a_notification_event_backup_completed`
+  - 4 CI workflows : a11y.yml, audit-egress.yml, load-test.yml, lockfile-integrity.yml
+  - BACKUP_COMPLETED notification câblée
+  - Cron purge audit_log mensuelle (dry-run mode actif, fenêtre 12 mois)
+  - ADR-025b Proposed (NK expenses arbitrage)
+- **PR2 #81 + follow-ups #82 #83 #84 #85** (mergée 2026-05-16, ~3h10 vs 9h15 nominal) : testing + perf harness
+  - k6 seed (10k assets / 100k AuditLog / 50 users) + 4 scenarios + thresholds + workflow_dispatch
+  - Lighthouse CI + axe-core 10 pages (8 strict + 2 Konva soft)
+  - `dr-drill.md §10` v2.4.0 candidate runbook + `recovery-runbook.md §9` migration timing
+  - Follow-ups : env-drive global ThrottlerModule, seed admin UserDelegation continue-on-error, /api/setup/status readiness gate (no MinIO CI), baseline load-test rempli run #4 réel
+- **PR3 (en cours, cette release)** : docs closure
+  - RGPD multi-mode (4 sections + DPA Annex template) + handoff 2e admin checklist + changelog-users FR non-jargon
+  - PROJECT_STATUS v2.4.0 refresh + DEVELOPMENT_LOG Sessions 13-17 narrative (ce fichier) + roadmap.md rewrite
+  - Placeholder audit Tier A/B/C (broaden + classification user)
+  - Plan v3 MCP `XCH_PLAN_V3_POST_V2_2026_05_17` consolidation Track F/G/D.3 backlog
+  - `scripts/auto-update-docs.sh` extension append DEVELOPMENT_LOG since last tag
+  - **Sync point Pass 5** : drill xch-deploy exécution session séparée, Pass 11 BLOQUÉE jusqu'à PASS
+
+**Calibration estimates rythme habituel** : ~43% du nominal (E.1 = 37%, D.1 = 21%, D.2 ≈ 57%, E.4 PR2 = 34%). Pattern figé MCP `XCH_ESTIMATES_HOURS_NOT_DAYS`.
+
+---
+
+<!-- AUTO-GENERATED BELOW (managed by scripts/auto-update-docs.sh) -->
+<!-- Manual session narrative is preserved above this marker. Auto-update entries are appended below by the docs auto-update hook. -->
+
+---
+
 ## 2026-03-29
 
 ### Session 16-17 : Organisation + Accès flexible + Répartition des coûts (v1.2.0)
