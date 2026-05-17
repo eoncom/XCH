@@ -37,7 +37,7 @@ Optionnel : `DEBUG=prisma:query` pour détecter N+1 lors du run.
 
 | Scénario | VUs | Durée | Traffic | Endpoints |
 |---|---|---|---|---|
-| `smoke-load.js` | 5 | 30s | sanity | `/api/health`, `/api/sites`, `/api/assets` |
+| `smoke-load.js` | 5 | 30s | sanity | `/api/setup/status`, `/api/sites`, `/api/assets` |
 | `read-heavy.js` | 50 | 5m | 70% mix | `/api/assets`, `/api/sites`, `/api/tasks` |
 | `write-mixed.js` | 10 | 5m | 20% mix | `POST /api/assets`, `PATCH /api/tasks/:id`, `POST /api/expenses` |
 | `audit-heavy.js` | 5 | 5m | 10% mix | `GET /api/audit?delegationId=…` (stress index composite PR1) |

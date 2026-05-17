@@ -28,8 +28,11 @@ export function setup() {
 export default function (data) {
   const headers = { Cookie: data.cookie };
   group('smoke', () => {
-    const r1 = http.get(`${BASE_URL}/api/health`, { headers });
-    check(r1, { '/api/health 200': (r) => r.status === 200 });
+    // /api/setup/status preferred over /api/health: works in CI without
+    // MinIO service (load-test.yml only provides postgres + redis).
+    // For prod sanity, /api/health is the canonical probe (cf. smoke-prod.sh).
+    const r1 = http.get(`${BASE_URL}/api/setup/status`, { headers });
+    check(r1, { '/api/setup/status 200': (r) => r.status === 200 });
 
     const r2 = http.get(`${BASE_URL}/api/sites`, { headers });
     check(r2, { '/api/sites 200': (r) => r.status === 200 });
