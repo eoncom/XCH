@@ -110,15 +110,20 @@ jobs:
         run: |
           nohup node dist/main.js > /tmp/backend.log 2>&1 &
           echo $! > /tmp/backend.pid
-          # Wait readiness up to 60s
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
+          # Wait readiness up to 90s via /api/setup/status (public, DB-only).
+          # Cannot use /api/health here — it probes MinIO too and this workflow
+          # only spins postgres + redis services (MinIO unreachable → 503).
+          # /api/setup/status returns 200 once NestJS has bootstrapped + DB
+          # accepts queries, which is sufficient for k6 HTTP load (scenarios
+          # don't exercise storage upload paths).
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:3000/api/setup/status >/dev/null 2>&1; then
               echo "backend up after ${i}s"
               break
             fi
             sleep 1
           done
-          curl -fsS http://localhost:3000/api/health || (cat /tmp/backend.log; exit 1)
+          curl -fsS http://localhost:3000/api/setup/status || (cat /tmp/backend.log; exit 1)
 
       - name: Run smoke-load
         if: ${{ github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'smoke' }}
