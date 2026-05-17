@@ -1,5 +1,7 @@
 # XCH — Cutover prod air-gap pilote — Track E.3 Pass 6
 
+> ⚠️ **EXEMPLE — toute mention de `xch.eoncom.io` est un exemple historique RSI banc de test. Pour un cutover client, substituer par le placeholder `<DEPLOY_DOMAIN>` (typiquement `xch.<client>.lan` ou `xch.<client>.local`).** Idem `xch-deploy` = hostname banc de test RSI, à remplacer par `<DEPLOY_HOST>` dans le contexte client.
+
 > **Scope** : checklist de cutover XCH vers VM pilote employeur air-gap, synthèse de tous les runbooks Track E.2 + E.3.
 > Mode C (cf. [deployment-modes.md §3.3](deployment-modes.md#33-air-gap-strict-mode-c--pilote-employeur-référence)).
 > **Statut empirique** : validé sur `xch-deploy` comme banc de test (Track E.3 Pass 1+2 — 2 cycles wipe + bootstrap reproductibles).

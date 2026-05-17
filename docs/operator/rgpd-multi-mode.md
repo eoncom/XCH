@@ -195,9 +195,9 @@ Pour tout mode (A/B/C/D), XCH expose les capacités suivantes pour traiter les d
 |---|---|---|
 | **Accès** (Art. 15) | `GET /api/users/me` + `GET /api/audit-log/me` (à valider implémentation) | Login utilisateur, export depuis profil |
 | **Rectification** (Art. 16) | `PATCH /api/users/me` | Login utilisateur, édition profil |
-| **Effacement** (Art. 17) | `DELETE /api/users/:id` (super-admin) | Procédure opérateur : 1) anonymiser audit_log via mécanisme TBD Track F, 2) supprimer profil, 3) conserver audit_log anonymisé pour traçabilité légale |
+| **Effacement** (Art. 17) | `DELETE /api/users/:id` (super-admin) | Procédure opérateur : 1) anonymiser audit_log via mécanisme à implémenter Track F (cf backlog `XCH_PLAN_V3_POST_V2_2026_05_17`), 2) supprimer profil, 3) conserver audit_log anonymisé pour traçabilité légale |
 | **Limitation** (Art. 18) | Désactiver compte (`PATCH /api/users/:id`) | Login bloqué mais données conservées |
-| **Portabilité** (Art. 20) | Export backup tenant scoped (super-admin) | Demande utilisateur → export ciblé via mécanisme TBD Track F |
+| **Portabilité** (Art. 20) | Export backup tenant scoped (super-admin) | Demande utilisateur → export ciblé via mécanisme à implémenter Track F |
 | **Opposition** (Art. 21) | Désactivation + flag opt-out | À implémenter Track F si demande client formelle |
 
 **Gap Track F** : automatisation des droits RGPD utilisateur final (export self-service, anonymisation audit). Trace dans `XCH_PLAN_V3_POST_V2_2026_05_17`.
@@ -268,7 +268,7 @@ Avant cutover production (tout mode) :
 - [ ] DPA signé entre RSI et client final
 - [ ] Si Mode A/D : DPA hébergeur signé
 - [ ] Si Mode B : convention infogérance signée si applicable
-- [ ] Politique de rétention documentée (audit log 1 an, backups TBD selon client)
+- [ ] Politique de rétention documentée (audit log 1 an, durée backups à définir contractuellement avec le client)
 - [ ] Procédure droits personnes documentée + testée
 - [ ] Procédure violation documentée + testée
 - [ ] Registre des traitements à jour
