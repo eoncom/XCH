@@ -316,3 +316,192 @@ docker logs xch-backend-worker --since 2m | grep 'health-recompute' | tail -10
 - Recovery scénarios service-down : [recovery-runbook.md](recovery-runbook.md) (Pass 6)
 - Procédure offsite USB : [offsite-backup.md](offsite-backup.md) (Pass 7)
 - Demo data principle : MCP `XCH_DEMO_DATA_PRINCIPLE`
+
+---
+
+## 10. Drill 2026-05-16 — v2.4.0 candidate (Track E.4 PR2 Pass 5)
+
+> **Scope** : re-validation E2E `restore-full.sh` après les migrations PR1
+> (`12_audit_log_delegation_id` + `7a_notification_event_backup_completed`).
+> Statut rapport : 🟡 **runbook + procédure livrés — première exécution
+> attendue sur stack dev local (PAS xch-deploy — banc de test réservé PR3
+> cutover validation)**. Résultats à compléter post-exécution.
+
+### 10.1 Objectifs
+
+- Confirmer que la migration `delegationId` (PR1) est **rejouée intact** lors d'un
+  `prisma migrate deploy` post-restore.
+- Confirmer l'**idempotence** Backup v2 sur 2 cycles consécutifs avec MÊME
+  tarball.
+- Capturer **live** la notification `BACKUP_COMPLETED` câblée PR1
+  ([backup.processor.ts:179](../../backend/src/modules/backup/backup.processor.ts:179)
+  + [notification-emitter.ts:160](../../backend/src/modules/notifications/notification-emitter.ts:160)).
+- Mesurer le RTO avec un volume seed Pass 3 (10k assets significatif).
+
+### 10.2 Pré-requis
+
+- Stack dev local **down** (pas de containers XCH actifs)
+- Backend buildé (`cd backend && npm run build`)
+- Seed Pass 3 chargé (cf. [load-test.yml](../../.github/workflows/load-test.yml)
+  ou `npx ts-node backend/scripts/seed-loadtest.ts --reset`)
+- Docker disponible (Postgres + Redis + MinIO + Mailpit éphémère)
+
+### 10.3 Procédure exacte (à exécuter sur host Docker-capable)
+
+```bash
+# === Cycle 1 — Backup + teardown + restore + smoke ===
+cd /path/to/XCH-dev
+
+# 1. Backup
+T_BACKUP_START=$(date +%s)
+bash scripts/backup-full.sh
+ls -la backups/ | tail -3
+BACKUP_FILE=$(ls -t backups/xch-backup-full-*.tar.gz | head -1)
+echo "Backup file: $BACKUP_FILE"
+T_BACKUP_END=$(date +%s)
+echo "Backup duration: $((T_BACKUP_END - T_BACKUP_START))s"
+
+# 2. Teardown (dry-run preview obligatoire v2)
+bash scripts/teardown-xch-stack.sh --dry-run
+bash scripts/teardown-xch-stack.sh --yes
+
+# 3. Re-start infra
+cd backend
+docker compose up -d postgres redis minio minio-init
+docker compose ps
+
+# Wait postgres healthy
+for i in $(seq 1 30); do
+  STATUS=$(docker inspect xch-postgres --format '{{.State.Health.Status}}' 2>/dev/null || echo "starting")
+  [ "$STATUS" = "healthy" ] && break
+  sleep 1
+done
+cd ..
+
+# 4. Restore (mode=api polling)
+T_RESTORE_START=$(date +%s)
+bash scripts/restore-full.sh "$BACKUP_FILE" --mode=api
+T_RESTORE_END=$(date +%s)
+echo "Restore duration: $((T_RESTORE_END - T_RESTORE_START))s"
+
+# 5. Vérif schéma post-restore (migrations PR1 rejouées)
+cd backend
+npx prisma db pull --schema=/tmp/pulled.prisma
+diff prisma/schema.prisma /tmp/pulled.prisma | grep -E "delegationId|@@index.*delegationId|BACKUP_COMPLETED" || echo "schema OK (no diff)"
+# Attendu: 0 diff sur ces 3 patterns. Si diff → migration NON rejouée → CRITICAL hotfix.
+cd ..
+
+# 6. Smoke 6/6
+bash scripts/smoke-prod.sh http://localhost:3000
+
+# === Cycle 2 — Idempotence avec MÊME tarball ===
+
+# 7. Re-teardown
+bash scripts/teardown-xch-stack.sh --yes
+
+# 8. Re-start infra
+cd backend && docker compose up -d postgres redis minio minio-init && cd ..
+
+# 9. Re-restore MÊME tarball
+T_RESTORE2_START=$(date +%s)
+bash scripts/restore-full.sh "$BACKUP_FILE" --mode=api
+T_RESTORE2_END=$(date +%s)
+echo "Restore #2 duration: $((T_RESTORE2_END - T_RESTORE2_START))s"
+
+# 10. Smoke 6/6 confirme idempotence
+bash scripts/smoke-prod.sh http://localhost:3000
+
+# === Cycle 3 — BACKUP_COMPLETED notif live capture ===
+
+# 11. Mailpit éphémère
+docker run -d --rm --name mailpit-drill \
+  --network backend_xch_dev_net \
+  -p 8025:8025 -p 1025:1025 \
+  axllent/mailpit
+
+# 12. Backend SMTP override + restart
+docker compose -f backend/docker-compose.yml exec -e SMTP_HOST=mailpit-drill -e SMTP_PORT=1025 backend npm run start:prod &
+# (alternative: ajouter SMTP_HOST/SMTP_PORT à .env.local puis docker compose restart backend)
+sleep 5
+
+# 13. Trigger backup full + poll
+curl -c /tmp/cookies.txt -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@demo.fr","password":"Demo1234"}'
+
+JOB=$(curl -s -b /tmp/cookies.txt -X POST http://localhost:3000/api/backup/full \
+  -H 'Content-Type: application/json' -d '{}' | jq -r .jobId)
+echo "Backup job: $JOB"
+
+for i in $(seq 1 30); do
+  STATE=$(curl -s -b /tmp/cookies.txt "http://localhost:3000/api/backup/jobs/$JOB" | jq -r .state)
+  echo "poll #$i state=$STATE"
+  [ "$STATE" = "completed" ] || [ "$STATE" = "failed" ] && break
+  sleep 2
+done
+
+# 14. Vérif notif BACKUP_COMPLETED reçue dans Mailpit
+curl -s http://localhost:8025/api/v1/messages | jq '.messages[] | select(.Subject | test("Backup"; "i"))'
+# Attendu: au moins 1 message avec Subject contenant "Backup" + body avec jobId + duration_ms + size_bytes
+
+# 14bis. Fallback SQL si Mailpit indisponible
+docker exec xch-postgres psql -U xch_user -d xch_dev -c \
+  "SELECT id, event, status, \"createdAt\" FROM notification_dispatches WHERE event='BACKUP_COMPLETED' ORDER BY \"createdAt\" DESC LIMIT 1;"
+
+# 15. Teardown Mailpit
+docker stop mailpit-drill
+```
+
+### 10.4 Vigilance R5.2 — ThrottlerGuard env override
+
+Si `429 Too Many Requests` lors du login Pass 5.3 (rate limit `THROTTLE_AUTH_LIMIT=5` défaut, cf.
+[auth.controller.ts:2](../../backend/src/modules/auth/auth.controller.ts:2)) :
+
+```bash
+# DRILL LOCAL UNIQUEMENT — JAMAIS sur prod
+export THROTTLE_AUTH_LIMIT=99999
+# … relancer la procédure depuis 12. …
+
+# RÉVERT OBLIGATOIRE POST-DRILL
+unset THROTTLE_AUTH_LIMIT
+docker compose restart backend
+# Confirme défaut restauré
+bash scripts/smoke-prod.sh http://localhost:3000   # 6/6 OK = défaut OK
+```
+
+### 10.5 Résultats observés
+
+> **À compléter après première exécution** (drill local 2026-05-XX).
+
+| Métrique | Cycle 1 | Cycle 2 (idempot.) | Cycle 3 (notif) | Cible |
+|---|---|---|---|---|
+| Backup duration (wall) | ⏳ s | n/a | ⏳ s | < 60s tenant ~10k |
+| Restore duration (wall) | ⏳ s | ⏳ s | n/a | < 30 min RTO |
+| Migration `12_audit_log_delegation_id` rejouée | ⏳ ✅/❌ | n/a | n/a | ✅ |
+| Migration `7a_notification_event_backup_completed` rejouée | ⏳ ✅/❌ | n/a | n/a | ✅ |
+| Schema diff post-restore | ⏳ 0 lignes | ⏳ 0 lignes | n/a | 0 |
+| Smoke 6/6 PASS | ⏳ ✅/❌ | ⏳ ✅/❌ | ⏳ ✅/❌ | ✅ |
+| BACKUP_COMPLETED notif délivrée (Mailpit) | n/a | n/a | ⏳ ✅/❌ | ✅ |
+| BACKUP_COMPLETED dispatch SQL fallback | n/a | n/a | ⏳ ✅/❌ | ✅ |
+| ThrottlerGuard env override appliqué ? | ⏳ oui/non | ⏳ oui/non | ⏳ oui/non | unset post-drill |
+| ThrottlerGuard reverted + smoke 6/6 PASS | n/a | n/a | ⏳ ✅/❌ | ✅ |
+
+### 10.6 Findings
+
+| # | Sévérité | Description | Action |
+|---|---|---|---|
+| ⏳ | ⏳ | ⏳ | ⏳ |
+
+Si CRITICAL R5.5 (restore casse migration delegationId) → hotfix PR2 inclus +
+ping user immédiat. Si CRITICAL R5.4 (notif BACKUP_COMPLETED non-émise) →
+régression PR1 wiring → hotfix PR2 inclus.
+
+### 10.7 Cleanup
+
+```bash
+# Si seed loadtest tenant à purger
+cd backend && npx ts-node scripts/seed-loadtest.ts --reset
+# OU drop complet
+docker compose down -v
+```
+
