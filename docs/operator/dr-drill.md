@@ -405,6 +405,8 @@ sha256sum /tmp/full-backup-v2-<timestamp>.zip
 
 Sur une DB fraîche post-`teardown-xch-stack.sh`, aucun admin n'existe pour s'authentifier auprès de `POST /api/backup/full/restore-upload` qui exige `@RequireWrite()`. Workaround obligatoire :
 
+> **NOTE** : les valeurs `setup@drill.local`, `DrillPass5_2026!`, `DrillTemp`, `Drill Admin` ci-dessous sont des **exemples illustratifs substituables**. Elles sont **overwrite par les données du backup** lors du restore (étape d) — donc n'ont aucune persistence et peuvent être remplacées par n'importe quelles valeurs ad-hoc. Pour un drill répétable, l'opérateur peut conserver ces exemples ; pour un cutover prod, utiliser des valeurs reflétant la convention du client (sans impact fonctionnel).
+
 ```bash
 # Étape a — créer un admin temporaire via Setup Wizard
 # Option flux UI : visiter https://<DEPLOY_DOMAIN>/setup
