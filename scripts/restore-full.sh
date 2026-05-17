@@ -127,7 +127,12 @@ restore_via_api() {
     return 0
   fi
 
-  CURL_FILES=(-F "file=@$BACKUP_FILE")
+  # Field name must match FileFieldsInterceptor in
+  # backend/src/modules/backup/backup.controller.ts:481
+  # ({ name: 'backup', maxCount: 1 }). Pass 5 drill 2026-05-17 caught
+  # a drift where `file=` was sent instead of `backup=`, causing
+  # `Unexpected field` 400 on multipart upload.
+  CURL_FILES=(-F "backup=@$BACKUP_FILE")
   [[ -n "$SIDECAR_FILE" ]] && CURL_FILES+=(-F "sidecar=@$SIDECAR_FILE")
 
   RESP=$(curl -sS -b "$COOKIES" \
