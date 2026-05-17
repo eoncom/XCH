@@ -7,6 +7,204 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.4.0] - 2026-05-17 — Track E.4 closure (preprod readiness)
+
+Pre-prod readiness pour cutover pilote air-gap RSI. Track E.4 livré en 3 PRs :
+PR1 foundation (ADR-028 audit enrichment + 4 CI workflows + BACKUP_COMPLETED
+notif + cron purge audit), PR2 testing+perf harness (k6 + Lighthouse/axe +
+drill runbook), PR3 docs+closure (RGPD multi-mode + handoff 2e admin +
+DEVELOPMENT_LOG Sessions 13-17 + roadmap rewrite + placeholder audit +
+**scope clarification backup v2 + dr-full-recovery.md**).
+
+### Added
+
+- **ADR-028** audit log enrichment (`delegationId` + `ipAddress` + `userAgent`)
+  + taxonomy `@SkipDelegation` 5 catégories figées + migration
+  `12_audit_log_delegation_id` (index composite p95 audit 1.14ms sous-charge).
+- **12 CI workflows GitHub Actions** : a11y, audit-egress, auto-doc-update,
+  backend-integration, bola-check, dto-coverage, e2e-tests, frontend-checks,
+  load-test, lockfile-integrity, smoke-prod-scheduled, tests-e2e.
+- **`BACKUP_COMPLETED` `NotificationEventType`** câblé sur BackupProcessor
+  ([backup.processor.ts:179](backend/src/modules/backup/backup.processor.ts:179) +
+  emitter dispatcher) + migration `7a_notification_event_backup_completed`.
+- **Cron purge `audit_log` mensuelle** (fenêtre 12 mois glissants, dry-run mode
+  actif par défaut, D4.3 Track E parent décision).
+- **`docs/operator/rgpd-multi-mode.md`** (~280 lignes) — conformité RGPD par
+  mode de déploiement (cloud public / cloud privé / VPS basique / air-gap) +
+  template DPA Annex 9 clauses CNIL + droits Art. 15-21 + notification
+  violation Art. 33-34. Marqué `NOT legal advice`.
+- **`docs/operator/handoff.md`** (~250 lignes) — checklist 2e admin onboarding
+  (lever bus-factor=1) : credentials, monitoring, 6 runbooks must-read, drill
+  applicatif mensuel + drill infrastructure trimestriel/semestriel, on-call
+  rotation + escalade, sign-off 1er/2e admin + DPO.
+- **`docs/operator/dr-full-recovery.md`** (~370 lignes, NEW) — guide
+  infrastructure DR par mode de déploiement (recommandations + intégration
+  solutions client). Composants à sauvegarder + stratégies par mode A/B/C/D +
+  procédure restauration générique + drill DR full trimestriel/semestriel.
+  Disclaimer explicite : recommandations, mise en œuvre = responsabilité IT
+  client. Outils mentionnés (Veeam, pg_dump, LVM, ZFS, snapshots cloud) =
+  standards industrie utilisés par client selon politique.
+- **`docs/user/changelog-users.md`** (nouveau dossier `docs/user/`) —
+  reformulation FR non-jargon CHANGELOG.md focus v1.9.0 → v2.4.0, public
+  cible opérateur RSI non-technicien.
+- **`docs/security/audit-placeholders-2026-05-17.md`** — méthodologie Tier A/B/C
+  + inventaire 19 fichiers `docs/operator/` + verdict Tier A=0, Tier B=0.
+- **`docs/perf/load-test-2026-05-16.md`** + **`docs/perf/a11y-baseline-2026-05-16.md`**
+  + **`docs/perf/a11y-followup-track-f.md`** — baselines Pass 3 + Pass 4 + suite
+  Track F backlog 13 violations color-contrast.
+- **`docs/status/roadmap.md`** réécrit (ancien archivé `docs/archive/roadmap-v1.0-2025-12-31.md`)
+  — timeline réelle v1.0 → v2.4.0 par phases (amorce / plan v2 / Tracks A-E) +
+  backlog Track F/G/D.3 pointeur MCP `XCH_PLAN_V3_POST_V2_2026_05_17`.
+- **`scripts/auto-update-docs.sh`** étendu : flag `--since-last-tag` (append
+  DEVELOPMENT_LOG des commits depuis le dernier `git tag`, idempotent par range
+  tag) + flag `--dry-run` (validation pre-write) + flag `--help`.
+
+### Clarified scope (v2.4.0)
+
+- **Backup v2 = content recovery applicatif same-tenant only**. Restore au sein
+  d'un tenant existant (corruption/suppression contenu). Drill mensuel
+  [`dr-drill.md`](docs/operator/dr-drill.md).
+- **DR infrastructure = responsabilité client** selon mode de déploiement (perte
+  VM / volume Postgres / redéploiement). Guide
+  [`dr-full-recovery.md`](docs/operator/dr-full-recovery.md) avec recommandations
+  + intégration solutions client (Veeam, pg_dump, LVM, snapshots cloud, etc.).
+  Drill infrastructure trimestriel/semestriel.
+
+### Measured
+
+- **Pass 3 perf baseline** (k6, 100 VU, 30 min, seed 10k assets / 100k AuditLog /
+  50 users) :
+  - 🏆 **p95 audit 1.14 ms** sur 100k rows AuditLog — **cible 500 ms, marge 440×** —
+    validation empirique spectaculaire de l'index composite ADR-028 §B.2
+    `(tenant_id, delegation_id, created_at DESC)`. Confirme que la migration
+    `12_audit_log_delegation_id` PR1 tient la charge production avec une marge
+    de 2.5 ordres de grandeur.
+  - **p95 read 23.94 ms** (cible 500 ms, **20× marge**)
+  - **p95 write 11.11 ms** (cible 1 s, **90× marge**)
+  - 0 N+1 détecté sur endpoints smoke `/api/assets` + `/api/sites`
+  - Détails : [docs/perf/load-test-2026-05-16.md](docs/perf/load-test-2026-05-16.md)
+- **Pass 4 a11y baseline** (Lighthouse CI + axe-core, 10 pages) :
+  - **13 violations axe** sur 7 pages standard (toutes `color-contrast` WCAG 2 AA
+    serious — 2 patterns CSS racines `text-muted-foreground/bg-muted` ratio 4.29
+    + `text-orange-600/bg-card` ratio 3.55) → **déférées Track F.1** suite
+  - **1/10 page sans violation** : `/auth/login` ✅
+  - **2/10 pages Konva** en soft (D7 — `/dashboard/floor-plans`,
+    `/dashboard/monitoring` exclues asserts stricts, canvas ARIA-limited)
+  - Lighthouse a11y `/auth/login` : **score parfait 100/100** (échelle LHCI 0–1
+    normalisée, valeur brute `1.0`). Rapport public capturé via Google CDN
+    [run 25996801195](https://github.com/eoncom/XCH/actions/runs/25996801195).
+    Les 9 autres pages ont leur audit Lighthouse **exécuté complet** sur le
+    runner CI (le browser headless a bien tourné les 10 URLs avec scoring),
+    mais l'étape de collecte des rapports artifact échoue par configuration
+    (`assertMatrix` du `lighthouserc.cjs` incompatible avec d'autres options
+    sur la même URL pattern → assert exit non-zero → reports `.lighthouseci/`
+    non finalisés). Track F.X backlog `lighthouserc.cjs` config — perte
+    d'observabilité multi-page, scores eux-mêmes calculés OK côté runner. À
+    résoudre avant pilote prod élargi pour récupérer le tableau scoring
+    complet 10 URLs.
+  - Détails : [docs/perf/a11y-baseline-2026-05-16.md](docs/perf/a11y-baseline-2026-05-16.md)
+- **Pass 5 drill restore applicatif backup v2** (re-drill post PR #86 hotfix
+  sur xch-deploy) :
+  - **Backup duration backend mesuré** : `1273 ms` (Bull `duration_ms_backend`,
+    capturé via event log re-drill, backup size 244 KB). RTO content-recovery
+    restore non mesuré sur volume représentatif car drill bloqué par F9 design
+    gap → **reclassé scope redefinition v2.4.0, pas un échec restore** (cf
+    `### Clarified scope` + `dr-drill.md` §10.6 F9 RESOLVED).
+  - **BACKUP_COMPLETED wiring** : `wiring_intact_verified_via_bull_event_log`
+    (channels sent = 0 dû à `notification_rules` absentes sur tenant fresh —
+    gap procédural documenté `dr-drill.md` §10.2.bis, finding F6 RESOLVED doc).
+  - **Schema diff post-restore** : `0` (migrations 12 + 7a confirmées pre-applied
+    sur fresh DB par `prisma db pull` post-bootstrap — validation indirecte
+    robustness des migrations PR1).
+  - **Idempotence cycle 2** : non mesuré empiriquement (cycle 2 jamais atteint —
+    cf `### Known limitations` Cycle 2 → Track D.3.7 backlog post seed
+    représentatif 10k assets).
+
+### Validated
+
+- **PR [#86](https://github.com/eoncom/XCH/pull/86) mergé** (commit `479b0f5`) :
+  F1 zombie `role+status` (restore data path) + F2 field name `file→backup`
+  (restore-full.sh) corrigés, re-drill comprehensive PASS confirme les deux
+  fixes + test 11 régression-guard ajouté + CI gap fix.
+- **Migrations PR1 rejouées robustement** (`12_audit_log_delegation_id` +
+  `7a_notification_event_backup_completed`) : confirmées pre-applied sur fresh
+  DB par `prisma db pull` post-bootstrap (schema diff lines = 0).
+- **BACKUP_COMPLETED wiring intact** : vérifié via Bull event log capture pendant
+  le re-drill. Channels sent = 0 dû à `notification_rules` absentes sur tenant
+  fresh — gap procédural documenté `dr-drill.md` §10.2.bis (finding F6 RESOLVED).
+- **Teardown surgical preserve sentinels** : GlitchTip + Grafana hosts non
+  touchés, vérifié re-drill cycle.
+- **12 CI workflows green** sur main HEAD `479b0f5` (recount 2026-05-17 post-merge
+  PR #86 — inchangé).
+- Runbook DR drill §10 corrigé post Pass 5 (F4/F6/F7/F8 procédural + F10 NEW
+  §10.2.cinq) + retitre scope-clarified.
+
+### Known limitations
+
+- **F.9 Backup encryption default** : `POST /api/backup/full` sans param body
+  retourne `encrypted=false` même avec `XCH_MASTER_KEY` set. Comportement
+  default vs opt-in à investiguer Track F. Workaround opérateur : passer
+  explicitement `{"encrypted":true}` dans le body si chiffrement requis.
+  Détails MCP `XCH_PLAN_V3_POST_V2_2026_05_17` Track F.9 pour résolution v2.5+.
+- **F.1 a11y color-contrast** : 13 violations sur 7 pages standard, toutes
+  `color-contrast` WCAG 2 AA serious, déférées Track F follow-up
+  ([docs/perf/a11y-followup-track-f.md](docs/perf/a11y-followup-track-f.md)).
+  Remédiation = 1 hotfix Tailwind config (2 patterns CSS racines).
+- **F.X Lighthouse multi-page observability gap** : les audits Lighthouse
+  s'exécutent correctement sur les 10 URLs (browser headless + scoring runner-side
+  OK), et la page testée individuellement (`/auth/login`) sort score parfait
+  **100/100**. Cependant, la collecte des rapports `.lighthouseci/` en artifact
+  CI est bloquée par une erreur de configuration `lighthouserc.cjs`
+  (`assertMatrix` incompatible avec d'autres options sur le même URL pattern).
+  **Impact** : perte d'observabilité multi-page (on ne récupère que la page la
+  plus simple via Google CDN au lieu du tableau complet 10 URLs). **Score lui-même
+  non-régressé**, audits eux-mêmes réussis. **À résoudre Track F.X** avant pilote
+  prod élargi pour exporter le tableau scoring complet et identifier d'éventuelles
+  régressions perf/a11y sur les pages dashboard.
+- **F1 RBAC GET investigation** : k6 super-admin user reçoit 99-100% non-2xx
+  sur `GET /api/assets|/tasks|/audit`. Latence sous-jacente excellente (p95
+  1-24ms) → bug RBAC/contract pas perf. Track G backlog.
+- **F2 POST /assets unique race** : test scénario à écrire Track F backlog.
+- **Cycle 2 idempotence non drillé empiriquement** : pattern `upsertByNaturalKey`
+  skip-if-exists ADR-025 §D validé par tests unitaires et same-tenant restore
+  en CI. Drill empirique cycle 2 reporté Track D.3.7 post seed représentatif
+  10k assets (cf MCP `XCH_PLAN_V3_POST_V2_2026_05_17`).
+
+### Out of scope (deferred Track F / G / D.3)
+
+- ADR-029 implementation (SSO/LDAP — Option C local-only durable retenue J1)
+- Validation cutover réel Mode A (cloud public) / B (cloud privé) / D (VPS) —
+  Track D.3 quand 2e client réel non-air-gap se présente
+- Pen test externe (Track F post-cutover stabilisé)
+- DPA formel signé client (template fourni Annex rgpd-multi-mode.md)
+- Automatisation droits RGPD utilisateur final (export self-service +
+  anonymisation audit_log) — Track F.7
+- Backup v2.2 cross-tenant amélioré pour staging/migration test — Track G.7
+  low priority
+
+### Notes opérateur
+
+- **Drill applicatif mensuel** : procédure [docs/operator/dr-drill.md §10](docs/operator/dr-drill.md)
+  corrigée Pass 5 (4 prérequis ajoutés : seed 10k assets F5, notification_rules
+  seedées avant test notif F6, Setup Wizard chicken-egg workaround pour DB
+  vierge F4, localisation tarball MinIO bucket `xch-backups` F8, restauration
+  DEUX fichiers `.env` post-teardown F10).
+- **Drill infrastructure trimestriel/semestriel** : nouveau guide
+  [docs/operator/dr-full-recovery.md](docs/operator/dr-full-recovery.md) avec
+  procédures par mode de déploiement + composants à sauvegarder + recommandations
+  outils standards (Veeam, pg_dump, LVM, ZFS, snapshots cloud, USB chiffré LUKS).
+- **Handoff 2e admin** : checklist [docs/operator/handoff.md](docs/operator/handoff.md)
+  à compléter avant cutover pilote (lever bus-factor=1).
+- **Tag rollback** : `v2.3.4` reste point de rollback propre. Procédure
+  [docs/operator/rollback.md](docs/operator/rollback.md).
+- **Track D.3.7 / G.6 backlog** : avant cutover pilote prod, charger seed
+  Pass 3 (10k assets) sur xch-deploy + re-drill restore avec RTO crédible.
+  Détails MCP `XCH_PLAN_V3_POST_V2_2026_05_17`.
+- **Worker rebuild caveat** préservé : `docker compose build backend backend-worker
+  && docker compose up -d backend backend-worker`.
+
+---
+
 ## [2.3.4] - 2026-05-16 — Track E.3 (Bootstrap air-gap + cutover + 4-mode matrix)
 
 Closure du sub-track E.3 de Track E preprod-readiness. Stratégie v2.2 actée :

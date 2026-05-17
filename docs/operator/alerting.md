@@ -222,14 +222,14 @@ ssh xch-deploy "docker rm -f xch-mailpit && mv /tmp/backend.env.bak /opt/<DEPLOY
 
 ### 4.4 Capture Mailpit Track E.2 Pass 4 (2026-05-16)
 
-Résultat empirique sur `xch-deploy` :
+Résultat empirique sur le banc de test RSI (les adresses `noreply@xch.eoncom.io` et `alerts-test@demo.fr` étaient les valeurs configurées pour le drill — en prod client, substituer respectivement `<NOREPLY_ADDRESS>` (`noreply@<DEPLOY_DOMAIN>`) et `<ALERT_TEST_RECIPIENT>`) :
 
 ```json
 {
   "total": 1,
   "messages": [{
-    "From": { "Address": "noreply@xch.eoncom.io" },
-    "To":   [{ "Address": "alerts-test@demo.fr" }],
+    "From": { "Address": "<NOREPLY_ADDRESS>" },
+    "To":   [{ "Address": "<ALERT_TEST_RECIPIENT>" }],
     "Subject": "[XCH] Test de notification",
     "Created": "2026-05-16T10:06:38.224Z",
     "Size": 1171,
