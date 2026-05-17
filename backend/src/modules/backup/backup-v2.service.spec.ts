@@ -987,6 +987,65 @@ describe('BackupService.restoreFullBackupV2 (Track D.1 step 3)', () => {
       await fs.rm(tmpZip, { force: true });
     }
   });
+
+  // Track E.4 PR2 Pass 5 drill regression guard — restore path must NOT
+  // pass `role` or `status` to prisma.user.create. Auth model v2 dropped
+  // these columns (User → UserDelegation + AccessOverride). Backup
+  // serializer correctly omits them ; if the restore path ever re-introduces
+  // them, every restore breaks with `Unknown argument 'status'` (caught
+  // 2026-05-17 on xch-deploy DR drill, fixed in commit c216cb3 / PR #86).
+  it('11. user restore — payload to prisma.user.create has neither `role` nor `status` (auth model v2 guard)', async () => {
+    const tmpZip = path.join(os.tmpdir(), `pass5-user-guard-${randomBytes(4).toString('hex')}.zip`);
+    const stub = new BackupService({} as never, {} as never, { get: jest.fn() } as never, disabledCrypto);
+    await buildV2BackupFixture(stub, tmpZip, {
+      data: {
+        // 7-field user JSON shape — same as the production backup serializer
+        // emits (cf. data/users.json inspected during Pass 5 drill).
+        users: [
+          {
+            id: 'u-drill',
+            email: 'admin@drill.local',
+            name: 'Drill Admin',
+            active: true,
+            phone: null,
+            authProvider: 'local',
+            // intentionally no role, no status
+          },
+        ],
+      },
+    });
+    try {
+      const { service, prismaStub } = wireService(tmpZip);
+      const result = await service.restoreFullBackupV2('tnt-test', 'audit-1', {
+        dryRun: false,
+      });
+
+      expect(result.kind).toBe('applied');
+
+      // Locate the user model's create mock + the call that inserted our user.
+      const userModel = prismaStub.user as { create: jest.Mock };
+      const userCreateCall = userModel.create.mock.calls.find(
+        (call) => (call[0] as { data?: { email?: string } })?.data?.email === 'admin@drill.local',
+      );
+      expect(userCreateCall).toBeDefined();
+      const userCreateData = (userCreateCall![0] as { data: Record<string, unknown> }).data;
+
+      // Regression guard : data must not contain zombie fields. We assert
+      // .not.toHaveProperty so future evolution adding either re-triggers
+      // the check (Prisma will reject `Unknown argument`).
+      expect(userCreateData).not.toHaveProperty('role');
+      expect(userCreateData).not.toHaveProperty('status');
+
+      // Positive shape : the legit fields must still be passed through.
+      expect(userCreateData).toMatchObject({
+        tenantId: 'tnt-test',
+        email: 'admin@drill.local',
+        name: 'Drill Admin',
+      });
+    } finally {
+      await fs.rm(tmpZip, { force: true });
+    }
+  });
 });
 
 // ============================================================================
