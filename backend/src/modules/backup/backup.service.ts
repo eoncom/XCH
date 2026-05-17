@@ -2604,8 +2604,6 @@ export class BackupService {
               tenantId,
               email: u.email,
               name: u.name,
-              role: u.role,
-              status: u.status ?? 'ACTIVE',
               passwordHash: u.passwordHash ?? null,
               externalId: u.externalId ?? null,
             },
