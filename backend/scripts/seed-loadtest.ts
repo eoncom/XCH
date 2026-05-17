@@ -110,8 +110,14 @@ async function seedUsers(delegationIds: string[]): Promise<string[]> {
   log(`[users] Creating ${NB_USERS} (+ admin) and ${NB_USERS} user-delegations…`);
   const hash = await bcrypt.hash(ADMIN_PASSWORD, BCRYPT_ROUNDS);
 
-  // Admin loadtest user (super-admin for audit-heavy scenario)
-  await prisma.user.create({
+  // Admin loadtest user — super-admin AND MANAGE on every delegation.
+  // isSuperAdmin alone is insufficient: AssetsController.findAll() calls
+  // permissionService.getAccessibleSiteIds(tenantId, userId) which derives
+  // accessible sites from UserDelegation rows. A super-admin with zero
+  // UserDelegations triggers a 100% failure rate on /api/assets under k6
+  // load (run 25988600189 finding). Grant MANAGE on all 5 loadtest
+  // delegations to mirror a real "tenant admin" RBAC context.
+  const admin = await prisma.user.create({
     data: {
       tenantId: TENANT_ID,
       email: 'admin-lt@loadtest.local',
@@ -121,6 +127,16 @@ async function seedUsers(delegationIds: string[]): Promise<string[]> {
       active: true,
     },
   });
+  for (const delegationId of delegationIds) {
+    await prisma.userDelegation.create({
+      data: {
+        tenantId: TENANT_ID,
+        userId: admin.id,
+        delegationId,
+        right: 'MANAGE',
+      },
+    });
+  }
 
   const userIds: string[] = [];
   for (let i = 1; i <= NB_USERS; i++) {

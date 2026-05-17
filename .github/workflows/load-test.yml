@@ -125,20 +125,28 @@ jobs:
           done
           curl -fsS http://localhost:3000/api/setup/status || (cat /tmp/backend.log; exit 1)
 
+      # All scenarios run with continue-on-error so a single threshold breach
+      # surfaces in artifacts without blocking the remaining 3 scenarios.
+      # Threshold violations are real findings to triage in the rapport
+      # (docs/perf/load-test-2026-05-16.md), not a CI gate per se.
       - name: Run smoke-load
         if: ${{ github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'smoke' }}
+        continue-on-error: true
         run: k6 run --summary-export=/tmp/k6-smoke.json tests/load/scenarios/smoke-load.js
 
       - name: Run read-heavy
         if: ${{ github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'read' }}
+        continue-on-error: true
         run: k6 run --summary-export=/tmp/k6-read.json tests/load/scenarios/read-heavy.js
 
       - name: Run write-mixed
         if: ${{ github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'write' }}
+        continue-on-error: true
         run: k6 run --summary-export=/tmp/k6-write.json tests/load/scenarios/write-mixed.js
 
       - name: Run audit-heavy
         if: ${{ github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'audit' }}
+        continue-on-error: true
         run: k6 run --summary-export=/tmp/k6-audit.json tests/load/scenarios/audit-heavy.js
 
       - name: Collect backend log
