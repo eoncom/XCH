@@ -319,20 +319,26 @@ docker logs xch-backend-worker --since 2m | grep 'health-recompute' | tail -10
 
 ---
 
-## 10. Drill 2026-05-16 — v2.4.0 candidate (Track E.4 PR2 Pass 5)
+## 10. Drill 2026-05-16/17 — v2.4.0 candidate (Track E.4 PR2 Pass 5 — révisé post-drill)
 
 > **Scope** : re-validation E2E `restore-full.sh` après les migrations PR1
 > (`12_audit_log_delegation_id` + `7a_notification_event_backup_completed`).
-> Statut rapport : 🟡 **runbook + procédure livrés — première exécution
-> attendue sur stack dev local (PAS xch-deploy — banc de test réservé PR3
-> cutover validation)**. Résultats à compléter post-exécution.
+> Statut rapport : 🟠 **première exécution effectuée sur xch-deploy 2026-05-17,
+> bloquée F1+F2 (restore broken, RTO non mesurable). Hotfix PR #86 ouverte.
+> Procédure ci-dessous corrigée des findings F4/F5/F6/F7/F8 — re-drill à
+> exécuter post-merge PR #86 sur volume Pass 3 (seed 10k assets).**
+>
+> **Pourquoi ces corrections** : MCP `XCH_TRACK_E4_PR2_PASS5_DRILL_XCH_DEPLOY_2026_05_17`
+> a documenté que la procédure précédente avait 4 erreurs procédurales (chemins
+> fichier, credentials admin, prérequis tenant, endpoint catalog) qui auraient
+> bloqué tout opérateur lisant le runbook tel quel.
 
 ### 10.1 Objectifs
 
 - Confirmer que la migration `delegationId` (PR1) est **rejouée intact** lors d'un
   `prisma migrate deploy` post-restore.
 - Confirmer l'**idempotence** Backup v2 sur 2 cycles consécutifs avec MÊME
-  tarball.
+  tarball (cible cycle 2 : `_created: 0`).
 - Capturer **live** la notification `BACKUP_COMPLETED` câblée PR1
   ([backup.processor.ts:179](../../backend/src/modules/backup/backup.processor.ts:179)
   + [notification-emitter.ts:160](../../backend/src/modules/notifications/notification-emitter.ts:160)).
@@ -340,11 +346,93 @@ docker logs xch-backend-worker --since 2m | grep 'health-recompute' | tail -10
 
 ### 10.2 Pré-requis
 
-- Stack dev local **down** (pas de containers XCH actifs)
-- Backend buildé (`cd backend && npm run build`)
-- Seed Pass 3 chargé (cf. [load-test.yml](../../.github/workflows/load-test.yml)
-  ou `npx ts-node backend/scripts/seed-loadtest.ts --reset`)
+- Stack cible **down** (pas de containers XCH actifs)
+- Backend buildé (`cd backend && npm run build`) — pas requis si exécution sur xch-deploy déployé
+- **Seed Pass 3 chargé** sur le tenant cible (cf. [load-test.yml](../../.github/workflows/load-test.yml)
+  ou `npx ts-node backend/scripts/seed-loadtest.ts --reset`) — finding F5 a montré qu'une DB
+  quasi-vide rend le RTO non représentatif. **Vérifier `SELECT count(*) FROM assets;` ≥ 10 000
+  AVANT le drill.** (Investigation seed représentatif xch-deploy = Track G/D.3 backlog —
+  cf MCP `XCH_PLAN_V3_POST_V2_2026_05_17`.)
 - Docker disponible (Postgres + Redis + MinIO + Mailpit éphémère)
+- **Notification rules seedées sur le tenant cible** (cf §10.2.bis ci-dessous) — finding F6
+  a montré que sans rules, Mailpit reste vide même avec wiring code intact (faux trigger R5.4).
+- **Admin credentials valides** sur le tenant cible (cf §10.2.ter ci-dessous) — finding F4
+  a montré que `admin@demo.fr` est stale, le réel sur xch-deploy est `admin@demo2.fr`.
+
+#### 10.2.bis — Préparer le tenant pour test BACKUP_COMPLETED notif (finding F6)
+
+Avant le cycle 3 du drill (capture live notif), seeder les rules + channels :
+
+```sql
+-- À exécuter via docker exec xch-postgres psql -U xch_user -d xch_dev
+INSERT INTO notification_rules (id, "tenantId", event, enabled, "createdAt", "updatedAt")
+  VALUES (gen_random_uuid()::text, '<tenantId>', 'BACKUP_COMPLETED', true, NOW(), NOW())
+  ON CONFLICT DO NOTHING;
+
+INSERT INTO notification_channels (id, "tenantId", kind, target, enabled, "createdAt", "updatedAt")
+  VALUES (gen_random_uuid()::text, '<tenantId>', 'email', '<test_recipient>', true, NOW(), NOW())
+  ON CONFLICT DO NOTHING;
+```
+
+> **Pourquoi obligatoire** : `backup.processor.ts:199-220` émet bien via emitter, et `notification-emitter.ts:160-192` dispatch via service — mais sans rules sur le tenant, le dispatcher filtre l'event et 0 message arrive à Mailpit + 0 entrée `notification_logs`. Sans ce seed, R5.4 sort en faux négatif.
+
+#### 10.2.ter — Localiser le tarball backup v2 (finding F8)
+
+> **CRITICAL — changement vs runbook v1** : les backups v2 (ADR-025 streaming) sont stockés **exclusivement dans le bucket MinIO `xch-backups`**, JAMAIS sur le filesystem host. Le pattern `ls -t backups/*.tar.gz` du runbook précédent ne trouvera rien.
+
+Pour matérialiser un tarball backup en local en vue d'un `restore-full.sh --mode=api` :
+
+```bash
+# Option A — via API download (PRÉFÉRÉE, requiert admin authentifié, cookie session valide)
+# Récupérer le backupId :
+curl -s -b /tmp/xch-cookies.txt https://<DEPLOY_DOMAIN>/api/backup/list | jq '.backups[0]'
+# → utiliser le champ .id pour le download :
+curl -s -b /tmp/xch-cookies.txt \
+  https://<DEPLOY_DOMAIN>/api/backup/<backupId>/download \
+  -o /tmp/full-backup-v2-<timestamp>.zip
+
+# Option B — via mc CLI (requiert alias MinIO configuré dans le container)
+docker exec xch-minio mc cp local/xch-backups/<filename>.zip /tmp/
+docker cp xch-minio:/tmp/<filename>.zip /tmp/
+
+# Vérification (sha256 doit matcher le checksum stocké dans backup metadata)
+sha256sum /tmp/full-backup-v2-<timestamp>.zip
+```
+
+> **Note F7** : l'endpoint catalog est `/api/backup/list` (le path `/api/backup/catalog` mentionné dans certaines versions historiques du plan n'existe pas dans le code — vérifié 2026-05-17 par grep `docs/operator/` = 0 occurrence, F7 closed).
+
+#### 10.2.quater — Workaround Setup Wizard chicken-egg pour restore sur DB vierge (finding F4 + R5.5 esprit)
+
+Sur une DB fraîche post-`teardown-xch-stack.sh`, aucun admin n'existe pour s'authentifier auprès de `POST /api/backup/full/restore-upload` qui exige `@RequireWrite()`. Workaround obligatoire :
+
+```bash
+# Étape a — créer un admin temporaire via Setup Wizard
+# Option flux UI : visiter https://<DEPLOY_DOMAIN>/setup
+# Option API directe :
+curl -X POST https://<DEPLOY_DOMAIN>/api/setup/admin \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "setup@drill.local",
+    "password": "DrillPass5_2026!",
+    "firstName": "Drill",
+    "lastName": "Admin",
+    "tenantName": "DrillTemp"
+  }'
+
+# Étape b — login avec cet admin temp pour obtenir cookie session
+curl -c /tmp/xch-cookies.txt -X POST https://<DEPLOY_DOMAIN>/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"setup@drill.local","password":"DrillPass5_2026!"}'
+
+# Étape c — lancer restore-full.sh --mode=api (qui réutilise le cookie ou re-login)
+bash scripts/restore-full.sh "$BACKUP_FILE" --mode=api
+
+# Étape d — vérifier que le restore overwrite le tenant/admin temp avec les données du backup
+# (le tenant DrillTemp + admin setup@drill.local disparaissent au profit des données restaurées,
+#  vérifié empiriquement Pass 5 2026-05-17)
+```
+
+> **Pourquoi obligatoire** : avant ce workaround, le runbook supposait implicitement qu'un admin existait déjà post-bootstrap. Pass 5 a découvert que sur DB fresh post-teardown, la chaîne complète bootstrap → restore est impossible sans cette étape intermédiaire.
 
 ### 10.3 Procédure exacte (à exécuter sur host Docker-capable)
 
@@ -352,14 +440,39 @@ docker logs xch-backend-worker --since 2m | grep 'health-recompute' | tail -10
 # === Cycle 1 — Backup + teardown + restore + smoke ===
 cd /path/to/XCH-dev
 
-# 1. Backup
+# 0. Login admin du tenant cible (vérifié non-stale ; cf finding F4)
+#    Sur xch-deploy : admin@demo2.fr — adapter pour stack dev local.
+curl -c /tmp/xch-cookies.txt -X POST https://<DEPLOY_DOMAIN>/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"<ADMIN_EMAIL>","password":"<ADMIN_PASSWORD>"}'
+
+# 1. Backup — déclencher via API (storage MinIO bucket, cf §10.2.ter / finding F8)
 T_BACKUP_START=$(date +%s)
-bash scripts/backup-full.sh
-ls -la backups/ | tail -3
-BACKUP_FILE=$(ls -t backups/xch-backup-full-*.tar.gz | head -1)
-echo "Backup file: $BACKUP_FILE"
+JOB=$(curl -s -b /tmp/xch-cookies.txt -X POST https://<DEPLOY_DOMAIN>/api/backup/full \
+  -H 'Content-Type: application/json' -d '{}' | jq -r .jobId)
+echo "Backup job: $JOB"
+# Poll Bull job state
+for i in $(seq 1 30); do
+  STATE=$(curl -s -b /tmp/xch-cookies.txt "https://<DEPLOY_DOMAIN>/api/backup/jobs/$JOB" | jq -r .state)
+  echo "poll #$i state=$STATE"
+  [ "$STATE" = "completed" ] || [ "$STATE" = "failed" ] && break
+  sleep 2
+done
 T_BACKUP_END=$(date +%s)
-echo "Backup duration: $((T_BACKUP_END - T_BACKUP_START))s"
+echo "Backup wall duration: $((T_BACKUP_END - T_BACKUP_START))s"
+
+# 1.bis Note finding F3 : par défaut le backup sort encrypted=false même avec XCH_MASTER_KEY set.
+#       Si le drill doit valider le path chiffré, ajouter '{"encrypted":true}' au body POST ci-dessus.
+#       Investigation default vs opt-in = Track F.9 backlog (cf XCH_PLAN_V3_POST_V2_2026_05_17).
+
+# 1.ter Matérialiser le tarball en local pour --mode=api restore (cf §10.2.ter)
+BACKUP_ID=$(curl -s -b /tmp/xch-cookies.txt https://<DEPLOY_DOMAIN>/api/backup/list | jq -r '.backups[0].id')
+BACKUP_FILE="/tmp/full-backup-v2-$(date +%Y%m%dT%H%M%S).zip"
+curl -s -b /tmp/xch-cookies.txt \
+  "https://<DEPLOY_DOMAIN>/api/backup/$BACKUP_ID/download" \
+  -o "$BACKUP_FILE"
+echo "Backup file local: $BACKUP_FILE"
+sha256sum "$BACKUP_FILE"
 
 # 2. Teardown (dry-run preview obligatoire v2)
 bash scripts/teardown-xch-stack.sh --dry-run
@@ -412,43 +525,57 @@ echo "Restore #2 duration: $((T_RESTORE2_END - T_RESTORE2_START))s"
 bash scripts/smoke-prod.sh http://localhost:3000
 
 # === Cycle 3 — BACKUP_COMPLETED notif live capture ===
+#
+# PRÉ-REQUIS BLOQUANT — seed des notification_rules + channels sur le tenant cible
+# (cf §10.2.bis / finding F6). Sans ce seed : faux trigger R5.4 (Mailpit vide
+# malgré wiring code intact).
 
-# 11. Mailpit éphémère
+# 11. Seed notification rules sur le tenant cible
+docker exec xch-postgres psql -U xch_user -d xch_dev <<'SQL'
+INSERT INTO notification_rules (id, "tenantId", event, enabled, "createdAt", "updatedAt")
+  VALUES (gen_random_uuid()::text, '<tenantId>', 'BACKUP_COMPLETED', true, NOW(), NOW())
+  ON CONFLICT DO NOTHING;
+INSERT INTO notification_channels (id, "tenantId", kind, target, enabled, "createdAt", "updatedAt")
+  VALUES (gen_random_uuid()::text, '<tenantId>', 'email', '<test_recipient>', true, NOW(), NOW())
+  ON CONFLICT DO NOTHING;
+SQL
+
+# 12. Mailpit éphémère
 docker run -d --rm --name mailpit-drill \
   --network backend_xch_dev_net \
   -p 8025:8025 -p 1025:1025 \
   axllent/mailpit
 
-# 12. Backend SMTP override + restart
+# 13. Backend SMTP override + restart
 docker compose -f backend/docker-compose.yml exec -e SMTP_HOST=mailpit-drill -e SMTP_PORT=1025 backend npm run start:prod &
 # (alternative: ajouter SMTP_HOST/SMTP_PORT à .env.local puis docker compose restart backend)
 sleep 5
 
-# 13. Trigger backup full + poll
-curl -c /tmp/cookies.txt -X POST http://localhost:3000/api/auth/login \
+# 14. Trigger backup full + poll (admin du tenant cible — F4 : NE PAS utiliser admin@demo.fr stale)
+curl -c /tmp/cookies.txt -X POST https://<DEPLOY_DOMAIN>/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@demo.fr","password":"Demo1234"}'
+  -d '{"email":"<ADMIN_EMAIL>","password":"<ADMIN_PASSWORD>"}'
 
-JOB=$(curl -s -b /tmp/cookies.txt -X POST http://localhost:3000/api/backup/full \
+JOB=$(curl -s -b /tmp/cookies.txt -X POST https://<DEPLOY_DOMAIN>/api/backup/full \
   -H 'Content-Type: application/json' -d '{}' | jq -r .jobId)
 echo "Backup job: $JOB"
 
 for i in $(seq 1 30); do
-  STATE=$(curl -s -b /tmp/cookies.txt "http://localhost:3000/api/backup/jobs/$JOB" | jq -r .state)
+  STATE=$(curl -s -b /tmp/cookies.txt "https://<DEPLOY_DOMAIN>/api/backup/jobs/$JOB" | jq -r .state)
   echo "poll #$i state=$STATE"
   [ "$STATE" = "completed" ] || [ "$STATE" = "failed" ] && break
   sleep 2
 done
 
-# 14. Vérif notif BACKUP_COMPLETED reçue dans Mailpit
+# 15. Vérif notif BACKUP_COMPLETED reçue dans Mailpit
 curl -s http://localhost:8025/api/v1/messages | jq '.messages[] | select(.Subject | test("Backup"; "i"))'
 # Attendu: au moins 1 message avec Subject contenant "Backup" + body avec jobId + duration_ms + size_bytes
 
-# 14bis. Fallback SQL si Mailpit indisponible
+# 15.bis Fallback SQL si Mailpit indisponible
 docker exec xch-postgres psql -U xch_user -d xch_dev -c \
   "SELECT id, event, status, \"createdAt\" FROM notification_dispatches WHERE event='BACKUP_COMPLETED' ORDER BY \"createdAt\" DESC LIMIT 1;"
 
-# 15. Teardown Mailpit
+# 16. Teardown Mailpit
 docker stop mailpit-drill
 ```
 
@@ -486,15 +613,27 @@ bash scripts/smoke-prod.sh http://localhost:3000   # 6/6 OK = défaut OK
 | ThrottlerGuard env override appliqué ? | ⏳ oui/non | ⏳ oui/non | ⏳ oui/non | unset post-drill |
 | ThrottlerGuard reverted + smoke 6/6 PASS | n/a | n/a | ⏳ ✅/❌ | ✅ |
 
-### 10.6 Findings
+### 10.6 Findings — Drill exécution 2026-05-17 (Pass 5 initial)
+
+> **Source** : MCP `XCH_TRACK_E4_PR2_PASS5_DRILL_XCH_DEPLOY_2026_05_17` event_log complet.
 
 | # | Sévérité | Description | Action |
 |---|---|---|---|
-| ⏳ | ⏳ | ⏳ | ⏳ |
+| **F1** | **CRITICAL** | `backup.service.ts:2607-2608` restore data path appelle `prisma.user.create({ data: { ..., role, status } })` — colonnes retirées par migration auth model v2 → restore full échoue avec `Unknown argument 'status'`. Régression latente jamais exercée avant Pass 5. | **Hotfix PR #86** (branche `claude/confident-mayer-309c5b`, commit `c216cb3`) — retrait zombie fields côté restore (backup serializer côté export OK) |
+| **F2** | **CRITICAL** | `restore-full.sh:130` envoie `curl -F 'file=@$BACKUP_FILE'` mais `FileFieldsInterceptor` dans `backup.controller.ts:481` attend field `backup`. Drift introduit commit `7fb03d04` (Track E.2 closure 2026-05-16) — `--mode=api` jamais E2E green depuis | **Hotfix PR #86** — script renommage `file` → `backup` |
+| **F3** | Important | `POST /api/backup/full` sans param body → `encrypted=false` même avec `XCH_MASTER_KEY` set. Comportement default vs opt-in à clarifier | **Track F.9 backlog** — investigation default vs opt-in (cf `XCH_PLAN_V3_POST_V2_2026_05_17`) |
+| **F4** | Procédural | Mémoire stale : admin user réel xch-deploy = `admin@demo2.fr` (PAS `admin@demo.fr` historique). Password `Demo1234` invalide pré-drill | Runbook §10.3 step 0 + Cycle 3 step 14 utilisent placeholders `<ADMIN_EMAIL>` / `<ADMIN_PASSWORD>`. Memory `project_prod_access.md` mise à jour |
+| **F5** | Procédural | DB demo2.fr quasi-vide pre-drill (1 user / 0 sites / 0 assets / 0 audit_logs) — RTO non représentatif. Hypothèse : seed Pass 3 jamais chargé sur xch-deploy | Runbook §10.2 requiert `SELECT count(*) FROM assets;` ≥ 10000 AVANT drill. **Track G/D.3 backlog** — investigation seed représentatif xch-deploy avant re-drill et cutover pilote |
+| **F6** | Procédural | Mailpit + `notification_logs` vides malgré wiring backup.processor + emitter intact. Cause : 0 `notification_rules` + 0 channels sur DrillTemp tenant fresh → dispatcher filtre l'event → faux trigger R5.4 | Runbook §10.2.bis ajoute seed SQL obligatoire avant Cycle 3 |
+| **F7** | Procédural | Plan source référençait `GET /api/backup/catalog` (HTTP 404 — endpoint inexistant). Endpoint réel = `GET /api/backup/list` | Runbook §10.2.ter + §10.3 step 1.ter utilisent `/api/backup/list`. Vérification grep `docs/operator/` 2026-05-17 = 0 occurrence stale. **F7 closed** |
+| **F8** | Procédural | Plan source supposait host FS path `backups/*.tar.gz`. Réalité ADR-025 streaming : backups v2 sont **exclusivement** dans MinIO bucket `xch-backups`. `ls backups/` retourne rien | Runbook §10.2.ter documente 2 options (API download / `mc cp`) + §10.3 step 1.ter matérialise localement via `/api/backup/<id>/download` |
 
-Si CRITICAL R5.5 (restore casse migration delegationId) → hotfix PR2 inclus +
-ping user immédiat. Si CRITICAL R5.4 (notif BACKUP_COMPLETED non-émise) →
-régression PR1 wiring → hotfix PR2 inclus.
+**Vigilances Pass 5 — verdicts** :
+- **R5.2 ThrottlerGuard** TRIGGERED réel — override LOCAL appliqué puis reverted Étape 7 + smoke 6/6 PASS confirme défaut restauré ✅
+- **R5.4 BACKUP_COMPLETED notif** NOT TRIGGERED (faux négatif causé par F6 — code intact, rules absentes)
+- **R5.5 migration delegationId rejouée** NOT REACHED (blocked F1+F2 avant le path schema diff). Esprit R5.5 ("restore broken → CRITICAL hotfix + ping user") APPLIQUÉ via F1+F2 + PR #86.
+
+**RTO Pass 5 = non mesurable** (restore broken par F1+F2). Re-drill obligatoire post-merge PR #86 sur volume Pass 3 (seed 10k assets) pour mesure crédible.
 
 ### 10.7 Cleanup
 
