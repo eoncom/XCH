@@ -53,6 +53,12 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Build + start CI stack (nginx + frontend + backend + postgres + redis + minio)
+        env:
+          # 10 sequential a11y tests × loginAsAdmin → exceeds default
+          # THROTTLE_AUTH_LIMIT=5/min (auth.controller.ts:2). Override forwarded
+          # to backend service via docker compose env interpolation.
+          THROTTLE_AUTH_LIMIT: '99999'
+          THROTTLE_AUTH_TTL: '60'
         run: |
           docker compose -f docker-compose.ci.yml up -d --build
           docker compose -f docker-compose.ci.yml ps
