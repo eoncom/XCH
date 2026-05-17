@@ -51,11 +51,14 @@ import { HealthModule } from './modules/health/health.module';
       envFilePath: '../.env',
     }),
 
-    // Rate limiting
+    // Rate limiting (global, per-IP across all routes).
+    // Env overrides for load-test workflow (k6 generates ~15 req/sec from
+    // localhost, blows past default 100/min limit). Auth controller has its
+    // own dedicated THROTTLE_AUTH_* envs scoped to /api/auth/* only.
     ThrottlerModule.forRoot([
       {
-        ttl: 60000, // 1 minute
-        limit: 100, // 100 requests per minute
+        ttl: parseInt(process.env.THROTTLE_GLOBAL_TTL || '60000', 10),
+        limit: parseInt(process.env.THROTTLE_GLOBAL_LIMIT || '100', 10),
       },
     ]),
 

@@ -64,9 +64,16 @@ jobs:
       K6_BASE_URL: http://localhost:3000
       K6_ADMIN_EMAIL: admin-lt@loadtest.local
       K6_ADMIN_PASSWORD: Loadtest1234
-      # Throttler disabled for k6 (50 VUs > 5/min would 429 the whole run)
+      # Throttlers disabled for k6 — both the per-route auth limiter
+      # (default 5/min on /api/auth/*) AND the GLOBAL per-IP limiter
+      # (default 100/60s across all routes via ThrottlerModule.forRoot).
+      # Without the global override, k6 ~15 req/sec from localhost = same IP
+      # hits the 100/min budget within seconds and all subsequent requests
+      # return 429 (run 25989452971 finding).
       THROTTLE_AUTH_LIMIT: '99999'
       THROTTLE_AUTH_TTL: '60'
+      THROTTLE_GLOBAL_LIMIT: '999999'
+      THROTTLE_GLOBAL_TTL: '60000'
 
     steps:
       - name: Checkout code
