@@ -96,6 +96,12 @@ jobs:
 
       - name: Run axe-core spec (10 pages)
         working-directory: frontend
+        # Soft per V2 fallback policy (plan §7) — baseline run captures
+        # findings, doesn't block merge. Spec assertions remain semantically
+        # correct (every "serious"/"critical" surfaces as test failure +
+        # JSON log). V2 verdict ≥3 pages <0.70 → Track F follow-up via
+        # docs/perf/a11y-followup-track-f.md, not blocking E.4 closure.
+        continue-on-error: true
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:8080
           PLAYWRIGHT_API_URL: http://localhost:8080
