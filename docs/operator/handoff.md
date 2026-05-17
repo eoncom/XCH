@@ -83,10 +83,11 @@
 
 ## Section 3 — Runbooks must-read
 
-Les 5 runbooks suivants doivent être **lus intégralement** + **exercés au moins une fois** avant le sign-off :
+Les 6 runbooks suivants doivent être **lus intégralement** + **exercés au moins une fois** avant le sign-off :
 
 - [ ] [`bootstrap-runbook.md`](bootstrap-runbook.md) — wipe + bootstrap end-to-end (validé 2 cycles v2.3.4)
-- [ ] [`dr-drill.md`](dr-drill.md) — RTO/RPO measured + §10 Pass 5 drill runbook
+- [ ] [`dr-drill.md`](dr-drill.md) — drill restore applicatif backup v2 (content recovery same-tenant), RTO/RPO mesurés + §10 procédure
+- [ ] [`dr-full-recovery.md`](dr-full-recovery.md) — guide infrastructure DR par mode de déploiement (cloud public / cloud privé / VPS / air-gap), recommandations + intégration solutions client
 - [ ] [`recovery-runbook.md`](recovery-runbook.md) — service-down scenarios (Postgres / Redis / MinIO / Backend) + §9 migration v2.4.0 timing
 - [ ] [`rollback.md`](rollback.md) — Git tag rollback + data restore procedure
 - [ ] [`incident-response.md`](incident-response.md) — on-call escalation + playbooks
@@ -102,24 +103,42 @@ Les 5 runbooks suivants doivent être **lus intégralement** + **exercés au moi
 
 ---
 
-## Section 4 — Drill mensuel restore
+## Section 4 — Drills (applicatif + infrastructure)
 
-**Cadence** : **trimestrielle** pour pilote (Mode C — D4.4 Track E parent) ; mensuelle si convention client renforcée.
+> **Deux types de drills à distinguer** (clarification scope v2.4.0) :
+>
+> 1. **Drill applicatif** (content recovery same-tenant) — cadence **mensuelle** — couvert par [`dr-drill.md`](dr-drill.md) §10. Valide le scénario "corruption / suppression contenu → restore au sein d'un tenant existant" avec backup v2 XCH.
+> 2. **Drill infrastructure** (recovery après perte VM / volume Postgres / host) — cadence **trimestrielle ou semestrielle** selon criticité — couvert par [`dr-full-recovery.md`](dr-full-recovery.md). Valide la procédure de recovery infrastructure de bout en bout (snapshots, pg_restore, MinIO bucket restore, redeploy stack), recommandations par mode de déploiement.
 
-### 4.1 Procédure drill
-- [ ] Lire `dr-drill.md` §10 (Pass 5 PR2 — v2.4.0 candidate)
-- [ ] Exécuter drill restore complet via `scripts/restore-full.sh`
-- [ ] Mesurer RTO réel (backup + restore + smoke)
+### 4.1 Drill applicatif mensuel (`dr-drill.md`)
+- [ ] Lire [`dr-drill.md`](dr-drill.md) §10 (Pass 5 PR2 — v2.4.0)
+- [ ] Vérifier pré-requis : `SELECT count(*) FROM assets` ≥ 10 000 sur tenant cible (cf §10.2 finding F5)
+- [ ] Seed `notification_rules` + `notification_channels` sur tenant cible avant Cycle 3 (cf §10.2.bis finding F6)
+- [ ] Exécuter drill restore content recovery via `scripts/restore-full.sh --mode=api`
+- [ ] Mesurer RTO content recovery (backup duration + restore duration + smoke)
 - [ ] Vérifier migration `delegationId` rejouée intact post-restore
-- [ ] Vérifier notification `BACKUP_COMPLETED` reçue (Slack / email selon `alerting.md`)
+- [ ] Vérifier notification `BACKUP_COMPLETED` reçue (Mailpit ou notification_logs)
 - [ ] Si Mode C : test restore depuis USB offsite LUKS (rotation hebdo)
 
-### 4.2 RTO/RPO cibles
-- **RTO** (Recovery Time Objective) : ≤ 1 h pour Mode C pilote (mesuré Pass 5 PR2)
-- **RPO** (Recovery Point Objective) : ≤ 7 jours pour Mode C avec rotation hebdo (cf `dr-drill.md` §6.4)
+### 4.2 Drill infrastructure trimestriel ou semestriel (`dr-full-recovery.md`)
+- [ ] Lire [`dr-full-recovery.md`](dr-full-recovery.md) intégralement
+- [ ] Selon mode de déploiement (cf [`deployment-modes.md`](deployment-modes.md)), exécuter le scénario de recovery infrastructure correspondant :
+  - Mode A (cloud public) — restauration depuis snapshot VM provider
+  - Mode B (cloud privé) — restauration depuis backups infra existants (Veeam, Avamar, etc.)
+  - Mode C (air-gap) — pg_dump + restore depuis USB chiffré LUKS
+  - Mode D (VPS basique) — snapshot VM hébergeur ou pg_dump + rsync offsite
+- [ ] Exécuter `bootstrap-runbook.md` puis pg_restore + MinIO bucket restore + .env + secrets
+- [ ] Smoke 6/6 PASS via `scripts/smoke-prod.sh`
+- [ ] Documenter RTO/RPO réels (à comparer aux SLA contractuels client)
 
-### 4.3 Documentation
-- [ ] Compte rendu drill stocké dans `docs/operator/drill-reports/YYYY-MM-DD-drill.md` (à créer post-drill)
+### 4.3 RTO/RPO cibles
+- **RTO content recovery applicatif** (Mode C pilote) : ≤ 1 h mesuré (cf `dr-drill.md` §10.5)
+- **RTO infrastructure recovery** : à définir avec le client selon mode + outils (range typique 2-24 h)
+- **RPO content recovery** (backup v2 last) : ≤ 7 jours pour Mode C avec rotation USB hebdo (cf `dr-drill.md` §6.4)
+- **RPO infrastructure recovery** : selon cadence snapshots/pg_dump client (24h-7j typique)
+
+### 4.4 Documentation post-drill
+- [ ] Compte rendu drill stocké dans `docs/operator/drill-reports/YYYY-MM-DD-{applicatif|infrastructure}.md`
 - [ ] Notifier DPO si RTO/RPO dégrade → revue procédure
 
 ---

@@ -1,6 +1,10 @@
-# XCH — DR drill (RTO/RPO mesurés) — Track E.2 Pass 5
+# XCH — Drill restore applicatif backup v2 (RTO/RPO content-recovery mesurés)
 
-> **Scope** : exercice réel de disaster recovery sur `xch-deploy` avec tenant démo comme cohorte sacrificielle. Mesures **observées le 2026-05-16**, baseline tag v2.3.2.
+> **Scope** : exercice réel de **restore applicatif backup v2** sur `xch-deploy` avec tenant démo comme cohorte sacrificielle. Couvre le scénario "corruption / suppression contenu → restore au sein d'un tenant existant" (content recovery, same-tenant).
+>
+> **HORS scope de ce runbook** : perte d'infrastructure (volume Postgres détruit, VM crashée, host filesystem perdu, redéploiement de zéro). Pour ces scénarios, voir [`dr-full-recovery.md`](dr-full-recovery.md) — guide de recovery infrastructure par mode de déploiement.
+>
+> Mesures **observées le 2026-05-16**, baseline tag v2.3.2.
 > **Placeholders Option C** : `<DEPLOY_DOMAIN>`, `<TENANT_ID>`, `<BACKUP_ID>`, `<RESTORE_JOB_ID>`.
 
 ---
@@ -319,14 +323,13 @@ docker logs xch-backend-worker --since 2m | grep 'health-recompute' | tail -10
 
 ---
 
-## 10. Drill 2026-05-16/17 — v2.4.0 candidate (Track E.4 PR2 Pass 5 — révisé post-drill)
+## 10. Drill restore applicatif backup v2 — v2.4.0 candidate (Track E.4 PR2 Pass 5 + re-drill 2026-05-17)
 
-> **Scope** : re-validation E2E `restore-full.sh` après les migrations PR1
-> (`12_audit_log_delegation_id` + `7a_notification_event_backup_completed`).
-> Statut rapport : 🟠 **première exécution effectuée sur xch-deploy 2026-05-17,
-> bloquée F1+F2 (restore broken, RTO non mesurable). Hotfix PR #86 ouverte.
-> Procédure ci-dessous corrigée des findings F4/F5/F6/F7/F8 — re-drill à
-> exécuter post-merge PR #86 sur volume Pass 3 (seed 10k assets).**
+> **Scope §10** : valide le scénario backup → corruption contenu → restore au sein d'un **tenant existant** (content recovery applicatif, same-tenant). Re-validation E2E `restore-full.sh` après les migrations PR1 (`12_audit_log_delegation_id` + `7a_notification_event_backup_completed`).
+>
+> **HORS scope** : perte d'infrastructure (volume Postgres détruit, VM crashée, redéploiement de zéro). Pour ces scénarios, voir [`dr-full-recovery.md`](dr-full-recovery.md).
+>
+> Statut rapport : 🟢 **re-drill comprehensive PASS post-PR #86 hotfix.** Première exécution 2026-05-17 bloquée F1+F2 (restore broken) → PR #86 mergée → re-drill confirme F1+F2 corrigés. F9 design gap (delegations non exportées) **reclassé RESOLVED — scope clarified** : backup v2 reste applicatif same-tenant only, cross-tenant migration n'est pas un cas backup mais un cas migration (cf Track G.7 backlog). F10 (teardown surgical renomme deux .env) RESOLVED — runbook §10.2.cinq documenté ci-dessous.
 >
 > **Pourquoi ces corrections** : MCP `XCH_TRACK_E4_PR2_PASS5_DRILL_XCH_DEPLOY_2026_05_17`
 > a documenté que la procédure précédente avait 4 erreurs procédurales (chemins
@@ -435,6 +438,38 @@ bash scripts/restore-full.sh "$BACKUP_FILE" --mode=api
 ```
 
 > **Pourquoi obligatoire** : avant ce workaround, le runbook supposait implicitement qu'un admin existait déjà post-bootstrap. Pass 5 a découvert que sur DB fresh post-teardown, la chaîne complète bootstrap → restore est impossible sans cette étape intermédiaire.
+
+#### 10.2.cinq — Restauration des DEUX fichiers `.env` post-teardown (finding F10)
+
+`scripts/teardown-xch-stack.sh` (surgical) **renomme deux fichiers `.env`** pour préserver les secrets avant le wipe :
+
+| Fichier | Rôle | Renommé en |
+|---|---|---|
+| `backend/.env` | DATABASE_URL, JWT_SECRET, XCH_MASTER_KEY, MINIO_ROOT_USER/PASSWORD applicatifs | `backend/.env.bak.<timestamp>` |
+| `/opt/xch-dev/XCH/.env` (xch-deploy) ou racine repo (dev local) | Docker compose env (`MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `POSTGRES_PASSWORD`, ports, etc.) | `.env.bak.<timestamp>` |
+
+**Restauration obligatoire des DEUX fichiers AVANT le `docker compose up`** :
+
+```bash
+# Sur xch-deploy (ajuster le chemin pour dev local)
+cd /opt/xch-dev/XCH
+
+# 1. Lister les sauvegardes (les plus récentes en premier)
+ls -lt backend/.env.bak.* .env.bak.* 2>/dev/null | head -4
+
+# 2. Restaurer les deux fichiers en parallèle
+cp backend/.env.bak.<timestamp> backend/.env
+cp .env.bak.<timestamp> .env
+
+# 3. Vérifier que les variables critiques sont présentes
+grep -E '^(MINIO_ACCESS_KEY|MINIO_SECRET_KEY|POSTGRES_PASSWORD)=' .env
+grep -E '^(DATABASE_URL|JWT_SECRET|XCH_MASTER_KEY)=' backend/.env
+
+# 4. SEULEMENT après ça, docker compose up -d
+docker compose -f backend/docker-compose.yml up -d postgres redis minio minio-init
+```
+
+> **Symptôme si on oublie un des deux** : `docker compose up` échoue silencieusement (container minio ou postgres non démarré, ou `MINIO_ACCESS_KEY` vide → MinIO refuse les requêtes API → backend pendant healthcheck infini). Le `.env` à la racine (compose-level) est facile à oublier car la doc historique ne mentionnait que `backend/.env`. Finding F10 documente ce piège.
 
 ### 10.3 Procédure exacte (à exécuter sur host Docker-capable)
 
@@ -615,20 +650,22 @@ bash scripts/smoke-prod.sh http://localhost:3000   # 6/6 OK = défaut OK
 | ThrottlerGuard env override appliqué ? | ⏳ oui/non | ⏳ oui/non | ⏳ oui/non | unset post-drill |
 | ThrottlerGuard reverted + smoke 6/6 PASS | n/a | n/a | ⏳ ✅/❌ | ✅ |
 
-### 10.6 Findings — Drill exécution 2026-05-17 (Pass 5 initial)
+### 10.6 Findings — Drill exécution 2026-05-17 (Pass 5 initial + re-drill)
 
-> **Source** : MCP `XCH_TRACK_E4_PR2_PASS5_DRILL_XCH_DEPLOY_2026_05_17` event_log complet.
+> **Source** : MCP `XCH_TRACK_E4_PR2_PASS5_DRILL_XCH_DEPLOY_2026_05_17` event_log complet (drill initial + re-drill post PR #86).
 
 | # | Sévérité | Description | Action |
 |---|---|---|---|
-| **F1** | **CRITICAL** | `backup.service.ts:2607-2608` restore data path appelle `prisma.user.create({ data: { ..., role, status } })` — colonnes retirées par migration auth model v2 → restore full échoue avec `Unknown argument 'status'`. Régression latente jamais exercée avant Pass 5. | **Hotfix PR #86** (branche `claude/confident-mayer-309c5b`, commit `c216cb3`) — retrait zombie fields côté restore (backup serializer côté export OK) |
-| **F2** | **CRITICAL** | `restore-full.sh:130` envoie `curl -F 'file=@$BACKUP_FILE'` mais `FileFieldsInterceptor` dans `backup.controller.ts:481` attend field `backup`. Drift introduit commit `7fb03d04` (Track E.2 closure 2026-05-16) — `--mode=api` jamais E2E green depuis | **Hotfix PR #86** — script renommage `file` → `backup` |
-| **F3** | Important | `POST /api/backup/full` sans param body → `encrypted=false` même avec `XCH_MASTER_KEY` set. Comportement default vs opt-in à clarifier | **Track F.9 backlog** — investigation default vs opt-in (cf `XCH_PLAN_V3_POST_V2_2026_05_17`) |
-| **F4** | Procédural | Mémoire stale : admin user réel xch-deploy = `admin@demo2.fr` (PAS `admin@demo.fr` historique). Password `Demo1234` invalide pré-drill | Runbook §10.3 step 0 + Cycle 3 step 14 utilisent placeholders `<ADMIN_EMAIL>` / `<ADMIN_PASSWORD>`. Memory `project_prod_access.md` mise à jour |
-| **F5** | Procédural | DB demo2.fr quasi-vide pre-drill (1 user / 0 sites / 0 assets / 0 audit_logs) — RTO non représentatif. Hypothèse : seed Pass 3 jamais chargé sur xch-deploy | Runbook §10.2 requiert `SELECT count(*) FROM assets;` ≥ 10000 AVANT drill. **Track G/D.3 backlog** — investigation seed représentatif xch-deploy avant re-drill et cutover pilote |
-| **F6** | Procédural | Mailpit + `notification_logs` vides malgré wiring backup.processor + emitter intact. Cause : 0 `notification_rules` + 0 channels sur DrillTemp tenant fresh → dispatcher filtre l'event → faux trigger R5.4 | Runbook §10.2.bis ajoute seed SQL obligatoire avant Cycle 3 |
-| **F7** | Procédural | Plan source référençait `GET /api/backup/catalog` (HTTP 404 — endpoint inexistant). Endpoint réel = `GET /api/backup/list` | Runbook §10.2.ter + §10.3 step 1.ter utilisent `/api/backup/list`. Vérification grep `docs/operator/` 2026-05-17 = 0 occurrence stale. **F7 closed** |
-| **F8** | Procédural | Plan source supposait host FS path `backups/*.tar.gz`. Réalité ADR-025 streaming : backups v2 sont **exclusivement** dans MinIO bucket `xch-backups`. `ls backups/` retourne rien | Runbook §10.2.ter documente 2 options (API download / `mc cp`) + §10.3 step 1.ter matérialise localement via `/api/backup/<id>/download` |
+| **F1** | **RESOLVED** | `backup.service.ts:2607-2608` restore data path appelle `prisma.user.create({ data: { ..., role, status } })` — colonnes retirées par migration auth model v2 → restore full échoue avec `Unknown argument 'status'`. Régression latente jamais exercée avant Pass 5. | ✅ **PR #86 mergée** (branche `claude/confident-mayer-309c5b`, commit `c216cb3`) — retrait zombie fields côté restore. Re-drill confirme fix. |
+| **F2** | **RESOLVED** | `restore-full.sh:130` envoie `curl -F 'file=@$BACKUP_FILE'` mais `FileFieldsInterceptor` dans `backup.controller.ts:481` attend field `backup`. Drift introduit commit `7fb03d04` (Track E.2 closure 2026-05-16) — `--mode=api` jamais E2E green depuis | ✅ **PR #86 mergée** — script renommage `file` → `backup`. Re-drill confirme fix. |
+| **F3** | Important (actif) | `POST /api/backup/full` sans param body → `encrypted=false` même avec `XCH_MASTER_KEY` set. Comportement default vs opt-in à clarifier | **Track F.9 backlog** — investigation default vs opt-in (cf `XCH_PLAN_V3_POST_V2_2026_05_17` Track F.9 pour résolution v2.5+). Workaround opérateur : passer `{"encrypted":true}` explicite. |
+| **F4** | RESOLVED — doc | Mémoire stale : admin user réel xch-deploy = `admin@demo2.fr` (PAS `admin@demo.fr` historique). Password `Demo1234` invalide pré-drill | ✅ Runbook §10.3 step 0 + Cycle 3 step 14 utilisent placeholders `<ADMIN_EMAIL>` / `<ADMIN_PASSWORD>`. Memory `project_prod_access.md` mise à jour |
+| **F5** | Procédural (actif) | DB demo2.fr quasi-vide pre-drill (1 user / 0 sites / 0 assets / 0 audit_logs) — RTO non représentatif. Hypothèse : seed Pass 3 jamais chargé sur xch-deploy | Runbook §10.2 requiert `SELECT count(*) FROM assets;` ≥ 10000 AVANT drill. **Track G/D.3.7 backlog** — investigation seed représentatif xch-deploy avant re-drill comprehensive + cutover pilote |
+| **F6** | RESOLVED — doc | Mailpit + `notification_logs` vides malgré wiring backup.processor + emitter intact. Cause : 0 `notification_rules` + 0 channels sur DrillTemp tenant fresh → dispatcher filtre l'event → faux trigger R5.4. Wiring code intact confirmé via Bull event log capture (re-drill). | ✅ Runbook §10.2.bis ajoute seed SQL obligatoire avant Cycle 3 |
+| **F7** | RESOLVED — doc | Plan source référençait `GET /api/backup/catalog` (HTTP 404 — endpoint inexistant). Endpoint réel = `GET /api/backup/list` | ✅ Runbook §10.2.ter + §10.3 step 1.ter utilisent `/api/backup/list`. Vérification grep `docs/operator/` 2026-05-17 = 0 occurrence stale |
+| **F8** | RESOLVED — doc | Plan source supposait host FS path `backups/*.tar.gz`. Réalité ADR-025 streaming : backups v2 sont **exclusivement** dans MinIO bucket `xch-backups`. `ls backups/` retourne rien | ✅ Runbook §10.2.ter documente 2 options (API download / `mc cp`) + §10.3 step 1.ter matérialise localement via `/api/backup/<id>/download` |
+| **F9** | **RESOLVED — scope clarified, not a bug** | Re-drill a révélé que les UserDelegation ne sont pas exportées dans backup v2, donc impossible de remonter intégralement un tenant dans un environnement vierge sans réseau de délégations (cas cross-tenant restore ou DR infrastructure). Initialement perçu comme bug backup v2. | ✅ **Scope redefinition v2.4.0** : backup v2 = content recovery **applicatif same-tenant only** (corruption/suppression contenu au sein d'un tenant existant avec délégations préservées). DR infrastructure = guide séparé [`dr-full-recovery.md`](dr-full-recovery.md) — recommandations par mode déploiement, mise en œuvre = responsabilité IT client. Track G.7 (low priority) backlog : backup v2.2 cross-tenant amélioré pour staging/migration test. |
+| **F10** | **RESOLVED — doc only** | `scripts/teardown-xch-stack.sh` (surgical) renomme **deux** fichiers `.env` : `backend/.env` ET `<repo>/.env` (Docker compose env). Restauration des **deux** obligatoire avant `docker compose up` sinon `MINIO_ACCESS_KEY` missing → MinIO refuse requêtes API → backend healthcheck infini | ✅ Runbook §10.2.cinq documente la table des 2 fichiers + procédure restauration + vérification grep critique avant bootstrap |
 
 **Vigilances Pass 5 — verdicts** :
 - **R5.2 ThrottlerGuard** TRIGGERED réel — override LOCAL appliqué puis reverted Étape 7 + smoke 6/6 PASS confirme défaut restauré ✅

@@ -24,7 +24,9 @@
 | Assets / chantiers | NetBox refs, sites, équipements | Hors RGPD (données non personnelles) | n/a |
 | Photos terrain | photos prises sur site | Art. 6.1.f si pas de visage / 6.1.a sinon | Documentation chantier |
 | Tâches + commentaires | texte libre, peut contenir données pers. | Art. 6.1.b ou 6.1.f | Coordination chantier |
-| Backups | snapshot complet DB + MinIO | Hérite catégories ci-dessus | Continuité activité |
+| Backups applicatif (v2) | snapshot tenant DB + MinIO bucket `xch-backups` | Hérite catégories ci-dessus | Continuité activité |
+
+> **Périmètre backup XCH** : XCH garantit le **backup applicatif same-tenant** (cf [`dr-drill.md`](dr-drill.md) — content recovery, restore au sein d'un tenant existant). Le **backup système / infrastructure** (snapshot VM, volume Postgres complet, ensemble multi-tenant, recovery post-perte VM) relève de la **responsabilité du client selon le mode de déploiement** ; recommandations dans [`dr-full-recovery.md`](dr-full-recovery.md).
 
 **Durée de rétention figée code** :
 - Audit log : **1 an glissant** + purge cron mensuelle (cf D4.3 Track E parent, wired Pass 9 PR1)
