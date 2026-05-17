@@ -33,3 +33,13 @@ export class ExpensesSummaryResponseDto {
   @Expose()
   byType!: Record<string, { count: number; total: number }>;
 }
+
+// Usage note (added 2026-05-17 after Pass 5 drill CI gap surfaced
+// dto-shape.spec.ts:92 latent failure) — this DTO is a Swagger marker only.
+// `expenses.controller.ts::summary()` returns `expensesService.summary(...)`
+// directly, and the global `ClassSerializerInterceptor` leaves plain-object
+// responses untouched (cf `integration-passthrough.response.dto.ts` rationale).
+// `byType` is therefore preserved end-to-end in prod ; the test that ran
+// `toResponse(ExpensesSummaryResponseDto, ...)` against this class hit
+// class-transformer's `excludeExtraneousValues + nested-untyped-Record`
+// limitation, which does not represent the production wire shape.

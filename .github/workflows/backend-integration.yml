@@ -104,6 +104,16 @@ jobs:
         working-directory: backend
         run: npx prisma migrate deploy
 
+      # Track E.4 PR2 Pass 5 (2026-05-17) — close coverage gap : `npm test`
+      # (Jest default config, matches `src/**/*.spec.ts`) was NOT run by any
+      # workflow. Test 11 regression guard for restore user payload (PR #86
+      # commit c859d7d) would never have been validated otherwise. Runs
+      # BEFORE integration so a unit-level failure short-circuits the slower
+      # integration job.
+      - name: Run backend unit tests
+        working-directory: backend
+        run: npm test -- --ci --reporters=default
+
       - name: Run integration tests
         working-directory: backend
         run: npm run test:integration
