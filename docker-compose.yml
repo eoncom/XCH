@@ -213,6 +213,10 @@ services:
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      # conf.d contient le server block HTTPS genere par scripts/generate-ssl.sh
+      # (ssl.conf). Sans ce mount, nginx.conf `include /etc/nginx/conf.d/ssl.conf*`
+      # ne trouve rien -> le port 443 est mappe mais rien n'ecoute dessus.
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
       - backend
       - frontend

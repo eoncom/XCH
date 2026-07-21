@@ -172,6 +172,8 @@ MODE=${MODE:-1}
 # si le serveur est accede via une autre adresse (IP + domaine).
 TRUST_PROXY_CORS=false
 MINIO_PUBLIC_URL=""
+COOKIE_SECURE_VAL=false
+USE_SSL=false
 
 if [ "$MODE" = "3" ]; then
     # ---- MODE DEV ----
@@ -239,14 +241,38 @@ else
     TRUST_PROXY_CORS=true
     NEXT_PUBLIC_API_URL=""
 
+    # HTTPS auto-signe : recommande. Le certificat embarque l'IP (SAN IP:x.x.x.x)
+    # ou le domaine. L'avertissement navigateur au premier acces est normal
+    # (certificat auto-signe) — cliquer "Continuer vers le site".
+    echo ""
+    read -p "  Activer HTTPS (certificat auto-signe pour ${SERVER_ADDR}) ? [y/n] (defaut: y): " SSL_ANSWER
+    SSL_ANSWER=${SSL_ANSWER:-y}
+
+    if [ "$SSL_ANSWER" = "y" ] || [ "$SSL_ANSWER" = "Y" ]; then
+        USE_SSL=true
+        bash scripts/generate-ssl.sh "$SERVER_ADDR"
+        COOKIE_SECURE_VAL=true
+        if [ "$CUSTOM_HTTPS_PORT" = "443" ]; then
+            PUBLIC_URL="https://${SERVER_ADDR}"
+        else
+            PUBLIC_URL="https://${SERVER_ADDR}:${CUSTOM_HTTPS_PORT}"
+        fi
+    else
+        USE_SSL=false
+        if [ "$CUSTOM_HTTP_PORT" = "80" ]; then
+            PUBLIC_URL="http://${SERVER_ADDR}"
+        else
+            PUBLIC_URL="http://${SERVER_ADDR}:${CUSTOM_HTTP_PORT}"
+        fi
+    fi
+
+    # Health check local en HTTP (port 80 sert aussi l'API, pas de -k requis)
     if [ "$CUSTOM_HTTP_PORT" = "80" ]; then
-        PUBLIC_URL="http://${SERVER_ADDR}"
         BACKEND_URL="http://localhost/api"
     else
-        PUBLIC_URL="http://${SERVER_ADDR}:${CUSTOM_HTTP_PORT}"
         BACKEND_URL="http://localhost:${CUSTOM_HTTP_PORT}/api"
     fi
-    info "Nginx integre selectionne (HTTP:${CUSTOM_HTTP_PORT}, HTTPS:${CUSTOM_HTTPS_PORT})"
+    info "Nginx integre selectionne (HTTP:${CUSTOM_HTTP_PORT}, HTTPS:${CUSTOM_HTTPS_PORT}, SSL auto-signe: ${USE_SSL})"
 fi
 
 ok "URL publique de l'application : ${PUBLIC_URL}"
@@ -363,7 +389,7 @@ TRUST_PROXY_CORS=${TRUST_PROXY_CORS}
 
 # ===== COOKIES =====
 COOKIE_DOMAIN=
-COOKIE_SECURE=false
+COOKIE_SECURE=${COOKIE_SECURE_VAL}
 COOKIE_SECRET="${COOKIE_SECRET}"
 
 # ===== JWT =====
@@ -558,6 +584,14 @@ echo -e "  ${BOLD}Ouvrez votre navigateur :${NC}"
 echo ""
 echo -e "    ${BLUE}${PUBLIC_URL}/setup${NC}"
 echo ""
+if [ "$USE_SSL" = true ]; then
+    warn "Certificat auto-signe : le navigateur affichera un avertissement"
+    warn "de securite au premier acces — cliquez 'Parametres avances' puis"
+    warn "'Continuer vers le site'. C'est normal et attendu."
+    warn "Utilisez UNIQUEMENT l'URL https (les cookies de session sont"
+    warn "marques Secure : le login ne fonctionne pas via http)."
+    echo ""
+fi
 if [ "$MODE" = "3" ]; then
     echo "  Acces direct aux services :"
     echo "    Frontend   : http://${SERVER_ADDR}:3001"

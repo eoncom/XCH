@@ -48,18 +48,32 @@ function buildAuthRedirect(request: NextRequest): NextResponse | null {
   return NextResponse.redirect(loginUrl);
 }
 
+// Détecte si la requête est arrivée en HTTPS. Derrière nginx (intégré ou
+// externe), le proxy pose `X-Forwarded-Proto: $scheme` ; en accès direct
+// (mode dev), on se rabat sur le protocole de l'URL. Utilisé pour ne
+// PAS émettre `upgrade-insecure-requests` sur un déploiement HTTP pur
+// (IP sans TLS) — voir buildCsp().
+function isSecureRequest(request: NextRequest): boolean {
+  const xfProto = request.headers.get('x-forwarded-proto');
+  if (xfProto) {
+    return xfProto.split(',')[0].trim() === 'https';
+  }
+  return request.nextUrl.protocol === 'https:';
+}
+
 export function middleware(request: NextRequest) {
   // Generate the per-request nonce (32 hex chars, ~128 bits of entropy).
   // crypto.randomUUID() is part of the Web Crypto API exposed to Edge
   // middleware; the dashes are stripped so the value is CSP-safe.
   const nonce = crypto.randomUUID().replace(/-/g, '');
+  const secureTransport = isSecureRequest(request);
 
   // Auth gate first — if the caller must be redirected to /login, do so
   // immediately. We still attach the CSP header to the redirect so the
   // browser remains in strict mode while it follows the 307.
   const redirect = buildAuthRedirect(request);
   if (redirect) {
-    redirect.headers.set('Content-Security-Policy', buildCsp(nonce));
+    redirect.headers.set('Content-Security-Policy', buildCsp(nonce, secureTransport));
     return redirect;
   }
 
@@ -70,7 +84,7 @@ export function middleware(request: NextRequest) {
   requestHeaders.set('x-nonce', nonce);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
-  response.headers.set('Content-Security-Policy', buildCsp(nonce));
+  response.headers.set('Content-Security-Policy', buildCsp(nonce, secureTransport));
   return response;
 }
 
