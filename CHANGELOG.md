@@ -7,6 +7,35 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **`install.sh` v2** — installation sur serveur accédé par IP (sans nom de
+  domaine) réparée : le script pose désormais `FRONTEND_URL` +
+  `TRUST_PROXY_CORS` dans `backend/.env` et `NEXT_PUBLIC_APP_URL` en build
+  arg frontend. Auparavant ces valeurs restaient vides → le backend rejetait
+  l'en-tête `Origin: http://<ip>` envoyé par le navigateur sur les POST
+  (même same-origin) → Setup Wizard `/setup` bloqué par erreur CORS.
+- **`install.sh` ré-exécution sûre** — les secrets existants (Postgres,
+  MinIO, JWT) sont réutilisés en mode « Reconfigurer » au lieu d'être
+  régénérés (une rotation aveugle rendait la base existante inaccessible).
+  Réinstallation destructive désormais explicite (confirmation `SUPPRIMER`
+  + `docker compose down -v`).
+
+### Added
+
+- **`install.sh` : déploiement GlitchTip intégré (opt-in)** — pour les
+  installations non air-gap : génération `glitchtip/.env`
+  (gen-secrets.sh), raccordement au réseau XCH détecté, exposition de
+  l'UI (port 8000 par défaut via `docker-compose.glitchtip.override.yml`
+  généré), bootstrap org/projets + injection automatique des DSN
+  (`GLITCHTIP_DSN_BACKEND` dans `backend/.env`,
+  `NEXT_PUBLIC_GLITCHTIP_DSN_FRONTEND` en build arg) via gen-dsn.sh —
+  ordonné AVANT le build frontend (DSN baké dans les bundles Next.js).
+- **`install.sh` : `COMPOSE_PROJECT_NAME` fixé** (projet existant préservé
+  sinon `xch`) → nom de réseau prévisible pour la stack GlitchTip.
+
 ## [2.4.0] - 2026-05-17 — Track E.4 closure (preprod readiness)
 
 Pre-prod readiness pour cutover pilote air-gap RSI. Track E.4 livré en 3 PRs :
