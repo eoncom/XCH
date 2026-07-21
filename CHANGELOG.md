@@ -35,6 +35,25 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   ordonné AVANT le build frontend (DSN baké dans les bundles Next.js).
 - **`install.sh` : `COMPOSE_PROJECT_NAME` fixé** (projet existant préservé
   sinon `xch`) → nom de réseau prévisible pour la stack GlitchTip.
+- **`install.sh` : HTTPS auto-signé intégré (mode nginx intégré, défaut oui)**
+  — appelle `scripts/generate-ssl.sh <ip|domaine>` (SAN `IP:` ou `DNS:`),
+  `PUBLIC_URL` en https, `COOKIE_SECURE=true`. Corrige le blocage
+  `ERR_CONNECTION_CLOSED` : la CSP frontend émet `upgrade-insecure-requests`
+  → le navigateur réécrivait tous les assets `_next/static` en `https://`
+  alors que rien n'écoutait sur 443.
+- **`docker-compose.yml` : mount `docker/nginx/conf.d` manquant** — le bloc
+  serveur 443 généré par `generate-ssl.sh` (`conf.d/ssl.conf`) n'atteignait
+  jamais le conteneur nginx (`include /etc/nginx/conf.d/ssl.conf*` ne
+  trouvait rien) → HTTPS impossible à activer même avec certificat généré.
+- **`generate-ssl.sh` : header HSTS retiré du bloc 443 généré** — avec un
+  certificat auto-signé, HSTS rend l'avertissement navigateur **non
+  contournable** (Chrome supprime « Continuer vers le site ») → lock-out.
+  HSTS réservé aux certificats reconnus (CA interne / Let's Encrypt).
+- **CSP frontend : `upgrade-insecure-requests` conditionné au transport**
+  ([csp.ts](frontend/src/lib/csp.ts) + [middleware.ts](frontend/src/middleware.ts)) —
+  émis uniquement si la requête est en HTTPS (`X-Forwarded-Proto` posé par
+  nginx, sinon protocole direct). Un déploiement HTTP pur (IP sans TLS)
+  reste désormais fonctionnel ; comportement inchangé en HTTPS.
 
 ## [2.4.0] - 2026-05-17 — Track E.4 closure (preprod readiness)
 

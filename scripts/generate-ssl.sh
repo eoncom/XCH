@@ -88,7 +88,10 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    # PAS de Strict-Transport-Security ici : avec un certificat auto-signe,
+    # HSTS rend l'avertissement navigateur NON contournable (Chrome retire
+    # le bouton "Continuer vers le site"). N'activer HSTS qu'avec un
+    # certificat reconnu (CA interne deployee sur les postes, ou Let's Encrypt).
 
     # Backend API
     location /api/ {

@@ -37,7 +37,15 @@ function glitchtipIngestOrigin(): string | null {
   }
 }
 
-export function buildCsp(nonce: string): string {
+/**
+ * @param secureTransport — la requête est-elle servie en HTTPS (directement
+ *   ou via un proxy qui pose `X-Forwarded-Proto`) ? `upgrade-insecure-requests`
+ *   n'est émis QUE dans ce cas : sur un déploiement HTTP pur (IP sans TLS,
+ *   install on-prem sans domaine), cette directive force le navigateur à
+ *   réécrire tous les assets `_next/static` en https:// alors que rien
+ *   n'écoute sur 443 → ERR_CONNECTION_CLOSED, page figée.
+ */
+export function buildCsp(nonce: string, secureTransport: boolean = true): string {
   const isDev = process.env.NODE_ENV === 'development';
   const ingestOrigin = glitchtipIngestOrigin();
   const directives: string[] = [
@@ -60,7 +68,9 @@ export function buildCsp(nonce: string): string {
     "base-uri 'self'",
     "form-action 'self'",
     "object-src 'none'",
-    'upgrade-insecure-requests',
   ];
+  if (secureTransport) {
+    directives.push('upgrade-insecure-requests');
+  }
   return directives.join('; ');
 }
