@@ -8437,3 +8437,24 @@ test(load): k6 seed + 4 scenarios + thresholds (Track E.4 PR2 Pass 3)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-07-22
+
+**Date:** 2026-07-22 11:06:17
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 2
+
+**Commit message:**
+```
+fix(deploy): HTTPS auto-signe IP + mount conf.d + CSP conditionnelle (#89)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

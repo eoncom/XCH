@@ -11,6 +11,20 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **`PATCH /api/tenants/current` 400 « Invalid data provided » sur toute
+  sauvegarde Paramètres → Organisation** (rename impossible) — drift de
+  contrat ADR-018 : le frontend envoyait les `securityReminders` au format
+  legacy `{ id, text }` alors que le service les passe à
+  `tenantSecurityReminder.create()` qui exige `{ title, body }` →
+  `PrismaClientValidationError` (« Argument title is missing ») faisait
+  échouer le PATCH entier. Backend :
+  [tenants.service.ts](backend/src/modules/tenants/tenants.service.ts)
+  normalise désormais legacy→typé (`text` → `title`/`body`) et ignore les
+  items vides. Frontend : la page Settings lit/écrit le format typé, et la
+  page Site lit `config.branding.securityReminders` (le chemin plat
+  `config.securityReminders` n'existait plus → l'info-bulle sécurité
+  retombait toujours sur les 4 rappels par défaut).
+
 - **`install.sh` v2** — installation sur serveur accédé par IP (sans nom de
   domaine) réparée : le script pose désormais `FRONTEND_URL` +
   `TRUST_PROXY_CORS` dans `backend/.env` et `NEXT_PUBLIC_APP_URL` en build

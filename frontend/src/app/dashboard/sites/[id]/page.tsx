@@ -1225,18 +1225,38 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   });
 
   // Load tenant config for dynamic security reminders
-  const { data: tenantConfig } = useQuery<{ config?: { securityReminders?: { id: string; text: string }[] } }>({
+  const { data: tenantConfig } = useQuery<{
+    config?: {
+      securityReminders?: { id: string; text: string }[];
+      branding?: { securityReminders?: { id: string; title?: string; enabled?: boolean }[] };
+    };
+  }>({
     queryKey: ['tenant-config'],
     queryFn: () => apiClient.get('/api/tenants/current'),
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
-  const securityReminders = tenantConfig?.config?.securityReminders ?? [
-    { id: '1', text: "Badge d'accès obligatoire sur tous les sites" },
-    { id: '2', text: 'Carte BTP à jour requise' },
-    { id: '3', text: 'EPI obligatoires (casque, gilet, chaussures)' },
-    { id: '4', text: 'Respecter les consignes affichées sur site' },
-  ];
+  // ADR-018 : les reminders vivent dans config.branding.securityReminders au
+  // format `{ title, body, enabled }` ; l'ancien emplacement plat
+  // `config.securityReminders` (`{ text }`) est gardé en fallback.
+  const remindersRaw =
+    tenantConfig?.config?.branding?.securityReminders ??
+    tenantConfig?.config?.securityReminders;
+  const securityReminders =
+    Array.isArray(remindersRaw) && remindersRaw.length > 0
+      ? remindersRaw
+          .filter((r: any) => r.enabled !== false)
+          .map((r: any, idx: number) => ({
+            id: String(r.id ?? idx + 1),
+            text: String(r.title ?? r.text ?? ''),
+          }))
+          .filter((r) => r.text.length > 0)
+      : [
+          { id: '1', text: "Badge d'accès obligatoire sur tous les sites" },
+          { id: '2', text: 'Carte BTP à jour requise' },
+          { id: '3', text: 'EPI obligatoires (casque, gilet, chaussures)' },
+          { id: '4', text: 'Respecter les consignes affichées sur site' },
+        ];
 
   const deleteMutation = useMutation({
     mutationFn: () => sitesApi.delete(id),
