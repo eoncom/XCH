@@ -112,6 +112,9 @@ export default function NewSitePage() {
   // typeId is mandatory: every contact lives under a ContactType (the
   // create POST after the site is in place reuses the imported one).
   type WizardContact = {
+    // id présent = contact d'annuaire importé (rattachement au save),
+    // id absent = brouillon à créer une fois le site existant.
+    id?: string;
     typeId: string;
     name: string;
     role?: string;
@@ -177,20 +180,29 @@ export default function NewSitePage() {
           contacts
             .filter((c) => c.typeId && c.name.trim())
             .map((c) =>
-              contactsApi.create({
-                typeId: c.typeId,
-                name: c.name,
-                role: c.role || undefined,
-                phone: c.phone || undefined,
-                mobile: c.mobile || undefined,
-                email: c.email || undefined,
-                company: c.company || undefined,
-                address: c.address || undefined,
-                notes: c.notes || undefined,
-                isPrimary: c.isPrimary,
-                siteId,
-                delegationId: delegationId ?? undefined,
-              }),
+              c.id
+                ? // Contact d'annuaire importé → rattachement (PATCH siteId),
+                  // pas une création (qui dupliquait le contact).
+                  contactsApi.update(c.id, {
+                    siteId,
+                    // R1 : même délégation que le site obligatoire.
+                    ...(delegationId ? { delegationId } : {}),
+                    isPrimary: c.isPrimary,
+                  })
+                : contactsApi.create({
+                    typeId: c.typeId,
+                    name: c.name,
+                    role: c.role || undefined,
+                    phone: c.phone || undefined,
+                    mobile: c.mobile || undefined,
+                    email: c.email || undefined,
+                    company: c.company || undefined,
+                    address: c.address || undefined,
+                    notes: c.notes || undefined,
+                    isPrimary: c.isPrimary,
+                    siteId,
+                    delegationId: delegationId ?? undefined,
+                  }),
             ),
         );
         const failed = results.filter((r) => r.status === 'rejected').length;
@@ -767,7 +779,7 @@ export default function NewSitePage() {
                           const matchesType =
                             contactPickerType === 'ALL' || c.typeId === contactPickerType;
                           const alreadyAdded = contacts.some(
-                            (sc) => sc.name === c.name && sc.email === c.email
+                            (sc) => (sc.id && sc.id === c.id) || (sc.name === c.name && sc.email === c.email)
                           );
                           return matchesSearch && matchesCategory && matchesType && !alreadyAdded;
                         });
@@ -835,6 +847,9 @@ export default function NewSitePage() {
                                       size="sm"
                                       onClick={() => {
                                         setContacts([...contacts, {
+                                          // Conserver l'id => rattachement au
+                                          // save au lieu d'une re-création.
+                                          id: c.id,
                                           typeId: c.typeId,
                                           name: c.name,
                                           role: c.role || c.type?.name || '',

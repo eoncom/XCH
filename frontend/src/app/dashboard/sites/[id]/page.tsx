@@ -780,8 +780,10 @@ function SiteContactsGrid({ contacts, siteId }: { contacts: any[]; siteId: strin
   const externalCategories = ['PROVIDER', 'PARTNER', 'TECHNICAL'];
 
   const isInternal = (c: any) => {
-    // 1) Si category est défini, l'utiliser
-    if (c.category) return internalCategories.includes(c.category);
+    // 1) Si la category est connue (via la relation type incluse par le
+    //    backend, ou à plat), l'utiliser
+    const category = c.type?.category ?? c.category;
+    if (category) return internalCategories.includes(category);
     // 2) Fallback : deviner par le rôle/company
     const role = (c.role || '').toLowerCase();
     const hasExternalMarkers = c.company || role.includes('fournisseur') || role.includes('sous-traitant') || role.includes('prestataire') || role.includes('opérateur');
