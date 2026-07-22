@@ -11,6 +11,18 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **nginx intégré : 502 après chaque redéploiement backend/frontend** — les
+  blocs `upstream` statiques figeaient l'IP du conteneur à la lecture de la
+  config ; un `docker compose up -d` qui recrée backend/frontend (nouvelle
+  IP) laissait nginx proxyer vers l'ancienne → 502 jusqu'à un
+  `docker restart xch-nginx` manuel. Remplacé par `resolver 127.0.0.11`
+  (DNS interne Docker, TTL 10 s) + `proxy_pass` en variable dans
+  [nginx.conf](docker/nginx/nginx.conf) et le template 443 de
+  [generate-ssl.sh](scripts/generate-ssl.sh).
+- **`generate-ssl.sh` idempotent** — un certificat existant est conservé au
+  re-run (chaque régénération forçait le navigateur à ré-accepter
+  l'avertissement) ; `FORCE_CERT=1` pour régénérer volontairement.
+
 - **Import d'un contact d'annuaire vers un site : doublon créé** — le picker
   « Importer un contact » (wizards création + édition de site) copiait les
   champs **sans l'`id`**, et la synchronisation classait tout contact sans id

@@ -50,16 +50,24 @@ fi
 
 echo "[1/3] Generating self-signed certificate..."
 
-openssl req -x509 -nodes -days 365 \
-  -newkey rsa:2048 \
-  -keyout "${SSL_DIR}/key.pem" \
-  -out "${SSL_DIR}/cert.pem" \
-  -subj "/CN=${SUBJECT}/O=XCH/C=FR" \
-  -addext "subjectAltName=${SAN}" \
-  2>/dev/null
+# Idempotence : un cert existant est conserve (sinon chaque re-run
+# genererait un nouveau cert => nouvel avertissement navigateur a
+# re-accepter). Forcer la regeneration : FORCE_CERT=1 bash scripts/generate-ssl.sh
+if [ -f "${SSL_DIR}/cert.pem" ] && [ "${FORCE_CERT:-0}" != "1" ]; then
+  echo "  Certificate deja present, conserve : ${SSL_DIR}/cert.pem"
+  echo "  (FORCE_CERT=1 pour regenerer)"
+else
+  openssl req -x509 -nodes -days 365 \
+    -newkey rsa:2048 \
+    -keyout "${SSL_DIR}/key.pem" \
+    -out "${SSL_DIR}/cert.pem" \
+    -subj "/CN=${SUBJECT}/O=XCH/C=FR" \
+    -addext "subjectAltName=${SAN}" \
+    2>/dev/null
 
-echo "  Certificate: ${SSL_DIR}/cert.pem"
-echo "  Private key: ${SSL_DIR}/key.pem"
+  echo "  Certificate: ${SSL_DIR}/cert.pem"
+  echo "  Private key: ${SSL_DIR}/key.pem"
+fi
 
 # ── Generate SSL nginx config ───────────────────────────────────────────────
 echo "[2/3] Generating nginx SSL configuration..."
@@ -94,8 +102,12 @@ server {
     # certificat reconnu (CA interne deployee sur les postes, ou Let's Encrypt).
 
     # Backend API
+    # NB: resolver 127.0.0.11 + proxy_pass en variable (defini dans nginx.conf
+    # http{}) => re-resolution DNS a chaque TTL, pas de 502 apres recreation
+    # des conteneurs backend/frontend.
     location /api/ {
-        proxy_pass http://backend;
+        set $backend_upstream http://backend:3000;
+        proxy_pass $backend_upstream;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -113,7 +125,8 @@ server {
     # MinIO storage (public files)
     location /storage/ {
         rewrite ^/storage/(.*) /$1 break;
-        proxy_pass http://minio;
+        set $minio_upstream http://minio:9000;
+        proxy_pass $minio_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -127,7 +140,8 @@ server {
 
     # Frontend (Next.js)
     location / {
-        proxy_pass http://frontend;
+        set $frontend_upstream http://frontend:3001;
+        proxy_pass $frontend_upstream;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
