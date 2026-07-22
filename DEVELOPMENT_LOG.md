@@ -8458,3 +8458,24 @@ fix(deploy): HTTPS auto-signe IP + mount conf.d + CSP conditionnelle (#89)
 - PROJECT_STATUS.md (timestamp)
 - DEVELOPMENT_LOG.md (this entry)
 
+
+---
+
+## Session Auto-Update - 2026-07-22
+
+**Date:** 2026-07-22 14:41:37
+**Type:** Automatic documentation update
+
+**Changes:**
+- Backend files modified: 1
+- Frontend files modified: 3
+
+**Commit message:**
+```
+fix(tenants): PATCH /tenants/current 400 — securityReminders contract drift (#90)
+```
+
+**Auto-updated files:**
+- PROJECT_STATUS.md (timestamp)
+- DEVELOPMENT_LOG.md (this entry)
+

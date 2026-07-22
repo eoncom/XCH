@@ -285,6 +285,10 @@ function EditSitePage({
     const finalIds = new Set<string>(contacts.filter((c) => c.id).map((c) => c.id!));
 
     const toCreate = contacts.filter((c) => !c.id && c.typeId && c.name.trim());
+    // Contacts importés depuis l'annuaire : id présent mais absent du snapshot
+    // initial → rattachement au site (PATCH siteId), PAS une création (qui
+    // dupliquait le contact dans l'annuaire).
+    const toAttach = contacts.filter((c) => c.id && !initialById.has(c.id));
     const toUpdate = contacts.filter((c) => {
       if (!c.id) return false;
       const original = initialById.get(c.id);
@@ -293,6 +297,17 @@ function EditSitePage({
     const toDelete = initialContacts.filter((c) => c.id && !finalIds.has(c.id));
 
     const ops: Promise<unknown>[] = [];
+    for (const c of toAttach) {
+      ops.push(
+        contactsApi.update(c.id!, {
+          siteId: id,
+          // R1 : le contact doit appartenir à la même délégation que le site
+          // (un contact global ne peut pas être rattaché à un site).
+          ...(effectiveDelegationId ? { delegationId: effectiveDelegationId } : {}),
+          isPrimary: c.isPrimary,
+        }),
+      );
+    }
     for (const c of toCreate) {
       ops.push(
         contactsApi.create({
@@ -327,7 +342,11 @@ function EditSitePage({
         }),
       );
     }
-    for (const c of toDelete) ops.push(contactsApi.delete(c.id!));
+    // Retirer un contact du site = le DÉTACHER (siteId null), pas le supprimer
+    // de l'annuaire — l'ancien DELETE détruisait un contact d'annuaire qui
+    // venait d'être importé. La suppression réelle se fait depuis le module
+    // Contacts.
+    for (const c of toDelete) ops.push(contactsApi.update(c.id!, { siteId: null }));
 
     if (ops.length === 0) return { failed: 0 };
     const results = await Promise.allSettled(ops);
@@ -943,9 +962,9 @@ function EditSitePage({
                             contactPickerCategory === 'ALL' || c.type?.category === contactPickerCategory;
                           const matchesType =
                             contactPickerType === 'ALL' || c.typeId === contactPickerType;
-                          // Exclure les contacts déjà ajoutés (par nom + email)
+                          // Exclure les contacts déjà ajoutés (par id, sinon nom + email)
                           const alreadyAdded = contacts.some(
-                            (sc) => sc.name === c.name && sc.email === c.email
+                            (sc) => (sc.id && sc.id === c.id) || (sc.name === c.name && sc.email === c.email)
                           );
                           return matchesSearch && matchesCategory && matchesType && !alreadyAdded;
                         });
@@ -1013,6 +1032,11 @@ function EditSitePage({
                                       size="sm"
                                       onClick={() => {
                                         setContacts([...contacts, {
+                                          // Conserver l'id : le save fera un
+                                          // rattachement (PATCH siteId) — sans
+                                          // id, syncContacts re-créait le
+                                          // contact => doublon dans l'annuaire.
+                                          id: c.id,
                                           typeId: c.typeId,
                                           name: c.name,
                                           role: c.role || c.type?.name || '',

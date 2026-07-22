@@ -11,6 +11,21 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Import d'un contact d'annuaire vers un site : doublon créé** — le picker
+  « Importer un contact » (wizards création + édition de site) copiait les
+  champs **sans l'`id`**, et la synchronisation classait tout contact sans id
+  en création (`POST /api/contacts`) → chaque import dupliquait le contact.
+  L'import garde désormais l'id et le save fait un **rattachement**
+  (`PATCH { siteId, delegationId }`, règle R1 délégation respectée). Retirer
+  un contact d'un site le **détache** (`siteId: null`) au lieu de le
+  supprimer de l'annuaire (l'ancien DELETE détruisait un contact importé).
+- **Contacts internes affichés dans « Contacts externes / IT Partenaires »**
+  sur la page site — `GET /api/sites/:id` chargeait `contactsOnSite` sans la
+  relation `type` : la `category` (INTERNAL/PROVIDER/…) manquait et le
+  frontend retombait sur une heuristique « a une entreprise ⇒ externe ».
+  Le backend inclut désormais `type` et le tri lit `type.category` en
+  priorité.
+
 - **`PATCH /api/tenants/current` 400 « Invalid data provided » sur toute
   sauvegarde Paramètres → Organisation** (rename impossible) — drift de
   contrat ADR-018 : le frontend envoyait les `securityReminders` au format

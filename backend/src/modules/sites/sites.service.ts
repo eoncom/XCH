@@ -307,6 +307,14 @@ export class SitesService {
     const [contactsOnSite, emplacements] = await Promise.all([
       this.prisma.contact.findMany({
         where: { siteId: id, tenantId, isActive: true },
+        // `type` porte la category (INTERNAL/PROVIDER/...) — sans cet include,
+        // le frontend retombe sur une heuristique (company => externe) qui
+        // classe les contacts internes dans "Contacts externes".
+        include: {
+          type: {
+            select: { id: true, name: true, slug: true, category: true, color: true, icon: true },
+          },
+        },
         orderBy: [{ isPrimary: 'desc' }, { name: 'asc' }],
       }),
       this.prisma.siteEmplacement.findMany({
