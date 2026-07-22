@@ -2126,7 +2126,14 @@ export default function SettingsPage() {
         setSelectedTheme(((tenant.config as any)?.branding?.theme) || 'blue');
         const reminders = (tenant.config as any)?.branding?.securityReminders;
         if (Array.isArray(reminders) && reminders.length > 0) {
-          setSecurityReminders(reminders);
+          // Le backend renvoie le format typé ADR-018 `{ id, title, body, ... }` ;
+          // l'éditeur local manipule une ligne unique `text`.
+          setSecurityReminders(
+            reminders.map((r: any, idx: number) => ({
+              id: String(r.id ?? idx + 1),
+              text: String(r.title ?? r.text ?? ''),
+            })),
+          );
         }
       } catch (error) {
         console.error('Failed to load tenant:', error);
@@ -2411,7 +2418,11 @@ export default function SettingsPage() {
           domain,
           timezone,
           language,
-          securityReminders,
+          // Contrat backend ADR-018 : `{ title, body }` requis (le format
+          // legacy `{ text }` seul faisait échouer le PATCH complet en 400).
+          securityReminders: securityReminders
+            .filter((r) => r.text.trim().length > 0)
+            .map((r) => ({ title: r.text.trim(), body: r.text.trim() })),
         },
       });
       queryClient.invalidateQueries({ queryKey: ['tenant-branding'] });

@@ -108,13 +108,29 @@ export class TenantsService {
       });
     }
     if (Array.isArray(config?.securityReminders)) {
+      // Compat pré-ADR-018 : l'ancien format frontend est `{ id, text }` —
+      // mappé vers title/body. Un item sans contenu exploitable est ignoré :
+      // un `title` undefined faisait échouer TOUT le PATCH en
+      // PrismaClientValidationError → 400 "Invalid data provided" (le rename
+      // d'organisation embarquant les reminders dans le même payload).
+      const normalizedReminders = config.securityReminders
+        .map((r) => {
+          const maybeText = (r as unknown as { text?: unknown })?.text;
+          const legacyText = typeof maybeText === 'string' ? maybeText.trim() : '';
+          const title =
+            typeof r?.title === 'string' && r.title.trim() ? r.title.trim() : legacyText;
+          const body = typeof r?.body === 'string' && r.body.trim() ? r.body.trim() : title;
+          return { ...r, title, body };
+        })
+        .filter((r) => r.title.length > 0);
+
       // Replace the global (siteId IS NULL) reminders atomically. Per-site
       // reminders are managed via a dedicated endpoint (out of scope here).
       await this.prisma.$transaction([
         this.prisma.tenantSecurityReminder.deleteMany({
           where: { tenantId: id, siteId: null },
         }),
-        ...config.securityReminders.map((r, idx) =>
+        ...normalizedReminders.map((r, idx) =>
           this.prisma.tenantSecurityReminder.create({
             data: {
               tenantId: id,
