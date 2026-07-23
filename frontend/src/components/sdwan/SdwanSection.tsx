@@ -54,13 +54,6 @@ const ROLE_LABELS: Record<SdwanFirewallRole, string> = {
   peer: 'Pair',
 };
 
-function statusBadgeVariant(status: string | null | undefined) {
-  if (status === 'up') return 'success' as const;
-  if (status === 'degraded') return 'warning' as const;
-  if (status === 'down') return 'destructive' as const;
-  return 'secondary' as const;
-}
-
 interface Props {
   siteId: string;
   canEdit: boolean;
@@ -134,9 +127,8 @@ export function SdwanSection({ siteId, canEdit }: Props) {
                 {config.enabled ? 'Activé' : 'Désactivé'}
               </Badge>
             )}
-            {config?.status && (
-              <Badge variant={statusBadgeVariant(config.status)}>{config.status}</Badge>
-            )}
+            {/* Badge status retiré — SdwanConfig.status n'existe plus (ADR-016),
+                le statut overlay vient de l'agrégation santé des firewalls. */}
           </CardTitle>
           {canEdit && (
             <div className="flex gap-2">
@@ -165,11 +157,6 @@ export function SdwanSection({ siteId, canEdit }: Props) {
                 <p>
                   <span className="text-muted-foreground">Provider :</span>{' '}
                   <span className="font-medium">{config.provider}</span>
-                </p>
-              )}
-              {config.monitorName && (
-                <p className="text-xs font-mono text-muted-foreground">
-                  Monitor : {config.monitorName}
                 </p>
               )}
               {config.notes && (
@@ -322,7 +309,6 @@ function SdwanConfigDialog({
 }) {
   const [enabled, setEnabled] = useState(existing?.enabled ?? true);
   const [provider, setProvider] = useState(existing?.provider ?? '');
-  const [monitorName, setMonitorName] = useState(existing?.monitorName ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
 
   // PROVIDER contacts (vendors — Fortinet, Cisco, VeloCloud...). The stored
@@ -339,7 +325,6 @@ function SdwanConfigDialog({
     if (!open) return;
     setEnabled(existing?.enabled ?? true);
     setProvider(existing?.provider ?? '');
-    setMonitorName(existing?.monitorName ?? '');
     setNotes(existing?.notes ?? '');
   }, [open, existing?.id, existing?.updatedAt]);
 
@@ -374,15 +359,10 @@ function SdwanConfigDialog({
               emptyMessage="Aucun contact PROVIDER. Créez-en un dans Contacts."
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="sdwan-monitor">Monitor externe (overlay)</Label>
-            <Input
-              id="sdwan-monitor"
-              value={monitorName}
-              onChange={(e) => setMonitorName(e.target.value)}
-              placeholder="[CODE] SDWAN Overlay"
-            />
-          </div>
+          {/* Champ « Monitor externe (overlay) » retiré — SdwanConfig.monitorName
+              n'existe plus (ADR-016) : le statut overlay est dérivé des monitors
+              des firewalls attachés. L'envoyer faisait rejeter TOUT le save en
+              400 (whitelist ValidationPipe). */}
           <div className="space-y-2">
             <Label htmlFor="sdwan-notes">Notes</Label>
             <Textarea
@@ -413,7 +393,6 @@ function SdwanConfigDialog({
               onSave({
                 enabled,
                 provider: provider.trim() || null,
-                monitorName: monitorName.trim() || null,
                 notes: notes.trim() || null,
               })
             }

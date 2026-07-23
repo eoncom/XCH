@@ -31,8 +31,8 @@ export interface SdwanConfig {
   siteId: string;
   enabled: boolean;
   provider: string | null;
-  monitorName: string | null;
-  status: string | null;
+  // monitorName + status retirés en ADR-016 — le statut overlay est dérivé
+  // des MonitorChecks des firewalls attachés (HealthAggregationService).
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -42,7 +42,6 @@ export interface SdwanConfig {
 export interface UpsertSdwanConfigData {
   enabled?: boolean;
   provider?: string | null;
-  monitorName?: string | null;
   notes?: string | null;
 }
 
