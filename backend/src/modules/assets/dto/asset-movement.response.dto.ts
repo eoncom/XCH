@@ -20,6 +20,12 @@ export class AssetMovementResponseDto {
   @Expose()
   assetId!: string;
 
+  @ApiProperty({
+    description: 'AssetMovementType (CREATED / SITE_CHANGE / RACK_MOUNT / ...)',
+  })
+  @Expose()
+  type!: string;
+
   @ApiPropertyOptional({ type: String, nullable: true })
   @Expose()
   fromSiteId?: string | null;
@@ -36,6 +42,14 @@ export class AssetMovementResponseDto {
   @Expose()
   toRackId?: string | null;
 
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @Expose()
+  fromRackPositionU?: number | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @Expose()
+  toRackPositionU?: number | null;
+
   @ApiPropertyOptional({ type: String, nullable: true })
   @Expose()
   fromStatus?: string | null;
@@ -46,15 +60,19 @@ export class AssetMovementResponseDto {
 
   @ApiPropertyOptional({ type: String, nullable: true })
   @Expose()
-  reason?: string | null;
+  notes?: string | null;
 
-  @ApiProperty({ description: 'User who triggered the movement' })
+  @ApiPropertyOptional({ type: String, nullable: true, description: 'User who triggered the movement' })
   @Expose()
-  userId!: string;
+  userId?: string | null;
 
+  // NB : le modèle Prisma s'appelle `timestamp` (PAS createdAt) — la
+  // première version de cette DTO exposait `createdAt`/`reason` qui
+  // n'existent pas sur AssetMovement : type/date/notes disparaissaient du
+  // wire et l'onglet Historique crashait (format(new Date(undefined))).
   @ApiProperty({ type: String, format: 'date-time' })
   @Expose()
-  createdAt!: Date;
+  timestamp!: Date;
 
   @ApiPropertyOptional({ description: 'fromSite reference (passthrough)' })
   @Expose()
