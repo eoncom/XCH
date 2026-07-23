@@ -21,6 +21,14 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **SD-WAN : impossible d'activer la configuration (400)** — le dialogue
+  envoyait encore `monitorName`, champ **supprimé du modèle en ADR-016**
+  (statut overlay dérivé des monitors des firewalls attachés) → la
+  ValidationPipe whitelist rejetait tout le save. Champ « Monitor externe
+  (overlay) » retiré du dialogue, `monitorName`/`status` retirés des types
+  frontend et du badge d'en-tête (`SdwanSection`). Effet de bord corrigé :
+  sans config créée, le bouton « Ajouter un firewall » n'apparaissait
+  jamais — d'où l'impression qu'aucun équipement n'était proposable.
 - **nginx intégré : 502 après chaque redéploiement backend/frontend** — les
   blocs `upstream` statiques figeaient l'IP du conteneur à la lecture de la
   config ; un `docker compose up -d` qui recrée backend/frontend (nouvelle
