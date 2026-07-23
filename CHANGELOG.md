@@ -9,6 +9,16 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **Paramètres → Organisation : interrupteur « Autoriser les cibles réseau
+  internes (RFC1918) »** (`allowInternalNetworkTargets`, ADR-016) — le flag
+  SSRF n'était réglable nulle part (seul le seed démo l'activait) : sur une
+  installation on-premise réelle, monitorer un équipement LAN (firewall,
+  switch…) ou câbler la connectivité échouait en 400 « Invalid target »
+  sans issue possible. Exposé dans `UpdateTenantDto` + switch super-admin
+  avec explication du risque (à laisser désactivé en cloud mutualisé).
+
 ### Fixed
 
 - **nginx intégré : 502 après chaque redéploiement backend/frontend** — les
