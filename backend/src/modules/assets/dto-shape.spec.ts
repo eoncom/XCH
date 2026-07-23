@@ -227,25 +227,39 @@ describe('Assets response DTO shapes (type A — Prisma raw leak protection)', (
   });
 
   describe('AssetMovementResponseDto', () => {
+    // Fixture alignée sur le VRAI modèle Prisma AssetMovement : les champs
+    // sont `type` / `timestamp` / `notes` (PAS createdAt/reason — la
+    // première version de la DTO et de ce spec les inventait, et l'onglet
+    // Historique frontend crashait car type/date disparaissaient du wire).
     it('exposes movement scalars + passthrough refs', () => {
+      const movedAt = new Date('2026-07-23T10:00:00Z');
       const dto = toResponse(AssetMovementResponseDto, {
         id: 'mv-1',
         tenantId: 't',
         assetId: 'ast-1',
+        type: 'SITE_CHANGE',
         fromSiteId: 'site-1',
         toSiteId: 'site-2',
         fromRackId: null,
         toRackId: 'rack-2',
-        reason: 'Relocation',
+        fromRackPositionU: null,
+        toRackPositionU: 12,
+        notes: 'Relocation',
         userId: 'u',
-        createdAt: new Date(),
+        timestamp: movedAt,
         fromSite: { id: 'site-1', name: 'Saclay' },
         toSite: { id: 'site-2', name: 'Vélizy' },
         user: { id: 'u', name: 'Admin' },
       });
-      expect(dto).toHaveProperty('reason', 'Relocation');
+      expect(dto).toHaveProperty('type', 'SITE_CHANGE');
+      expect(dto).toHaveProperty('notes', 'Relocation');
+      expect(dto).toHaveProperty('timestamp', movedAt);
+      expect(dto).toHaveProperty('toRackPositionU', 12);
       expect(dto.fromSite).toMatchObject({ name: 'Saclay' });
       expect(dto.user).toMatchObject({ name: 'Admin' });
+      // Anti-régression : les champs imaginaires ne doivent PAS réapparaître.
+      expect(dto).not.toHaveProperty('reason');
+      expect(dto).not.toHaveProperty('createdAt');
     });
   });
 
