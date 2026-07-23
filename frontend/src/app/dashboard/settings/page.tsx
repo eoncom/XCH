@@ -1992,6 +1992,9 @@ export default function SettingsPage() {
   // Branding state
   const [logoUrl, setLogoUrl] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#0070f3');
+  // Politique SSRF (ADR-016) : autorise les cibles RFC1918 (monitoring,
+  // connectivité, assets). Indispensable pour un déploiement on-prem LAN.
+  const [allowInternalTargets, setAllowInternalTargets] = useState(false);
   const [securityReminders, setSecurityReminders] = useState<SecurityReminder[]>([
     { id: '1', text: "Badge d'accès obligatoire sur tous les sites" },
     { id: '2', text: 'Carte BTP à jour requise' },
@@ -2121,6 +2124,7 @@ export default function SettingsPage() {
         setLanguage('Français');
         setLogoUrl(tenant.logoUrl || '');
         setPrimaryColor(tenant.primaryColor || '#0070f3');
+        setAllowInternalTargets(!!(tenant as any).allowInternalNetworkTargets);
         // ADR-018 — branding.theme/securityReminders surfaced via the assembled
         // config shape (TenantBranding + TenantSecurityReminder relations).
         setSelectedTheme(((tenant.config as any)?.branding?.theme) || 'blue');
@@ -2413,6 +2417,7 @@ export default function SettingsPage() {
         name: orgName,
         logoUrl: logoUrl || null,
         primaryColor,
+        allowInternalNetworkTargets: allowInternalTargets,
         config: {
           ...tenantData?.config,
           domain,
@@ -3045,6 +3050,40 @@ export default function SettingsPage() {
                         disabled={!isAdmin}
                       />
                     </div>
+                  </div>
+
+                  {/* Politique réseau interne (SSRF, ADR-016) */}
+                  <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="allowInternalTargets" className="flex items-center gap-2">
+                        Autoriser les cibles réseau internes (RFC1918)
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p className="text-xs">
+                                Permet au monitoring, à la connectivité et aux équipements de
+                                cibler des adresses privées (10.x, 172.16-31.x, 192.168.x).
+                                Indispensable pour un déploiement on-premise où les
+                                équipements (firewalls, switches…) sont sur le LAN.
+                                Laisser désactivé sur un hébergement cloud mutualisé.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Sans cette option, monitorer un équipement en IP privée est refusé (erreur 400).
+                      </p>
+                    </div>
+                    <Switch
+                      id="allowInternalTargets"
+                      checked={allowInternalTargets}
+                      onCheckedChange={setAllowInternalTargets}
+                      disabled={!isAdmin}
+                    />
                   </div>
 
                   {/* Logo */}

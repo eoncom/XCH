@@ -60,6 +60,14 @@ export class UpdateTenantDto {
   primaryColor?: string;
 
   @ApiPropertyOptional({
+    description:
+      'Politique SSRF (ADR-016) — autorise les cibles RFC1918 pour le monitoring / la connectivité / les assets. À activer pour un déploiement on-premise LAN.',
+  })
+  @IsBoolean()
+  @IsOptional()
+  allowInternalNetworkTargets?: boolean;
+
+  @ApiPropertyOptional({
     description: 'Legacy nested config — only `theme` and `securityReminders` are still routed.',
   })
   @IsObject()
