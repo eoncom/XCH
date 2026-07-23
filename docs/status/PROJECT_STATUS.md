@@ -1,6 +1,6 @@
 # XCH - Statut du Projet
 
-**Dernière mise à jour :** 2026-07-23 16:05:42 (Auto-update)
+**Dernière mise à jour :** 2026-07-23 16:41:01 (Auto-update)
 **Version actuelle :** **v2.4.0** (en cours de release — tag pending Pass 5 PASS sync)
 **Versions tag stables récentes :** v2.3.4 (Track E.3 air-gap bootstrap, 2026-05-16), v2.3.3 (Track E.2 DR + monitoring), v2.3.2 (hotfix BOLA sites.update), v2.3.1 (hotfix multipart shared volume + BOLA restore), v2.3.0 (Track D.2 polish), v2.2.0/v2.2.1 (Track D.1 Backup v2), v2.1.0-v2.1.4 (S8 GlitchTip + Tracks A/B/C + chore), v2.0.0 (S9 hardening tail), v1.9.0 (plan v2 finalization S7+S7.5).
 **Statut global :** ✅ **MVP Production-Ready + Plan v2 CLOSED + Track A/B/C/D.1/D.2/E.1/E.2/E.3/E.4 CLOSED** — preprod-readiness atteinte, cutover pilote air-gap RSI ready post-tag v2.4.0

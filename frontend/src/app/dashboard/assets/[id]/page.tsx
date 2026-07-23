@@ -1037,7 +1037,14 @@ const statusLabels: Record<string, string> = {
 };
 
 function MovementTimelineItem({ movement }: { movement: AssetMovement }) {
-  const config = movementTypeConfig[movement.type];
+  // Garde défensive : un type inconnu (nouvelle valeur backend, ancien wire
+  // contract) ne doit pas crasher toute la page — fallback neutre.
+  const config = movementTypeConfig[movement.type] ?? {
+    label: movement.type || 'Mouvement',
+    icon: History,
+    color: 'text-muted-foreground',
+    bgColor: 'bg-muted',
+  };
   const Icon = config.icon;
 
   const renderDetails = () => {
@@ -1130,7 +1137,10 @@ function MovementTimelineItem({ movement }: { movement: AssetMovement }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm">{config.label}</span>
           <span className="text-xs text-muted-foreground">
-            {format(new Date(movement.timestamp), "dd MMM yyyy 'à' HH:mm", { locale: fr })}
+            {/* format() throw sur une date invalide → page blanche. */}
+            {movement.timestamp && !Number.isNaN(new Date(movement.timestamp).getTime())
+              ? format(new Date(movement.timestamp), "dd MMM yyyy 'à' HH:mm", { locale: fr })
+              : '—'}
           </span>
         </div>
 

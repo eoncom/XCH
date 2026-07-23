@@ -21,6 +21,14 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Page équipement → onglet Historique : crash (page blanche)** — la
+  `AssetMovementResponseDto` (migration ADR-023) avait été écrite contre un
+  modèle imaginaire : elle exposait `createdAt`/`reason` (inexistants sur
+  `AssetMovement`) et omettait `type`, `timestamp`, `notes`,
+  `fromRackPositionU`/`toRackPositionU` → le wire perdait le type et la
+  date de chaque mouvement, et `format(new Date(undefined))` levait une
+  RangeError dans la timeline. DTO alignée sur le modèle réel + gardes
+  défensives frontend (type inconnu → icône neutre, date invalide → « — »).
 - **SD-WAN : impossible d'activer la configuration (400)** — le dialogue
   envoyait encore `monitorName`, champ **supprimé du modèle en ADR-016**
   (statut overlay dérivé des monitors des firewalls attachés) → la
